@@ -43,6 +43,7 @@ from routers import (
     people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -129,6 +130,7 @@ from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -245,6 +247,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
@@ -528,6 +531,7 @@ async def shutdown_event():
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()
+    await shutdown_sync_metrics()
     await close_all_clients()
     close_posthog_control_plane()
     close_free_tier_control_plane()

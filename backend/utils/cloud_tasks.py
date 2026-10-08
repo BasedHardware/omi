@@ -16,7 +16,7 @@ import logging
 import hashlib
 import os
 import uuid
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, Iterable, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -61,6 +61,19 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
     }
 )
 SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_epoch'}
+# Present only when the upload carried parsed S1 capture-evidence claims
+# (routers/sync.py). An exact-set check without this key raised ValueError at
+# enqueue for every claims-bearing upload and wedged that uid's sequencer.
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims'})
+
+
+def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
+    """True when keys are a durable sync job schema plus only optional keys."""
+    core = frozenset(keys) - SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS
+    if core == SYNC_JOB_TASK_PAYLOAD_KEYS:
+        return True
+    return allow_sequenced and core == SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS
+
 
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
@@ -292,8 +305,7 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
-    keys = frozenset(payload)
-    if keys not in (SYNC_JOB_TASK_PAYLOAD_KEYS, SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS):
+    if not sync_job_payload_keys_valid(payload):
         raise ValueError('sync job payload does not match the durable worker schema')
     sequencer_epoch = payload.get('sequencer_epoch')
     if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):

@@ -394,8 +394,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
           }
 
           if (provider.error != null && !hasAnyData) {
+            // Usage data failed to load, but plan management/cancellation must stay
+            // reachable whenever subscription data did load (see #20621).
             return Column(
               children: [
+                if (provider.subscription != null) _buildSubscriptionInfo(context, provider),
                 _buildFairUseBanner(),
                 Expanded(
                   child: OmiErrorState(

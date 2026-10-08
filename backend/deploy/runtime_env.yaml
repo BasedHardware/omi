@@ -6,6 +6,13 @@ environments:
       namespace: dev-omi-backend
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
+      env:
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
       static_address_name: dev-llm-gateway-ilb-ip-address
     gcp_project: based-hardware-dev
     gke:
@@ -20,6 +27,27 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'false'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'false'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -29,6 +57,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -373,6 +404,15 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -477,6 +517,27 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'false'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'false'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'false'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -486,6 +547,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -538,6 +602,15 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -814,6 +887,16 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -881,6 +964,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -890,6 +994,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1076,6 +1183,15 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
               category: rollout
@@ -1200,6 +1316,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1209,6 +1346,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1353,6 +1493,21 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1481,6 +1636,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1490,6 +1666,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1613,6 +1792,21 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware-dev
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1715,6 +1909,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'false'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -1724,6 +1939,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -1818,6 +2036,15 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1898,6 +2125,69 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+          secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend-dev
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '10797'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2181,6 +2471,7 @@ environments:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
@@ -2197,6 +2488,12 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         PROACTIVITY_REDIS_HOST:
           config_map:
             name: prod-omi-backend-config
@@ -2234,6 +2531,27 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'true'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2243,6 +2561,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2367,16 +2688,16 @@ environments:
             value: 'false'
             category: rollout
           STT_FAILOVER_RECOVERY_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           STT_ROUTING_MODE:
-            value: shadow
+            value: 'on'
             category: rollout
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
           STT_ROUTING_ON_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           STT_ROUTING_TARGETS_JSON:
             value: ''
@@ -2585,6 +2906,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           PROACTIVITY_REDIS_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -2602,6 +2929,15 @@ environments:
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: cohort
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
+            category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
             category: rollout
@@ -2611,6 +2947,12 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          SONIOX_IDLE_CLOSE_SECONDS:
+            value: '45'
+            category: rollout
+          STT_NO_TEXT_RESCUE_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
@@ -2676,13 +3018,19 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '10'
+            value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2724,6 +3072,27 @@ environments:
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
             category: rollout
+          LIVE_CAPTURE_WINDOW_RETENTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+            value: 'false'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_MERGE_UNION:
+            value: 'true'
+            category: rollout
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+            value: 'true'
+            category: rollout
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+            value: 'true'
+            category: rollout
+          SONIOX_WIRE_LEDGER:
+            value: 'true'
+            category: rollout
           CAPTURE_EVIDENCE_V1_DARK_WRITE:
             value: 'true'
             category: rollout
@@ -2733,6 +3102,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
@@ -2783,6 +3155,12 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          PROACTIVITY_V2_POSTHOG_TOKEN:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: rollout
+          PROACTIVITY_V2_POSTHOG_HOST:
+            value: https://us.posthog.com
+            category: rollout
           POSTHOG_PROJECT_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -2803,6 +3181,15 @@ environments:
             category: telemetry
           MENTOR_PIPELINE:
             value: cohort
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: cohort
+            category: rollout
+          SONIOX_ORDERED_FINALIZE:
+            value: 'false'
             category: rollout
           MENTOR_GATE_DEBOUNCE_ENABLED:
             value: 'true'
@@ -2834,13 +3221,19 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '10'
+            value: '100'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -2958,6 +3351,16 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
+        PROACTIVITY_V2_POSTHOG_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: rollout
+        PROACTIVITY_V2_POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -3042,6 +3445,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3051,6 +3475,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3236,8 +3663,23 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
+            OMI_SHAPED_AGENT_MODE:
+              value: cohort
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             MENTOR_GATE_DEBOUNCE_ENABLED:
               value: 'true'
@@ -3323,13 +3765,19 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '10'
+              value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3381,6 +3829,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3390,6 +3859,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3533,8 +4005,26 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
@@ -3598,13 +4088,19 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '10'
+              value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3655,6 +4151,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3664,6 +4181,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -3786,8 +4306,26 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -3842,13 +4380,19 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '2'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '10'
+              value: '100'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
+              value: '1'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
               value: '60000'
@@ -3903,6 +4447,27 @@ environments:
             LIVE_SPEAKER_SPAN_RESOLUTION:
               value: 'true'
               category: rollout
+            LIVE_CAPTURE_WINDOW_RETENTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_MERGE_UNION:
+              value: 'false'
+              category: rollout
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+              value: 'false'
+              category: rollout
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+              value: 'false'
+              category: rollout
+            SONIOX_WIRE_LEDGER:
+              value: 'false'
+              category: rollout
             CAPTURE_EVIDENCE_V1_DARK_WRITE:
               value: 'true'
               category: rollout
@@ -3912,6 +4477,9 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+              value: shadow
+              category: rollout
             CAPTURE_GROUP_CONTAINMENT_MODE:
               value: shadow
               category: rollout
@@ -4005,8 +4573,20 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            PROACTIVITY_V2_POSTHOG_TOKEN:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: rollout
+            PROACTIVITY_V2_POSTHOG_HOST:
+              value: https://us.posthog.com
+              category: rollout
             MENTOR_PIPELINE:
               value: cohort
+              category: rollout
+            SPEAKER_MATCH_SCORES_ENABLED:
+              value: 'true'
+              category: rollout
+            SONIOX_ORDERED_FINALIZE:
+              value: 'false'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -4082,6 +4662,66 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
+        x-connector-sync-job:
+          flags:
+            --task-timeout: 3600s
+            --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
+          secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+          env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            REDIS_DB_HOST:
+              value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+            REDIS_DB_PORT:
+              value: '13151'
+            MEMORY_ENABLED:
+              value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
         memory-maintenance-job:
@@ -4365,6 +5005,7 @@ environments:
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
+      - .github/workflows/gcp_x_connector_sync_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml

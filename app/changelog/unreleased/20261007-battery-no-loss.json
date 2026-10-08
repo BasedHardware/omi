@@ -1,0 +1,3 @@
+{
+  "change": "Continuous pendant capture stays active after silence; live capture uses less CPU and memory without changing saved audio."
+}

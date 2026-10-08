@@ -143,6 +143,15 @@ Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 50))
 
 bool _hasOp(_ScriptedTransport t, int op) => t.writes.any((w) => w[0] == op);
 
+/// Ends the custody session, then waits for every queued checkpoint write, so no
+/// write outlives the directory the test is about to delete (#20500).
+Future<void> _drainCustody(OmiDeviceConnection? conn, Iterable<PendantRingCustody> custodies) async {
+  await conn?.disconnect();
+  for (final custody in custodies) {
+    await custody.flush();
+  }
+}
+
 void main() {
   test(
     'ring firmware >= 3.0.20 probes INFO at connect; 0x14 opt-in only once a real audio listener attaches',
@@ -310,17 +319,21 @@ void main() {
   test('persisted durable frontier replays before READ through 0x15 only', () async {
     const ringId = 0x1122334455667788;
     final tmp = await Directory.systemTemp.createTemp('custody_replay_test');
+    OmiDeviceConnection? conn;
+    final custodies = <PendantRingCustody>[];
     try {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final seed = PendantRingCustody(store: store, walValidator: (_) async => true);
+      custodies.add(seed);
       await seed.beginConnection('omi-1', 1, _ringInfo(ringId: ringId));
       await seed.recordDurableRingRange('omi-1', 1, ringId, 0, 10, const [
         CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
       ]);
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
+      custodies.add(custody);
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
-      OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
+      conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
       t.emit(DeviceTransportState.connected);
       await _settle();
 
@@ -333,6 +346,7 @@ void main() {
       expect(bd.getUint64(9, Endian.big), 10);
       expect(_hasOp(t, RingProtocol.cmdAdvance), isFalse);
     } finally {
+      await _drainCustody(conn, custodies);
       if (await tmp.exists()) await tmp.delete(recursive: true);
     }
   });
@@ -340,35 +354,45 @@ void main() {
   test('rejected opt-in suppresses the persisted replay entirely', () async {
     const ringId = 0x1122334455667788;
     final tmp = await Directory.systemTemp.createTemp('custody_reject_test');
+    OmiDeviceConnection? conn;
+    final custodies = <PendantRingCustody>[];
     try {
       final store = PendantCustodyStore(directoryProvider: () async => tmp);
       final seed = PendantRingCustody(store: store, walValidator: (_) async => true);
+      custodies.add(seed);
       await seed.beginConnection('omi-1', 1, _ringInfo(ringId: ringId));
       await seed.recordDurableRingRange('omi-1', 1, ringId, 0, 10, const [
         CustodyWalRef(fileName: 'a.bin', bytes: 1, frames: 1),
       ]);
 
       final custody = PendantRingCustody(store: store, walValidator: (_) async => true);
+      custodies.add(custody);
       final t = _ScriptedTransport(
         infoPayload: _v1Info(ringId: ringId),
         enableStatus: RingProtocol.ackInvalidCommand,
       );
-      final conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
+      final connection = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
+      conn = connection;
       t.emit(DeviceTransportState.connected);
       await _settle();
       expect(t.writes.where((w) => w[0] == RingProtocol.cmdInfo), isNotEmpty);
 
-      await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+      await connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
       await _settle();
 
-      expect(conn.ringEffectiveCaps, 0);
-      expect(conn.ringLivePersistEnabled, isFalse);
+      expect(connection.ringEffectiveCaps, 0);
+      expect(connection.ringLivePersistEnabled, isFalse);
       final writesBefore = t.writes.length;
-      final fenced = await conn.advanceRingCustody(10, expectedEpoch: conn.ringCustodyEpoch, expectedRingId: ringId);
+      final fenced = await connection.advanceRingCustody(
+        10,
+        expectedEpoch: connection.ringCustodyEpoch,
+        expectedRingId: ringId,
+      );
       expect(fenced?.status, RingProtocol.ackRingIdMismatch);
       expect(t.writes.length, writesBefore);
       expect(_hasOp(t, RingProtocol.cmdAdvance), isFalse);
     } finally {
+      await _drainCustody(conn, custodies);
       if (await tmp.exists()) await tmp.delete(recursive: true);
     }
   });
@@ -449,8 +473,9 @@ void main() {
   test('explicit disconnect ends the custody session even without a transport event', () async {
     const ringId = 0x1122334455667788;
     final tmp = await Directory.systemTemp.createTemp('custody_disconnect_test');
+    PendantRingCustody? custody;
     try {
-      final custody = PendantRingCustody(
+      custody = PendantRingCustody(
         store: PendantCustodyStore(directoryProvider: () async => tmp),
         walValidator: (_) async => true,
       );
@@ -466,6 +491,7 @@ void main() {
       expect(custody.hasConnection('omi-1', epoch), isFalse);
       expect(custody.currentRingId('omi-1'), isNull);
     } finally {
+      await custody?.flush();
       if (await tmp.exists()) await tmp.delete(recursive: true);
     }
   });

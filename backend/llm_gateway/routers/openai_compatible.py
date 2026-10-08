@@ -114,7 +114,9 @@ async def create_chat_completion(
         proactivity = context_from_request(request, caller, accounting_context)
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
         if proactivity is not None and is_streaming:
-            raise GatewayInvalidRequestError('proactivity requires a nonstreaming exclusive budget')
+            raise GatewayInvalidRequestError(
+                'proactivity requires a nonstreaming exclusive budget', rejection_reason='proactivity_streaming'
+            )
         if is_streaming:
             return await _streaming_response(
                 resolved_route,
@@ -199,6 +201,7 @@ async def create_chat_completion(
                     api_surface='openai_chat_completions',
                     error_class=exc.code.value,
                     request_id=request_id,
+                    error=exc,
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
@@ -256,9 +259,11 @@ async def _request_json(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except ValueError as exc:
-        raise GatewayInvalidRequestError('request body must be valid JSON') from exc
+        raise GatewayInvalidRequestError(
+            'request body must be valid JSON', rejection_reason='request_body_json'
+        ) from exc
     if not isinstance(body, dict):
-        raise GatewayInvalidRequestError('request body must be an object')
+        raise GatewayInvalidRequestError('request body must be an object', rejection_reason='request_body_object')
     return cast(dict[str, Any], body)
 
 

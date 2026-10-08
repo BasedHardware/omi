@@ -12,6 +12,7 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
+from database.account_deletion_policy import deletion_billing_error_is_already_gone
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -19,7 +20,12 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
-from database.person_aliases import rename_person_retaining_aliases
+from database.person_aliases import (
+    dismiss_person_soft,
+    find_person_by_name,
+    list_people,
+    rename_person_retaining_aliases,
+)
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
@@ -41,7 +47,8 @@ from models.other import Person
 import logging
 
 logger = logging.getLogger(__name__)
-DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+# Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
+DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
 # A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
 # re-selected by every reconciler tick on every pod. Without a delay that is one claim
 # transaction per pod per tick, forever, against a record that cannot make progress. The
@@ -383,6 +390,24 @@ def mark_user_deletion_wipe_running(uid: str):
 
 
 @transactional
+def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref) -> None:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists and (snapshot.to_dict() or {}).get('wipe_status') == 'running':
+        transaction.update(doc_ref, {'wipe_running_at': datetime.now(timezone.utc)})
+
+
+def heartbeat_user_deletion_wipe(uid: str) -> None:
+    """Refresh a live wipe without resurrecting a failed/completed marker."""
+    client = account_deletion_firestore_client()
+    _heartbeat_user_deletion_wipe_txn(client.transaction(), account_deletion_document(uid, firestore_client=client))
+
+
+def mark_user_deletion_auth_deleted(uid: str) -> None:
+    """Keep retries fenced once Firebase Auth deletion has succeeded."""
+    account_deletion_document(uid).set({'wipe_auth_deleted_at': datetime.now(timezone.utc)}, merge=True)
+
+
+@transactional
 def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> DeletionWipeIntent:
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
@@ -586,8 +611,8 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
 def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
-        status = (snapshot.to_dict() or {}).get('wipe_status')
-        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+        data = snapshot.to_dict() or {}
+        if data.get('wipe_status') in ('cancelled', 'completed') or data.get('wipe_auth_deleted_at'):
             return False
 
     transaction.set(
@@ -606,8 +631,8 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
 def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
     """Record that account deletion is blocked on Stripe cancellation.
 
-    Never clobbers an actionable or terminal wipe state. A billing failure can
-    only block deletion before a destructive wipe has been queued or started.
+    The worker must first verify Firebase Auth still exists. Started wipes may
+    park here before Auth deletion; a post-Auth or terminal marker stays fenced.
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
@@ -649,7 +674,9 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed, stale ``pending`` records
+    Queries ``failed`` records whose per-attempt backoff has elapsed,
+    ``billing_failed`` records with historical already-gone billing errors,
+    stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
     (intent written but never transitioned to ``pending`` — usually a crash
     after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
@@ -686,6 +713,15 @@ def get_pending_deletion_wipes(
         if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
             continue
         result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        billing_docs = account_deletion_collection().where('wipe_status', '==', 'billing_failed').stream()
+        for doc in billing_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            if deletion_billing_error_is_already_gone(data.get('billing_error')):
+                result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -755,7 +791,8 @@ def _claim_deletion_wipe_txn(
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
-    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    Transitions ``wipe_status`` from ``failed``, already-gone ``billing_failed``,
+    stale ``pending``, stale
     ``deleting_auth`` (auth user verified gone by caller), stale ``running``
     (worker crashed mid-execution), or stale ``retrying`` to ``retrying`` so
     concurrent workers cannot re-enqueue the same wipe. Fresh ``pending``,
@@ -770,6 +807,11 @@ def _claim_deletion_wipe_txn(
     data = snapshot.to_dict()
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
+    if status == 'billing_failed':
+        if not deletion_billing_error_is_already_gone(data.get('billing_error')):
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -860,7 +902,9 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         if running_at and running_at >= now - running_stale_after:
             return 'running'
 
-    if status in ('pending', 'retrying', 'failed', 'running'):
+    # A queued task retries transient pre-Auth billing failures. The reconciler
+    # only recovers historical already-gone billing errors, never an outage.
+    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed'):
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
@@ -885,43 +929,46 @@ def create_person(uid: str, data: dict):
     return data
 
 
-def get_person(uid: str, person_id: str):
+def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
+    """Return one owner-scoped person, hiding soft-dismissed records by default.
+
+    ``include_dismissed`` is reserved for complete-account export paths. Normal
+    product reads must not make dismissed people or their voice data visible.
+    """
+
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
     if not person_doc.exists:
         return None
     person_data = person_doc.to_dict()
+    if not include_dismissed and person_data.get('is_dismissed') is True:
+        return None
     person_data.setdefault('id', person_doc.id)
     return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    result, cache = [], {}
-    for person in people_ref.stream():
-        data = person.to_dict()
-        data.setdefault('id', person.id)
-        result.append(project_person_learning(uid, data, firestore_client=db, projection_cache=cache))
-    return result
+def get_people(uid: str, *, include_dismissed: bool = False):
+    cache = {}
+    return [
+        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
+        for person in list_people(db, uid, include_dismissed=include_dismissed)
+    ]
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:
-    """Server-side count of the user's people (speaker profiles) collection."""
+    """Server-side count of active people, excluding soft-dismissed profiles like `get_people`."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     people_ref = client.collection('users').document(uid).collection('people')
-    result = people_ref.count().get()
-    return int(result[0][0].value or 0)
+    total = int(people_ref.count().get()[0][0].value or 0)
+    dismissed = int(people_ref.where(filter=FieldFilter('is_dismissed', '==', True)).count().get()[0][0].value or 0)
+    return max(total - dismissed, 0)
 
 
 def get_person_by_name(uid: str, name: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        data = docs[0].to_dict()
-        data.setdefault('id', docs[0].id)
-        return project_person_learning(uid, data, firestore_client=db)
-    return None
+    person = find_person_by_name(db, uid, name)
+    if person is None:
+        return None
+    return project_person_learning(uid, person, firestore_client=db)
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
@@ -929,6 +976,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
     Note: db.get_all() returns results in arbitrary order (Firestore behavior).
     Callers must not assume the result order matches person_ids order.
+    Dismissed people are returned on purpose: callers resolve IDs already stored on past
+    segments, and dismissal hides a profile from lists without rewriting that history.
     """
     if not person_ids:
         return []
@@ -950,6 +999,10 @@ def update_person(uid: str, person_id: str, name: str) -> bool:
     """Rename a stable person and retain old names as owner-scoped aliases."""
 
     return rename_person_retaining_aliases(db, uid, person_id, name)
+
+
+def dismiss_person(uid: str, person_id: str) -> bool:
+    return dismiss_person_soft(db, uid, person_id)
 
 
 def delete_person(uid: str, person_id: str):
@@ -1738,8 +1791,8 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
-def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Subscription:
-    """Gets the user's subscription, creating a default free one if it doesn't exist."""
+def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:
+    """Get a subscription; read_only suppresses default creation and legacy migration."""
     user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
@@ -1758,7 +1811,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
 
             subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
             # Handle migration for old 'free' plan identifier after validating the normalized payload.
-            if legacy_free_plan:
+            if legacy_free_plan and not read_only:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
             observe_subscription(uid, subscription)
@@ -1771,6 +1824,8 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     from utils.subscription import get_default_basic_subscription
 
     default_subscription = get_default_basic_subscription()
+    if read_only:
+        return default_subscription
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)

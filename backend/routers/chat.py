@@ -44,8 +44,11 @@ from models.chat import (
     FileChat,
     RateMessageRequest,
     ShareChatMessagesRequest,
+    DeviceToolResultRequest,
+    DeviceToolResultResponse,
 )
 from utils.apps import get_available_app_by_id
+from utils.device_tools import UnknownDeviceToolCall, store_device_tool_result
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     acquire_chat_session,
@@ -696,6 +699,8 @@ def send_message(
                 platform=x_app_platform,
                 client_kind=mobile_journey_attempt.client_kind,
                 client_tz=chat_tz,
+                device_tool_names=set(data.device_tools or ()),
+                shaped_invocation=True,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
@@ -761,6 +766,41 @@ def send_message(
     )
     record_product_event('chat_message_sent', request=request, uid=uid, outcome='ok')
     return StreamingResponse(observed_stream, media_type="text/event-stream")
+
+
+@router.post('/v2/messages/device-tool/{call_id}/result', tags=['chat'], response_model=DeviceToolResultResponse)
+def submit_device_tool_result(
+    call_id: str,
+    data: DeviceToolResultRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:device_tool_result")),
+):
+    """Deliver a client's result for an in-flight device tool call.
+
+    The awaiting tool coroutine may be on a different worker than this request,
+    so the result is handed over through Redis rather than an in-process future.
+    The key is scoped by uid, so one user cannot answer another user's call.
+
+    A result is only accepted for a call that is actually in flight for this uid.
+    Without that check the endpoint is a write primitive: an authenticated caller
+    could invent call ids and park an oversized value in shared Redis for each
+    one, at the full rate limit, for the length of the TTL.
+    """
+    if not call_id or len(call_id) > 100:
+        raise HTTPException(status_code=400, detail='Invalid call_id')
+
+    try:
+        store_device_tool_result(uid, call_id, data.result)
+    except ValueError:
+        raise HTTPException(status_code=413, detail='Device tool result too large')
+    except UnknownDeviceToolCall:
+        # 404 rather than 409: to a caller that never made this call, it does not
+        # exist. The same answer covers an expired call and an invented one, so
+        # this cannot be used to probe which calls are in flight.
+        raise HTTPException(status_code=404, detail='No such in-flight device tool call')
+    # Whether a coroutine was still waiting is deliberately not reported: it
+    # would let a caller probe which calls are in flight, and a late result is
+    # harmless because the tool has already returned its timeout.
+    return {'status': 'accepted'}
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
@@ -861,9 +901,7 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        # The greeting belongs to the session that was read, not to whatever
-        # session `acquire_chat_session` would pick for the app.
-        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return []
     # FastAPI validates the response against Message, so one malformed/legacy stored row would
     # 500 the whole page; skip bad rows the same way the send path does.
     return Message.deserialize_many_safe(

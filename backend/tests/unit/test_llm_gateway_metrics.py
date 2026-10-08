@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from llm_gateway.gateway import metrics
 from llm_gateway.gateway.config_loader import load_gateway_config
-from llm_gateway.gateway.errors import GatewayProviderRequestRejectedError
+from llm_gateway.gateway.errors import GatewayInvalidRequestError, GatewayProviderRequestRejectedError
 from llm_gateway.gateway.schemas import ProviderRejection
 
 
@@ -138,7 +140,7 @@ def test_terminal_errors_are_warning_logs_with_only_bounded_failure_fields(monke
         'provider=none model=none credential_source=service_forwarded_byok outcome=error '
         'error_class=credential_failure route_serving_class=active failure_class=byok_auth '
         'fallback_used=false fallback_from=none fallback_to=none provider_rejection=none '
-        'budget_source=none output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none'
+        'budget_source=none output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none rejection_reason=none'
     ]
 
 
@@ -228,5 +230,63 @@ def test_pre_route_rejection_metric_has_only_bounded_contract_labels(monkeypatch
     ]
     assert [record.message for record in caplog.records if 'llm_gateway_request_rejected' in record.message] == [
         'llm_gateway_request_rejected request_id=5d1baae6-c824-4988-adc3-ae82df35cfa5 '
-        'surface=openai_chat_completions error_class=invalid_request'
+        'surface=openai_chat_completions error_class=invalid_request rejection_reason=unknown'
     ]
+
+
+@pytest.mark.parametrize(
+    'code,param,expected',
+    [
+        ('proactivity_item', 'PRIVATE', 'proactivity_item'),
+        ('proactivity_admission.input_bound', None, 'proactivity_admission.input_bound'),
+        ('PRIVATE_SECRET\nforged_log=true', 'messages', 'unknown'),
+        ('secret' * 1000, None, 'unknown'),
+        (None, 'questions.PRIVATE_SECRET\nforged=true.criteria', 'parameter_questions'),
+        (None, 'messages[123].content', 'parameter_messages'),
+        (None, 'response_format.json_schema.schema', 'parameter_response_format'),
+        (None, 'PRIVATE_SECRET', 'unknown'),
+        (None, None, 'unknown'),
+    ],
+)
+def test_invalid_request_terminal_reason_is_closed_bounded_and_payload_free(code, param, expected, caplog):
+    error = GatewayInvalidRequestError('PRIVATE_USER_CONTENT_AND_TOKEN', param=param, rejection_reason=code)
+    with caplog.at_level(logging.WARNING, logger=metrics.logger.name):
+        metrics.observe_error(
+            metrics.time_request(),
+            lane_id='omi:auto:proactive-notification',
+            route_artifact_id='route.proactive_notification.model_config.001',
+            error=error,
+            credential_source='omi_managed',
+            request_id='synthetic',
+        )
+        metrics.observe_request_rejection(
+            api_surface='openai_chat_completions',
+            error_class=error.code.value,
+            request_id='synthetic',
+            error=error,
+        )
+    assert len(expected) <= metrics.REJECTION_REASON_MAX_LENGTH
+    assert caplog.text.count(f'rejection_reason={expected}') == 2
+    assert 'PRIVATE' not in caplog.text and 'secret' not in caplog.text and 'forged' not in caplog.text
+
+
+def test_terminal_defensively_rejects_unrecognized_reason(caplog):
+    metrics.observe_route_result(
+        metrics.time_request(),
+        lane_id='omi:auto:proactive-notification',
+        route_artifact_id='route.proactive_notification.model_config.001',
+        provider='none',
+        model='none',
+        credential_source='omi_managed',
+        used_lkg=False,
+        fallback_used=False,
+        fallback_reason=None,
+        outcome='error',
+        error_class='invalid_request',
+        request_id='synthetic',
+        api_surface='openai_chat_completions',
+        streaming=False,
+        phase='before_output',
+        rejection_reason='PRIVATE_SECRET\n' * 1000,
+    )
+    assert 'rejection_reason=unknown' in caplog.text and 'PRIVATE' not in caplog.text

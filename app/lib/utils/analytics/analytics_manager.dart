@@ -65,6 +65,8 @@ class AnalyticsManager {
   static int get identityEpoch => _identityEpoch;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
+  static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
+  static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
   static String get mobilePlatform => _mobilePlatformName;
@@ -209,6 +211,7 @@ class AnalyticsManager {
         final consent = await SharedPreferences.getInstance();
         if (consentRevision == _consentRevision) {
           _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
+          _trackingConsent.value = _trackingEnabled;
         }
         await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
         if (!identical(_adapter, adapter)) return;
@@ -281,6 +284,7 @@ class AnalyticsManager {
     _globalEventProperties = {'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
+    _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
     _identityEpoch++;
@@ -435,6 +439,7 @@ class AnalyticsManager {
     _consentRevision++;
     if (!_trackingEnabled) _identityEpoch++;
     _trackingEnabled = true;
+    _trackingConsent.value = true;
     unawaited(_persistTrackingPreference(true));
     _notifyIdentity(null, false);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
@@ -451,6 +456,7 @@ class AnalyticsManager {
   void optOutTracking() {
     _consentRevision++;
     _trackingEnabled = false;
+    _trackingConsent.value = false;
     unawaited(_persistTrackingPreference(false));
     _identityEpoch++;
     _queuedEvents.clear();

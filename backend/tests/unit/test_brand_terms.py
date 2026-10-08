@@ -8,6 +8,7 @@ from utils.stt import soniox as soniox_module
 from utils.stt.brand_terms import normalize_brand_segments, normalize_brand_terms
 from utils.stt.pre_recorded import _segments_as_objects
 from utils.stt.recovery_state import LiveRecoveryController
+from utils.stt.soniox_idle import SonioxIdleBudget
 
 
 @pytest.mark.parametrize(
@@ -121,6 +122,7 @@ async def test_soniox_context_terms_are_gated_and_sanitized(monkeypatch, flag, e
 @pytest.mark.parametrize('same_provider', [False, True])
 async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_provider):
     receiver = object.__new__(ListenReceiver)
+    receiver.soniox_idle_budget = SonioxIdleBudget()
     receiver.host = MagicMock()
     receiver.host.vocabulary = ['Omi', 'omi.me']
     receiver.host.stt_service = STTService.soniox
@@ -143,3 +145,4 @@ async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_pro
     await receiver._create_stt_socket(lambda _segments: None, 16000, same_provider=same_provider)
 
     assert process_audio.await_args.kwargs['keywords'] == ['Omi', 'omi.me']
+    assert process_audio.await_args.kwargs['idle_budget'] is receiver.soniox_idle_budget

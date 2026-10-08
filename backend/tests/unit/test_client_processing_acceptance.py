@@ -273,7 +273,7 @@ def stack():
             os.path.join(str(_BACKEND), 'routers', 'developer.py'),
         )
         dev.resolve_geolocation = lambda g: g
-        dev.record_and_persist_finalized_meeting_receipt = lambda *_args, **_kwargs: None
+        dev.record_finalized_meeting_receipt = lambda *_args, **_kwargs: None
         yield pc, dev
 
 

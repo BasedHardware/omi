@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import datetime
 import hashlib
 import io
@@ -515,6 +516,7 @@ def get_syncing_file_temporal_url(file_path: str):
     return _blob_public_url(blob, syncing_local_bucket, file_path)
 
 
+@sync_phase('gcs')
 def get_syncing_file_temporal_signed_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
@@ -527,6 +529,7 @@ def get_syncing_file_temporal_signed_url(file_path: str):
     return _get_signed_url(blob, 15)
 
 
+@sync_phase('gcs')
 def delete_syncing_temporal_file(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
@@ -559,6 +562,7 @@ def schedule_syncing_temporal_file_deletion(
     _syncing_temporal_deleter.schedule(file_path, delay_seconds)
 
 
+@sync_phase('gcs')
 def upload_syncing_temporal_file(file_path: str):
     """Stage a local file in the syncing bucket (blob name = local relative path)."""
     bucket = _get_storage_client().bucket(syncing_local_bucket)
@@ -571,6 +575,7 @@ def upload_syncing_temporal_file(file_path: str):
         blob.upload_from_filename(file_path)
 
 
+@sync_phase('gcs')
 def download_syncing_temporal_file(file_path: str) -> bool:
     """Download a staged blob back to its local relative path.
 
@@ -594,6 +599,7 @@ def download_syncing_temporal_file(file_path: str) -> bool:
 # ************************************************
 
 
+@sync_phase('gcs')
 def upload_audio_chunk(
     chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: Optional[str] = None
 ) -> str:

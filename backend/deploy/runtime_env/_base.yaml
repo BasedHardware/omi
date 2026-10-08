@@ -14,9 +14,17 @@ environment_shared:
       env:
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
         SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
@@ -332,9 +340,17 @@ environment_shared:
       env:
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
         LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
         CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
@@ -458,6 +474,10 @@ environment_shared:
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
+      FIRESTORE_READ_LEDGER:
+        value: '1'
+      FIRESTORE_READ_LEDGER_SERVICE:
+        value: desktop-backend
     secrets:
       GEMINI_API_KEY:
         secret: GEMINI_API_KEY
@@ -511,9 +531,17 @@ environment_shared:
             value: backend
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -682,9 +710,17 @@ environment_shared:
             value: backend-sync
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -836,9 +872,17 @@ environment_shared:
             value: backend-sync-backfill
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -975,9 +1019,17 @@ environment_shared:
             value: backend-integration
           AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
           LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'off', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'shadow', category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
@@ -1090,6 +1142,53 @@ environment_shared:
             value: 'true'
             category: memory_rollout
           PINECONE_INDEX_NAME:
+            category: integrations
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+      x-connector-sync-job:
+        flags:
+          --task-timeout: 3600s
+        secrets:
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+          OPENAI_API_KEY:
+            secret: OPENAI_API_KEY
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          PINECONE_API_KEY:
+            secret: PINECONE_API_KEY
+            version: latest
+          X_OAUTH_CLIENT_SECRET:
+            secret: X_OAUTH_CLIENT_SECRET
+            version: latest
+          RAPID_API_KEY:
+            secret: RAPID_API_KEY
+            version: latest
+        env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
+            category: memory_rollout
+          PINECONE_INDEX_NAME:
+            category: integrations
+          X_OAUTH_CLIENT_ID:
+            env_var: X_OAUTH_CLIENT_ID
+            category: oauth_metadata
+          X_OAUTH_REDIRECT_URI:
+            env_var: X_OAUTH_REDIRECT_URI
+            category: oauth_metadata
+          RAPID_API_HOST:
+            env_var: RAPID_API_HOST
             category: integrations
           OMI_ENV_STAGE:
             value: '{env}'

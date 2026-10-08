@@ -17,6 +17,23 @@ enum SubscriptionPlanPresentation {
   }
 }
 
+/// Copy comes from the server's allowance decision, not the synthetic BYOK
+/// subscription flag: an enrolled LLM key alone does not pay for transcription.
+enum TranscriptionAllowancePresentation {
+  static func statusText(_ allowance: TranscriptionAllowanceSnapshot?) -> String {
+    guard let allowance else { return "Transcription allowance unavailable — refresh to check" }
+    switch allowance.reason {
+    case "byok": return "Transcription: Deepgram BYOK active"
+    case "plan_within_allowance": return "Transcription: Omi-managed allowance"
+    case "plan_allowance_exhausted": return "Transcription: Omi-managed allowance exhausted"
+    case "plan_unlimited", "marketplace_reviewer": return "Transcription: Omi-managed (unlimited)"
+    case "trial_paywalled": return "Transcription: Omi trial access ended"
+    case "subscription_inactive": return "Transcription: Omi plan inactive"
+    default: return "Transcription allowance unavailable — refresh to check"
+    }
+  }
+}
+
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
@@ -99,6 +116,9 @@ extension SettingsContentView {
   var currentPlanSubtitle: String {
     if isLoadingSubscription {
       return "Fetching subscription details from Omi."
+    }
+    if userSubscription?.subscription.features.contains("byok") == true {
+      return "LLM BYOK active for supported AI features."
     }
     if let detail = currentPlanBillingDetail {
       return detail
@@ -735,6 +755,7 @@ extension SettingsContentView {
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
+    let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
     Task {
       do {
@@ -762,6 +783,11 @@ extension SettingsContentView {
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
           dailySummaryHour = dailySummary.hour
+          if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
+            savedDailySummaryDepth = dailySummary.depth
+            dailySummaryDepth = dailySummary.depth
+            dailySummaryDepthError = nil
+          }
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
           // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.

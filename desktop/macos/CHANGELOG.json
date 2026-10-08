@@ -2,6 +2,86 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.452",
+      "date": "2026-10-08",
+      "changes": [
+        "Fixed chat failing with a generic error for BYOK users despite validated API keys — the desktop backend now actually reads the keys instead of silently ignoring them."
+      ]
+    },
+    {
+      "version": "0.12.451",
+      "date": "2026-10-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.450",
+      "date": "2026-10-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.449",
+      "date": "2026-10-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.448",
+      "date": "2026-10-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.447",
+      "date": "2026-10-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.446",
+      "date": "2026-10-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.445",
+      "date": "2026-10-05",
+      "changes": [
+        "Fixed conversation summary tasks losing their links and leaving duplicate suggestions after being added",
+        "Choose a brief, normal, or deep daily recap in Settings",
+        "Show installed summary apps with search when changing a conversation summary"
+      ]
+    },
+    {
+      "version": "0.12.444",
+      "date": "2026-10-05",
+      "changes": [
+        "Omi can now look up a contact, read a Messages thread, send an iMessage, and run an AppleScript on your Mac — each one showing you exactly what it will do before it does it",
+        "Omi can now tell you what's waiting in your Apple Mail inbox — who wrote and about what, never the message bodies — and it says when Full Disk Access needs a restart instead of asking you to grant it again"
+      ]
+    },
+    {
+      "version": "0.12.443",
+      "date": "2026-10-04",
+      "changes": [
+        "Removed automatic goal, task, and meeting-note cards from Chat while keeping rich cards in replies"
+      ]
+    },
+    {
+      "version": "0.12.442",
+      "date": "2026-10-04",
+      "changes": [
+        "Clarified which custom keys cover AI features versus transcription and show the current transcription allowance in macOS settings"
+      ]
+    },
+    {
       "version": "0.12.441",
       "date": "2026-10-04",
       "changes": [

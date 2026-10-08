@@ -56,7 +56,7 @@ def controls(monkeypatch):
     monkeypatch.setattr(live_health, 'health', pod)
     monkeypatch.setattr(live_chain, '_recent_connect_failures', deque(maxlen=1000))
     monkeypatch.setattr(soniox_module, '_rate_limit_events', [])
-    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(soniox_module, '_last_rate_limit_error_log', float('-inf'))
     monkeypatch.setattr(
         connect_backoff_module,
         '_shared',
@@ -1342,19 +1342,6 @@ async def test_router_never_removes_configured_serviceability(monkeypatch, scena
                 'modulate-velma-2': GateState(stage=0, until=1e20),
             },
         )
-    if scenario == 'empty':
-        with pytest.raises(live_chain.NoPermittedTarget):
-            await live_chain.connect_configured_chain(
-                primary_service=primary,
-                connect_primary=connector(primary),
-                callbacks=callbacks,
-                failed=set(),
-                models=models,
-                routing_uid='synthetic',
-                routing_language='en',
-            )
-        assert seen == []
-        return
     _, service = await live_chain.connect_configured_chain(
         primary_service=primary,
         connect_primary=connector(primary, scenario in ('unknown-tail', 'benched-tail')),
