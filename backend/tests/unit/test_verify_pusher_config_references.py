@@ -24,6 +24,12 @@ def preflight() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+@pytest.fixture(scope="module")
+def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
+    module = SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+    return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -252,9 +258,18 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
 @pytest.mark.parametrize("env_name", ["PROACTIVITY_V2_POSTHOG_TOKEN", "PROACTIVITY_V2_POSTHOG_HOST"])
 @pytest.mark.parametrize("mutation", ["missing", "changed", "secret"])
 def test_dev_pusher_dedicated_posthog_literals_reject_rendered_drift(
-    preflight: SimpleNamespace, env_name: str, mutation: str
+    monkeypatch,
+    preflight: SimpleNamespace,
+    dev_pusher_contract_baseline: tuple[dict, tuple],
+    env_name: str,
+    mutation: str,
 ):
-    deployment = preflight.rendered_pusher_deployment("dev")
+    deployment = copy.deepcopy(dev_pusher_contract_baseline[0])
+    monkeypatch.setitem(
+        preflight.validate_dev_pusher_binding_contract.__globals__,
+        "dev_pusher_binding_contract",
+        lambda: dev_pusher_contract_baseline[1],
+    )
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     entry = next(item for item in env if item["name"] == env_name)
     if mutation == "missing":
