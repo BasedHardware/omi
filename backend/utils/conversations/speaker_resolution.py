@@ -1198,7 +1198,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
 
     pending = [s for s in segments if needs_embedding(s)]
     abstained = set()
-    if spans_on:
+    if spans_on and embeddable:
         # One missing provider window does not invalidate other proven windows.
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
