@@ -88,6 +88,8 @@ class NativeRow {
     this.imageUri,
     this.level,
     this.maximumValue,
+    this.minimumValue,
+    this.step,
     this.points = const [],
     this.blocks = const [],
     this.indent,
@@ -114,6 +116,9 @@ class NativeRow {
   /// The existing three-band confidence meter; never a probability or a new score.
   final int? level;
   final double? maximumValue;
+
+  /// A 'level' control's lower bound (default 0) and optional grid step; no other kind takes them.
+  final double? minimumValue, step;
   final List<Map<String, Object>> points;
   final List<Map<String, Object>> blocks;
 
@@ -157,6 +162,8 @@ class NativeRow {
         'imageUri': imageUri,
         'level': level,
         'maximumValue': maximumValue,
+        'minimumValue': minimumValue,
+        'step': step,
         'points': points,
         'blocks': blocks,
         'indent': indent,
@@ -197,9 +204,12 @@ class NativeRow {
     if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;
     if (maximumValue != null &&
-        (!['slider', 'progress', 'image'].contains(kind) || !maximumValue!.isFinite || maximumValue! <= 0)) {
+        (!['slider', 'progress', 'image', 'level'].contains(kind) ||
+            !maximumValue!.isFinite ||
+            kind != 'level' && maximumValue! <= 0)) {
       return false;
     }
+    if ((minimumValue != null || step != null) && kind != 'level') return false;
     if (imageUri != null) {
       final uri = Uri.tryParse(imageUri!);
       if (imageUri!.length > 4096 ||
@@ -275,6 +285,7 @@ class NativeRow {
           (value as num).isFinite &&
           (value as num) >= 0 &&
           (value as num) <= maximumValue!,
+      'level' => _acceptsLevel(value),
       'keypad' => value is String &&
           (value as String).length <= 10000 &&
           ['dialer', 'dtmf'].contains(keypadMode) &&
@@ -336,7 +347,20 @@ class NativeRow {
     return milliseconds != null && milliseconds.abs() <= 8640000000000000;
   }
 
+  /// A finite number within [minimumValue] (default 0) and [maximumValue], on the [step] grid when
+  /// one is set. A degenerate range, step or grid of more than 1000 steps accepts nothing.
+  bool _acceptsLevel(Object? input) {
+    final minimum = minimumValue ?? 0.0, maximum = maximumValue, step = this.step;
+    if (maximum == null || !minimum.isFinite || !maximum.isFinite || maximum <= minimum) return false;
+    if (input is! num || !input.isFinite || input < minimum || input > maximum) return false;
+    if (step == null) return true;
+    if (!step.isFinite || step <= 0 || step > maximum - minimum || (maximum - minimum) / step > 1000) return false;
+    final steps = (input - minimum) / step;
+    return (steps - steps.roundToDouble()).abs() < 1e-6;
+  }
+
   bool accepts(Object? input) => switch (kind) {
+        'level' => _acceptsLevel(input),
         'slider' => input is num && input.isFinite && input >= 0 && maximumValue != null && input <= maximumValue!,
         'keypad' => input is String &&
             (options.containsKey(input) || keypadMode == 'dialer' && ['+', 'erase', 'clear'].contains(input)),

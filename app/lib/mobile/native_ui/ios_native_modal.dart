@@ -81,6 +81,8 @@ Future<NativeModalResult?> showIosNativeModal(
       rows.any((row) => row.indent != null || row.swipeLeading.isNotEmpty || row.swipeTrailing.isNotEmpty)) {
     return null;
   }
+  // Modals edit text, switches and choices only; a level control keeps the Flutter dialog too.
+  if (rows.any((row) => row.kind == 'level')) return null;
   final ticket = _PresentationTicket();
   final owner = AuthService.instance.captureSessionSnapshot();
   var sessionValid = true;

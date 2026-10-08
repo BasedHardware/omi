@@ -74,6 +74,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
                   && ($0.swipeTrailing ?? []).isEmpty }) else { throw PresentationError.invalid }
         // A graph needs its surface's camera and capture owner; a modal would echo no node selection.
         guard !snapshot.allRows.contains(where: { $0.kind == "graph" }) else { throw PresentationError.invalid }
+        // Modals edit text, switches and choices only; a level control keeps the caller's Flutter dialog.
+        guard !snapshot.allRows.contains(where: { $0.kind == "level" }) else { throw PresentationError.invalid }
         var parent = root
         while let presented = parent.presentedViewController { parent = presented }
         guard parent.viewIfLoaded?.window != nil, !parent.isBeingDismissed else {

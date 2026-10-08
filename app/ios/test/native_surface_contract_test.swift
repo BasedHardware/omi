@@ -196,6 +196,56 @@ struct NativeSurfaceTests {
         try secrets()
         try listInteractions()
         try richMessagesAndCategoricalCharts(input)
+        // 'level' mirrors NativeRow.valid/accepts in Dart: ordered finite bounds and a value on the step grid.
+        var labelled = input
+        labelled.removeValue(forKey: "chat")
+        let brightness: [String: Any] = ["id": "led_brightness", "title": "LED Brightness", "kind": "level",
+            "subtitle": "50%", "value": 50, "maximumValue": 100, "step": 25, "options": [], "enabled": true,
+            "destructive": false]
+        func levelSurface(_ changes: [String: Any?], kind: String = "level") -> [String: Any] {
+            var row = brightness
+            row["kind"] = kind
+            for (key, value) in changes { row[key] = value }
+            var surface = labelled
+            surface["sections"] = [["id": "device", "title": "", "footer": "", "rows": [row]]]
+            return surface
+        }
+        let levelControl = try NativeSurfaceSnapshot.decode(levelSurface([:])).sections[0].rows[0]
+        precondition(levelControl.minimumValue == nil && levelControl.step == 25 && levelControl.value?.number == 50)
+        let moved = levelControl.replacingValue(.number(75))
+        precondition(moved.value?.number == 75 && moved.step == 25 && moved.maximumValue == 100 && moved.hasValidValue)
+        precondition(!levelControl.replacingValue(.number(60)).hasValidValue)
+        let validLevels: [[String: Any?]] = [
+            ["value": 0], ["value": 100.0], ["step": nil, "value": 37.5],
+            ["minimumValue": -10, "maximumValue": 10, "step": 0.5, "value": -2.5],
+            ["minimumValue": 1, "maximumValue": 5, "step": 1, "value": 3],
+            ["minimumValue": 0, "maximumValue": 1, "step": 0.1, "value": 0.30000000000000004],
+            ["maximumValue": 10, "step": 4, "value": 8], ["maximumValue": 1000, "step": 1, "value": 999],
+        ]
+        for changes in validLevels { _ = try NativeSurfaceSnapshot.decode(levelSurface(changes)) }
+        let invalidLevels: [[String: Any?]] = [
+            ["maximumValue": nil], ["minimumValue": 100, "maximumValue": 100, "value": 100],
+            ["minimumValue": 10, "maximumValue": 5, "step": nil, "value": 7],
+            ["maximumValue": Double.nan], ["maximumValue": Double.infinity], ["minimumValue": Double.nan],
+            ["minimumValue": -Double.infinity], ["value": Double.nan], ["step": nil, "value": Double.infinity],
+            ["value": nil], ["value": "50"], ["value": true], ["value": 60],
+            ["minimumValue": 1, "maximumValue": 5, "step": 2, "value": 2],
+            ["minimumValue": 10, "step": nil, "value": 5], ["value": 125], ["value": -25],
+            ["step": 0], ["step": -25], ["step": Double.nan], ["step": Double.infinity], ["step": 101, "value": 0],
+            ["maximumValue": 1001, "step": 1, "value": 1],
+        ]
+        for changes in invalidLevels { rejects(levelSurface(changes)) }
+        // Bounds and steps belong to the level control only; the playback slider keeps its contract.
+        rejects(levelSurface([:], kind: "slider"))
+        rejects(levelSurface(["step": nil, "minimumValue": 0], kind: "slider"))
+        rejects(levelSurface([:], kind: "progress"))
+        rejects(levelSurface(["value": nil, "maximumValue": nil], kind: "button"))
+        rejects(levelSurface(["value": nil, "maximumValue": nil, "step": nil, "minimumValue": 0], kind: "button"))
+        _ = try NativeSurfaceSnapshot.decode(levelSurface(["step": nil, "value": 25.5], kind: "slider"))
+        for number in [0.0, 25, 50, 75.00000001, 100] { precondition(levelControl.acceptsLevel(number)) }
+        for number in [-25.0, 125, 60, 12.5, .nan, .infinity, -Double.infinity] { precondition(!levelControl.acceptsLevel(number)) }
+        let free = try NativeSurfaceSnapshot.decode(levelSurface(["minimumValue": -1, "maximumValue": 1, "step": nil, "value": 0]))
+        precondition(free.sections[0].rows[0].acceptsLevel(-0.333) && !free.sections[0].rows[0].acceptsLevel(1.0001))
         input.removeValue(forKey: "chat")
         let link: [String: Any] = ["id": "siri_shortcuts_link", "title": "Ask Omi", "kind": "shortcuts_link", "subtitle": "",
             "options": [], "destructive": false, "enabled": false]

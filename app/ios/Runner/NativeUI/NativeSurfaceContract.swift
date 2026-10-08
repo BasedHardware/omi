@@ -108,6 +108,9 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         }
     }
     let graph: Graph?
+    /// A 'level' control's lower bound (default 0) and optional grid step; no other kind takes them.
+    let minimumValue: Double?
+    let step: Double?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -119,7 +122,21 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
              indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing,
              chartStyle: chartStyle,
-             graph: graph)
+             graph: graph,
+             minimumValue: minimumValue, step: step)
+    }
+
+    /// Mirrors NativeRow.accepts in Dart: a finite number within minimumValue (default 0) and
+    /// maximumValue, on the step grid when one is set. A degenerate range or grid accepts nothing.
+    func acceptsLevel(_ number: Double) -> Bool {
+        let minimum = minimumValue ?? 0
+        guard kind == "level", let maximumValue, minimum.isFinite, maximumValue.isFinite, maximumValue > minimum,
+              number.isFinite, number >= minimum, number <= maximumValue else { return false }
+        guard let step else { return true }
+        guard step.isFinite, step > 0, step <= maximumValue - minimum,
+              (maximumValue - minimum) / step <= 1000 else { return false }
+        let steps = (number - minimum) / step
+        return abs(steps - steps.rounded()) < 1e-6
     }
 
 
@@ -129,6 +146,9 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         case "slider", "progress":
             guard case let .number(number) = value, let maximumValue else { return false }
             return number.isFinite && maximumValue.isFinite && maximumValue > 0 && (0...maximumValue).contains(number)
+        case "level":
+            guard case let .number(number) = value else { return false }
+            return acceptsLevel(number)
         case "keypad":
             guard case let .text(text) = value else { return false }
             return text.count <= 10000 && ["dialer", "dtmf"].contains(keypadMode ?? "")
@@ -292,14 +312,14 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               snapshot.hostKindsOnlyInSections,
               snapshot.hasValidGraphs,
               rows.allSatisfy({ row in
-                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret", "graph"].contains(row.kind)
+                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret", "graph", "level"].contains(row.kind)
                       || NativeUICapabilities.compiledKinds.contains(row.kind))
                       && row.hasValidHostKind
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
                       && row.hasValidRichBody && row.hasValidChartStyle
-                      && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
+                      && (row.maximumValue == nil || ["slider", "progress", "image", "level"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
                       && row.hasValidImageURI
@@ -328,6 +348,10 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil
                   && snapshot.selection == nil && snapshot.fillGraphRow == nil),
               secrets.allSatisfy(\.hasOnlySecretFields) else { throw ContractError.invalidSnapshot }
+        // Bounds and steps belong to the level control only, as in NativeRow.valid.
+        guard rows.allSatisfy({ ($0.minimumValue == nil && $0.step == nil) || $0.kind == "level" }) else {
+            throw ContractError.invalidSnapshot
+        }
         return snapshot
     }
 

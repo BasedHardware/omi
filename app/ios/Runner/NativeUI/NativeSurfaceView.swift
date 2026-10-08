@@ -122,7 +122,7 @@ final class NativeSurfaceState: ObservableObject {
         // A selection or order is a desired state: the latest wins, and other actions wait for it.
         let isListCommand = id == "_selection" || id.hasPrefix("_reorder:")
         let isEdit = snapshot.allRows.contains {
-            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider"].contains($0.kind)
+            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider", "level"].contains($0.kind)
         } || isKeypad || isListCommand
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
@@ -229,6 +229,9 @@ final class NativeSurfaceState: ObservableObject {
         editWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
     }
+
+    /// Whether the owner refused this row's latest edit; a level control then drops its optimistic value.
+    func editFailed(_ id: String) -> Bool { failedEdits.contains(id) }
 
     func draft(for row: NativeSurfaceRow) -> String {
         if pendingEdits.contains(row.id) || failedEdits.contains(row.id) {
@@ -554,6 +557,8 @@ struct NativeSurfaceView: View {
                     .accessibilityLabel(row.title)
             case "slider":
                 NativePlaybackSlider(row: row, state: state)
+            case "level":
+                NativeLevelRow(row: row, state: state)
             case "progress":
                 VStack(alignment: .leading, spacing: 8) {
                     label(row)
@@ -1118,6 +1123,107 @@ private struct NativeThumbnail: View {
                 guard !Task.isCancelled else { return }
                 if let image { localImage = UIImage(cgImage: image) }
             }
+    }
+}
+
+/// A labelled, discrete setting level; unlike the playback 'slider', it never sends while dragging.
+/// Releasing commits one grid value to the existing Dart owner. The optimistic value stays until the
+/// owner's next snapshot, and a refused commit reverts it.
+@available(iOS 16.0, *)
+@MainActor
+private struct NativeLevelRow: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+    @State private var local: Double?
+    @State private var origin: Double?
+    @State private var editing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(row.title).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+                Spacer(minLength: 8)
+                Text(valueLabel).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+            }
+            Slider(value: Binding(get: { current }, set: { local = $0 }), in: bounds,
+                   step: step ?? (bounds.upperBound - bounds.lowerBound) / 100,
+                   onEditingChanged: { began in
+                       editing = began
+                       // A refused value is never the origin a cancelled drag returns to.
+                       if began { origin = state.editFailed(row.id) ? nil : local; return }
+                       // After a refusal, committing the owner's value again clears the failed edit.
+                       if let value = local,
+                          snapped(value) != (origin ?? row.value?.number) || state.editFailed(row.id) { commit(value) }
+                       else { local = origin }
+                   })
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.title)
+        .accessibilityValue(valueLabel)
+        .accessibilityAdjustableAction { direction in
+            guard row.enabled, !state.pending.contains(row.id) else { return }
+            let amount = step ?? (bounds.upperBound - bounds.lowerBound) / 10
+            let next: Double
+            switch direction {
+            case .increment: next = snapped(current + amount)
+            case .decrement: next = snapped(current - amount)
+            default: return
+            }
+            if next != current || state.editFailed(row.id) { commit(next) }
+        }
+        .onChange(of: state.snapshot.revision) { _ in
+            if !editing && !state.pending.contains(row.id) { local = nil }
+        }
+    }
+
+    /// The validated range; a degenerate row (never decoded) renders 0...1 instead of trapping.
+    private var bounds: ClosedRange<Double> {
+        let lower = row.minimumValue ?? 0
+        let upper = row.maximumValue ?? lower + 1
+        return lower.isFinite && upper.isFinite && upper > lower ? lower...upper : 0...1
+    }
+
+    /// The owner's grid step, when it is usable for the current bounds.
+    private var step: Double? {
+        guard let step = row.step, step.isFinite, step > 0,
+              step <= bounds.upperBound - bounds.lowerBound else { return nil }
+        return step
+    }
+
+    private var current: Double { local ?? row.value?.number ?? bounds.lowerBound }
+
+    /// The owner's localized label, or the unit-less local number while it differs from the snapshot.
+    private var valueLabel: String {
+        guard let local else { return row.subtitle }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: state.snapshot.locale)
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: local)) ?? String(local)
+    }
+
+    /// The nearest grid value inside the bounds; the maximum counts only when it lies on the grid.
+    private func snapped(_ value: Double) -> Double {
+        let clamped = min(max(value, bounds.lowerBound), bounds.upperBound)
+        guard let step else { return clamped }
+        let steps = ((clamped - bounds.lowerBound) / step).rounded()
+        let candidate = bounds.lowerBound + steps * step
+        guard candidate > bounds.upperBound else { return candidate }
+        let range = (bounds.upperBound - bounds.lowerBound) / step
+        return abs(range - steps) < 1e-6 ? bounds.upperBound : bounds.lowerBound + (steps - 1) * step
+    }
+
+    private func commit(_ value: Double) {
+        let committed = snapped(value)
+        let revision = state.snapshot.revision
+        local = committed
+        Task {
+            await state.send(row.id, value: committed)
+            // A queued commit returns at once; only the send that ran settles the optimistic value.
+            guard !editing, !state.pending.contains(row.id) else { return }
+            if state.editFailed(row.id) || state.snapshot.revision != revision { local = nil }
+        }
     }
 }
 

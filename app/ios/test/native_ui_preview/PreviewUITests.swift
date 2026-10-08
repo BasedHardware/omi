@@ -486,6 +486,79 @@ final class PreviewUITests: XCTestCase {
         return (brightness.max() ?? 0) - (brightness.min() ?? 0) > 45
     }
 
+    func testLevelShowsTitleAndValueAndCommitsOnceOnRelease() {
+        let app = start(["surface", "level"])
+        let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
+        XCTAssertTrue(level.waitForExistence(timeout: 10))
+        // One adjustable element: the visible title is its label and the owner's label its value.
+        XCTAssertEqual(level.label, "LED Brightness")
+        XCTAssertEqual(level.value as? String, "50%")
+        // Drag the thumb from the middle across two grid values and hold before lifting. The playback
+        // slider would send on every tick; a level sends exactly one grid value, on release.
+        let thumb = level.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        let end = level.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.75))
+        // XCUITest cannot sample mid-gesture; a per-tick sender would have counted several sends by now.
+        thumb.press(forDuration: 0.3, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1)
+        XCTAssertTrue(app.staticTexts["level-sends:1"].waitForExistence(timeout: 5))
+        let landed = NSPredicate { _, _ in
+            ["led_brightness:75.0", "led_brightness:100.0"].contains(app.staticTexts["preview-last-action"].label)
+                && ["75%", "100%"].contains(level.value as? String ?? "")
+        }
+        expectation(for: landed, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertEqual(app.staticTexts["preview-last-saved"].label, "level-sends:1")
+        capture(app, "native-level-control")
+    }
+
+    func testLevelVoiceOverIncrementSendsOneStep() {
+        let app = start(["surface", "level"])
+        let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
+        XCTAssertTrue(level.waitForExistence(timeout: 10))
+        level.increment()
+        let stepped = NSPredicate { _, _ in
+            app.staticTexts["preview-last-action"].label == "led_brightness:75.0" && (level.value as? String) == "75%"
+        }
+        expectation(for: stepped, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.staticTexts["preview-last-saved"].label, "level-sends:1")
+        level.decrement()
+        let back = NSPredicate { _, _ in app.staticTexts["preview-last-action"].label == "led_brightness:50.0" }
+        expectation(for: back, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.staticTexts["preview-last-saved"].label, "level-sends:2")
+    }
+
+    func testLevelLargeTextKeepsTitleVisible() {
+        let app = start(["surface", "level", "large"])
+        let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
+        XCTAssertTrue(level.waitForExistence(timeout: 10))
+        XCTAssertEqual(level.label, "LED Brightness")
+        XCTAssertTrue(level.isHittable)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(level.frame), "The title row and slider stay on screen")
+        XCTAssertGreaterThanOrEqual(level.frame.height, 44)
+        capture(app, "native-level-control-large-text")
+    }
+
+    func testLevelFailureRevertsValue() {
+        let app = start(["surface", "level", "failed-level"])
+        let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
+        XCTAssertTrue(level.waitForExistence(timeout: 10))
+        level.increment()
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 5))
+        let reverted = NSPredicate { _, _ in (level.value as? String) == "50%" }
+        expectation(for: reverted, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.staticTexts["preview-last-saved"].label, "level-sends:1")
+        XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture")
+        // The failed edit blocks Save until the owner's value is committed again.
+        app.buttons["save"].tap()
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(app.staticTexts["save:"].exists)
+        level.decrement()
+        XCTAssertTrue(app.staticTexts["level-sends:2"].waitForExistence(timeout: 5))
+    }
+
     /// Whether any pixel inside [frame] (screen points) is a saturated red.
     func containsRed(_ image: UIImage, in frame: CGRect) -> Bool {
         guard let cgImage = image.cgImage else { return false }
