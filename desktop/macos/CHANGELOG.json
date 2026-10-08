@@ -2,6 +2,22 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.454",
+      "date": "2026-10-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.453",
+      "date": "2026-10-08",
+      "changes": [
+        "Fixed Task Assistant opening new threads with the wrong AI provider and added an option to recover existing Claude threads using Omi AI",
+        "Fixed chat billing errors incorrectly claiming your API key was ignored or directing you to the wrong billing account",
+        "Fixed a dropped network connection or provider hiccup silently turning off BYOK keys — your saved keys now stay active when a validation check can't reach the provider, instead of chat falling back to Omi's metered service."
+      ]
+    },
+    {
       "version": "0.12.452",
       "date": "2026-10-08",
       "changes": [

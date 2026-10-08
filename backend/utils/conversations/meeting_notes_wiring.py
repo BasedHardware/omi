@@ -54,18 +54,10 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
     return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
-def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
-
-
 def meeting_notes_episode_evidence_enabled(uid: str | None = None) -> bool:
     return _flag_enabled('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED') and import_module(
         'config.episode_notes'
     ).episode_notes_cohort(uid)
-
-
-def meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
 
 
 def meeting_notes_screen_frames_context_enabled() -> bool:
@@ -74,10 +66,7 @@ def meeting_notes_screen_frames_context_enabled() -> bool:
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Frame names and summaries are screen text: they ride the screen-text flag.
-    # Images need the same docs, so either flag loads them.
-    if not (meeting_notes_screen_text_context_enabled() or meeting_notes_screen_frames_context_enabled()):
-        return ()
+    # Screen text is always available; images still have their own gate.
     return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
 
 

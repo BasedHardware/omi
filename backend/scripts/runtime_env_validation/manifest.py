@@ -633,11 +633,7 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
-            if (
-                scope == f'{env}/gke/backend-listen'
-                and env_name == 'STT_SERVICE_MODELS'
-                and _manifest_literal_env_value(env_map, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
-            ):
+            if scope == f'{env}/gke/backend-listen' and env_name == 'STT_SERVICE_MODELS':
                 models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
                 if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
                     continue
