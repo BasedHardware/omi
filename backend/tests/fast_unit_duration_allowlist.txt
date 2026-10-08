@@ -332,6 +332,10 @@ tests/unit/test_memories_archive_and_read_contracts.py::test_get_memories_forwar
 # Full listen-runtime bootstrap (STT selection, fair-use, onboarding admission)
 # sits exactly at the 0.30s CPU budget under a saturated pre-push fanout.
 tests/unit/test_listen_runtime_regressions.py::test_bootstrap_forces_single_language_before_selecting_stt_for_onboarding
+# Builds a real Conversation, then parses process_conversation to exec the
+# persistence hook. Call-phase CPU sits on the 0.30s local budget (0.13-0.20s
+# alone, 0.32s when pre-push fans the file out with the rest of the lane).
+tests/unit/test_capture_loss_accounting.py::test_pydantic_internal_evidence_survives_wire_exclusion_for_finalize_accounting
 tests/unit/test_llm_gateway_validator.py::test_accepts_matching_output_limit_aliases
 tests/unit/test_desktop_proxy.py::test_proxy_reports_upstream_unavailable_as_retryable
 tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_bad_request[/v2/files]

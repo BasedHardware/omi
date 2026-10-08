@@ -1106,6 +1106,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         trigger=ProcessingTrigger.SYNC_UPDATE,
         user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
+        # Deserialize drops relevance_decision. The raw row still has it:
+        # sync_update means a previous enrichment, sync_intake or absence does not.
+        prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
     )
     elapsed = time.monotonic() - started
     # Persistence is guaranteed here: a fenced write raises before return.
