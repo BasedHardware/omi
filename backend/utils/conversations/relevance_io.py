@@ -104,14 +104,14 @@ def emit_recorded_decision(uid: str, conversation_id: str, decision: RelevanceDe
     The shared PostHog helper uses the SDK's background capture queue. Optional
     analytics must never fail conversation processing, even if capture raises.
     """
-    properties: dict[str, Any] = {
-        'conversation_id': str(conversation_id),
-        'reason': decision.reason,
-        'discarded': decision.discard,
-    }
-    if decision.arm is not None:
-        properties['arm'] = decision.arm
     try:
+        properties: dict[str, Any] = {
+            'conversation_id': str(conversation_id),
+            'reason': decision.reason,
+            'discarded': decision.discard,
+        }
+        if decision.arm is not None:
+            properties['arm'] = decision.arm
         emit_posthog_event(uid, 'Relevance Decision Recorded', properties)
     except Exception as error:
         logger.warning('relevance analytics capture failed error=%s', type(error).__name__)
