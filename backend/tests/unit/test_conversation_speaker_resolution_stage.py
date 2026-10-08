@@ -102,6 +102,11 @@ class FakeDiarizer:
 
 @pytest.fixture
 def env(monkeypatch):
+    from utils.stt.owner_profile import recovery_db
+
+    # This fixture supplies no enrolled owner audio. Keep the repair-state
+    # dependency hermetic instead of invoking the real SDK client factory.
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: None)
     monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda uid: True)
     store = {}
     monkeypatch.setattr(stage, 'speaker_embedding_configured', lambda: True)
