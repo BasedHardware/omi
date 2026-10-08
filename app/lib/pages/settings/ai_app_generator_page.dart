@@ -1,27 +1,39 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
 
+part 'ai_app_generator_native.dart';
+
 class AiAppGeneratorPage extends StatelessWidget {
-  const AiAppGeneratorPage({super.key});
+  const AiAppGeneratorPage({super.key, @visibleForTesting this.createProvider});
+
+  /// Test-only: supplies the page's owner instead of a new [AiAppGeneratorProvider].
+  final AiAppGeneratorProvider Function()? createProvider;
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(create: (_) => AiAppGeneratorProvider(), child: const _AiAppGeneratorPageView());
+    return ChangeNotifierProvider(
+        create: (_) => createProvider?.call() ?? AiAppGeneratorProvider(), child: const _AiAppGeneratorPageView());
   }
 }
 
@@ -37,9 +49,23 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   final FocusNode _promptFocusNode = FocusNode();
   bool _isDescriptionExpanded = false;
 
+  // Native presentation only: the generated icon crosses as a session-fenced temporary PNG.
+  AiAppGeneratorProvider? _nativeOwner;
+  AuthSessionSnapshot? _nativeSessionOwner;
+  StreamSubscription<int>? _nativeSession;
+  Uint8List? _nativeIconBytes;
+  File? _nativeIconFile;
+  String? _nativeIconUri;
+  int _nativeIconGeneration = 0;
+  Future<void> _nativePurge = Future.value();
+
+  /// The native price field's text; the classic field keeps its own.
+  String _nativePrice = '';
+
   @override
   void initState() {
     super.initState();
+    if (nativePresentationEnabled) _startNativeIcon();
     PlatformManager.instance.analytics.aiAppGeneratorPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AiAppGeneratorProvider>();
@@ -48,8 +74,11 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     });
   }
 
+  void _updateNative(VoidCallback update) => setState(update);
+
   @override
   void dispose() {
+    _stopNativeIcon();
     _promptController.dispose();
     _promptFocusNode.dispose();
     super.dispose();
@@ -67,7 +96,10 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
           onPopInvokedWithResult: (didPop, _) {
             if (!didPop) provider.clear();
           },
-          child: provider.hasGeneratedApp ? _buildGeneratedAppView(provider) : _buildInputView(provider),
+          child: _nativeGeneratorSurface(
+            provider,
+            provider.hasGeneratedApp ? _buildGeneratedAppView(provider) : _buildInputView(provider),
+          ),
         );
       },
     );

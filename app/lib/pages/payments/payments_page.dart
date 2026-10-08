@@ -1,6 +1,8 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -11,6 +13,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'models/payment_method_config.dart';
+
+part 'payments_native.dart';
 
 class PaymentsPage extends StatefulWidget {
   const PaymentsPage({super.key});
@@ -28,6 +32,26 @@ class _PaymentsPageState extends State<PaymentsPage> {
       await context.read<PaymentMethodProvider>().getPaymentMethodsStatus();
     });
   }
+
+  // One closure per action, shared by the classic cards and the native rows, so analytics match.
+  void _manageActiveStripe() {
+    PlatformManager.instance.analytics.paymentMethodSelected(methodName: 'Stripe');
+    routeToPage(context, const StripeConnectSetup());
+  }
+
+  void _manageStripe() {
+    PlatformManager.instance.analytics.track('Manage Stripe');
+    routeToPage(context, const StripeConnectSetup());
+  }
+
+  void _setStripeActive(PaymentMethodProvider provider) {
+    provider.setActiveMethod(PaymentMethodType.stripe);
+    PlatformManager.instance.analytics.track('Set Stripe as active');
+  }
+
+  /// PayPal is no longer offered; only Stripe counts as an active method.
+  PaymentMethodType? _activeMethod(PaymentMethodProvider provider) =>
+      provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
 
   String _getPaymentSubtitle({required bool isActive, required bool isConnected}) {
     if (isActive) return context.l10n.paymentStatusActive;
@@ -62,6 +86,14 @@ class _PaymentsPageState extends State<PaymentsPage> {
   Widget build(BuildContext context) {
     return Consumer<PaymentMethodProvider>(
       builder: (context, provider, child) {
+        return _nativePaymentsSurface(provider, _buildClassic(provider));
+      },
+    );
+  }
+
+  Widget _buildClassic(PaymentMethodProvider provider) {
+    return Builder(
+      builder: (context) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(
@@ -83,9 +115,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     const SizedBox(height: 18),
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
-                        // PayPal is no longer offered; only treat Stripe as a valid active method.
-                        final activeMethod =
-                            provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
+                        final activeMethod = _activeMethod(provider);
                         final hasActiveMethod = activeMethod != null;
 
                         return Column(
@@ -146,10 +176,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
     final config = PaymentMethodConfig.stripe(
       title: context.l10n.paymentMethodStripe,
       subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
-      onManageTap: () {
-        PlatformManager.instance.analytics.paymentMethodSelected(methodName: 'Stripe');
-        routeToPage(context, const StripeConnectSetup());
-      },
+      onManageTap: _manageActiveStripe,
       isActive: true,
       isConnected: true,
     );
@@ -173,14 +200,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
           PaymentMethodConfig.stripe(
             title: context.l10n.paymentMethodStripe,
             subtitle: _getPaymentSubtitle(isActive: false, isConnected: true),
-            onManageTap: () {
-              PlatformManager.instance.analytics.track('Manage Stripe');
-              routeToPage(context, const StripeConnectSetup());
-            },
-            onSetActiveTap: () {
-              provider.setActiveMethod(PaymentMethodType.stripe);
-              PlatformManager.instance.analytics.track('Set Stripe as active');
-            },
+            onManageTap: _manageStripe,
+            onSetActiveTap: () => _setStripeActive(provider),
             isConnected: true,
             isActive: false,
           ),
@@ -191,10 +212,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
           PaymentMethodConfig.stripe(
             title: context.l10n.paymentMethodStripe,
             subtitle: _getPaymentSubtitle(isActive: false, isConnected: false),
-            onManageTap: () {
-              PlatformManager.instance.analytics.track('Manage Stripe');
-              routeToPage(context, const StripeConnectSetup());
-            },
+            onManageTap: _manageStripe,
             isConnected: false,
           ),
           true,

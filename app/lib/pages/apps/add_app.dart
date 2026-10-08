@@ -55,43 +55,7 @@ class _AddAppPageState extends State<AddAppPage> {
     super.initState();
   }
 
-  Future<void> _startEarningSheet(BuildContext context) async {
-    final l10n = context.l10n;
-    await showOmiSheet<void>(
-      context: context,
-      showCloseButton: false,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(l10n.startEarning, style: OmiType.title2),
-            const SizedBox(height: OmiSpacing.sm),
-            Text(
-              l10n.connectStripeOrPayPal,
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            ),
-            const SizedBox(height: OmiSpacing.xl),
-            OmiButton(
-              label: l10n.connectNow,
-              expand: true,
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                routeToPage(context, const PaymentsPage());
-              },
-            ),
-            const SizedBox(height: OmiSpacing.xs),
-            OmiButton.tertiary(
-              label: l10n.notNow,
-              expand: true,
-              onPressed: () => Navigator.pop(sheetContext),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> _startEarningSheet(BuildContext context) => showStartEarningPrompt(context);
 
   Future<void> _confirmAndSubmit(BuildContext context, AddAppProvider provider) async {
     final l10n = context.l10n;
@@ -458,4 +422,57 @@ class _AddAppPageState extends State<AddAppPage> {
       },
     );
   }
+}
+
+/// Offers payouts after a paid app is submitted without an active payout method. The native prompt
+/// and the classic sheet both route Connect to [PaymentsPage]; Not now leaves the user here.
+@visibleForTesting
+Future<void> showStartEarningPrompt(BuildContext context) async {
+  final l10n = context.l10n;
+  // An alert keeps both choices as labelled buttons, as the classic sheet does.
+  final result = await showIosNativeModal(context, title: l10n.startEarning, alert: true, sections: [
+    NativeSection('start_earning', [NativeRow('start_earning_message', l10n.connectStripeOrPayPal, kind: 'label')]),
+  ], actions: [
+    NativeRow('cancel', l10n.notNow),
+    NativeRow('connect', l10n.connectNow, symbol: 'creditcard'),
+  ]);
+  if (!context.mounted) return;
+  if (result != null) {
+    if (result.action == 'connect') routeToPage(context, const PaymentsPage());
+    return;
+  }
+  await showOmiSheet<void>(
+    context: context,
+    showCloseButton: false,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.startEarning, style: OmiType.title2),
+          const SizedBox(height: OmiSpacing.sm),
+          Text(
+            l10n.connectStripeOrPayPal,
+            textAlign: TextAlign.center,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton(
+            label: l10n.connectNow,
+            expand: true,
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              routeToPage(context, const PaymentsPage());
+            },
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton.tertiary(
+            label: l10n.notNow,
+            expand: true,
+            onPressed: () => Navigator.pop(sheetContext),
+          ),
+        ],
+      ),
+    ),
+  );
 }
