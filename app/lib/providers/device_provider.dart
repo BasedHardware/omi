@@ -13,8 +13,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/app_globals.dart';
-import 'package:omi/pages/home/firmware_update.dart';
-import 'package:omi/pages/home/omiglass_ota_update.dart';
+import 'package:omi/pages/home/firmware_update_dialog.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -36,7 +35,6 @@ import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
@@ -227,21 +225,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
 
       _pairingLostDialogShowing = true;
-      showDialog<void>(
-        context: context,
+      // One answer only (acknowledge), so an alert, not a confirmation.
+      showOmiAlert(
+        context,
+        title: context.l10n.bluetooth,
+        message: context.l10n.deviceUnpairedMessage,
+        okLabel: context.l10n.gotIt,
         barrierDismissible: false,
-        // One answer only (acknowledge), so an alert, not a confirmation.
-        builder: (dialogContext) => OmiAlertDialog(
-          title: dialogContext.l10n.bluetooth,
-          message: dialogContext.l10n.deviceUnpairedMessage,
-          actions: [
-            OmiDialogAction(
-              label: dialogContext.l10n.gotIt,
-              isDefault: true,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-          ],
-        ),
       ).whenComplete(() => _pairingLostDialogShowing = false);
     }
 
@@ -1289,53 +1279,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final prompt = _firmwareUpdatePromptCoordinator.beginPresentation();
     if (prompt == null) return;
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        final route = ModalRoute.of(dialogContext);
-        final navigator = Navigator.of(dialogContext);
-        _firmwareUpdatePromptCoordinator.attachDismissal(prompt, () {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!dialogContext.mounted || route == null || !route.isActive) return;
-            if (route.isCurrent) {
-              navigator.pop();
-            } else {
-              navigator.removeRoute(route);
-            }
-          });
-        });
-
-        return ConfirmationDialog(
-          title: dialogContext.l10n.firmwareUpdateAvailable,
-          description: dialogContext.l10n.firmwareUpdateAvailableDescription(_latestFirmwareVersion),
-          confirmText: dialogContext.l10n.update,
-          cancelText: dialogContext.l10n.later,
-          onConfirm: () {
-            if (!_firmwareUpdatePromptCoordinator.accept(prompt)) return;
-            Logger.info('Firmware update prompt accepted');
-            setFirmwareUpdateInProgress(true);
-            if (_isOmiGlassDevice) {
-              navigator.push(
-                omiPageRoute(
-                  builder: (context) =>
-                      OmiGlassOtaUpdate(device: pairedDevice, latestFirmwareDetails: _latestOmiGlassFirmwareDetails),
-                ),
-              );
-            } else {
-              navigator.push(omiPageRoute(builder: (context) => FirmwareUpdate(device: pairedDevice)));
-            }
-          },
-          onCancel: () {
-            if (_firmwareUpdatePromptCoordinator.defer(prompt)) {
-              Logger.info('Firmware update prompt deferred by user');
-            }
-          },
-        );
+    unawaited(presentFirmwareUpdatePrompt(
+      context,
+      coordinator: _firmwareUpdatePromptCoordinator,
+      prompt: prompt,
+      version: _latestFirmwareVersion,
+      onAccept: (navigator) {
+        setFirmwareUpdateInProgress(true);
+        navigator.push(omiPageRoute(
+            builder: (context) => firmwareUpdatePageFor(
+                omiGlass: _isOmiGlassDevice, device: pairedDevice, omiGlassDetails: _latestOmiGlassFirmwareDetails)));
       },
-    ).whenComplete(() {
-      _firmwareUpdatePromptCoordinator.complete(prompt);
-    });
+    ));
   }
 
   Future setisDeviceStorageSupport() async {

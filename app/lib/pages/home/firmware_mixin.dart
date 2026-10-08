@@ -298,13 +298,15 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     required String firmwareRevision,
     required String hardwareRevision,
     required String manufacturerName,
+    Future<Map> Function()? fetch,
   }) async {
-    latestFirmwareDetails = await getLatestFirmwareVersion(
-      deviceModelNumber: deviceModelNumber,
-      firmwareRevision: firmwareRevision,
-      hardwareRevision: hardwareRevision,
-      manufacturerName: manufacturerName,
-    );
+    latestFirmwareDetails = await (fetch?.call() ??
+        getLatestFirmwareVersion(
+          deviceModelNumber: deviceModelNumber,
+          firmwareRevision: firmwareRevision,
+          hardwareRevision: hardwareRevision,
+          manufacturerName: manufacturerName,
+        ));
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }
@@ -313,8 +315,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  Future getStableVersion({required String deviceModelNumber}) async {
-    latestFirmwareDetails = await getStableFirmwareVersion(deviceModelNumber: deviceModelNumber);
+  Future getStableVersion({required String deviceModelNumber, Future<Map> Function()? fetch}) async {
+    latestFirmwareDetails = await (fetch?.call() ?? getStableFirmwareVersion(deviceModelNumber: deviceModelNumber));
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);
     }
