@@ -14,7 +14,8 @@ then:
      of /api/omi/stats/profitability for signups/revenue/cost/conversion).
      The mobile board mirrors the macOS board panel-for-panel except the
      desktop-only product surfaces (floating bar, desktop notifications,
-     desktop crash rate, macOS version pies), which have no mobile analog.
+     desktop crash rate, macOS version pies), which have no mobile analog,
+     plus two mobile-only battery-health panels.
 
 Mobile IS instrumented in PostHog (iOS since 2025-03, Android since 2026-05)
 but does not emit `Sign In Completed`, so its signup/activation cohorts anchor
@@ -361,6 +362,88 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
     }
 
 
+DEVICE_HEALTH_PATH = "/api/omi/stats/device-health?days=14"
+PENDANT_DRAIN_TITLE = "Pendant battery drain (%/h, p50 by firmware)"
+PHONE_DRAIN_TITLE = "Phone battery drain (%/h, p50 by build)"
+MOBILE_BATTERY_TITLES = {PENDANT_DRAIN_TITLE, PHONE_DRAIN_TITLE}
+
+
+def _battery_bar(panel_id: int, title: str, description: str, root: str,
+                  columns: list[dict], no_value: str | None = None) -> dict:
+    """Categorical bar for one device-health series. One string column is the
+    category; one number column is the bar, so a count series cannot dwarf it."""
+    defaults: dict = {
+        "unit": "none",
+        "decimals": 2,
+        "min": 0,
+        "color": {"mode": "fixed", "fixedColor": "#3b82f6"},
+        "custom": {"axisPlacement": "auto", "fillOpacity": 80, "lineWidth": 0},
+    }
+    if no_value:
+        defaults["noValue"] = no_value
+    return {
+        "id": panel_id,
+        "type": "barchart",
+        "title": title,
+        "description": description,
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "fieldConfig": {"defaults": defaults, "overrides": []},
+        "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": False},
+            "orientation": "auto",
+            "showValue": "never",
+            "stacking": "none",
+            "tooltip": {"mode": "single", "sort": "none"},
+            "xTickLabelRotation": 0,
+        },
+        "targets": [{
+            "refId": "A",
+            "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+            "type": "json",
+            "source": "url",
+            "parser": "backend",
+            "format": "table",
+            "url": f"{PROXY}{DEVICE_HEALTH_PATH}",
+            "url_options": {"method": "GET", "data": ""},
+            "root_selector": root,
+            "columns": columns,
+        }],
+    }
+
+
+def device_health_panels() -> list[dict]:
+    return [
+        _battery_bar(
+            1101,
+            PENDANT_DRAIN_TITLE,
+            "Median pendant battery drain in percent per hour, by firmware, "
+            "over the last 14 days. The median uses only samples whose drain is "
+            "between 0.1 and 100; an unfiltered median is 0 because most daily "
+            "events report no drain.",
+            "pendant_health",
+            [
+                {"selector": "firmware", "text": "Firmware", "type": "string"},
+                {"selector": "p50_drain_valid", "text": "p50 drain %/h", "type": "number"},
+            ],
+            "n/a",
+        ),
+        _battery_bar(
+            1102,
+            PHONE_DRAIN_TITLE,
+            "Median phone battery drain in percent per hour, by OS and app build, "
+            "over the last 14 days. Empty until Phone Battery Sample events exist "
+            "(shipping in a parallel app PR).",
+            "phone_health.series",
+            [
+                {"selector": "label", "text": "OS / build", "type": "string"},
+                {"selector": "p50_drain_per_hour", "text": "p50 drain %/h", "type": "number"},
+            ],
+            "awaiting instrumentation",
+        ),
+    ]
+
+
 def set_kfactor_tile_description(dash, platform_label: str, scope: str = "all") -> None:
     """The K-factor tile is platform-scoped per board; keep its description
     honest about which signals and which population each board counts."""
@@ -547,6 +630,11 @@ def build_platform_board(base, scope: str) -> dict:
                                 "(PostHog telemetry; mobile does not emit Sign In Completed).")
 
     prune_vars_and_titles(dash)
+    if scope == "mobile":
+        # Pendant and phone battery telemetry exist only on the mobile clients.
+        # Appended after the shared mirror so macOS stays panel-for-panel and
+        # reflow packs the new row at the bottom.
+        dash["panels"].extend(device_health_panels())
     reflow(dash)
     return finish(dash, f"omi-tv-{scope}", f"Omi TV — {label}")
 
