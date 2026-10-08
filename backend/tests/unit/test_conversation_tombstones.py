@@ -15,6 +15,7 @@ import pytest
 
 from database import conversation_tombstones as tombstones
 from google.api_core.exceptions import AlreadyExists
+from testing.import_isolation import stub_modules, AutoMockModule
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -80,7 +81,9 @@ def store(monkeypatch):
         'transcript_segments': [{'text': 'private'}],
         'structured': {'title': 'private'},
     }
-    return store
+    # The route's notification collaborator is outside this storage/delete contract.
+    with stub_modules({'utils.notifications': AutoMockModule('utils.notifications')}):
+        yield store
 
 
 def test_tombstone_contains_only_identity_and_point_lookup_is_owner_scoped(store):
@@ -192,8 +195,6 @@ def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registrati
 
 
 def test_developer_delete_commits_tombstone_before_cleanup_failure(store, monkeypatch):
-    from testing.import_isolation import stub_modules, AutoMockModule
-
     helper = AutoMockModule('utils.conversations.merge_conversations')
 
     def fail(*args):
