@@ -34,6 +34,8 @@ class _Memories extends MemoriesProvider {
   final deleted = <String>[];
   final calls = <String>[];
   var loads = 0, confirmed = 0;
+  bool isLoading = false, loadError = false;
+  Completer<void>? initGate;
 
   @override
   List<Memory> get memories => items;
@@ -43,7 +45,7 @@ class _Memories extends MemoriesProvider {
           if (!device && memory.content.toLowerCase().contains(query)) memory
       ];
   @override
-  bool get loading => false;
+  bool get loading => isLoading;
   @override
   String get searchQuery => query;
   @override
@@ -57,7 +59,7 @@ class _Memories extends MemoriesProvider {
   @override
   bool get showPartialLoadError => partial;
   @override
-  bool get showLoadError => false;
+  bool get showLoadError => loadError;
   @override
   bool get memoryBeliefEnabled => belief;
   @override
@@ -73,7 +75,7 @@ class _Memories extends MemoriesProvider {
   @override
   bool canRevertSupersededFact(Memory memory) => revertable.contains(memory.id);
   @override
-  Future<void> init() async {}
+  Future<void> init() async => initGate?.future;
   @override
   Future<void> loadMemories({int limit = 100}) async => loads++;
   @override
@@ -375,6 +377,28 @@ void main() {
         ..notifyListeners();
       await NativeTestHost.settle(tester);
       expect(_published(host).$1['memory_history'], ['memory_history_label']);
+    });
+
+    testWidgets('disables management during the first load and names the load failure', (tester) async {
+      final host = NativeTestHost.install();
+      final memories = _Memories([])
+        ..isLoading = true
+        ..initGate = Completer<void>();
+      await tester.pumpWidget(_app(memories, const MemoriesPage(showMindMap: false)));
+      await NativeTestHost.settle(tester);
+      expect(_published(host).$2['memories_manage']!['enabled'], isFalse);
+
+      memories
+        ..isLoading = false
+        ..loadError = true;
+      memories.initGate!.complete();
+      await NativeTestHost.settle(tester);
+      final view = host.created.first;
+      final snapshot =
+          host.calls.lastWhere((call) => call.$1 == view && call.$2.method == 'update').$2.arguments as Map;
+      expect(snapshot['failed'], isTrue);
+      expect(snapshot['error'], _en.couldNotLoadMemories);
+      expect(_published(host).$2['memories_manage']!['enabled'], isTrue);
     });
 
     testWidgets('mirrors the three empty states and their one action', (tester) async {

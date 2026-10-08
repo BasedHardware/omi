@@ -326,6 +326,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         fallback: classic,
         loading: loading,
         failed: provider.showLoadError,
+        errorMessage: l10n.couldNotLoadMemories,
         empty: searching ? l10n.noMemoriesFound : l10n.noMemoriesYet,
         searchValue: provider.searchQuery,
         searchPlaceholder: l10n.searchMemories,
@@ -341,7 +342,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               _createMemory(provider);
               PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
             }),
-          NativeRow('memories_manage', l10n.memoryManagement, symbol: 'line.3.horizontal.decrease', action: (_) {
+          NativeRow('memories_manage', l10n.memoryManagement, symbol: 'line.3.horizontal.decrease', enabled: !loading,
+              action: (_) {
             _showMemoryManagementSheet(context, provider);
           }),
         ],
