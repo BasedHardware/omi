@@ -95,3 +95,33 @@ def test_legacy_enrollment_audio_repair_reaches_all_consumers(monkeypatch, surfa
         monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda uid: False)
         cache = stage.load_voiceprints_for_resolution('u')
     assert set(cache) == {'user'}
+
+
+def test_continuous_queue_does_not_starve_overdue_owner_retry(monkeypatch):
+    loads = []
+    before_idle = []
+    state = SimpleNamespace(speaker_id_enabled=True, active=False, speaker_id_done=asyncio.Event())
+    matcher = speakers.SpeakerMatcher(SimpleNamespace(state=state))
+    matcher._profile_conversation_id = 'c'
+    matcher._owner_load_failed = True
+    matcher._profile_retry_after = 0
+    matcher.speaker_to_person[1] = ('p', 'Paid person')
+
+    async def load(**kwargs):
+        loads.append(kwargs)
+        matcher._owner_load_failed = False
+
+    class BusyQueue:
+        count = 0
+
+        async def get(self):
+            self.count += 1
+            if self.count > 100:
+                before_idle.append(len(loads))
+                raise asyncio.TimeoutError
+            return {'speaker_id': 1, 'duration': 0.5}
+
+    matcher.queue = BusyQueue()
+    monkeypatch.setattr(matcher, '_load_profiles', load)
+    asyncio.run(matcher.load_and_run())
+    assert before_idle == [1]

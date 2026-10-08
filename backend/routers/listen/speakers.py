@@ -392,6 +392,8 @@ class SpeakerMatcher:
                 if not state.active:
                     break
                 continue
+            if self._profile_conversation_id is not None and self._owner_load_failed:
+                await self.refresh_for_conversation(self._profile_conversation_id)
             speaker_id = segment['speaker_id']
             if should_spawn_speaker_match(
                 speaker_already_mapped=speaker_id in self.speaker_to_person,
