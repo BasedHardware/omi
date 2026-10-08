@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -97,6 +98,7 @@ class ConversationDetailHeader extends StatelessWidget {
               );
             },
           ),
+          ConversationEntityChips(conversationId: conversation.id),
         ],
       ),
     );
