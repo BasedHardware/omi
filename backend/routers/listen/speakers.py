@@ -42,6 +42,12 @@ from utils.stt.speaker_match import (
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
 from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL, OMI_LIVE_SPEAKER_COLLAPSE_TOTAL
+from utils.observability.owner_recognition import (
+    live_decision_labels,
+    pending_decision_target,
+    record_live_speaker_decision,
+    record_live_speaker_rollover,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +59,11 @@ MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 # instead of silently empty. The set is deliberately small:
 # - window_outside_buffer: the segment's audio window does not intersect the
 #   ring buffer's retained range (the post-failover clock bug's signature).
-# - too_short: the segment, or what remains of its window after subtracting
-#   already-embedded audio, is below the minimum embedding duration.
+# - segment_shorter_than_minimum: the segment's own duration is below the
+#   minimum embedding duration, before any window math.
+# - no_fresh_audio: subtracting audio already embedded leaves nothing to embed.
+# - window_shorter_than_minimum: pooled fresh intervals or extracted PCM
+#   remain below the current extraction floor; later fragments may complete them.
 # - no_pcm: no buffered audio at all, or the extraction returned no PCM.
 # - stale_generation: the matcher's conversation/profile state moved on while
 #   this detection was queued, or the segment belongs to an earlier conversation.
@@ -64,7 +73,9 @@ MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 SPEAKER_ID_EXIT_REASONS = frozenset(
     {
         'window_outside_buffer',
-        'too_short',
+        'segment_shorter_than_minimum',
+        'no_fresh_audio',
+        'window_shorter_than_minimum',
         'no_pcm',
         'stale_generation',
         'already_mapped',
@@ -98,6 +109,10 @@ class SpeakerMatcher:
         self.voice_candidates: Dict[int, list] = {}
         self.match_scores: list = []
         self._suggested_person: Dict[int, str] = {}
+        # manual or automatic, so a rollover can say which mappings were dropped.
+        self._mapping_origin: Dict[int, str] = {}
+        # Set by the rollover path before refresh; None means the caller did not report a receipt.
+        self._pending_rollover_carry: Optional[set[int]] = None
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
@@ -122,6 +137,10 @@ class SpeakerMatcher:
         self._profile_retry_after = 0.0
         self._owner_load_failed = False
 
+    def note_rollover_carry(self, carried_speaker_ids: set[int]) -> None:
+        """Manual receipt ids copied by this rollover; automatic ids join after validation."""
+        self._pending_rollover_carry = set(carried_speaker_ids)
+
     async def refresh_for_conversation(
         self,
         conversation_id: str,
@@ -131,6 +150,7 @@ class SpeakerMatcher:
     ) -> None:
         async with self._profile_lock:
             if self._profile_conversation_id == conversation_id:
+                self._pending_rollover_carry = None
                 if self._owner_load_failed and time.monotonic() >= self._profile_retry_after:
                     self._profile_retry_after = time.monotonic() + 30.0
                     await self._load_profiles()
@@ -159,6 +179,14 @@ class SpeakerMatcher:
                             self.speaker_evidence[voice],
                             self._covered_audio.get(voice, []),
                         )
+            carried = self._pending_rollover_carry
+            old_mappings = dict(self.speaker_to_person)
+            old_origins = dict(self._mapping_origin)
+            if carried is not None:
+                # A copied receipt id may be a rejection or a different manual
+                # decision. It does not prove carry of the old automatic map.
+                carried = {voice for voice in carried if old_origins.get(voice) == 'manual'}
+            count_rollover = self._profile_conversation_id is not None and carried is not None
             self.clear()
             self._profile_conversation_id = conversation_id
             if self.host.state.speaker_id_enabled:
@@ -210,6 +238,11 @@ class SpeakerMatcher:
                     self._covered_audio[voice] = covered
                     self._voice_scopes[voice] = owner_carry_scope
                     self._voice_segments[voice] = ''
+                    self._mapping_origin[voice] = 'automatic'
+                    if carried is not None:
+                        carried.add(voice)
+            if count_rollover:
+                record_live_speaker_rollover(old_mappings, old_origins, carried)
 
     async def resolve_owner_name(self) -> Optional[str]:
         """The account owner's first name, resolved at most once per session.
@@ -346,7 +379,10 @@ class SpeakerMatcher:
             else:
                 # Dropped before a match is attempted; count it with the same
                 # bounded vocabulary the match path uses.
-                self._record_exit('already_mapped' if speaker_id in self.speaker_to_person else 'too_short', speaker_id)
+                self._record_exit(
+                    'already_mapped' if speaker_id in self.speaker_to_person else 'segment_shorter_than_minimum',
+                    speaker_id,
+                )
         state.speaker_id_done.set()
 
     def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
@@ -457,6 +493,7 @@ class SpeakerMatcher:
     def _retract_rejected_voice(self, voice: int, segment_id: Optional[str]) -> None:
         stale = voice in self.speaker_to_person or voice in self._suggested_person
         self.speaker_to_person.pop(voice, None)
+        self._mapping_origin.pop(voice, None)
         self.voice_candidates.pop(voice, None)
         self._suggested_person.pop(voice, None)
         self.voice_identity_status[voice] = SpeakerIdentityStatus.no_match
@@ -504,7 +541,7 @@ class SpeakerMatcher:
                 # an inverted-clamp "too short" that hides the real cause.
                 self._record_exit(
                     (
-                        'too_short'
+                        'segment_shorter_than_minimum'
                         if segment['duration'] < self.host.limits.speaker_id_min_audio
                         else 'window_outside_buffer'
                     ),
@@ -545,7 +582,7 @@ class SpeakerMatcher:
                 fresh = remaining
             if not fresh:
                 # Zero fresh seconds left after subtracting embedded audio.
-                self._record_exit('too_short', speaker_id)
+                self._record_exit('no_fresh_audio', speaker_id)
                 return
             # A metadata cap also bounds pathological alternating tiny turns.
             if speaker_id not in self._pending_audio and len(self._pending_audio) >= 128:
@@ -557,7 +594,7 @@ class SpeakerMatcher:
                 0.5, min(self.host.limits.speaker_id_min_audio, SPEAKER_MATCH_MIN_EVIDENCE_SECONDS - have_seconds)
             )
             if sum(end - start for start, end in fresh) < needed:
-                self._record_exit('too_short', speaker_id)
+                self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
             selected = []
             chunks = []
@@ -580,7 +617,7 @@ class SpeakerMatcher:
             pcm = b''.join(chunks)
             clip_seconds = len(pcm) / (2 * self.host.request.sample_rate)
             if clip_seconds < needed:
-                self._record_exit('too_short', speaker_id)
+                self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
             samples = np.frombuffer(pcm, dtype=np.int16)
             buffer = io.BytesIO()
@@ -610,6 +647,10 @@ class SpeakerMatcher:
                 # Accumulation, not a drop: this speaker's next clip reuses the
                 # evidence and reaches a decision, so it logs (below) but is not
                 # an exit reason.
+                record_live_speaker_decision(
+                    pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings),
+                    'pending',
+                )
                 logger.info(
                     'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending session=%s',
                     speaker_id,
@@ -679,6 +720,7 @@ class SpeakerMatcher:
                         else SpeakerIdentityStatus.not_user
                     )
                     self.speaker_to_person[speaker_id] = (person_id, name)
+                    self._mapping_origin[speaker_id] = 'manual'
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True
@@ -693,9 +735,15 @@ class SpeakerMatcher:
                 voice_groups=voice_groups,
             )
             decision = decisions.get(speaker_id)
+            if decision is not None:
+                decision_target, decision_kind = live_decision_labels(
+                    decision, owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings
+                )
+                record_live_speaker_decision(decision_target, decision_kind)
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s session=%s',
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s '
+                'session=%s conversation=%s',
                 speaker_id,
                 len(evidence),
                 evidence_seconds,
@@ -705,6 +753,7 @@ class SpeakerMatcher:
                 decision.accepted if decision else False,
                 decision.owner_contended if decision else False,
                 self._session_log_id(),
+                conversation_id,
             )
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
@@ -730,6 +779,7 @@ class SpeakerMatcher:
                     best_name = self.person_embeddings[best_id]['name']
                     changed = self.speaker_to_person.get(voice) != (best_id, best_name)
                     self.speaker_to_person[voice] = (best_id, best_name)
+                    self._mapping_origin[voice] = 'automatic'
                     status = (
                         SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
                     )
@@ -738,6 +788,7 @@ class SpeakerMatcher:
                 else:
                     if result.owner_contended:
                         self.speaker_to_person.pop(voice, None)
+                        self._mapping_origin.pop(voice, None)
                         if self.voice_identity_status.get(voice) != SpeakerIdentityStatus.ambiguous:
                             logger.info(
                                 'speaker_id_owner_contention surface=live speaker=%s session=%s',
@@ -855,6 +906,8 @@ class SpeakerMatcher:
         self._pending_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
+        self._mapping_origin.clear()
+        self._pending_rollover_carry = None
         self.speaker_evidence.clear()
         self.segment_assignments.clear()
         self.segment_identity_status.clear()

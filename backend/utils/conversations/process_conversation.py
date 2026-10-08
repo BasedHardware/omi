@@ -122,6 +122,12 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.observability.owner_recognition import (
+    emit_finalized_owner_recognition,
+    lookup_owner_voiceprint,
+    owner_recognition_already_observed,
+    owner_recognition_needs_profile,
+)
 from utils.metrics import (
     record_jit_first_open,
     record_lazy_desktop_deferral,
@@ -2831,6 +2837,7 @@ def process_conversation(
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
     recovery_transcript_decoded: bool = True,
+    prior_relevance_decision: Mapping[str, Any] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2840,10 +2847,43 @@ def process_conversation(
     """
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
+    # Snapshot before this call replaces structured or status. Sync intake's
+    # completed status is not an observation; see owner_recognition_already_observed.
+    already_observed = owner_recognition_already_observed(
+        conversation,
+        is_reprocess=is_reprocess,
+        trigger=trigger,
+        prior_relevance_decision=prior_relevance_decision,
+    )
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
+
+    def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # One observation per conversation, on every successful persist. The
+        # free-tier terminal stores and the eager-extraction denial return
+        # through report_persistence, so a new early return that reports a
+        # completed write is observed too. Telemetry must not fail the write.
+        try:
+            profile = None
+            if owner_recognition_needs_profile(completed):
+                profile = lookup_owner_voiceprint(uid, read_embedding=users_db.get_user_speaker_embedding)
+            emit_finalized_owner_recognition(
+                completed,
+                uid=uid,
+                already_observed=already_observed,
+                owner_profile_present=profile,
+            )
+        except Exception:
+            try:
+                logger.warning(
+                    'owner_recognition_outcome emit_failed uid=%s conversation=%s',
+                    uid,
+                    getattr(completed, 'id', None),
+                )
+            except Exception:
+                return
 
     def report_persistence(
         current: bool,
@@ -2853,6 +2893,7 @@ def process_conversation(
     ) -> None:
         if current and completed is not None:
             record_capture_loss(completed)
+            _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:

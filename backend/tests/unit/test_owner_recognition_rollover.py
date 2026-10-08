@@ -9,6 +9,7 @@ import pytest
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from routers.listen.speakers import SpeakerMatcher
 from tests.unit.test_live_speaker_carry import _CarryHarness, _segment, _stamped_epoch, SCOPE
+from utils.observability.owner_recognition import LIVE_SPEAKER_ROLLOVER
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.stt.speaker_match import select_speaker_match
 
@@ -66,6 +67,9 @@ async def test_automatic_owner_rollover_transcript(
         harness.on_scope_swap = lambda: setattr(
             controller.host.receiver, 'speaker_provider_epoch', _stamped_epoch('new')
         )
+    automatic = LIVE_SPEAKER_ROLLOVER.labels(carried='automatic', target='owner')
+    dropped = LIVE_SPEAKER_ROLLOVER.labels(carried='none', target='owner')
+    automatic_before, dropped_before = automatic._value.get(), dropped._value.get()
     await controller.create_new_in_progress_conversation(rollover=True)
     row = harness.rows[harness.pointer]
     incoming = [TranscriptSegment(**_segment('new', start=0.0, end=0.5))]
@@ -75,3 +79,5 @@ async def test_automatic_owner_rollover_transcript(
         assert matcher._covered_audio[0] == [(0.0, 5.0)]
     assert not row.get('manual_speaker_assignments') or rejected
     assert matcher.segment_assignments == {}
+    assert automatic._value.get() == automatic_before + int(incoming[0].is_user)
+    assert dropped._value.get() == dropped_before + int(not incoming[0].is_user)
