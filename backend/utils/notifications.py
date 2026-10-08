@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from config.action_item_reminder_policy import should_schedule_action_item_reminder
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -622,11 +623,23 @@ def send_new_app_review_notification(
     send_notification(app_owner_uid, title, body, data)
 
 
-def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
+def send_action_item_data_message(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    *,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+):
     """
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
     if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
         from utils.commitment_followup_tasks import schedule_followup
 
@@ -809,16 +822,19 @@ def sync_action_item_reminder(
     description: str,
     completed: bool,
     due_at: Optional[Union[datetime, str]],
+    *,
+    status: Optional[str] = None,
+    deleted: bool = False,
 ):
     """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
 
     The mobile client schedules a local reminder from the action-item update/data message and
     cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
-    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
-    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    completed, explicitly non-active, deleted, or undated; only an active (or legacy status-absent)
+    task with a due date is (re)scheduled. Reusing send_action_item_deletion_message is intentional: the client treats it as
     "cancel the scheduled local notification by id", not as a task deletion.
     """
-    if completed or not due_at:
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
     if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
