@@ -3591,3 +3591,9 @@ locks, deletion, manual decisions and owner rejection prevent adoption. This
 state stays in the listen matcher; it never creates a manual receipt or
 training authorization. Reconnects and provider stream reconstructions start a
 new scope and must establish acoustic evidence again.
+
+Live identity consumes positioned provider fragments, accumulating distinct
+intervals in the existing ring before embedding. Overlaps and repeats count
+once; successful extraction reserves its intervals. Pending metadata and task
+concurrency are bounded. The five-second live decision floor and verification
+thresholds remain unchanged, as does WAL's separate eligibility policy.

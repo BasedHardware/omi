@@ -103,6 +103,7 @@ class SpeakerMatcher:
         # intervals survive centroid eviction, but are pruned with the audio ring.
         self._speaker_locks: Dict[int, asyncio.Lock] = {}
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
+        self._pending_audio: Dict[int, list[tuple[float, float]]] = {}
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
@@ -280,8 +281,10 @@ class SpeakerMatcher:
             if should_spawn_speaker_match(
                 speaker_already_mapped=speaker_id in self.speaker_to_person,
                 duration=segment['duration'],
-                min_audio_seconds=self.host.limits.speaker_id_min_audio,
+                min_audio_seconds=0.0,
             ):
+                if len(self.tasks) >= 16:
+                    await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
                 task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
                 self.tasks.add(task)
                 task.add_done_callback(self.tasks.discard)
@@ -433,9 +436,6 @@ class SpeakerMatcher:
             if ring_buffer is None:
                 self._record_exit('no_pcm', speaker_id)
                 return
-            if segment['duration'] < self.host.limits.speaker_id_min_audio:
-                self._record_exit('too_short', speaker_id)
-                return
             time_range = ring_buffer.get_time_range()
             if time_range is None:
                 self._record_exit('no_pcm', speaker_id)
@@ -447,14 +447,36 @@ class SpeakerMatcher:
                 # after a failover while the window was still computed from
                 # the first provider's clock. Name it; never fall through to
                 # an inverted-clamp "too short" that hides the real cause.
-                self._record_exit('window_outside_buffer', speaker_id)
+                self._record_exit(
+                    (
+                        'too_short'
+                        if segment['duration'] < self.host.limits.speaker_id_min_audio
+                        else 'window_outside_buffer'
+                    ),
+                    speaker_id,
+                )
                 return
             # Streaming providers resend/extend merged segments. Subtract every
             # successfully embedded interval before choosing a fresh clip, so an
             # update cannot turn three seconds of speech into six seconds of evidence.
             covered = [(a, b) for a, b in self._covered_audio.get(speaker_id, []) if b > buffer_start]
             self._covered_audio[speaker_id] = covered
-            fresh = [(max(buffer_start, segment['abs_start']), min(buffer_end, segment['abs_end']))]
+            # Retain interval metadata only; PCM stays in the bounded ring.
+            # Coalesce provider repeats before subtracting successful evidence.
+            incoming = (
+                max(buffer_start, segment['abs_start']),
+                min(buffer_end, segment['abs_end'], segment['abs_start'] + max(0.0, segment['duration'])),
+            )
+            ranges = self._pending_audio.get(speaker_id, []) + [incoming]
+            fresh = []
+            for start, end in sorted(ranges):
+                start, end = max(start, buffer_start), min(end, buffer_end)
+                if end <= start:
+                    continue
+                if fresh and start <= fresh[-1][1]:
+                    fresh[-1] = (fresh[-1][0], max(fresh[-1][1], end))
+                else:
+                    fresh.append((start, end))
             for used_start, used_end in covered:
                 remaining = []
                 for start, end in fresh:
@@ -470,17 +492,36 @@ class SpeakerMatcher:
                 # Zero fresh seconds left after subtracting embedded audio.
                 self._record_exit('too_short', speaker_id)
                 return
-            extract_start, extract_end = max(fresh, key=lambda interval: interval[1] - interval[0])
-            if extract_end - extract_start > MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS:
-                center = (extract_start + extract_end) / 2
-                half_window = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS / 2
-                extract_start, extract_end = center - half_window, center + half_window
-            if extract_end - extract_start < self.host.limits.speaker_id_min_audio:
+            # A metadata cap also bounds pathological alternating tiny turns.
+            if speaker_id not in self._pending_audio and len(self._pending_audio) >= 128:
+                self._pending_audio.pop(next(iter(self._pending_audio)))
+            self._pending_audio[speaker_id] = fresh[-128:]
+            fresh = self._pending_audio[speaker_id]
+            have_seconds = sum(seconds for _, seconds in self.speaker_evidence.get(speaker_id, ()))
+            needed = max(
+                0.5, min(self.host.limits.speaker_id_min_audio, SPEAKER_MATCH_MIN_EVIDENCE_SECONDS - have_seconds)
+            )
+            if sum(end - start for start, end in fresh) < needed:
                 self._record_exit('too_short', speaker_id)
                 return
-            pcm = ring_buffer.extract(extract_start, extract_end)
-            if not pcm:
-                self._record_exit('no_pcm', speaker_id)
+            selected = []
+            chunks = []
+            remaining_seconds = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
+            for start, end in fresh:
+                if remaining_seconds <= 0:
+                    break
+                end = min(end, start + remaining_seconds)
+                chunk = ring_buffer.extract(start, end)
+                if not chunk:
+                    self._record_exit('no_pcm', speaker_id)
+                    return
+                chunks.append(chunk)
+                selected.append((start, end))
+                remaining_seconds -= end - start
+            pcm = b''.join(chunks)
+            clip_seconds = len(pcm) / (2 * self.host.request.sample_rate)
+            if clip_seconds < needed:
+                self._record_exit('too_short', speaker_id)
                 return
             samples = np.frombuffer(pcm, dtype=np.int16)
             buffer = io.BytesIO()
@@ -501,8 +542,8 @@ class SpeakerMatcher:
                 self._record_exit(drop_reason, speaker_id)
                 return
             # Reserve only successful embeddings: a failed request may be retried.
-            covered.append((extract_start, extract_end))
-            clip_seconds = extract_end - extract_start
+            covered.extend(selected)
+            self._pending_audio.pop(speaker_id, None)
             evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
             evidence.append((query, clip_seconds))
             evidence_seconds = sum(seconds for _, seconds in evidence)
@@ -751,6 +792,7 @@ class SpeakerMatcher:
         self._profile_conversation_id = None
         self._named_speakers_allowed = None
         self._covered_audio.clear()
+        self._pending_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
         self.speaker_evidence.clear()

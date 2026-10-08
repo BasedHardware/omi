@@ -541,3 +541,30 @@ def test_known_household_member_does_not_contend_for_the_owner():
     result = arbitrate_owner_matches(rows, {i: select_speaker_match(row) for i, row in rows.items()})
     assert result[0].person_id == 'user'
     assert result[1].person_id == 'person'
+
+
+def test_subsecond_live_fragments_reach_owner_transcript(monkeypatch):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, emitted = _live_matcher(monkeypatch, [owner] * 6)
+    for index in range(15):
+        # Real provider fragments, not merged text: 7.5 distinct speech seconds.
+        fragment = _segment(f's{index}', index * 0.5, 0.5)
+        fragment['speaker_id'] = 1
+        fragment['speaker_id_scope'] = 'socket:0'
+        asyncio.run(matcher.match(1, fragment))
+    from utils.speaker_assignment import process_speaker_assigned_segments
+
+    rendered = TranscriptSegment(id='reply', text='Okay', speaker_id=1, is_user=False, start=8.0, end=8.5)
+    process_speaker_assigned_segments([rendered], matcher.segment_assignments, matcher.speaker_to_person)
+    assert rendered.model_dump()['is_user'] is True
+    assert rendered.speaker_label_source == 'auto'
+    assert len(emitted) == 1
+
+
+def test_repeated_tiny_fragment_cannot_mint_owner_evidence(monkeypatch):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, _, emitted = _live_matcher(monkeypatch, [owner] * 20)
+    for _ in range(20):
+        asyncio.run(matcher.match(1, _segment('same', 0.0, 0.5)))
+    assert 1 not in matcher.speaker_to_person
+    assert not emitted
