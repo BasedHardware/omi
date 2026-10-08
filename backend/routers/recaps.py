@@ -133,6 +133,9 @@ def _period_open_tasks(
         )
         return tasks, False
     except Exception:
+        # The fallback warning carries no cause; keep it at debug so an
+        # unexpected error (not just a failed read) is still traceable.
+        logger.debug('period recap open-task read failed', exc_info=True)
         record_fallback(
             component='daily_summary',
             from_mode='with_tasks',
@@ -168,6 +171,7 @@ def _period_people(
                 names[person_id] = name
         return stats, names
     except Exception:
+        logger.debug('period recap people scan failed', exc_info=True)
         record_fallback(
             component='daily_summary',
             from_mode='with_people',

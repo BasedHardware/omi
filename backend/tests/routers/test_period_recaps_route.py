@@ -203,6 +203,27 @@ def test_people_scan_failure_still_serves_the_recap_and_records_the_fallback(dep
     assert [r for r in caplog.records if r.name == recaps_mod.logger.name] == []
 
 
+def test_a_degraded_read_keeps_its_cause_at_debug_level(deps, monkeypatch, caplog):
+    # The fallback warning names no cause, so a programming error inside a read
+    # would otherwise look like a routine outage. Its traceback stays at debug.
+    def broken_scan(uid, **_kwargs):
+        raise TypeError('unexpected keyword argument')
+
+    def broken_tasks(uid, **_kwargs):
+        raise KeyError('missing field')
+
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', broken_scan)
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', broken_tasks)
+    monkeypatch.setattr(recaps_mod, 'record_fallback', lambda **kwargs: None)
+
+    with caplog.at_level(logging.DEBUG, logger=recaps_mod.logger.name):
+        _get('week', '2026-10-01', response=Response())
+
+    records = [r for r in caplog.records if r.name == recaps_mod.logger.name]
+    assert {r.levelno for r in records} == {logging.DEBUG}
+    assert sorted(r.exc_info[0].__name__ for r in records) == ['KeyError', 'TypeError']
+
+
 def test_a_failed_daily_recap_read_fails_the_request(deps, monkeypatch):
     # The daily recaps are the recap: without them every total would read zero,
     # so the failure reaches the app as an error it offers Try Again on.
