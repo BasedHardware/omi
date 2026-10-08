@@ -29,6 +29,7 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = context.read<ReviewProvider?>();
+      provider?.reportReleaseChannel();
       if (provider != null && provider.availability == ReviewAvailability.unknown) provider.load();
     });
   }

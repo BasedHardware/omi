@@ -34,6 +34,7 @@ const _speaker = ReviewItem(
 Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<String, dynamic>)> sent) async {
   final provider = ReviewProvider(
     isEligible: () => true,
+    reportChannel: (_) async => const ApiSuccess<void>(null),
     loadItems: () async => ApiSuccess(ReviewItemsResponse(items: items, remainingToday: items.length)),
     sendAnswer: (item, answer) async {
       sent.add((item.itemId, answer.toJson(item.kind)));
@@ -86,7 +87,9 @@ void main() {
 
   testWidgets('the Home entry shows the fallback while Review is off, and hides when caught up', (tester) async {
     final off = ReviewProvider(
-        isEligible: () => true, loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+        isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
     await off.load();
     await tester.pumpWidget(_host(off, const ReviewEntryCard(fallback: Text('old card'))));
     expect(find.text('old card'), findsOneWidget);

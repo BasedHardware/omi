@@ -117,18 +117,37 @@ void main() {
   group('ReviewProvider', () {
     test('a 404 turns the surface off; success turns it on', () async {
       final off = ReviewProvider(
-          isEligible: () => true, loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+          isEligible: () => true,
+          reportChannel: (_) async => const ApiSuccess<void>(null),
+          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
       await off.load();
       expect(off.availability, ReviewAvailability.off);
 
       final on = ReviewProvider(
         isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 2)),
       );
       await on.load();
       expect(on.availability, ReviewAvailability.on);
       expect(on.items, hasLength(1));
       expect(on.remainingToday, 2);
+    });
+
+    test('reports the release channel once per session, for store builds too', () async {
+      final sent = <String>[];
+      final provider = ReviewProvider(
+        isEligible: () => false,
+        releaseChannel: () => 'app_store',
+        reportChannel: (channel) async {
+          sent.add(channel);
+          return const ApiFailure(ApiProblem(ApiProblemKind.notFound));
+        },
+        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+      );
+      await provider.reportReleaseChannel();
+      await provider.reportReleaseChannel();
+      expect(sent, ['app_store']);
     });
 
     test('a store build never asks the server and stays off', () async {
@@ -147,7 +166,9 @@ void main() {
 
     test('a transient failure keeps the surface state and reports it', () async {
       final provider = ReviewProvider(
-          isEligible: () => true, loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
+          isEligible: () => true,
+          reportChannel: (_) async => const ApiSuccess<void>(null),
+          loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
       await provider.load();
       expect(provider.availability, ReviewAvailability.unknown);
       expect(provider.loadFailed, isTrue);
@@ -159,6 +180,7 @@ void main() {
       final b = _item(_speakerJson('b'));
       final provider = ReviewProvider(
         isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [a, b], remainingToday: 2)),
         sendAnswer: (_, __) async =>
             succeed ? const ApiSuccess(1) : const ApiFailure(ApiProblem(ApiProblemKind.server)),
@@ -180,6 +202,7 @@ void main() {
     test('finds the question about an entity and the speaker question in a conversation', () async {
       final provider = ReviewProvider(
         isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(
           items: [_item(_speakerJson('a', conversationId: 'conv-9')), _item(_samePersonJson())],
           remainingToday: 2,
@@ -195,6 +218,7 @@ void main() {
       final played = <String>[];
       final provider = ReviewProvider(
         isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1)),
         loadClip: (speaker) async => ApiSuccess(Uint8List.fromList([1, 2, 3])),
         playClip: (id, _) async {
@@ -212,6 +236,7 @@ void main() {
       var calls = 0;
       final provider = ReviewProvider(
         isEligible: () => true,
+        reportChannel: (_) async => const ApiSuccess<void>(null),
         loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
         loadProjects: () async {
           calls++;

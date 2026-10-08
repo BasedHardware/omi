@@ -16,6 +16,7 @@ import 'package:omi/utils/logger.dart';
 typedef ReviewItemsLoader = Future<ApiResult<ReviewItemsResponse>> Function();
 typedef ReviewAnswerSender = Future<ApiResult<int>> Function(ReviewItem item, ReviewAnswer answer);
 typedef ReviewClipLoader = Future<ApiResult<Uint8List>> Function(SpeakerItem speaker);
+typedef ReleaseChannelReporter = Future<ApiResult<void>> Function(String channel);
 typedef ReviewProjectsLoader = Future<ApiResult<List<EntityRef>>> Function();
 typedef ConversationEntitiesLoader = Future<ApiResult<List<EntityRef>>> Function(String conversationId);
 
@@ -39,7 +40,11 @@ class ReviewProvider extends ChangeNotifier {
     ReviewProjectsLoader? loadProjects,
     ConversationEntitiesLoader? loadConversationEntities,
     bool Function()? isEligible,
-  })  : _isEligible = isEligible ?? _defaultEligible,
+    ReleaseChannelReporter? reportChannel,
+    String Function()? releaseChannel,
+  })  : _reportChannel = reportChannel ?? api.putReleaseChannel,
+        _releaseChannel = releaseChannel ?? _defaultReleaseChannel,
+        _isEligible = isEligible ?? _defaultEligible,
         _loadItems = loadItems ?? api.getReviewItems,
         _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
         _loadProjects = loadProjects ?? api.getProjectEntities,
@@ -48,6 +53,9 @@ class ReviewProvider extends ChangeNotifier {
         _playClipOverride = playClip;
 
   final bool Function() _isEligible;
+  final ReleaseChannelReporter _reportChannel;
+  final String Function() _releaseChannel;
+  bool _channelReported = false;
   final ReviewItemsLoader _loadItems;
   final ReviewAnswerSender _sendAnswer;
   final ReviewClipLoader _loadClip;
@@ -88,6 +96,15 @@ class ReviewProvider extends ChangeNotifier {
       if (item.speaker?.conversationId == conversationId) return item;
     }
     return null;
+  }
+
+  /// Reports this install's release channel once per session, for every build (a Store launch
+  /// must clear an earlier TestFlight record). Failures are ignored; the next launch retries.
+  Future<void> reportReleaseChannel() async {
+    if (_channelReported) return;
+    _channelReported = true;
+    final result = await _reportChannel(_releaseChannel());
+    if (result case ApiFailure(:final problem)) Logger.debug('release channel not recorded: $problem');
   }
 
   Future<void> load() => _inFlight ??= _load().whenComplete(() => _inFlight = null);
@@ -231,6 +248,9 @@ class ReviewProvider extends ChangeNotifier {
       }
     }
   }
+
+  static String _defaultReleaseChannel() =>
+      Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev');
 
   static bool _defaultEligible() => Env.isTestFlight || F.env == Environment.dev;
 
