@@ -376,7 +376,6 @@ def resolve_conversation_speakers(
         for s in eligible
         if _seg(s, 'id') in cluster_of_segment
     )
-    centers = np.array([center for center, _ in placed])
     for segment in eligible:
         segment_id = _seg(segment, 'id')
         if segment_id in cluster_of_segment:
