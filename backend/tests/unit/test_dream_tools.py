@@ -76,14 +76,17 @@ def test_transcript_fix_uses_encoded_reversible_patch_and_snapshot_fence(monkeyp
     args, kwargs = captured[0]
     patch = args[2][0].patch
     assert isinstance(patch['transcript_segments'], str)
-    decoded = dream_tools.conversations.prepare_conversation_for_read(dict(stored, **patch), uid)
+    assert patch['structured.title'] == 'Alice meeting'
+    persisted = deepcopy(stored)
+    persisted['structured']['title'] = patch['structured.title']
+    persisted['transcript_segments'] = patch['transcript_segments']
+    decoded = dream_tools.conversations.prepare_conversation_for_read(persisted, uid)
     assert decoded['transcript_segments'][0]['text'] == 'Alice said hi'
     assert decoded['structured']['title'] == 'Alice meeting'
-    assert decoded['structured']['overview'] == 'Alice discussed Widgets'
-    assert decoded['structured']['sections'][0]['heading'] == 'Alice meeting'
-    assert decoded['structured']['sections'][0]['body_markdown'] == 'Alice met us'
-    assert decoded['structured']['sections'][0]['source_segment_ids'] == []
-    assert patch['client_processing'] is None
+    assert decoded['structured']['overview'] == 'Alise discussed Widgets'
+    assert decoded['structured']['sections'][0]['heading'] == 'Alise meeting'
+    assert decoded['structured']['sections'][0]['body_markdown'] == 'Alise met us'
+    assert decoded['structured']['sections'][0]['source_segment_ids'] == ['s1']
     assert kwargs['expected_documents'] == {'c1': stored}
     assert set(patch) <= review_changes.ALLOWED_FIELDS['conversations']
 

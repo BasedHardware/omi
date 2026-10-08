@@ -27,7 +27,7 @@ def record_merge(uid, change, edit, edit_key):
         current = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
         blocked = marker.get(transaction=tx).exists
         if current:
-            if current['edit_key'] != edit_key or current['memory_edit'] != edit.model_dump():
+            if current['edit_key'] != edit_key or current['memory_edit'] != edit.model_dump(exclude_none=True):
                 raise store.ReviewConflict('Memory merge identity conflict')
             return current
         if blocked or any(
@@ -50,7 +50,7 @@ def record_merge(uid, change, edit, edit_key):
             'change': change.model_dump(mode='python'),
             'created_at': change.created_at,
             'edit_key': edit_key,
-            'memory_edit': edit.model_dump(),
+            'memory_edit': edit.model_dump(exclude_none=True),
             'memory_merge': True,
             'before': [s.model_dump(mode='python') for s in valid_sources],
             'phase': 'applying',

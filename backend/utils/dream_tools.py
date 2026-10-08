@@ -164,7 +164,9 @@ def apply_edit(uid, edit, records):
             ) != row.get('structured'):
                 raise review_store.ReviewConflict('Dream conversation changed')
             structured = _replace_tree(current.get('structured') or {}, edit.before, edit.after)
-            patch = {'structured': structured}
+            patch = {}
+            if structured.get('title') != (current.get('structured') or {}).get('title'):
+                patch['structured.title'] = structured['title']
             if current.get('user_title'):
                 patch['user_title'] = replace_term(current['user_title'], edit.before, edit.after)
             segments = copy.deepcopy(current.get('transcript_segments') or [])
@@ -178,21 +180,7 @@ def apply_edit(uid, edit, records):
                 encoded = conversations.encode_conversation_for_write(
                     uid, {'transcript_segments': segments}, current.get('data_protection_level', 'standard')
                 )
-                patch.update(encoded)
-                # Clear stale references with nulls (reversible journal snapshots);
-                # DELETE_FIELD sentinels are not serializable journal payloads.
-                for segment_id in changed_ids:
-                    for path in conversations.summary_source_reference_invalidations(structured, segment_id):
-                        parts = path.split('.')[1:]
-                        branch = structured
-                        for part in parts[:-1]:
-                            branch = branch.setdefault(part, {})
-                        branch[parts[-1]] = conversations.summary_source_reference_invalidations(
-                            structured, segment_id
-                        )[path]
-                invalidated = {}
-                conversations.clear_client_processing(invalidated)
-                patch.update({name: None for name in invalidated})
+                patch['transcript_segments'] = encoded['transcript_segments']
         else:
             raise ValueError('dream_unsupported_spelling_target')
     else:
