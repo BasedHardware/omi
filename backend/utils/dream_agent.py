@@ -177,22 +177,21 @@ async def run_pass(uid, *, caps=None, turn=None):
 
                 remaining = caps.edits
                 for edit in plan.edits:
+                    key = dream_tools.edit_key(edit, records)
                     if edit.target not in records or any(ref not in records for ref in edit.evidence):
-                        outcomes.append({'key': dream_tools.edit_key(edit, records), 'status': 'invalid_evidence'})
+                        outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
-                    allowed = await run_blocking(
-                        db_executor, review_changes.agent_change_allowed, uid, dream_tools.edit_key(edit, records)
-                    )
+                    allowed = await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key)
                     if not allowed:
                         status = 'suppressed'
-                    elif edit.kind in demoted:
+                    elif key.split(':')[1] in demoted:
                         status = 'suggest_only'
                     elif remaining <= 0:
                         status = 'edit_cap'
                     else:
                         remaining -= 1
                         status = await effect(dream_tools.apply_edit, edit, records)
-                    outcomes.append({'key': dream_tools.edit_key(edit, records), 'status': status})
+                    outcomes.append({'key': key, 'status': status})
                 attention = await run_blocking(db_executor, review_store.remaining_today, uid)
                 if lease['mode'] == 'on' and mode() == 'on' and plan.questions:
                     attention = await run_blocking(

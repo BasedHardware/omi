@@ -141,3 +141,22 @@ def test_memory_merge_key_survives_new_tail_ids_after_undo():
     later = edit.model_copy(update={'target': 'memory_items/undo-tail-1', 'other': 'memory_items/undo-tail-2'})
     tails = {later.target: records[edit.target], later.other: records[edit.other]}
     assert dream_tools.edit_key(later, tails) == original_key
+
+
+def test_memory_correction_key_survives_undo_tail_and_tool_kind_changes():
+    edit = spelling('memory_items/original')
+    row = {
+        'content': 'Alise prefers Widgets',
+        'subject_scope': 'primary_user',
+        'subject_entity_id': None,
+        'slot': 'preference',
+        'visibility': 'private',
+    }
+    original = dream_tools.edit_key(edit, {edit.target: row})
+    tail = edit.model_copy(update={'target': 'memory_items/undo-tail'})
+    assert original == dream_tools.edit_key(tail, {tail.target: row})
+    rewrite = tail.model_copy(update={'kind': 'memory', 'before': '', 'after': 'Alice prefers Widgets'})
+    assert original == dream_tools.edit_key(rewrite, {rewrite.target: row})
+    assert original.startswith('dream:memory:')
+    changed = dict(row, content='Alise now prefers Robots')
+    assert original != dream_tools.edit_key(tail, {tail.target: changed})

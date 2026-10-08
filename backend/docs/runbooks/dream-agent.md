@@ -83,7 +83,9 @@ Live edits call the Review ledger/journal seams. Transcript name fixes retain
 storage encryption/compression and clear stale evidence references and
 `client_processing` in the same reversible patch. Memory duplicate merges
 supersede both canonical facts; undo appends two direct-user tails, preserving
-original history. People merges keep redirect identities. Derived entity-page
+original history. Memory correction keys use content, subject, slot and privacy;
+new undo tail IDs and alternate spelling/rewrite tools cannot bypass suppression.
+Memory spelling and rewrite edits share one demotion bucket. People merges keep redirect identities. Derived entity-page
 summaries use the existing cache writer with a reversible journal entry. Slow tasks become pending Candidates,
 never accepted action items. Per-type demotion keeps proposed edits in the run
 report as `suggest_only`. Questions use the existing Review queue and its shared

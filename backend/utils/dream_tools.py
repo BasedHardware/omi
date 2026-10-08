@@ -20,7 +20,28 @@ from utils.entity_pages import write_entity_summary
 
 def edit_key(edit, records=None):
     # Semantic key excludes run id and prose. Undo cannot be bypassed next pass.
+    kind = edit.kind
     value = [edit.target, edit.other, edit.before.casefold(), edit.after.casefold()]
+    if (
+        records
+        and edit.target in records
+        and edit.target.split('/')[0] in {'memories', 'memory_items'}
+        and edit.kind in {'memory', 'spelling'}
+    ):
+        row = records[edit.target]
+        after = replace_term(row['content'], edit.before, edit.after) if edit.kind == 'spelling' else edit.after
+        # Undo appends a tail with another id. Suppress the same semantic edit
+        # even if a later plan chooses the other memory-correction tool kind.
+        kind = 'memory'
+        value = [
+            row['content'],
+            after,
+            row.get('subject_scope'),
+            row.get('subject_entity_id'),
+            row.get('slot'),
+            row.get('visibility'),
+        ]
+
     if edit.kind == 'merge_memories' and records and edit.target in records and edit.other in records:
         rows = [records[edit.target], records[edit.other]]
         value = sorted(
@@ -31,7 +52,7 @@ def edit_key(edit, records=None):
         )
     elif edit.kind == 'merge_people' or edit.kind == 'merge_memories':
         value = sorted([edit.target, edit.other])
-    return 'dream:' + edit.kind + ':' + hashlib.sha256(json.dumps(value).encode()).hexdigest()
+    return 'dream:' + kind + ':' + hashlib.sha256(json.dumps(value).encode()).hexdigest()
 
 
 def replace_term(text, before, after):
