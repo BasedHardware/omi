@@ -24,14 +24,19 @@ extension _NativeAppDetailPresentation on _AppDetailPageState {
     }
     final permissions = AppPermissionsCard(app: app).presentationLabels(context);
     void openReviews() {
+      final recent = app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList();
+      // The native sheet hosts the section's own surface or editor; the Flutter sheet keeps the classic section.
       showOmiSheet<void>(
           context: context,
           title: l10n.ratingsAndReviews,
-          builder: (_) => RecentReviewsSection(
+          builder: (_) => SingleChildScrollView(
+              child: RecentReviewsSection(
+                  app: app, userReview: app.userReview, reviews: recent, onReviewUpdated: _refreshAfterNativeReview)),
+          nativeBuilder: (_) => RecentReviewsSection(
               nativePage: true,
               app: app,
               userReview: app.userReview,
-              reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+              reviews: recent,
               onReviewUpdated: _refreshAfterNativeReview));
     }
 

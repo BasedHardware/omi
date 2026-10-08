@@ -1,20 +1,39 @@
 import 'package:flutter/material.dart';
 
+import 'package:collection/collection.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/extensions/string.dart';
+
+/// Loads a capability's apps grouped by category; [retrieveCapabilityAppsGroupedByCategory] is the owner.
+typedef CapabilityAppsLoader
+    = Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})> Function(
+        String capability);
 
 class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
   final List<App> apps;
 
-  const CapabilityAppsPage({super.key, required this.capability, required this.apps});
+  /// Replaces the HTTP loader in tests; null uses [retrieveCapabilityAppsGroupedByCategory].
+  @visibleForTesting
+  final CapabilityAppsLoader? loadApps;
+
+  const CapabilityAppsPage({super.key, required this.capability, required this.apps, this.loadApps});
 
   @override
   State<CapabilityAppsPage> createState() => _CapabilityAppsPageState();
@@ -25,6 +44,9 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   bool _isLoading = true;
   bool _loadFailed = false;
   int _totalCount = 0;
+
+  /// Apps the native rows are enabling; their Enable option is withdrawn until the owner answers.
+  final _enabling = <String>{};
 
   @override
   void initState() {
@@ -40,10 +62,13 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
 
     try {
       // Fetch capability apps grouped by category from backend
-      final result = await retrieveCapabilityAppsGroupedByCategory(
-        capability: widget.capability.id,
-        includeReviews: true,
-      );
+      final loader = widget.loadApps;
+      final result = loader != null
+          ? await loader(widget.capability.id)
+          : await retrieveCapabilityAppsGroupedByCategory(
+              capability: widget.capability.id,
+              includeReviews: true,
+            );
 
       if (mounted) {
         setState(() {
@@ -223,9 +248,92 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
     );
   }
 
+  String _groupTitle(Map<String, dynamic> group) {
+    final categoryMap = group['category'] as Map<String, dynamic>?;
+    return Category(
+      id: categoryMap?['id'] as String? ?? '',
+      title: categoryMap?['title'] as String? ?? context.l10n.categoryOther,
+    ).getLocalizedTitle(context);
+  }
+
+  Future<void> _openDetail(App app) async {
+    PlatformManager.instance.analytics.pageOpened('App Detail');
+    final appProvider = context.read<AppProvider>();
+    await routeToPage(context, AppDetailPage(app: app));
+    appProvider.filterApps();
+  }
+
+  /// The row button's Enable: the same consent question and enable owner.
+  Future<void> _enable(App app) async {
+    final provider = context.read<AppProvider>();
+    if (!await confirmAppDataAccess(context, app)) return;
+    if (!mounted || !_enabling.add(app.id)) return;
+    setState(() {});
+    try {
+      await provider.toggleApp(app.id, true, null);
+    } finally {
+      _enabling.remove(app.id);
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// The same states and groups in the native presentation; loading and navigation stay here.
+  Widget _native(Widget classic) {
+    final l10n = context.l10n;
+    final provider = context.watch<AppProvider>();
+    final failed = !_isLoading && _totalCount == 0 && _loadFailed;
+    NativeRow appRow(App app, String id) {
+      final enabled = (provider.apps.firstWhereOrNull((a) => a.id == app.id) ?? app).enabled;
+      final canEnable = !enabled && !appNeedsDetailToEnable(app) && !_enabling.contains(app.id);
+      return NativeRow(id, app.name.decodeString,
+          kind: 'navigation',
+          imageUri: nativeImageUri(app.getImageUrl()),
+          subtitle: [
+            if (app.description.isNotEmpty) app.description,
+            if (app.ratingAvg != null) '★ ${app.getRatingAvg()} (${app.ratingCount})',
+          ].join('\n'),
+          options: canEnable ? {'enable': l10n.enable} : const {},
+          swipeTrailing: canEnable ? const ['enable'] : const [],
+          action: (value) => value == 'enable' ? _enable(app) : _openDetail(app));
+    }
+
+    return IosNativeSurface(
+      title: widget.capability.getLocalizedTitle(context),
+      fallback: classic,
+      loading: _isLoading,
+      failed: failed,
+      errorMessage: l10n.unableToLoadApps,
+      empty: l10n.noAppsFound,
+      onRefresh: (_) async {
+        OmiHaptics.medium();
+        await _loadCapabilityApps();
+      },
+      toolbar: [
+        NativeRow('capability_apps_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        if (!_isLoading && !failed && _totalCount == 0)
+          NativeSection('capability_apps_status', [
+            NativeRow('capability_apps_empty', l10n.noAppsFound,
+                kind: 'label', symbol: 'square.grid.2x2', subtitle: l10n.checkBackLaterForNewApps),
+          ]),
+        if (!_isLoading && _totalCount > 0)
+          for (final (index, group) in _categoryGroups.indexed)
+            if ((group['data'] as List<App>? ?? const <App>[]) case final apps when apps.isNotEmpty)
+              NativeSection(
+                'group_$index',
+                [for (final (row, app) in apps.indexed) appRow(app, 'group_${index}_$row')],
+                title: _groupTitle(group),
+                footer: l10n.categoryAppCount(apps.length),
+              ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         backgroundColor: OmiColors.surface0,
@@ -245,5 +353,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
               child: _buildContent(),
             ),
     );
+    if (!nativePresentationEnabled) return classic;
+    return _native(classic);
   }
 }

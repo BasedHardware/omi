@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/apps/update_app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -13,9 +14,13 @@ import 'package:omi/utils/other/temp.dart';
 ///
 /// Content for [showAppOptionsSheet], which presents it in the shared sheet shell titled with the
 /// app's name.
+///
+/// With [nativeTitle] it is the native sheet's body: the same rows and handlers in the native
+/// presentation, falling back to this content in the shared sheet shell.
 class ShowAppOptionsSheet extends StatelessWidget {
   final App app;
-  const ShowAppOptionsSheet({super.key, required this.app});
+  final String? nativeTitle;
+  const ShowAppOptionsSheet({super.key, required this.app, this.nativeTitle});
 
   Future<void> _setPublic(BuildContext context, AppProvider provider, bool value) async {
     final l10n = context.l10n;
@@ -50,11 +55,42 @@ class ShowAppOptionsSheet extends StatelessWidget {
       ..pop();
   }
 
+  void _manage(BuildContext context) {
+    Navigator.pop(context);
+    routeToPage(context, UpdateAppPage(app: app));
+  }
+
+  Widget _native(BuildContext context, AppProvider provider, String title) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: title,
+      fallback: OmiSheetScaffold(title: title, child: ShowAppOptionsSheet(app: app)),
+      toolbar: [
+        NativeRow('app_options_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('app_options_visibility', [
+          NativeRow('app_keep_public', l10n.keepItemPublic(l10n.itemApp),
+              kind: 'toggle',
+              value: provider.appPublicToggled,
+              action: (value) => _setPublic(context, provider, value as bool)),
+        ]),
+        NativeSection('app_options_manage', [
+          NativeRow('app_manage', l10n.manageApp,
+              kind: 'navigation', symbol: 'pencil', action: (_) => _manage(context)),
+          NativeRow('app_delete', l10n.deleteItemTitle(l10n.itemApp),
+              symbol: 'trash', destructive: true, action: (_) => _delete(context, provider)),
+        ]),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
+        if (nativeTitle case final title?) return _native(context, provider, title);
         return Padding(
           padding: const EdgeInsets.only(bottom: OmiSpacing.md),
           child: Column(
@@ -75,10 +111,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                   OmiSettingsRow(
                     leading: const Icon(Icons.edit),
                     title: l10n.manageApp,
-                    onTap: () {
-                      Navigator.pop(context);
-                      routeToPage(context, UpdateAppPage(app: app));
-                    },
+                    onTap: () => _manage(context),
                   ),
                   OmiSettingsRow(
                     leading: const Icon(Icons.delete_outline),
@@ -98,5 +131,10 @@ class ShowAppOptionsSheet extends StatelessWidget {
 
 /// Shows the owner's options for [app] in the shared sheet shell.
 Future<void> showAppOptionsSheet(BuildContext context, App app) {
-  return showOmiSheet(context: context, title: app.name, builder: (context) => ShowAppOptionsSheet(app: app));
+  return showOmiSheet(
+    context: context,
+    title: app.name,
+    builder: (context) => ShowAppOptionsSheet(app: app),
+    nativeBuilder: (context) => ShowAppOptionsSheet(app: app, nativeTitle: app.name),
+  );
 }

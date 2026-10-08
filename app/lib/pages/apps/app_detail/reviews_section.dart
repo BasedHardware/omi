@@ -239,14 +239,20 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               action: (value) => setState(() => reviewController.text = value as String)),
         ],
         if (widget.reviews.isNotEmpty)
-          NativeRow('app_reviews_all', l10n.ratingsAndReviews, action: (_) {
-            PlatformManager.instance.analytics
-                .appDetailReviewsOpened(appId: widget.app.id, reviewCount: widget.reviews.length);
-            routeToReviews();
-          }),
+          NativeRow('app_reviews_all', l10n.ratingsAndReviews, kind: 'navigation', action: (_) => _openAllReviews()),
       ])
     ];
-    final fallback = Scaffold(body: SafeArea(child: SingleChildScrollView(child: classic)));
+    // Presented as a native sheet's body: the fallback keeps the shared sheet shell and the full list.
+    final fallback = OmiSheetScaffold(
+        title: l10n.ratingsAndReviews,
+        child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          classic,
+          if (widget.reviews.isNotEmpty)
+            Padding(
+                padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
+                child: OmiButton.secondary(label: l10n.ratingsAndReviews, onPressed: _openAllReviews)),
+        ])));
     if (editing) {
       return IosNativeEdit(
           title: l10n.ratingsAndReviews,
@@ -276,6 +282,12 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             NativeRow('app_reviews_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop())
           ],
         ));
+  }
+
+  void _openAllReviews() {
+    PlatformManager.instance.analytics
+        .appDetailReviewsOpened(appId: widget.app.id, reviewCount: widget.app.reviews.length);
+    routeToReviews();
   }
 
   void routeToReviews() {
