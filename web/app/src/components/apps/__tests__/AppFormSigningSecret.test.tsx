@@ -62,6 +62,9 @@ describe('AppForm > External Integration > Webhook signing', () => {
     await waitFor(() =>
       expect(api.getAppWebhookSigningSecretStatus).toHaveBeenCalledWith('app-1'),
     );
+    expect(
+      screen.getByText(/this secret also signs your app's chat-tool calls/i),
+    ).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: /create secret/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /signing secret created/i });

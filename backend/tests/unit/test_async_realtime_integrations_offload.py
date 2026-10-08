@@ -177,8 +177,7 @@ sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(re
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
 # utils.app_integrations loads each app's signing secret per delivery; no secret means unsigned.
-sys.modules["database.webhook_signing"].get_app_webhook_signing_db = MagicMock(return_value=None)
-sys.modules["database.webhook_signing"].note_unsigned_delivery = MagicMock()
+sys.modules["database.webhook_signing"].active_app_signing_secrets = MagicMock(return_value=[])
 # Graduated-response action codes; mirror database.webhook_health. utils.app_integrations
 # imports these by name, so the stub has to carry them or the module fails to import.
 sys.modules["database.webhook_health"].ACTION_NONE = 0

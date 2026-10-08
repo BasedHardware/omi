@@ -180,7 +180,7 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         ),
         'database.webhook_signing': _auto_module(
             'database.webhook_signing',
-            get_app_webhook_signing_db=MagicMock(return_value=None),
+            active_app_signing_secrets=MagicMock(return_value=[]),
         ),
         'database.chat': _auto_module(
             'database.chat',
