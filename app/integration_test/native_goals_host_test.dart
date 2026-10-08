@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/core/app_shell.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
 import 'package:omi/pages/goals/goals_page.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -124,6 +126,53 @@ void main() {
       expect(nativeProjectedRow(tester, 'goal:0').title, endsWith('Read 20 books'));
       expect(goals.stored.map((goal) => goal.title), ['Read 20 books', 'Run 100 km']);
       expect(find.byType(IosNativeSurface), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the shared-tasks deep link sheet opens natively and accepts once', (tester) async {
+      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      addTearDown(JourneyHermeticBoot.stop);
+      final tokens = <String>[];
+      var accepted = 0;
+      await tester.pumpWidget(nativeHostApp(
+        Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: TextButton(
+                // The production entry point: the deep link handler opens exactly this.
+                onPressed: () => showSharedTasksSheet(
+                  context,
+                  token: 'token',
+                  data: {
+                    'sender_name': 'Sam',
+                    'tasks': [
+                      {'description': 'Buy milk', 'due_at': '2026-10-09T12:00:00Z'},
+                      {'description': 'Call back', 'due_at': null},
+                    ],
+                  },
+                  onAccepted: () => accepted++,
+                  acceptSharedTasks: (token) async {
+                    tokens.add(token);
+                    return {'count': 2};
+                  },
+                ),
+                child: const Text('Shared tasks'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Shared tasks'));
+      await _settle(tester);
+      expect(tester.widget<AcceptSharedTasksSheet>(find.byType(AcceptSharedTasksSheet)).native, isTrue);
+      await checkNativeHost(tester, 'native-goals-shared-tasks-shared-tasks-dark');
+
+      expect(nativeProjectedRow(tester, 'shared_task:0').title, 'Buy milk');
+      await nativeProjectedRow(tester, 'shared_tasks_accept').action!(null);
+      await _settle(tester);
+      expect(tokens, ['token']);
+      expect(accepted, 1);
+      expect(find.byType(AcceptSharedTasksSheet), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

@@ -151,6 +151,7 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
     return IosNativeSurface(
       title: title,
       fallback: classic,
+      loading: _isAccepting,
       toolbar: [
         NativeRow('shared_tasks_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
         NativeRow('shared_tasks_accept', l10n.sharedTasksAddButton(widget.tasks.length),

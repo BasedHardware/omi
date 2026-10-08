@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
@@ -402,9 +403,10 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-/// Opens the accept sheet for shared tasks [data]. The SwiftUI preview on iOS uses the shared sheet
-/// shell with a native list; every other build keeps the transparent modal sheet. Accepting refreshes
-/// the action items unless [onAccepted] replaces that.
+/// Opens the accept sheet for shared tasks [data]. The SwiftUI preview on a supported iOS uses the
+/// shared sheet shell with a native list; every other build, unsupported iOS included, keeps the
+/// transparent modal sheet. [nativePreview] overrides only the flag and platform check, never the
+/// renderer check. Accepting refreshes the action items unless [onAccepted] replaces that.
 @visibleForTesting
 Future<void> showSharedTasksSheet(
   BuildContext context, {
@@ -413,7 +415,7 @@ Future<void> showSharedTasksSheet(
   VoidCallback? onAccepted,
   bool? nativePreview,
   Future<Map<String, dynamic>?> Function(String token) acceptSharedTasks = action_items_api.acceptSharedActionItems,
-}) {
+}) async {
   AcceptSharedTasksSheet sheet({bool native = false}) => AcceptSharedTasksSheet(
         token: token,
         senderName: data['sender_name'] ?? context.l10n.sharedTasksUnknownSender,
@@ -430,7 +432,11 @@ Future<void> showSharedTasksSheet(
         native: native,
         acceptSharedTasks: acceptSharedTasks,
       );
-  if (nativePreview ?? (iosSwiftUiEnabled && Platform.isIOS)) {
+  // Only a confirmed renderer changes the route; unsupported iOS keeps the flag-off sheet. Flag-off
+  // and Android builds short-circuit before the await, so they open the sheet synchronously as before.
+  final native = (nativePreview ?? (iosSwiftUiEnabled && Platform.isIOS)) && await supportsNativePresentation();
+  if (!context.mounted) return;
+  if (native) {
     // The sheet draws its own title and close X, so the shell adds none.
     return showOmiSheet<void>(
       context: context,

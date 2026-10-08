@@ -90,6 +90,9 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
   late final String _initialTarget;
   String? _emoji;
 
+  /// Read only with the preview on: unsupported systems keep the classic sheet and its own guard.
+  late final Future<bool> _native = supportsNativePresentation();
+
   bool get _isEditing => widget.goal != null;
 
   static String _rawNum(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
@@ -251,6 +254,15 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
         ),
       ),
     );
+    if (!nativePresentationEnabled) return classic;
+    return FutureBuilder<bool>(
+      future: _native,
+      builder: (context, support) => support.data == true ? _nativeForm(classic) : classic,
+    );
+  }
+
+  Widget _nativeForm(Widget classic) {
+    final l10n = context.l10n;
     final emoji = _emoji;
     return IosNativeEdit(
       title: _isEditing ? l10n.editGoal : l10n.addGoal,

@@ -257,7 +257,8 @@ void main() {
 
   group('Goal form', () {
     Future<void> open(WidgetTester tester,
-        {Goal? goal, GoalSaveCallback? onSave, VoidCallback? onDelete, String? emoji}) async {
+        {Goal? goal, GoalSaveCallback? onSave, VoidCallback? onDelete, String? emoji, bool native = true}) async {
+      if (native) NativeTestHost.install();
       await tester.pumpWidget(NativeTestHost.app(Scaffold(
         body: Builder(
           builder: (context) => TextButton(
@@ -352,6 +353,22 @@ void main() {
       expect(find.byType(GoalFormSheet), findsNothing);
     });
 
+    testWidgets('an unsupported renderer keeps the classic form with one discard guard', (tester) async {
+      await open(tester, native: false);
+      expect(find.byType(GoalFormSheet), findsOneWidget);
+      expect(find.byType(IosNativeEdit), findsNothing);
+
+      await tester.enterText(find.byType(TextField).first, 'Read');
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text(_l10n.discardChangesTitle), findsOneWidget);
+      await tester.tap(find.text(_l10n.discard));
+      await tester.pumpAndSettle();
+      expect(find.text(_l10n.discardChangesTitle), findsNothing);
+      expect(find.byType(GoalFormSheet), findsNothing);
+    });
+
     test('saveGoal persists the chosen emoji through the existing owner', () async {
       final provider = _FakeGoals([]);
       addTearDown(provider.dispose);
@@ -416,7 +433,7 @@ void main() {
     };
 
     // showOmiSheet's native branch needs the compile-time flag, so this mounts the sheet in the same
-    // shell itself; the host test covers the production wiring on Simulator.
+    // shell itself; native_goals_host_test covers the production showSharedTasksSheet wiring on Simulator.
     Future<NativeTestHost> openNative(WidgetTester tester, Completer<Map<String, dynamic>?> accept,
         {required void Function() onRequest, required VoidCallback onAccepted}) async {
       final host = NativeTestHost.install();
@@ -458,9 +475,12 @@ void main() {
       var requests = 0;
       var refreshed = 0;
       final host = await openNative(tester, accept, onRequest: () => requests++, onAccepted: () => refreshed++);
+      IosNativeSurface surface() => tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      expect(surface().loading, isFalse);
       unawaited(_send(host, 'shared_tasks_accept'));
       await tester.pump();
       expect(_row(tester, 'shared_tasks_accept').enabled, isFalse);
+      expect(surface().loading, isTrue, reason: 'the native list shows progress while the request runs');
       accept.complete(null);
       await tester.pump();
       await tester.pump();
@@ -468,6 +488,7 @@ void main() {
       expect(refreshed, 0);
       expect(find.byType(AcceptSharedTasksSheet), findsOneWidget);
       expect(_row(tester, 'shared_tasks_accept').enabled, isTrue);
+      expect(surface().loading, isFalse);
     });
 
     testWidgets('the native sheet lists the tasks and accepts once', (tester) async {
@@ -521,7 +542,29 @@ void main() {
       expect(find.byType(IosNativeSurface), findsNothing);
     });
 
-    testWidgets('the preview shell keeps one header when the native renderer is unavailable', (tester) async {
+    testWidgets('the preview keeps the transparent modal sheet when the native renderer is unavailable',
+        (tester) async {
+      await tester.pumpWidget(NativeTestHost.app(Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () =>
+                showSharedTasksSheet(context, token: 'token', data: data, onAccepted: () {}, nativePreview: true),
+            child: const Text('open'),
+          ),
+        ),
+      )));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      final route = ModalRoute.of(tester.element(find.byType(AcceptSharedTasksSheet)));
+      expect(route, isA<ModalBottomSheetRoute<dynamic>>());
+      expect(route, isNot(isA<OmiSheetRoute<dynamic>>()));
+      expect(tester.widget<AcceptSharedTasksSheet>(find.byType(AcceptSharedTasksSheet)).native, isFalse);
+      expect(find.text(_l10n.sharedTasksTitle('Sam', 2)), findsOneWidget);
+    });
+
+    testWidgets('the preview shell keeps one header when a supported renderer falls back', (tester) async {
+      NativeTestHost.install();
       await tester.pumpWidget(NativeTestHost.app(Scaffold(
         body: Builder(
           builder: (context) => TextButton(
