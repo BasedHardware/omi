@@ -732,34 +732,3 @@ def witness_completeness_errors(
     for key in sorted(set(witnesses) - set(discovered)):
         errors.append(f'{key}: witness exists for a caller that is no longer discovered')
     return errors
-
-
-def _run_entity_page(monkeypatch, capture):
-    from utils import entity_pages
-
-    monkeypatch.setattr(
-        entity_pages, 'resolve_entity', lambda *a: {'entity_id': 'org', 'type': 'organization', 'name': 'Org'}
-    )
-    monkeypatch.setattr(entity_pages.knowledge_graph, 'get_knowledge_edges', lambda *a: [])
-    monkeypatch.setattr(entity_pages, 'entity_facts', lambda *a: ([], [], set()))
-    monkeypatch.setattr(
-        entity_pages.store,
-        'user',
-        lambda *a: SimpleNamespace(
-            collection=lambda *a: SimpleNamespace(
-                document=lambda *a: SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: {}))
-            )
-        ),
-    )
-    trial(capture, entity_pages.get_entity_page, 'shape-user', 'org')
-
-
-_ENTITY_PAGE_WITNESS = CallerWitness(
-    'utils/entity_pages.py:get_entity_page:database.conversations.get_conversations',
-    'database.conversations.get_conversations',
-    'database.conversations.get_conversations',
-    ('entity-pages',),
-    1,
-    _run_entity_page,
-)
-WITNESSES[_ENTITY_PAGE_WITNESS.key] = _ENTITY_PAGE_WITNESS

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 from config.dream_agent import Caps
 from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID as UID
-from tests.support import firestore_review_query_drivers as review
 
 
 def entries():
@@ -25,7 +24,7 @@ def entries():
 
 
 registry_extension = SimpleNamespace(
-    DRIVERS={**review.registry_extension.DRIVERS, **{entry.function: entry for entry in entries()}},
-    COVERED_BY=review.registry_extension.COVERED_BY,
-    SKIPS=review.registry_extension.SKIPS,
+    DRIVERS={entry.function: entry for entry in entries()},
+    COVERED_BY={},
+    SKIPS={},
 )
