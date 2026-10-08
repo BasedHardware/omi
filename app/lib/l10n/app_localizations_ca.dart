@@ -12507,16 +12507,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalitzant la teva experiència';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mentre esperes, t\'agrada utilitzar Omi?';
+  String get onboardingRatingPromptTitle => 'T\'agrada Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Valorar-nos amb 5 estrelles ens ajuda molt ❤️';
+  String get onboardingRatingPromptYes => 'Sí';
 
   @override
-  String get onboardingRatingPromptYes => 'Sí, vull donar-vos suport!';
-
-  @override
-  String get onboardingRatingPromptNo => 'No gaire';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Enregistrament parcial';
@@ -12529,4 +12526,217 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get openInMaps => 'Obre a Mapes';
+
+  @override
+  String get importTranscriptFiles => 'Fitxers de transcripció';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui';
+
+  @override
+  String get importTooManyAttempts => 'Hi ha massa importacions ara mateix. Torna-ho a provar més tard.';
+
+  @override
+  String get importFileTooLarge => 'Aquest fitxer és massa gran per importar-lo.';
+
+  @override
+  String get importUnsupportedFileType => 'Aquest tipus de fitxer no es pot importar.';
+
+  @override
+  String get reviewTitle => 'Revisió';
+
+  @override
+  String get reviewEntryTitle => 'Preguntes per a tu';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Queden $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Qui ha dit això?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'És la mateixa persona que «$name»?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Com s’escriu això?';
+
+  @override
+  String get reviewPlayClip => 'Reprodueix el clip';
+
+  @override
+  String get reviewStopClip => 'Atura el clip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Obre els detalls';
+
+  @override
+  String get reviewAnswerMe => 'Jo';
+
+  @override
+  String get reviewAnswerOther => 'Altre';
+
+  @override
+  String get reviewAddTask => 'Afegeix la tasca';
+
+  @override
+  String get reviewAnswerFailed => 'No s’ha pogut desar la teva resposta. Torna-ho a provar.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Aquesta resposta etiqueta $count converses';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Parlant desconegut';
+
+  @override
+  String get reviewNewPersonName => 'El seu nom';
+
+  @override
+  String get reviewSomeoneElse => 'Algú altre…';
+
+  @override
+  String get reviewConfirm => 'Confirma';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Confirma $name';
+  }
+
+  @override
+  String get reviewNotSure => 'No n’estic segur';
+
+  @override
+  String get reviewOpenConversation => 'Conversa';
+
+  @override
+  String get reviewTaskField => 'Tasca';
+
+  @override
+  String get reviewDue => 'Venciment';
+
+  @override
+  String get reviewNoDate => 'Cap';
+
+  @override
+  String get reviewProject => 'Projecte';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Ja fet';
+
+  @override
+  String get reviewReasonNotMine => 'No és meva';
+
+  @override
+  String get reviewReasonNotUseful => 'No és útil';
+
+  @override
+  String get reviewYesMerge => 'Sí, fusiona';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Converses: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Escriu-ho';
+
+  @override
+  String get reviewLoadFailed => 'No s’han pogut carregar les teves preguntes.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Res per respondre';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi només preguntarà aquí quan et necessiti.';
+
+  @override
+  String get reviewRecentChanges => 'Canvis recents';
+
+  @override
+  String get reviewChangesIntro =>
+      'El que Omi ha canviat pel seu compte en els últims 30 dies. Desfés qualsevol cosa que no sembli correcta.';
+
+  @override
+  String get reviewChangeUndone => 'Desfet. Omi no ho tornarà a fer pel seu compte.';
+
+  @override
+  String get reviewChangeFailed => 'No s’ha pogut actualitzar aquest canvi. Torna-ho a provar.';
+
+  @override
+  String get reviewChangesLoadFailed => 'No s’han pogut carregar els canvis recents.';
+
+  @override
+  String get reviewNoChangesTitle => 'Encara no hi ha canvis';
+
+  @override
+  String get reviewNoChangesBody => 'Quan Omi endreci les teves notes, els canvis apareixeran aquí.';
+
+  @override
+  String get reviewShowMore => 'Mostra’n més';
+
+  @override
+  String get entityKeptCurrent => 'Mantingut al dia per Omi';
+
+  @override
+  String get entityNotRight => 'No és correcte?';
+
+  @override
+  String get entityCorrectionTitle => 'Què no és correcte?';
+
+  @override
+  String get entityCorrectionHint => 'Digues a Omi què ha de corregir';
+
+  @override
+  String get entityCorrectionSaved => 'Gràcies. Omi ho corregirà.';
+
+  @override
+  String get entityCorrectionFailed => 'No s’ha pogut enviar la teva correcció. Torna-ho a provar.';
+
+  @override
+  String get entityLoadFailed => 'No s’ha pogut carregar aquesta pàgina.';
+
+  @override
+  String get entityProject => 'Projecte';
+
+  @override
+  String get entityProjects => 'Projectes';
+
+  @override
+  String get entityDecisions => 'Decisions';
+
+  @override
+  String get entityOpenTasks => 'Tasques obertes';
+
+  @override
+  String get entityOpenThreads => 'Fils oberts';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Esperant $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Venciment: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Què sap Omi';
+
+  @override
+  String get entityRecentConversations => 'Converses recents';
+
+  @override
+  String get tasksNoProject => 'Sense projecte';
+
+  @override
+  String get tasksGroupByProject => 'Agrupa per projecte';
+
+  @override
+  String get tasksGroupByDate => 'Agrupa per data';
 }

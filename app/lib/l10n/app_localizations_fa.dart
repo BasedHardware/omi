@@ -12435,16 +12435,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'شخصی‌سازی تجربه شما';
 
   @override
-  String get onboardingRatingPromptTitle => 'تا آماده شدن، استفاده از Omi برایتان خوشایند بوده؟';
+  String get onboardingRatingPromptTitle => 'آیا از Omi لذت می‌برید؟';
 
   @override
-  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+  String get onboardingRatingPromptYes => 'بله';
 
   @override
-  String get onboardingRatingPromptYes => 'بله، می‌خواهم از شما حمایت کنم!';
-
-  @override
-  String get onboardingRatingPromptNo => 'نه چندان';
+  String get onboardingRatingPromptNo => 'خیر';
 
   @override
   String get partialRecording => 'ضبط ناقص';
@@ -12457,4 +12454,217 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get openInMaps => 'باز کردن در نقشه‌ها';
+
+  @override
+  String get importTranscriptFiles => 'فایل‌های رونوشت';
+
+  @override
+  String get importTranscriptFilesDescription => 'رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید';
+
+  @override
+  String get importTooManyAttempts => 'در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get importFileTooLarge => 'این فایل برای وارد کردن بیش از حد بزرگ است.';
+
+  @override
+  String get importUnsupportedFileType => 'این نوع فایل را نمی‌توان وارد کرد.';
+
+  @override
+  String get reviewTitle => 'بازبینی';
+
+  @override
+  String get reviewEntryTitle => 'پرسش‌هایی برای شما';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count مانده';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'این را چه کسی گفت؟';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'همان شخصِ «$name» است؟';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'این چطور نوشته می‌شود؟';
+
+  @override
+  String get reviewPlayClip => 'پخش کلیپ';
+
+  @override
+  String get reviewStopClip => 'توقف کلیپ';
+
+  @override
+  String get reviewOpenDetailsHint => 'جزئیات را باز می‌کند';
+
+  @override
+  String get reviewAnswerMe => 'من';
+
+  @override
+  String get reviewAnswerOther => 'دیگر';
+
+  @override
+  String get reviewAddTask => 'افزودن وظیفه';
+
+  @override
+  String get reviewAnswerFailed => 'پاسخ شما ذخیره نشد. دوباره تلاش کنید.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'این پاسخ $count گفتگو را برچسب می‌زند';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'گوینده نامشخص';
+
+  @override
+  String get reviewNewPersonName => 'نام او';
+
+  @override
+  String get reviewSomeoneElse => 'شخص دیگری…';
+
+  @override
+  String get reviewConfirm => 'تأیید';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'تأیید $name';
+  }
+
+  @override
+  String get reviewNotSure => 'مطمئن نیستم';
+
+  @override
+  String get reviewOpenConversation => 'گفتگو';
+
+  @override
+  String get reviewTaskField => 'وظیفه';
+
+  @override
+  String get reviewDue => 'سررسید';
+
+  @override
+  String get reviewNoDate => 'هیچ';
+
+  @override
+  String get reviewProject => 'پروژه';
+
+  @override
+  String get reviewReasonAlreadyDone => 'قبلاً انجام شده';
+
+  @override
+  String get reviewReasonNotMine => 'مال من نیست';
+
+  @override
+  String get reviewReasonNotUseful => 'مفید نیست';
+
+  @override
+  String get reviewYesMerge => 'بله، ادغام کن';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'گفتگوها: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'تایپ کنید';
+
+  @override
+  String get reviewLoadFailed => 'پرسش‌های شما بارگذاری نشد.';
+
+  @override
+  String get reviewCaughtUpTitle => 'چیزی برای پاسخ نیست';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi فقط وقتی به شما نیاز داشته باشد اینجا می‌پرسد.';
+
+  @override
+  String get reviewRecentChanges => 'تغییرات اخیر';
+
+  @override
+  String get reviewChangesIntro =>
+      'آنچه Omi در ۳۰ روز گذشته خودش تغییر داده است. هر چیزی که اشتباه به نظر می‌رسد را برگردانید.';
+
+  @override
+  String get reviewChangeUndone => 'برگردانده شد. Omi این کار را خودش تکرار نمی‌کند.';
+
+  @override
+  String get reviewChangeFailed => 'این تغییر به‌روزرسانی نشد. دوباره تلاش کنید.';
+
+  @override
+  String get reviewChangesLoadFailed => 'تغییرات اخیر بارگذاری نشد.';
+
+  @override
+  String get reviewNoChangesTitle => 'هنوز تغییری نیست';
+
+  @override
+  String get reviewNoChangesBody => 'وقتی Omi یادداشت‌های شما را مرتب کند، تغییرات اینجا نمایش داده می‌شود.';
+
+  @override
+  String get reviewShowMore => 'نمایش بیشتر';
+
+  @override
+  String get entityKeptCurrent => 'به‌روز نگه‌داشته‌شده توسط Omi';
+
+  @override
+  String get entityNotRight => 'درست نیست؟';
+
+  @override
+  String get entityCorrectionTitle => 'چه چیزی درست نیست؟';
+
+  @override
+  String get entityCorrectionHint => 'به Omi بگویید چه چیزی را اصلاح کند';
+
+  @override
+  String get entityCorrectionSaved => 'ممنون. Omi آن را اصلاح می‌کند.';
+
+  @override
+  String get entityCorrectionFailed => 'اصلاحیه شما ارسال نشد. دوباره تلاش کنید.';
+
+  @override
+  String get entityLoadFailed => 'این صفحه بارگذاری نشد.';
+
+  @override
+  String get entityProject => 'پروژه';
+
+  @override
+  String get entityProjects => 'پروژه‌ها';
+
+  @override
+  String get entityDecisions => 'تصمیم‌ها';
+
+  @override
+  String get entityOpenTasks => 'وظایف باز';
+
+  @override
+  String get entityOpenThreads => 'موضوعات باز';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'در انتظار $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'سررسید $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'آنچه Omi می‌داند';
+
+  @override
+  String get entityRecentConversations => 'گفتگوهای اخیر';
+
+  @override
+  String get tasksNoProject => 'بدون پروژه';
+
+  @override
+  String get tasksGroupByProject => 'گروه‌بندی بر اساس پروژه';
+
+  @override
+  String get tasksGroupByDate => 'گروه‌بندی بر اساس تاریخ';
 }

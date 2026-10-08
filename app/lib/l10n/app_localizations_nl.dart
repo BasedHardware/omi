@@ -12473,16 +12473,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Je ervaring wordt gepersonaliseerd';
 
   @override
-  String get onboardingRatingPromptTitle => 'Terwijl je wacht: vind je Omi fijn om te gebruiken?';
+  String get onboardingRatingPromptTitle => 'Bevalt Omi je?';
 
   @override
-  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm ❤️';
+  String get onboardingRatingPromptYes => 'Ja';
 
   @override
-  String get onboardingRatingPromptYes => 'Ja, ik wil jullie steunen!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Niet echt';
+  String get onboardingRatingPromptNo => 'Nee';
 
   @override
   String get partialRecording => 'Gedeeltelijke opname';
@@ -12495,4 +12492,218 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get openInMaps => 'Openen in Kaarten';
+
+  @override
+  String get importTranscriptFiles => 'Transcriptiebestanden';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden';
+
+  @override
+  String get importTooManyAttempts => 'Te veel imports op dit moment. Probeer het later opnieuw.';
+
+  @override
+  String get importFileTooLarge => 'Dit bestand is te groot om te importeren.';
+
+  @override
+  String get importUnsupportedFileType => 'Dit bestandstype kan niet worden geïmporteerd.';
+
+  @override
+  String get reviewTitle => 'Beoordeling';
+
+  @override
+  String get reviewEntryTitle => 'Vragen voor jou';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Nog $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Wie zei dit?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Dezelfde persoon als “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Hoe schrijf je dit?';
+
+  @override
+  String get reviewPlayClip => 'Fragment afspelen';
+
+  @override
+  String get reviewStopClip => 'Fragment stoppen';
+
+  @override
+  String get reviewOpenDetailsHint => 'Opent details';
+
+  @override
+  String get reviewAnswerMe => 'Ik';
+
+  @override
+  String get reviewAnswerOther => 'Anders';
+
+  @override
+  String get reviewAddTask => 'Taak toevoegen';
+
+  @override
+  String get reviewAnswerFailed => 'Je antwoord kon niet worden opgeslagen. Probeer het opnieuw.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Dit antwoord labelt $count gesprekken';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Onbekende spreker';
+
+  @override
+  String get reviewNewPersonName => 'Hun naam';
+
+  @override
+  String get reviewSomeoneElse => 'Iemand anders…';
+
+  @override
+  String get reviewConfirm => 'Bevestigen';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '$name bevestigen';
+  }
+
+  @override
+  String get reviewNotSure => 'Weet ik niet';
+
+  @override
+  String get reviewOpenConversation => 'Gesprek';
+
+  @override
+  String get reviewTaskField => 'Taak';
+
+  @override
+  String get reviewDue => 'Deadline';
+
+  @override
+  String get reviewNoDate => 'Geen';
+
+  @override
+  String get reviewProject => 'Project';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Al gedaan';
+
+  @override
+  String get reviewReasonNotMine => 'Niet van mij';
+
+  @override
+  String get reviewReasonNotUseful => 'Niet nuttig';
+
+  @override
+  String get reviewYesMerge => 'Ja, samenvoegen';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Gesprekken: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Typ het';
+
+  @override
+  String get reviewLoadFailed => 'Je vragen konden niet worden geladen.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Niets om te beantwoorden';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi vraagt hier alleen iets als het je nodig heeft.';
+
+  @override
+  String get reviewRecentChanges => 'Recente wijzigingen';
+
+  @override
+  String get reviewChangesIntro =>
+      'Wat Omi de afgelopen 30 dagen zelf heeft gewijzigd. Maak alles ongedaan wat niet klopt.';
+
+  @override
+  String get reviewChangeUndone => 'Ongedaan gemaakt. Omi doet dit niet uit zichzelf opnieuw.';
+
+  @override
+  String get reviewChangeFailed => 'Deze wijziging kon niet worden bijgewerkt. Probeer het opnieuw.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Recente wijzigingen konden niet worden geladen.';
+
+  @override
+  String get reviewNoChangesTitle => 'Nog geen wijzigingen';
+
+  @override
+  String get reviewNoChangesBody => 'Als Omi je notities opruimt, verschijnen de wijzigingen hier.';
+
+  @override
+  String get reviewShowMore => 'Meer tonen';
+
+  @override
+  String get entityKeptCurrent => 'Actueel gehouden door Omi';
+
+  @override
+  String get entityNotRight => 'Klopt dit niet?';
+
+  @override
+  String get entityCorrectionTitle => 'Wat klopt er niet?';
+
+  @override
+  String get entityCorrectionHint => 'Vertel Omi wat er moet worden aangepast';
+
+  @override
+  String get entityCorrectionSaved => 'Bedankt. Omi past het aan.';
+
+  @override
+  String get entityCorrectionFailed => 'Je correctie kon niet worden verzonden. Probeer het opnieuw.';
+
+  @override
+  String get entityLoadFailed => 'Deze pagina kon niet worden geladen.';
+
+  @override
+  String get entityProject => 'Project';
+
+  @override
+  String get entityProjects => 'Projecten';
+
+  @override
+  String get entityDecisions => 'Besluiten';
+
+  @override
+  String get entityOpenTasks => 'Open taken';
+
+  @override
+  String get entityOpenThreads => 'Open onderwerpen';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Wachten op $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Deadline $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Wat Omi weet';
+
+  @override
+  String get entityRecentConversations => 'Recente gesprekken';
+
+  @override
+  String get tasksNoProject => 'Geen project';
+
+  @override
+  String get tasksGroupByProject => 'Groeperen op project';
+
+  @override
+  String get tasksGroupByDate => 'Groeperen op datum';
 }

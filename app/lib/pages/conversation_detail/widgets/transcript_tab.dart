@@ -32,6 +32,8 @@ import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/pages/review/widgets/review_question_card.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/photos_grid.dart';
 
@@ -514,6 +516,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         final conversation = provider.conversation;
         final segments = conversation.transcriptSegments;
         final photos = conversation.photos;
+        // Review's "Who said this?" for this conversation sits above the lines it asks about.
+        final reviewQuestion = context.watch<ReviewProvider?>()?.speakerQuestionIn(conversation.id);
         controller?.updateSegments(segments);
         return getTranscriptWidget(
           false,
@@ -536,8 +540,15 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
           onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
           startedAt: conversation.startedAt ?? conversation.createdAt,
-          leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
-          leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
+          leadingItems: [
+            if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation),
+            if (segments.isNotEmpty && reviewQuestion != null)
+              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
+          ],
+          leadingItemIds: [
+            if (segments.isNotEmpty) 'transcript-heading',
+            if (segments.isNotEmpty && reviewQuestion != null) 'review-question-${reviewQuestion.itemId}',
+          ],
           currentSegmentId: controller?.currentSegmentId,
           followTargetSegmentId: controller?.followTargetSegmentId,
           // Follow while the reader hasn't taken the scroll back AND playback

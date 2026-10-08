@@ -238,6 +238,11 @@ export async function createStagedTaskFromExtraction(
   context: TaskExtractionContext = contextOf(task),
   minConfidence: number = DEFAULT_MIN_CONFIDENCE
 ): Promise<void> {
+  // Capture authority: inferred next steps may be returned by the model schema
+  // so the extraction layer can classify and suppress them, but they are never
+  // eligible for the staged-task write lifecycle.
+  if (task.captureKind === 'inferred_next_step') return
+
   // §5 step 1 — confidence gate (Mac gates in processFrame before save). Below the
   // threshold is filtered with no write of any kind.
   if (task.confidence < minConfidence) return

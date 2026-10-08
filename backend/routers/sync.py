@@ -641,9 +641,10 @@ async def sync_local_files(
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
         vad_errors = []
+        vad_segment_lock = threading.Lock()
 
         def _run_vad(path):
-            retrieve_vad_segments(path, segmented_paths, vad_errors)
+            retrieve_vad_segments(path, segmented_paths, vad_errors, segment_source_lock=vad_segment_lock)
 
         await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 

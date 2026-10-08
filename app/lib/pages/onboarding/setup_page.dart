@@ -119,9 +119,6 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
             actions: [
                 NativeRow('not_really', l10n.onboardingRatingPromptNo),
                 NativeRow('support', l10n.onboardingRatingPromptYes),
-              ],
-            sections: [
-                NativeSection('rating', [NativeRow('rating_message', l10n.onboardingRatingPromptBody, kind: 'label')]),
               ])
         : null;
     final answer = native != null
@@ -133,7 +130,6 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
                 barrierDismissible: false,
                 builder: (dialogContext) => OmiAlertDialog(
                   title: l10n.onboardingRatingPromptTitle,
-                  message: l10n.onboardingRatingPromptBody,
                   actions: [
                     OmiDialogAction(
                       key: const Key('onboarding_rating_yes'),

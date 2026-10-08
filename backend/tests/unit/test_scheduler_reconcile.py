@@ -94,6 +94,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",

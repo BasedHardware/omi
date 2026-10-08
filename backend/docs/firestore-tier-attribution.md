@@ -115,8 +115,29 @@ Reconcile the observed fleet to the **Cloud Firestore Read Ops** SKU under
   the request's owner; it does **not** establish that basic users generate
   avoidable load. Cross-user reads inside a request still belong to its owner.
 
+## The daily ledger carries the same dimension (schema 2)
+
+`firestore_read_ledger` snapshots emit cumulative `tier_counts` alongside the
+`lookup`/`not_found`/`query` counters (schema 2). The tier comes from the same
+`current_tier()` read the Prometheus counters already use, so ledger and metrics
+can never disagree within a process; jobs, cron sweeps and Cloud Tasks work stay
+`unattributed` exactly as above. Per-read cost is unchanged: one dict increment
+under the existing lock, keys bounded by the plan catalog. Day rollover resets
+the breakdown with the kind counters.
+
+`backend/scripts/firestore_read_reconcile.py` sums `tier_counts` from each
+latest service/epoch snapshot and prints `reads_by_tier` in the daily JSON, so
+the cron-owned reconcile answers "what share of the settled bill is basic vs
+paid vs unattributed" with p=1 census data instead of a Prometheus scrape
+window. Schema-1 snapshots (pre-upgrade revisions still serving) contribute
+their kind counters but no tiers; during rollout the missing share appears as
+absent keys, not as zeros — do not read a partial-day `reads_by_tier` as a
+tier split until all required services serve schema 2.
+
 Verification lives in `tests/unit/test_firestore_tier_context.py` (real FastAPI
 auth, simultaneous requests, executor copies, cold/fault paths, close and
 cancellation, 30 requests with zero additional subscription reads) and
 `tests/unit/test_firestore_document_probe.py` (the SDK read surface under multiple
-tiers, bounded labels, metrics failures, additive totals).
+tiers, bounded labels, metrics failures, additive totals). Ledger tier emission
+and the reducer's `reads_by_tier` aggregation are covered in
+`tests/unit/test_firestore_read_reconcile.py`.

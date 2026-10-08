@@ -143,9 +143,18 @@ SH
   cat >"$fixture/scripts/omi-harness" <<'PY'
 #!/usr/bin/env python3
 import os
+import subprocess
 import sys
 import time
+from pathlib import Path
 mode = os.environ["OMI_TEST_FLOW_MODE"]
+# Leave the process group on purpose. Cleanup has to find this grandchild by
+# the supervisor token, not by killing the shell that launched omi-harness.
+grandchild = subprocess.Popen(
+    [sys.executable, "-c", "import time; time.sleep(120)"],
+    start_new_session=True,
+)
+Path(os.environ["OMI_TEST_GRANDCHILD_PID_FILE"]).write_text(str(grandchild.pid))
 if mode == "success":
     raise SystemExit(0)
 if mode == "failure":
@@ -211,7 +220,12 @@ run_case_once() {
   local fixture="$TMP_ROOT/$mode-$attempt" bin_dir="$TMP_ROOT/$mode-$attempt-bin"
   local owned_file="$TMP_ROOT/$mode-$attempt-owned.pid"
   local foreign_file="$TMP_ROOT/$mode-$attempt-foreign.pid"
+  local grandchild_file="$TMP_ROOT/$mode-$attempt-grandchild.pid"
   local output="$TMP_ROOT/$mode-$attempt.out" error_file="$fixture/server-error"
+  local flow_deadline=""
+  if [[ "$mode" == timeout ]]; then
+    flow_deadline=2
+  fi
   local status=0 harness_pid=""
   local bundle="omi-fault-owned-cleanup-${mode}-${attempt}"
   local token="fault-owned-cleanup-token-${mode}-${attempt}-123456"
@@ -221,7 +235,9 @@ run_case_once() {
     PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
       OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
+      OMI_TEST_GRANDCHILD_PID_FILE="$grandchild_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
+      OMI_FAULT_FLOW_SHUTDOWN_DEADLINE=3 \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1 &
     harness_pid=$!
     wait_for_file "$owned_file" || { cat "$output" >&2; fail "TERM case never launched detached app"; }
@@ -232,6 +248,7 @@ run_case_once() {
       launch_records=("$fixture/.harness/desktop-core/"*-fault/fault-app.json)
     done
     [[ -f "${launch_records[0]}" ]] || { cat "$output" >&2; fail "TERM case never established launch ownership proof"; }
+    wait_for_file "$grandchild_file" || { cat "$output" >&2; fail "TERM case never started the fault-flow grandchild"; }
     kill -TERM "$harness_pid"
     set +e
     wait "$harness_pid"
@@ -243,7 +260,10 @@ run_case_once() {
     PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
       OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
+      OMI_TEST_GRANDCHILD_PID_FILE="$grandchild_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
+      OMI_FAULT_FLOW_SHUTDOWN_DEADLINE=3 \
+      OMI_FAULT_FLOW_RUN_DEADLINE="$flow_deadline" \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1
     status=$?
     set -e
@@ -274,6 +294,8 @@ run_case_once() {
   foreign_pid="$(cat "$foreign_file")"
   assert_dead "$owned_pid" "$mode owned detached app"
   assert_alive "$foreign_pid" "$mode foreign same-bundle app"
+  wait_for_file "$grandchild_file" || fail "$mode case did not record the fault-flow grandchild"
+  assert_dead "$(cat "$grandchild_file")" "$mode fault-flow grandchild"
   kill "$foreign_pid" 2>/dev/null || true
   printf '%s\n' "$foreign_pid" >"$TMP_ROOT/foreign-cleaned.pid"
 
@@ -320,5 +342,6 @@ run_case() {
 run_case success
 run_case failure
 run_case term
+run_case timeout
 
 echo "fault-suite owned detached-app cleanup regressions passed"

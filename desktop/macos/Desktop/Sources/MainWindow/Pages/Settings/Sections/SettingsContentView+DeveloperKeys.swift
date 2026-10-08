@@ -303,6 +303,16 @@ extension SettingsContentView {
               "Could not enroll keys with Omi. Free plan stays off until enrollment succeeds."
           }
         }
+      } else if BYOKValidator.isTransient(results[selectedBYOKLLMProvider.provider] ?? .failed("missing")) {
+        // The check produced no provider verdict (transport failure, provider
+        // 5xx/429, offline). The key may be perfectly good: keep the existing
+        // enrollment intact and say the check can be retried, instead of
+        // treating a non-answer as a rejection and tearing the free plan down.
+        await MainActor.run {
+          byokKeyStatuses = results
+          byokActivationError =
+            "Couldn't reach \(selectedBYOKLLMProvider.displayName) to verify your key. Your saved keys stay active — try again in a moment."
+        }
       } else {
         let failed = results.filter {
           if case .ok = $0.value { return false }
@@ -376,6 +386,8 @@ extension SettingsContentView {
       Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.listeningGreen)
     case .failed:
       Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(SettingsInk.notice)
+    case .transient:
+      Text("Check failed").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.secondary)
     }
   }
 
