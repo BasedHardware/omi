@@ -12420,16 +12420,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'आपका अनुभव पर्सनलाइज़ हो रहा है';
 
   @override
-  String get onboardingRatingPromptTitle => 'इंतज़ार के दौरान बताइए, क्या Omi इस्तेमाल करना अच्छा लगा?';
+  String get onboardingRatingPromptTitle => 'क्या आपको Omi पसंद आ रहा है?';
 
   @override
-  String get onboardingRatingPromptBody => '5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️';
+  String get onboardingRatingPromptYes => 'हाँ';
 
   @override
-  String get onboardingRatingPromptYes => 'हाँ, मुझे आपको सपोर्ट करना है!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ज़्यादा नहीं';
+  String get onboardingRatingPromptNo => 'नहीं';
 
   @override
   String get partialRecording => 'आंशिक रिकॉर्डिंग';

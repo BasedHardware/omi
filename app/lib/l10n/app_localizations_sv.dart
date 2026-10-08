@@ -12442,16 +12442,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Din upplevelse anpassas';
 
   @override
-  String get onboardingRatingPromptTitle => 'Medan du väntar, har Omi varit trevlig att använda?';
+  String get onboardingRatingPromptTitle => 'Gillar du Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 stjärnor hjälper oss verkligen mycket ❤️';
+  String get onboardingRatingPromptYes => 'Ja';
 
   @override
-  String get onboardingRatingPromptYes => 'Ja, jag vill stötta er!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Inte direkt';
+  String get onboardingRatingPromptNo => 'Nej';
 
   @override
   String get partialRecording => 'Delvis inspelning';

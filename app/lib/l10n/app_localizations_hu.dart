@@ -12485,16 +12485,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Az élményed személyre szabása';
 
   @override
-  String get onboardingRatingPromptTitle => 'Amíg vársz, jó élmény volt az Omi használata?';
+  String get onboardingRatingPromptTitle => 'Tetszik az Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
+  String get onboardingRatingPromptYes => 'Igen';
 
   @override
-  String get onboardingRatingPromptYes => 'Igen, szeretnék támogatni titeket!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nem igazán';
+  String get onboardingRatingPromptNo => 'Nem';
 
   @override
   String get partialRecording => 'Részleges felvétel';

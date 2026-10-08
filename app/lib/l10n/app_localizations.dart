@@ -22272,25 +22272,19 @@ abstract class AppLocalizations {
   /// Store rating pre-prompt title shown on the onboarding setup page
   ///
   /// In en, this message translates to:
-  /// **'While you wait, has Omi been nice to use?'**
+  /// **'Are you enjoying Omi?'**
   String get onboardingRatingPromptTitle;
-
-  /// Store rating pre-prompt body
-  ///
-  /// In en, this message translates to:
-  /// **'Rating us 5 stars really helps us out ❤️'**
-  String get onboardingRatingPromptBody;
 
   /// Store rating pre-prompt: open the store review sheet
   ///
   /// In en, this message translates to:
-  /// **'Yes, I want to support you!'**
+  /// **'Yes'**
   String get onboardingRatingPromptYes;
 
   /// Store rating pre-prompt: decline
   ///
   /// In en, this message translates to:
-  /// **'Not really'**
+  /// **'No'**
   String get onboardingRatingPromptNo;
 
   /// Conversation detail badge shown when capture evidence says the recording is incomplete.

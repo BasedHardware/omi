@@ -12469,16 +12469,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персаналізацыя вашага вопыту';
 
   @override
-  String get onboardingRatingPromptTitle => 'Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?';
+  String get onboardingRatingPromptTitle => 'Вам падабаецца Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ацэнка ў 5 зорак вельмі нам дапаможа ❤️';
+  String get onboardingRatingPromptYes => 'Так';
 
   @override
-  String get onboardingRatingPromptYes => 'Так, хачу вас падтрымаць!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не асабліва';
+  String get onboardingRatingPromptNo => 'Не';
 
   @override
   String get partialRecording => 'Частковы запіс';

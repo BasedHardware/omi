@@ -12538,16 +12538,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Pini-personalize ang iyong karanasan';
 
   @override
-  String get onboardingRatingPromptTitle => 'Habang naghihintay, masarap bang gamitin ang Omi?';
+  String get onboardingRatingPromptTitle => 'Nag-e-enjoy ka ba sa Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
+  String get onboardingRatingPromptYes => 'Oo';
 
   @override
-  String get onboardingRatingPromptYes => 'Oo, gusto ko kayong suportahan!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Hindi masyado';
+  String get onboardingRatingPromptNo => 'Hindi';
 
   @override
   String get partialRecording => 'Bahagyang pagrekord';

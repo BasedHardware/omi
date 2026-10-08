@@ -12371,16 +12371,13 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'กำลังปรับแต่งประสบการณ์ของคุณ';
 
   @override
-  String get onboardingRatingPromptTitle => 'ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม';
+  String get onboardingRatingPromptTitle => 'คุณชอบ Omi ไหม?';
 
   @override
-  String get onboardingRatingPromptBody => 'การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️';
+  String get onboardingRatingPromptYes => 'ใช่';
 
   @override
-  String get onboardingRatingPromptYes => 'ใช่ ฉันอยากสนับสนุนคุณ!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ไม่ค่อย';
+  String get onboardingRatingPromptNo => 'ไม่';
 
   @override
   String get partialRecording => 'การบันทึกบางส่วน';

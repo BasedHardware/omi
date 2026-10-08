@@ -12506,16 +12506,13 @@ class AppLocalizationsIt extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalizzazione della tua esperienza';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mentre aspetti, ti sta piacendo usare Omi?';
+  String get onboardingRatingPromptTitle => 'Ti piace Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Una valutazione di 5 stelle ci aiuta davvero tanto ❤️';
+  String get onboardingRatingPromptYes => 'Sì';
 
   @override
-  String get onboardingRatingPromptYes => 'Sì, voglio supportarvi!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Non proprio';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Registrazione parziale';

@@ -12431,16 +12431,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Sinu kogemuse isikupärastamine';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kuni ootad, kas Omi kasutamine on meeldiv olnud?';
+  String get onboardingRatingPromptTitle => 'Kas Omi meeldib sulle?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+  String get onboardingRatingPromptYes => 'Jah';
 
   @override
-  String get onboardingRatingPromptYes => 'Jah, tahan teid toetada!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pigem mitte';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osaline salvestus';

@@ -12441,16 +12441,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Kokemustasi personoidaan';
 
   @override
-  String get onboardingRatingPromptTitle => 'Odotellessasi: onko Omin käyttö ollut mukavaa?';
+  String get onboardingRatingPromptTitle => 'Pidätkö Omista?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon ❤️';
+  String get onboardingRatingPromptYes => 'Kyllä';
 
   @override
-  String get onboardingRatingPromptYes => 'Kyllä, haluan tukea teitä!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ei oikeastaan';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osittainen tallenne';
