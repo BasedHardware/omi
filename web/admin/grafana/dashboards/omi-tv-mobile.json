@@ -4719,6 +4719,166 @@
       "timeFrom": "60d",
       "title": "Thumbs positive % \u2014 weekly",
       "type": "timeseries"
+    },
+    {
+      "id": 1101,
+      "type": "barchart",
+      "title": "Pendant battery drain (%/h, p50 by firmware)",
+      "description": "Median pendant battery drain in percent per hour, by firmware, over the last 14 days. The median uses only samples whose drain is between 0.1 and 100; an unfiltered median is 0 because most daily events report no drain.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3b82f6"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "noValue": "n/a"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "http://127.0.0.1:8899/api/omi/stats/device-health?days=14",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "pendant_health",
+          "columns": [
+            {
+              "selector": "firmware",
+              "text": "Firmware",
+              "type": "string"
+            },
+            {
+              "selector": "p50_drain_valid",
+              "text": "p50 drain %/h",
+              "type": "number"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1102,
+      "type": "barchart",
+      "title": "Phone battery drain (%/h, p50 by build)",
+      "description": "Median phone battery drain in percent per hour, by OS and app build, over the last 14 days. Empty until Phone Battery Sample events exist (shipping in a parallel app PR).",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 117,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3b82f6"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "noValue": "awaiting instrumentation"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "showValue": "never",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "http://127.0.0.1:8899/api/omi/stats/device-health?days=14",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "phone_health.series",
+          "columns": [
+            {
+              "selector": "label",
+              "text": "OS / build",
+              "type": "string"
+            },
+            {
+              "selector": "p50_drain_per_hour",
+              "text": "p50 drain %/h",
+              "type": "number"
+            }
+          ]
+        }
+      ]
     }
   ],
   "refresh": "1h",
