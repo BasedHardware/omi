@@ -32,6 +32,8 @@ import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
 import type { RewindFrame } from '../../../shared/types'
 import { isAppAllowed, isMessagingApp, isPromptMessagingApp, isWindowAllowed } from './appLists'
 import { runExtractionLoop } from './loop'
+import { TASK_SYSTEM_PROMPT } from './prompt'
+import { withOutputLanguage } from '../core/outputLanguage'
 import { createStagedTaskFromExtraction } from './create'
 import type { ExtractedTask } from './models'
 
@@ -133,7 +135,9 @@ export class TaskAssistant implements ProactiveAssistant {
   async analyze(frame: RewindFrame): Promise<AssistantResult | null> {
     this.latestFrame = frame
     this.latestFrameApp = frame.app
-    if (!shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)) {
+    if (
+      !shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)
+    ) {
       return null
     }
     await this.runPipeline(frame)
@@ -163,7 +167,9 @@ export class TaskAssistant implements ProactiveAssistant {
 
     const frame = departingFrame ?? this.latestFrame
     if (!frame) return
-    if (!shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)) {
+    if (
+      !shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)
+    ) {
       return
     }
     await this.runPipeline(frame)
@@ -224,6 +230,9 @@ export class TaskAssistant implements ProactiveAssistant {
       try {
         results = await runExtractionLoop({
           session,
+          // Task titles and descriptions are shown to the user, so they follow
+          // the preferred language.
+          systemPrompt: await withOutputLanguage(TASK_SYSTEM_PROMPT),
           app: frame.app,
           today: formatToday(),
           isMessaging: isPromptMessagingApp(frame.app),
@@ -277,7 +286,9 @@ export class TaskAssistant implements ProactiveAssistant {
       console.log('[tasks] analyzeNow skipped — privacy gate')
       return
     }
-    if (!shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)) {
+    if (
+      !shouldExtractForApp(frame.app, frame.windowTitle ?? '', getAppSettings().taskExcludedApps)
+    ) {
       console.log('[tasks] analyzeNow skipped — not a whitelisted app/window')
       return
     }

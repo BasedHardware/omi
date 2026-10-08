@@ -42,6 +42,8 @@ vi.mock('../core/session', () => ({
   getBackendSession: h.getBackendSession,
   getSessionEpoch: () => 1
 }))
+// The language lookup has its own tests; here the prompt passes through unchanged.
+vi.mock('../core/outputLanguage', () => ({ withOutputLanguage: async (p: string) => p }))
 vi.mock('./context', () => ({ loadFocusContext: h.loadFocusContext }))
 vi.mock('./promptStore', () => ({ getFocusSystemPrompt: h.getFocusSystemPrompt }))
 vi.mock('./gemini', () => ({ analyzeScreenshot: h.analyzeScreenshot }))

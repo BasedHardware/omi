@@ -26,6 +26,7 @@ import { notifyProactive } from '../core/notify'
 import { getAppSettings, setAppSettings } from '../../appSettings'
 import { fetchGoalContext, hasSufficientContext, type GoalContextData } from './context'
 import { GOAL_SYSTEM_PROMPT, GOAL_SUGGESTION_SCHEMA, fillPrompt } from './prompt'
+import { withOutputLanguage } from '../core/outputLanguage'
 
 // Flash-Lite: text-only, schema-bounded, nobody waiting — no business on the Vertex
 // Flash PT reservation. Mirrors Mac's ModelQoS.Gemini.lightweight goals pin.
@@ -105,6 +106,7 @@ function extractText(json: unknown): string {
 
 async function attempt(
   session: BackendSession,
+  systemPrompt: string,
   prompt: string,
   external?: AbortSignal
 ): Promise<string> {
@@ -122,7 +124,7 @@ async function attempt(
         signal,
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          systemInstruction: { parts: [{ text: GOAL_SYSTEM_PROMPT }] },
+          systemInstruction: { parts: [{ text: systemPrompt }] },
           generationConfig: {
             responseMimeType: 'application/json',
             responseSchema: GOAL_SUGGESTION_SCHEMA
@@ -145,10 +147,12 @@ export async function generateSuggestionText(
   prompt: string
 ): Promise<string> {
   const external = getAbortSignal()
+  // Suggested goals are shown to the user, so they follow the preferred language.
+  const systemPrompt = await withOutputLanguage(GOAL_SYSTEM_PROMPT)
   let lastError: unknown
   for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
     try {
-      return await attempt(session, prompt, external)
+      return await attempt(session, systemPrompt, prompt, external)
     } catch (e) {
       lastError = e
       if (i === RETRY_DELAYS_MS.length || !isTransient(e)) break

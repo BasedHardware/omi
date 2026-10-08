@@ -29,6 +29,8 @@ vi.mock('../core/session', () => ({
   getSessionEpoch: h.getSessionEpoch,
   getBackendSession: h.getBackendSession
 }))
+// The language lookup has its own tests; here the prompt passes through unchanged.
+vi.mock('../core/outputLanguage', () => ({ withOutputLanguage: async (p: string) => p }))
 vi.mock('../core/frameImage', () => ({ readFrameImageBase64: h.readFrameImageBase64 }))
 vi.mock('../core/privacy', () => ({ mayAnalyzeFrame: h.mayAnalyzeFrame }))
 vi.mock('./loop', () => ({ runExtractionLoop: h.runExtractionLoop }))
