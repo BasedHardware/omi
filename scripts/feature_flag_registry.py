@@ -21,10 +21,16 @@ FAILS = {"open", "closed", "inverted"}
 DECISIONS = {"pending", "graduate", "kill", "keep"}
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
-SWIFT_FLAG = re.compile(r'\bstatic\s+let\s+\w*(?:flagName|FlagName|FlagKey|Flag|enabledFlag|killSwitchFlag|enableFlag)\s*=\s*"([^"\n]+)"')
+SWIFT_FLAG = re.compile(
+    r'\bstatic\s+let\s+\w*(?:flagName|FlagName|FlagKey|Flag|enabledFlag|killSwitchFlag|enableFlag)\s*=\s*"([^"\n]+)"'
+)
 SWIFT_LITERAL = re.compile(r'\bisFeatureEnabled\s*\(\s*"([^"\n]+)"')
-SWIFT_HEADER = re.compile(r'\blet\s+(?:canonicalLifecycleExposed|deviceScopeSupported|defaultDeleteSupported|beliefEnabled)Header\s*=\s*"(X-Omi-[^"\n]+)"')
-SWIFT_HARDCODED = re.compile(r'\bstatic\s+var\s+(isWorkstreamPoolingEnabled|isProactiveCandidatesEnabled|isEnabled)\s*:')
+SWIFT_HEADER = re.compile(
+    r'\blet\s+(?:canonicalLifecycleExposed|deviceScopeSupported|defaultDeleteSupported|beliefEnabled)Header\s*=\s*"(X-Omi-[^"\n]+)"'
+)
+SWIFT_HARDCODED = re.compile(
+    r'\bstatic\s+var\s+(isWorkstreamPoolingEnabled|isProactiveCandidatesEnabled|isEnabled)\s*:'
+)
 DART_DEFINITION = re.compile(r"\bExperimentDefinition(?:<[^>]+>)?\s*\(\s*key\s*:\s*['\"]([^'\"\n]+)['\"]")
 DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
@@ -63,7 +69,12 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                     errors.append(f"{label}: aliases must be a list of nonempty names")
                     aliases = []
                 keys += aliases
-                for field, allowed in (("kind", KINDS), ("lifecycle", LIFECYCLES), ("fail", FAILS), ("decision", DECISIONS)):
+                for field, allowed in (
+                    ("kind", KINDS),
+                    ("lifecycle", LIFECYCLES),
+                    ("fail", FAILS),
+                    ("decision", DECISIONS),
+                ):
                     if entry.get(field) not in allowed:
                         errors.append(f"{label}: invalid {field}: {entry.get(field)!r}")
                 surfaces = entry.get("surfaces")
@@ -98,11 +109,20 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                     errors.append(f"{label}: prereg is required for experiments")
                 ph = entry.get("posthog")
                 if entry.get("kind") == "posthog":
-                    if not isinstance(ph, dict) or ph.get("row") not in {"expected", "absent"} or ph.get("role") not in POSTHOG_ROLES:
-                        errors.append(f"{label}: posthog requires row expected|absent and role enable|kill|exposure|payload")
+                    if (
+                        not isinstance(ph, dict)
+                        or ph.get("row") not in {"expected", "absent"}
+                        or ph.get("role") not in POSTHOG_ROLES
+                    ):
+                        errors.append(
+                            f"{label}: posthog requires row expected|absent and role enable|kill|exposure|payload"
+                        )
                 elif ph is not None:
                     errors.append(f"{label}: posthog block requires kind: posthog")
-                if "pairs_with" in entry and (not isinstance(entry["pairs_with"], list) or not all(isinstance(p, str) for p in entry["pairs_with"])):
+                if "pairs_with" in entry and (
+                    not isinstance(entry["pairs_with"], list)
+                    or not all(isinstance(p, str) for p in entry["pairs_with"])
+                ):
                     errors.append(f"{label}: pairs_with must be a list of names")
             elif section == "ignore":
                 if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
@@ -133,7 +153,9 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
 def tracked_code_paths(root: Path) -> list[str]:
     result = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        cwd=root, stdout=subprocess.PIPE, check=True,
+        cwd=root,
+        stdout=subprocess.PIPE,
+        check=True,
         env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
     )
     return sorted({p.decode("utf-8") for p in result.stdout.split(b"\0") if p})
@@ -145,14 +167,21 @@ def relevant_code(path: str) -> bool:
     if path.startswith("llm_gateway/") and path.endswith(".py"):
         return "/tests/" not in path
     return (
-        path.startswith("desktop/macos/Desktop/Sources/") and path.endswith(".swift") and "/Generated/" not in path
-        or path.startswith("app/lib/services/experiments/") and path.endswith(".dart")
-        or path.startswith(("web/", "desktop/windows/src/")) and path.endswith((".ts", ".tsx")) and "/generated/" not in path.lower()
+        path.startswith("desktop/macos/Desktop/Sources/")
+        and path.endswith(".swift")
+        and "/Generated/" not in path
+        or path.startswith("app/lib/services/experiments/")
+        and path.endswith(".dart")
+        or path.startswith(("web/", "desktop/windows/src/"))
+        and path.endswith((".ts", ".tsx"))
+        and "/generated/" not in path.lower()
     )
 
 
 def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]:
-    if not any(token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var", "chat_first_ui")):
+    if not any(
+        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var")
+    ):
         return []
     tree = ast.parse(text, filename=path)
     values: dict[str, str] = {}
@@ -181,7 +210,13 @@ def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]
                     key = literal(node.args[0])
                     if key and (FLAG_SUFFIX.search(key) or key in known):
                         found.append((key, node.lineno))
-                elif func.attr == "get" and isinstance(func.value, ast.Attribute) and isinstance(func.value.value, ast.Name) and func.value.value.id == "os" and func.value.attr == "environ":
+                elif (
+                    func.attr == "get"
+                    and isinstance(func.value, ast.Attribute)
+                    and isinstance(func.value.value, ast.Name)
+                    and func.value.value.id == "os"
+                    and func.value.attr == "environ"
+                ):
                     key = literal(node.args[0])
                     if key and (FLAG_SUFFIX.search(key) or key in known):
                         found.append((key, node.lineno))
@@ -197,7 +232,13 @@ def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]
                 key = literal(arg)
                 if key and (key in known or (FLAG_SUFFIX.search(key) and re.fullmatch(r"[A-Z][A-Z0-9_]+", key))):
                     found.append((key, node.lineno))
-        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name) and node.value.value.id == "os" and node.value.attr == "environ":
+        elif (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "os"
+            and node.value.attr == "environ"
+        ):
             key = literal(node.slice)
             if key and (FLAG_SUFFIX.search(key) or key in known):
                 found.append((key, node.lineno))
@@ -208,11 +249,15 @@ def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]
                 if key:
                     found.append((key, node.lineno))
             for target in targets:
-                if isinstance(target, ast.Name) and target.id in known and target.id in {"ACCOUNT_CUTOVER_COHORT", "chat_first_ui"}:
+                if isinstance(target, ast.Name) and target.id in known and target.id in {"ACCOUNT_CUTOVER_COHORT"}:
                     found.append((target.id, node.lineno))
                 if isinstance(target, ast.Name) and target.id in known and target.id.endswith("_COHORT"):
                     found.append((target.id, node.lineno))
-                if isinstance(target, ast.Name) and (target.id.endswith(("_ENV", "_HEADER")) or target.id == "enabled_env_var") and literal(node.value) in known:
+                if (
+                    isinstance(target, ast.Name)
+                    and (target.id.endswith(("_ENV", "_HEADER")) or target.id == "enabled_env_var")
+                    and literal(node.value) in known
+                ):
                     found.append((literal(node.value), node.lineno))
     return found
 
@@ -233,15 +278,20 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             matches = python_reads(path, text, known)
         else:
             patterns = (
-                (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER) if path.endswith(".swift") else
-                (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else
-                (BUILD_DEFINE,)
+                (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
+                if path.endswith(".swift")
+                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE,)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):
                     if _in_client_comment(text, match.start()):
                         continue
-                    key = ("VITE_ENABLE_" if "import.meta.env.VITE_ENABLE_" in match.group(0) else "NEXT_PUBLIC_ENABLE_") + match[1] if pattern is BUILD_DEFINE else match[1]
+                    key = (
+                        ("VITE_ENABLE_" if "import.meta.env.VITE_ENABLE_" in match.group(0) else "NEXT_PUBLIC_ENABLE_")
+                        + match[1]
+                        if pattern is BUILD_DEFINE
+                        else match[1]
+                    )
                     if not key.startswith("--"):
                         matches.append((key, text.count("\n", 0, match.start()) + 1))
             if path.endswith("ContextBucketsFeature.swift"):
@@ -256,7 +306,9 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
 
 
 def extract_deploy_declarations(root: Path) -> list[Read]:
-    files = [root / "backend/deploy/runtime_env" / name for name in ("_base.yaml", "dev.overlay.yaml", "prod.overlay.yaml")]
+    files = [
+        root / "backend/deploy/runtime_env" / name for name in ("_base.yaml", "dev.overlay.yaml", "prod.overlay.yaml")
+    ]
     files += [p for p in (root / "backend/charts").rglob("*values.yaml") if p.name.startswith(("dev_", "prod_"))]
     reads: list[Read] = []
     for file in files:
@@ -272,7 +324,9 @@ def extract_deploy_declarations(root: Path) -> list[Read]:
 
 def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
     return sorted(
-        entry["key"] for entry in registry.get("flags", [])
-        if entry.get("lifecycle") in {"rollout", "experiment"} and entry.get("review_by")
+        entry["key"]
+        for entry in registry.get("flags", [])
+        if entry.get("lifecycle") in {"rollout", "experiment"}
+        and entry.get("review_by")
         and date.fromisoformat(entry["review_by"]) < as_of
     )

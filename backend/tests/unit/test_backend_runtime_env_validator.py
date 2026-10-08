@@ -80,10 +80,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
-        {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
         {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
@@ -126,7 +122,7 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     this catches.
     """
     flags = (
-        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\1'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
@@ -683,14 +679,14 @@ def test_conversation_finalization_capability_contract_rejects_missing_summary_p
     cap_env,
 ):
     validator, env_config = cap_env('prod')
-    del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
+    del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED']
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
 
     assert (
         validator.ValidationError(
             'prod/cloud_run/backend-sync',
-            'summary-pipeline flag CONVERSATION_NOTES_V2_ENABLED must be a literal on every conversation-finalization host',
+            'summary-pipeline flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED must be a literal on every conversation-finalization host',
         )
         in errors
     )
@@ -698,13 +694,15 @@ def test_conversation_finalization_capability_contract_rejects_missing_summary_p
 
 def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement(cap_env):
     validator, env_config = cap_env('prod')
-    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED'][
+        'value'
+    ] = 'false'
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
 
     assert any(
         error.scope == 'prod/conversation-finalization'
-        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and 'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees' in error.message
         and 'prod/cloud_run/backend-sync' in error.message
         for error in errors
     )
@@ -714,13 +712,15 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
     validator, env_config = cap_env('prod')
     # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
     # co-host gate compares raw literals; admission must not be weaker than it.
-    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED'][
+        'value'
+    ] = ' TRUE '
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
 
     assert any(
         error.scope == 'prod/conversation-finalization'
-        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and 'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees' in error.message
         and "' TRUE '" in error.message
         and "'true'" in error.message
         for error in errors
@@ -749,16 +749,18 @@ def test_conversation_finalization_capability_contract_rejects_empty_summary_pip
     # '' parses as literal-present so it dodges the omission check, and an
     # all-empty fleet would also dodge disagreement — yet runtime treats it as
     # False, the exact silent-off case this contract exists to reject.
-    env_config['gke']['backend-listen']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
-    env_config['gke']['pusher']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
-    env_config['cloud_run']['services']['backend']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
-    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['gke']['backend-listen']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED']['value'] = ''
+    env_config['gke']['pusher']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED'][
+        'value'
+    ] = ''
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
 
     assert any(
         error.scope == 'prod/cloud_run/backend-sync'
-        and 'CONVERSATION_NOTES_V2_ENABLED must be an explicit boolean literal' in error.message
+        and 'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED must be an explicit boolean literal' in error.message
         for error in errors
     )
     assert not any('disagrees' in error.message for error in errors)
@@ -1721,8 +1723,6 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -1741,8 +1741,6 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -1759,8 +1757,6 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -1995,8 +1991,6 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'PUBLIC_SHARED_CONVERSATION_CHAT_MODE': {'value': 'gateway'},
                                     'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway'},
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
-                                    'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
-                                    'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
@@ -2044,8 +2038,6 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -2064,8 +2056,6 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -2082,8 +2072,6 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
@@ -2121,8 +2109,6 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
@@ -2140,8 +2126,6 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
@@ -2157,8 +2141,6 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
-        {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},

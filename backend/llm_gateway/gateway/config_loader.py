@@ -256,7 +256,7 @@ def _generated_feature_route_items(
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
-                'output_budget': _output_budget_for_feature(feature, provider),
+                'output_budget': None,
                 'timeouts': {
                     'request_ms': (
                         override.request_timeout_ms
@@ -513,16 +513,6 @@ def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
         },
     }
     return [lane], [artifact]
-
-
-def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
-    """Keep pilot caps explicit and disabled until an operator enables the experiment."""
-    if feature == 'session_titles' and provider == 'gemini':
-        return {
-            'experiment': 'session_titles',
-            'max_completion_tokens': 128,
-        }
-    return None
 
 
 def _surface_for_feature(feature: str, provider: str) -> str:

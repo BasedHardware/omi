@@ -305,8 +305,8 @@ class TestModelQosProfiles:
 
     def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
         luna_features = {
-            'conv_action_items',
             'wake_word_adjudication',
+            'conv_action_items',
             'conv_structure',
             'conv_app_result',
             'daily_summary',
@@ -549,7 +549,7 @@ class TestGetOrCreateLlmBehavioral:
         options = {'mode': 'explicit', 'ttl': '30m'}
         with _patch.object(clients_mod, 'should_route_features_through_gateway', return_value=True), _patch.object(
             clients_mod, 'get_or_create_omi_gateway_llm', return_value=_Recorder()
-        ), _patch.object(clients_mod, 'maybe_wrap_dev_gateway_shadow', return_value=_Recorder()):
+        ):
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
         assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
@@ -788,7 +788,6 @@ class TestExpandedCallsiteCoverage:
         for key in [
             'conv_folder',
             'conv_discard',
-            'conv_action_items',
             'conv_structure',
             'conv_app_result',
             'conv_app_select',

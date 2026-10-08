@@ -202,12 +202,10 @@ def _run_discard(conversation, *, meetings, google_result=None, google_error=Non
         patch.object(pc, 'get_overlapping_calendar_event', google_mock),
         patch.object(
             pc,
-            'get_transcript_structure',
+            'get_conversation_notes',
             MagicMock(return_value=Structured(title='Kept by calendar overlap')),
         ),
-        patch.object(pc, 'extract_action_items', MagicMock(return_value=[])),
-        patch.object(pc, '_fetch_dedup_candidates', MagicMock(return_value=[])),
-        patch.object(pc, '_primary_user_name', MagicMock(return_value=None)),
+        patch.object(pc, '_fetch_dedup_candidates_for_query', MagicMock(return_value=[])),
     ):
         structured, discarded = pc._get_structured('uid-scrap', 'en', conversation)
 
@@ -292,7 +290,7 @@ class TestEverythingElseStillDiscards:
                 MagicMock(side_effect=RuntimeError('firestore unavailable')),
             ),
             patch.object(pc, 'get_overlapping_calendar_event', google_mock),
-            patch.object(pc, 'get_transcript_structure', MagicMock(return_value=Structured(title='x'))),
+            patch.object(pc, 'get_conversation_notes', MagicMock(return_value=Structured(title='x'))),
         ):
             structured, discarded = pc._get_structured('uid-scrap', 'en', _scrap_conversation())
 
@@ -309,10 +307,8 @@ class TestEverythingElseStillDiscards:
             patch.object(pc, 'should_discard_conversation', MagicMock(return_value=True)),
             patch.object(pc.calendar_db, 'get_meetings_in_time_range', MagicMock(return_value=[_meeting_record()])),
             patch.object(pc, 'get_overlapping_calendar_event', AsyncMock(return_value=None)),
-            patch.object(pc, 'get_transcript_structure', structure),
-            patch.object(pc, 'extract_action_items', MagicMock(return_value=[])),
-            patch.object(pc, '_fetch_dedup_candidates', MagicMock(return_value=[])),
-            patch.object(pc, '_primary_user_name', MagicMock(return_value=None)),
+            patch.object(pc, 'get_conversation_notes', structure),
+            patch.object(pc, '_fetch_dedup_candidates_for_query', MagicMock(return_value=[])),
         ):
             from models.structured import Structured
 

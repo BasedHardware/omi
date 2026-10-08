@@ -4859,7 +4859,6 @@ export interface TaskUpdateCandidate {
 
 export interface TaskWorkflowControl {
   account_generation?: number;
-  chat_first_ui?: boolean;
   workflow_mode?: TaskWorkflowMode;
 }
 

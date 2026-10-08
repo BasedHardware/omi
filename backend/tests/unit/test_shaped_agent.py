@@ -429,22 +429,20 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
 
 
 @pytest.mark.parametrize('mode,expected', [('off', 'old'), ('on', 'new'), ('shadow', 'old')])
-def test_legacy_notes_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
+def test_notes_v2_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
     uid = uid_in_bucket(monkeypatch, 'shadow') if mode == 'shadow' else 'test'
     if mode != 'shadow':
         monkeypatch.setenv(shaped.FLAG, mode)
-    monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: False)
     monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda c: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(pc, '_primary_user_name', lambda *a: None)
-    monkeypatch.setattr(pc, 'extract_action_items', lambda *a, **k: [])
     calls = []
-    monkeypatch.setattr(pc, 'get_transcript_structure', lambda *a, **k: calls.append('old') or Structured(title='old'))
+    monkeypatch.setattr(
+        notes, '_get_conversation_notes_legacy', lambda *a, **k: calls.append('old') or Structured(title='old')
+    )
     monkeypatch.setattr(
         notes, '_get_shaped_conversation_notes', lambda *a, **k: calls.append('new') or Structured(title='new')
     )

@@ -816,12 +816,6 @@ LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS = Counter(
     ['surface', 'reason'],
 )
 
-LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
-    'llm_gateway_chat_extraction_comparisons_total',
-    'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
-    ['feature', 'field', 'outcome'],
-)
-
 LLM_GATEWAY_CIRCUIT_OPEN = Gauge(
     'llm_gateway_circuit_open',
     'Whether this backend process is bypassing the LLM gateway after transport failures',

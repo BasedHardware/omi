@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-06 -->
+<!-- feature-flag-registry as-of: 2026-10-08 -->
 
 # Feature-flag authority registry
 
@@ -110,7 +110,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-06.
+None as of 2026-10-08.
 
 ## Flags
 
@@ -146,15 +146,14 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_FLIP_PERCENT` | Universal owner flip control: 0 off, 100 on; unset follows live flag; other values off | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-21 | dazheng |
 | `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` | Global UTC daily admission cap for owner shadow, default 60000 | backend | env | closed | — | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | Candidate-hash percentage for advisory owner measurement | backend | env | closed | — | 0 (cloud_run/backend-sync, cloud_run/backend-sync-backfill); 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
-| `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
 
 ### rollout
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `ACCOUNT_CUTOVER_COHORT` | Account cutover cohort | backend | hardcoded | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `ACCOUNT_CUTOVER_ENFORCEMENT` | Fence accounts onto the rewritten backend | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-10-15 | unowned |
+| `ACCOUNT_CUTOVER_COHORT` | Account cutover cohort | backend | hardcoded | closed | — | — | — | — | pending | 2026-11-08 | unowned |
+| `ACCOUNT_CUTOVER_ENFORCEMENT` | Fence accounts onto the rewritten backend | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-11-08 | unowned |
 | `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED` | Measure, in the action_item_identity log line only, how many reprocess-unmatched prior tasks pair one-to-one with a new task by stored transcript segment ids; never changes what is written or delivered (default on) | backend | env | open | — | — | — | — | pending | 2026-10-31 | dazheng |
 | `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` | Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-31 | dazheng |
 | `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` | Preserve existing tasks and transfer smart-merge donor tasks on SMART_MERGE and SYNC_UPDATE; append exact-unmatched tasks (default on) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | graduate | 2026-11-01 | dazheng |
@@ -164,7 +163,6 @@ and an explicit empty literal renders as `''`.
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | Piggyback bounded capture evidence metadata on existing writes | backend, mobile, macos | env | closed | {value: 'false', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-10-27 | dazheng |
 | `CAPTURE_GROUP_CONTAINMENT_MODE` | Time-aligned user utterance containment for complementary cross-source capture groups; off\|shadow\|on, default shadow, unknown off | backend | env | closed | {value: 'shadow', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-03 | dazheng |
 | `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED` | Read calendar context during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
-| `CONVERSATION_NOTES_V2_ENABLED` | Select notes-v2 summary versus legacy structure extraction | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `CONVERSATION_OCR_CONTEXT_ENABLED` | Read OCR meeting identity during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `CONVERSATION_RELEVANCE_JEV_ENABLED` | Enable Jev conversation relevance decisions | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-23 | unowned |
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off\|shadow\|merge) | backend | env | open | — | — | — | — | graduate | 2026-10-29 | dazheng |
@@ -207,19 +205,14 @@ and an explicit empty literal renders as `''`.
 | `MENTOR_GATE_DEBOUNCE_ENABLED` | Debounce mentor gate evaluation | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `MENTOR_GATE_PROMPT_CACHE_ENABLED` | Cache mentor gate prompts | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED` | Shadow gateway action-items extraction | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
-| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Shadow gateway conversation structuring | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
-| `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Shadow all development gateway lanes | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED` | Enable explicit GPT-5.6 cache hints | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation: unset/off/unknown keeps old serving; cohort serves the named account and shadows a stable five percent of other UIDs; on serves shaped only. Default off. | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-05 | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
-| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | true | — | graduate | 2026-10-23 | dazheng |
-| `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
@@ -258,22 +251,21 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | pending | 2026-10-15 | unowned |
-| `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Canonical memory lifecycle response header retained for older clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `chat_first_ui` | Universal chat-first capability sent for older clients and sampled by macOS | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
+| `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
-| `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
+| `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
-| `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
-| `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
+| `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
+| `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |
 | `screen_task_jev_gate` | Default-off screen dedupe, Jev OCR gate and one-call extraction; privacy approval required | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-01 | dazheng |
 | `system_calendar_meeting_context` | Enable system calendar meeting context on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
-| `system_calendar_meeting_context_kill` | Beta system calendar meeting context stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
+| `system_calendar_meeting_context_kill` | Beta system calendar meeting context stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 
 ### ops_kill
 
@@ -305,6 +297,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Allow production gateway feature mode | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` | Enable gateway observability logs | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `OMI_VERTEX_LEGACY_TASK_MODE` | enforce (default) refuses positively identified macOS task loops below the configured capable build after confirmed inactivity; unset/invalid threshold or observe only counts | backend | env | closed | env_var | env_var | env_var | — | keep | — | dazheng |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | — | dazheng |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | — | dazheng |
 | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | — | unowned |
@@ -347,6 +340,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_JEV_AUDIT_RATE` | Screen gate reject audit fraction, default 0.01 | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `SCREEN_TASK_JEV_THRESHOLD` | Screen gate threshold, default 0.5 | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `SCREEN_TASK_MIN_MACOS_BUILD` | Minimum identified macOS build admitted to the screen-task gate, admission, and flagged extraction; default 12435; invalid values use the default | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | keep | — | backend runtime_env (PR #18855) |
 | `SONIOX_ESTIMATED_USD_PER_HOUR` | Metered-audio fallback price for Soniox runway | backend | env | closed | 0.07537 | 0.07537 (backend-listen (chart), gke/backend-listen) | 0.07537 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_NO_TEXT_RESCUE_SECONDS` | Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 | backend | env | closed | — | — | — | — | pending | — | backend |
 | `STT_NO_TEXT_SECONDS` | Deadline from VAD-confirmed speech to first provider text | backend | env | closed | 30 | 30 (backend-listen (chart), gke/backend-listen) | 30 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
@@ -407,7 +401,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MENTOR_GATE_PROMPT_CACHE_ENABLED` — Cache mentor gate prompts (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
-- `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)
 - `OMI_MODEL_TIER` — Select proxy budget tier (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
