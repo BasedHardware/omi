@@ -970,12 +970,23 @@ def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     assert '/v1/conversations/shared/chat' not in app.openapi()['paths']
 
 
-def test_public_shared_chat_runtime_mode_per_backend_surface():
+@pytest.fixture(scope='module')
+def _runtime_surface_configs():
+    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
+        manifest = yaml.safe_load(handle)
+    charts = {}
+    for environment in ('dev', 'prod'):
+        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
+        with chart_path.open(encoding='utf-8') as handle:
+            charts[environment] = yaml.safe_load(handle)
+    return manifest, charts
+
+
+def test_public_shared_chat_runtime_mode_per_backend_surface(_runtime_surface_configs):
     # Dev enables every surface. Prod enables the Cloud Run services only: the
     # prod load balancer sends /v1/conversations/shared/chat to Cloud Run
     # `backend`, never to GKE backend-listen, which stays off (no Helm roll).
-    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
-        manifest = yaml.safe_load(handle)
+    manifest, charts = _runtime_surface_configs
 
     for environment in ('dev', 'prod'):
         listener_env = manifest['environments'][environment]['gke']['backend-listen']['env']
@@ -993,10 +1004,7 @@ def test_public_shared_chat_runtime_mode_per_backend_surface():
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
         )
 
-        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
-        with chart_path.open(encoding='utf-8') as chart_handle:
-            chart = yaml.safe_load(chart_handle)
-        chart_env = {item['name']: item.get('value') for item in chart['env']}
+        chart_env = {item['name']: item.get('value') for item in charts[environment]['env']}
         assert (
             chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']
             == {
