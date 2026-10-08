@@ -322,7 +322,7 @@ async def test_actual_app_and_developer_webhook_payloads_are_public(monkeypatch,
     )
     monkeypatch.setattr(apps, 'get_available_apps', lambda _: [app])
     monkeypatch.setattr(apps, 'is_app_webhook_disabled', lambda _: False)
-    monkeypatch.setattr(apps, 'get_app_webhook_signing_db', lambda _: None)
+    monkeypatch.setattr('database.webhook_signing.get_app_webhook_signing_db', lambda _: None)
     monkeypatch.setattr(apps, 'record_app_webhook_success', lambda _: None)
     monkeypatch.setattr(apps, 'safe_request_target', lambda url: (url, {'headers': {}, 'extensions': {}}))
     monkeypatch.setattr(apps, 'get_webhook_circuit_breaker', lambda _: cb)

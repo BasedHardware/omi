@@ -52,6 +52,7 @@ class TestHttpToolArguments:
             patch.object(self.mod, "is_app_webhook_disabled", return_value=False),
             patch.object(self.mod, "get_cached_user_geolocation", return_value=None),
             patch.object(self.mod, "get_webhook_circuit_breaker", return_value=_allowing_breaker()),
+            patch.object(self.mod, "active_app_signing_secrets", return_value=[]),
             patch.object(self.mod, "record_app_webhook_success"),
             patch("httpx.AsyncClient", return_value=client),
         ):
@@ -91,6 +92,7 @@ class TestHttpToolArguments:
             patch.object(self.mod, "is_app_webhook_disabled", return_value=False),
             patch.object(self.mod, "get_cached_user_geolocation", return_value=None),
             patch.object(self.mod, "get_webhook_circuit_breaker", return_value=_allowing_breaker()),
+            patch.object(self.mod, "active_app_signing_secrets", return_value=[]),
             patch.object(self.mod, "record_app_webhook_failure", return_value=0),
             patch.object(self.mod, "_handle_app_webhook_disable"),
             patch("httpx.AsyncClient", return_value=client),
