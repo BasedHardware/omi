@@ -3,15 +3,18 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/native_static_map.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
 const _mapClusterDistanceMeters = 100.0;
@@ -89,9 +92,19 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
 /// at each place. Single-conversation places open the conversation directly;
 /// multi-conversation places keep the cluster bottom sheet.
 class ConversationMapPage extends StatelessWidget {
-  const ConversationMapPage({super.key, required this.conversations});
+  const ConversationMapPage({super.key, required this.conversations, this.launchMap, this.staticMapResolver});
 
   final List<ServerConversation> conversations;
+
+  /// Opens a place in the map app; [MapsUtil.launchMap] unless a test injects a launcher.
+  @visibleForTesting
+  final void Function(double latitude, double longitude)? launchMap;
+
+  /// Fetches the native preview's map file; [resolveNativeStaticMapFile] unless a test injects one.
+  @visibleForTesting
+  final NativeStaticMapResolver? staticMapResolver;
+
+  void _launch(double latitude, double longitude) => (launchMap ?? MapsUtil.launchMap)(latitude, longitude);
 
   Future<void> _openConversation(BuildContext context, ServerConversation conversation) async {
     final timestamp = conversation.startedAt ?? conversation.createdAt;
@@ -105,37 +118,52 @@ class ConversationMapPage extends StatelessWidget {
       _openConversation(context, group.conversations.single);
       return;
     }
-    final dates = OmiDateFormat.of(context);
+    final title = context.l10n.conversationCount(group.conversations.length);
     showOmiSheet<void>(
       context: context,
-      title: context.l10n.conversationCount(group.conversations.length),
+      title: title,
       padding: EdgeInsets.zero,
-      builder: (sheetContext) => ListView(
-        shrinkWrap: true,
-        children: [
-          for (final conversation in group.conversations)
-            ListTile(
-              key: ValueKey('conversation_map_cluster_row_${conversation.id}'),
-              title: Text(
-                conversationDisplayTitle(
-                  conversation,
-                  context.l10n,
-                  surface: ConversationUntitledRenderedSurface.map,
-                  dates: OmiDateFormat.of(context),
-                ),
-              ),
-              subtitle: Text(
-                dates.dateTime(conversation.startedAt ?? conversation.createdAt),
-                style: TextStyle(color: OmiColors.textSecondary),
-              ),
-              trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                _openConversation(context, conversation);
-              },
-            ),
-        ],
+      builder: (sheetContext) => _clusterList(context, sheetContext, group),
+      nativeBuilder: (sheetContext) => ConversationMapClusterChooser(
+        title: title,
+        conversations: group.conversations,
+        onOpen: (conversation) => _openConversation(context, conversation),
+        fallback: OmiSheetScaffold(
+          title: title,
+          padding: EdgeInsets.zero,
+          child: _clusterList(context, sheetContext, group),
+        ),
       ),
+    );
+  }
+
+  Widget _clusterList(BuildContext context, BuildContext sheetContext, ConversationMapGroup group) {
+    final dates = OmiDateFormat.of(context);
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        for (final conversation in group.conversations)
+          ListTile(
+            key: ValueKey('conversation_map_cluster_row_${conversation.id}'),
+            title: Text(
+              conversationDisplayTitle(
+                conversation,
+                context.l10n,
+                surface: ConversationUntitledRenderedSurface.map,
+                dates: OmiDateFormat.of(context),
+              ),
+            ),
+            subtitle: Text(
+              dates.dateTime(conversation.startedAt ?? conversation.createdAt),
+              style: TextStyle(color: OmiColors.textSecondary),
+            ),
+            trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              _openConversation(context, conversation);
+            },
+          ),
+      ],
     );
   }
 
@@ -155,7 +183,7 @@ class ConversationMapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = buildConversationMapGroups(conversations);
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationMap)),
       body: groups.isEmpty
@@ -170,7 +198,7 @@ class ConversationMapPage extends StatelessWidget {
                   button: true,
                   label: context.l10n.conversationMap,
                   child: GestureDetector(
-                    onTap: () => MapsUtil.launchMap(groups.first.latitude, groups.first.longitude),
+                    onTap: () => _launch(groups.first.latitude, groups.first.longitude),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: SizedBox(
@@ -239,6 +267,162 @@ class ConversationMapPage extends StatelessWidget {
                   ),
               ],
             ),
+    );
+    if (!nativePresentationEnabled) return classic;
+    return _NativeConversationMap(page: this, groups: groups, classic: classic);
+  }
+}
+
+/// The native title of a place's conversation. Locked content never crosses the bridge, so a
+/// locked conversation shows the generic label instead of its title.
+String _nativeConversationTitle(BuildContext context, ServerConversation conversation) => conversation.isLocked
+    ? context.l10n.conversations
+    : conversationDisplayTitle(
+        conversation,
+        context.l10n,
+        surface: ConversationUntitledRenderedSurface.map,
+        dates: OmiDateFormat.of(context),
+      );
+
+/// The same map, Open in Maps and grouped places, projected natively. The preview is a temporary
+/// PNG fetched by Dart through the authenticated proxy; this State owns that file and deletes it on
+/// dispose, on a brightness or session change and when a fetch completes too late. Rows address
+/// groups by index; only Dart maps an index back to its conversations.
+class _NativeConversationMap extends StatefulWidget {
+  const _NativeConversationMap({required this.page, required this.groups, required this.classic});
+
+  final ConversationMapPage page;
+  final List<ConversationMapGroup> groups;
+  final Widget classic;
+
+  @override
+  State<_NativeConversationMap> createState() => _NativeConversationMapState();
+}
+
+class _NativeConversationMapState extends State<_NativeConversationMap> {
+  late final _map = NativeStaticMap(resolver: widget.page.staticMapResolver);
+
+  @override
+  void dispose() {
+    _map.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = widget.groups;
+    // Rebuilds on a theme change, so a new map in the other style replaces the current file.
+    Theme.of(context);
+    final width = (MediaQuery.sizeOf(context).width - 32).round();
+    if (groups.isNotEmpty && width > 0) {
+      _map.show(
+        pins: [for (final group in groups) OmiMapPin(latitude: group.latitude, longitude: group.longitude)],
+        width: width,
+        height: 220,
+        brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark,
+      );
+    }
+    return ListenableBuilder(listenable: _map, builder: (context, _) => _surface(context, groups));
+  }
+
+  Widget _surface(BuildContext context, List<ConversationMapGroup> groups) {
+    final l10n = context.l10n;
+    final page = widget.page;
+    return IosNativeSurface(
+      title: l10n.conversationMap,
+      fallback: widget.classic,
+      empty: page.conversations.isEmpty ? l10n.noConversationsYet : l10n.unknownLocation,
+      toolbar: [
+        NativeRow('conversation_map_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        if (groups.isNotEmpty) ...[
+          NativeSection('conversation_map_preview', [
+            if (_map.uri != null)
+              NativeRow('conversation_map_image', l10n.conversationMap,
+                  kind: 'image', imageUri: _map.uri, maximumValue: 4),
+            if (_map.loading) NativeRow('conversation_map_loading', l10n.loading, kind: 'label'),
+            if (_map.failed) NativeRow('conversation_map_error', l10n.couldNotLoadMap, kind: 'label'),
+            NativeRow('conversation_map_open', l10n.openInMaps,
+                symbol: 'map', action: (_) => page._launch(groups.first.latitude, groups.first.longitude)),
+          ]),
+          NativeSection('conversation_map_groups', [
+            for (final (index, group) in groups.indexed)
+              NativeRow(
+                'conversation_map_group_$index',
+                group.conversations.length == 1
+                    ? _nativeConversationTitle(context, group.conversations.single)
+                    : l10n.conversationCount(group.conversations.length),
+                kind: 'navigation',
+                symbol: group.conversations.length == 1 ? 'mappin.circle.fill' : 'square.stack',
+                action: (_) => page._openGroup(context, group),
+              ),
+          ]),
+        ],
+      ],
+    );
+  }
+}
+
+/// The native chooser for a place with several conversations. Choosing one closes the sheet and
+/// then opens it, only while the account session that opened the chooser is still current.
+class ConversationMapClusterChooser extends StatefulWidget {
+  const ConversationMapClusterChooser({
+    super.key,
+    required this.title,
+    required this.conversations,
+    required this.onOpen,
+    required this.fallback,
+  });
+
+  final String title;
+  final List<ServerConversation> conversations;
+  final void Function(ServerConversation conversation) onOpen;
+
+  /// The complete Flutter chooser, already inside its sheet scaffold.
+  final Widget fallback;
+
+  @override
+  State<ConversationMapClusterChooser> createState() => _ConversationMapClusterChooserState();
+}
+
+class _ConversationMapClusterChooserState extends State<ConversationMapClusterChooser> {
+  final _owner = AuthService.instance.captureSessionSnapshot();
+  bool _chosen = false;
+
+  void _choose(ServerConversation conversation) {
+    // A second command before the sheet closes must not pop the map beneath it.
+    if (_chosen) return;
+    _chosen = true;
+    final owner = _owner;
+    Navigator.of(context).pop();
+    if (owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
+    widget.onOpen(conversation);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dates = OmiDateFormat.of(context);
+    return IosNativeSurface(
+      title: widget.title,
+      fallback: widget.fallback,
+      toolbar: [
+        NativeRow('conversation_map_cluster_close', context.l10n.close,
+            symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('conversation_map_cluster', [
+          for (final (index, conversation) in widget.conversations.indexed)
+            NativeRow(
+              'conversation_map_cluster_$index',
+              _nativeConversationTitle(context, conversation),
+              subtitle: dates.dateTime(conversation.startedAt ?? conversation.createdAt),
+              kind: 'navigation',
+              action: (_) => _choose(conversation),
+            ),
+        ]),
+      ],
     );
   }
 }

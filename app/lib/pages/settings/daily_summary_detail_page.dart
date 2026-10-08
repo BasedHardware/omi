@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,7 +12,13 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/users.dart'
-    show deleteDailySummary, getDailySummary, regenerateDailySummary, setDailySummaryVisibility;
+    show
+        RegenerateDailySummaryResult,
+        deleteDailySummary,
+        getDailySummary,
+        regenerateDailySummary,
+        setDailySummaryVisibility;
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/action_items/day_tasks_page.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
@@ -21,6 +30,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/widgets/native_static_map.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -32,12 +42,32 @@ class DailySummaryDetailPage extends StatefulWidget {
   final DayConversationsFetcher? dayConversationsFetcher;
   final DayTasksFetcher? dayTasksFetcher;
 
+  /// Loads the summary when none is passed; [getDailySummary] unless a test injects a loader.
+  @visibleForTesting
+  final Future<DailySummary?> Function(String id)? summaryLoader;
+
+  /// Loads a linked conversation; [conversations_api.getConversationById] unless a test injects one.
+  @visibleForTesting
+  final Future<ServerConversation?> Function(String id)? conversationFetcher;
+
+  /// Opens a place in the map app; [MapsUtil.launchMap] unless a test injects a launcher.
+  @visibleForTesting
+  final void Function(double latitude, double longitude)? launchMap;
+
+  /// Fetches the native journey map's file; [resolveNativeStaticMapFile] unless a test injects one.
+  @visibleForTesting
+  final NativeStaticMapResolver? staticMapResolver;
+
   const DailySummaryDetailPage({
     super.key,
     required this.summaryId,
     this.summary,
     this.dayConversationsFetcher,
     this.dayTasksFetcher,
+    this.summaryLoader,
+    this.conversationFetcher,
+    this.launchMap,
+    this.staticMapResolver,
   });
 
   @override
@@ -83,7 +113,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       return;
     }
 
-    final summary = await getDailySummary(widget.summaryId);
+    final summary = await (widget.summaryLoader ?? getDailySummary)(widget.summaryId);
     if (mounted) {
       setState(() {
         _summary = summary;
@@ -106,11 +136,59 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       body: _isLoading
-          ? const OmiLoadingState()
+          ? _nativeStatus(const OmiLoadingState(), loading: true)
           : _summary == null
-              ? _buildNotFound()
+              ? _nativeStatus(_buildNotFound(), loading: false)
               : _buildContent(),
     );
+  }
+
+  /// The loading and not-found states, projected natively with the same Back and Go Back.
+  Widget _nativeStatus(Widget classic, {required bool loading}) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.recap,
+      fallback: classic,
+      loading: loading,
+      empty: loading ? '' : l10n.summaryNotFound,
+      toolbar: [
+        NativeRow('recap_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+      ],
+      sections: [
+        if (!loading)
+          NativeSection('recap_not_found', [
+            NativeRow('recap_not_found_label', l10n.summaryNotFound, kind: 'label', symbol: 'tray'),
+            NativeRow('recap_go_back', l10n.goBack, action: (_) => Navigator.pop(context)),
+          ]),
+      ],
+    );
+  }
+
+  void _launchMap(double latitude, double longitude) => (widget.launchMap ?? MapsUtil.launchMap)(latitude, longitude);
+
+  /// Shows the blocking spinner: the native activity when available, otherwise the Flutter spinner
+  /// dialog on the root navigator. The returned callback removes it exactly once, also after this
+  /// page unmounts. Call it before awaiting any route or sheet.
+  Future<VoidCallback> _showBlockingSpinner() async {
+    // Captured before any await: the navigator outlives this page if it is popped mid-flight.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final activity =
+        nativePresentationEnabled ? await showIosNativeActivity(context, label: context.l10n.loading) : null;
+    if (activity != null) return () => unawaited(activity.dismiss());
+    if (!mounted) return () {};
+    var shown = true;
+    // Fullscreen blocking spinner — barrierDismissible=false so the user
+    // can't half-cancel and get into a torn state.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
+    );
+    return () {
+      if (!shown) return;
+      shown = false;
+      if (rootNavigator.canPop()) rootNavigator.pop();
+    };
   }
 
   Future<void> _shareSummary() async {
@@ -153,24 +231,22 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     }
 
     // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
-    );
-
+    final dismissSpinner = await _showBlockingSpinner();
+    ServerConversation? conversation;
+    var failed = false;
     try {
-      final conversation = await conversations_api.getConversationById(conversationId);
-      if (!mounted) return;
-      Navigator.pop(context); // Dismiss loading
-
-      if (conversation != null) {
-        routeToPage(context, ConversationDetailPage(conversation: conversation));
-      }
+      conversation = await (widget.conversationFetcher ?? conversations_api.getConversationById)(conversationId);
     } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Dismiss loading
+      failed = true;
+    } finally {
+      // Dismissed before any route opens, and even when this page is gone.
+      dismissSpinner();
+    }
+    if (!mounted) return;
+    if (failed) {
       OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    } else if (conversation != null) {
+      routeToPage(context, ConversationDetailPage(conversation: conversation));
     }
   }
 
@@ -243,26 +319,16 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     if (_isRegenerating || _summary == null) return;
     setState(() => _isRegenerating = true);
 
-    // Capture the navigator BEFORE the await so we can dismiss the spinner
-    // unconditionally — even if the widget unmounts mid-flight (route
-    // popped from outside, OS kills the activity), the navigator is still
-    // alive and pop() works without needing a valid widget context.
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
-
-    // Fullscreen blocking spinner — barrierDismissible=false so the user
-    // can't half-cancel and get into a torn state.
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
-    );
-
-    final result = await regenerateDailySummary(widget.summaryId);
-
-    // Dismiss spinner first, then bail if widget is gone. Order matters:
-    // mounted check before pop would orphan the dialog on dispose.
-    if (rootNavigator.canPop()) {
-      rootNavigator.pop();
+    // The spinner is dismissed unconditionally — even if the widget unmounts
+    // mid-flight (route popped from outside, OS kills the activity).
+    final dismissSpinner = await _showBlockingSpinner();
+    final RegenerateDailySummaryResult result;
+    try {
+      result = await regenerateDailySummary(widget.summaryId);
+    } finally {
+      // Dismiss spinner first, then bail if widget is gone. Order matters:
+      // mounted check before dismissal would orphan the spinner on dispose.
+      dismissSpinner();
     }
     if (!mounted) return;
 
@@ -382,9 +448,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       NativeSection('recap_overview', [
         NativeRow('recap_headline', '${summary.dayEmoji} ${summary.headline}', kind: 'label'),
         NativeRow('recap_overview_text', summary.overview, kind: 'label'),
-        NativeRow('recap_stats',
-            '${l10n.conversationCount(summary.stats.totalConversations)} · ${summary.stats.formattedDuration} · ${l10n.taskCount(summary.stats.actionItemsCount)}',
-            kind: 'label'),
+        ..._nativeStats(summary),
       ]),
       NativeSection(
           'recap_highlights',
@@ -437,17 +501,62 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       if (summary.memoriesLearned.isNotEmpty)
         NativeSection('recap_memories', [
           NativeRow('recap_review_memories', l10n.memories,
-              action: (_) => showOmiSheet<void>(
-                  context: context,
-                  builder: (_) => SingleChildScrollView(child: _buildMemoriesLearnedSection(summary)))),
+              action: (_) => showMemoryReviewSheet(context,
+                  items: summary.memoriesLearned,
+                  source: MemoryReviewSource.dailySummaryDetail,
+                  impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
+                  title: l10n.memories)),
         ]),
       if (summary.locations.isNotEmpty)
         NativeSection('recap_locations', [
-          NativeRow('recap_locations_map', l10n.yourDaysJourney,
-              action: (_) => showOmiSheet<void>(
-                  context: context, builder: (_) => SingleChildScrollView(child: _buildLocationsMap(summary)))),
+          NativeRow('recap_locations_map', l10n.yourDaysJourney, action: (_) => _showJourney(summary)),
         ]),
     ]);
+  }
+
+  /// The classic stat tiles as rows: conversations and tasks open their day pages when the recap
+  /// date parses, and watching minutes and proactive moments show only when positive.
+  List<NativeRow> _nativeStats(DailySummary summary) {
+    final l10n = context.l10n;
+    final stats = summary.stats;
+    final recapDay = parseRecapDate(summary.date);
+    return [
+      NativeRow('recap_conversations_stat', l10n.conversationCount(stats.totalConversations),
+          kind: recapDay == null ? 'label' : 'navigation',
+          symbol: 'message',
+          action: recapDay == null
+              ? null
+              : (_) => routeToPage(
+                  context, DayConversationsPage(date: recapDay, fetchConversations: widget.dayConversationsFetcher))),
+      NativeRow('recap_duration_stat', stats.formattedDuration,
+          kind: 'label', subtitle: l10n.durationLabel, symbol: 'clock'),
+      NativeRow('recap_tasks_stat', l10n.tasksCountLabel(stats.actionItemsCount),
+          kind: recapDay == null ? 'label' : 'navigation',
+          symbol: 'checkmark.circle',
+          action: recapDay == null
+              ? null
+              : (_) => routeToPage(context, DayTasksPage(date: recapDay, fetchTasks: widget.dayTasksFetcher))),
+      if ((stats.watchingMinutes ?? 0) > 0)
+        NativeRow('recap_watching_stat', stats.formattedWatchingDuration!, kind: 'label', symbol: 'eye'),
+      if ((stats.proactiveMoments ?? 0) > 0)
+        NativeRow('recap_proactive_stat', '${stats.proactiveMoments}', kind: 'label', symbol: 'bell'),
+    ];
+  }
+
+  /// "Your day's journey" in a sheet: natively, a Dart-fetched map image, Open in Maps and the
+  /// timeline; otherwise the classic journey section.
+  Future<void> _showJourney(DailySummary summary) {
+    Widget classic() => SingleChildScrollView(child: _buildLocationsMap(summary));
+    return showOmiSheet<void>(
+      context: context,
+      builder: (_) => classic(),
+      nativeBuilder: (_) => RecapJourneySheet(
+        locations: summary.locations,
+        onLaunch: _launchMap,
+        staticMapResolver: widget.staticMapResolver,
+        fallback: OmiSheetScaffold(child: classic()),
+      ),
+    );
   }
 
   Widget _buildHeader(DailySummary summary) {
@@ -618,22 +727,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  // Format time from "17:00" to "5PM" format
-  String _formatTimeTo12Hour(String? timeStr) {
-    if (timeStr == null || timeStr.isEmpty) return '';
-    final parts = timeStr.split(':');
-    if (parts.length != 2) return timeStr;
-    final hours = int.tryParse(parts[0]) ?? 0;
-    final minutes = int.tryParse(parts[1]) ?? 0;
-    final period = hours >= 12 ? 'PM' : 'AM';
-    final hour12 = hours == 0 ? 12 : (hours > 12 ? hours - 12 : hours);
-    if (minutes == 0) {
-      return '$hour12$period';
-    } else {
-      return '$hour12:${minutes.toString().padLeft(2, '0')}$period';
-    }
-  }
-
   Widget _buildLocationsMap(DailySummary summary) {
     final timelineLocations = buildTimelineLocations(summary.locations, unknownLabel: context.l10n.unknown);
 
@@ -650,7 +743,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                 // Apple Maps cannot take waypoints via map_launcher, so the
                 // preview opens the day's first stop; each timeline row below
                 // opens its own stop.
-                MapsUtil.launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
+                _launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
               }
             },
             child: SizedBox(
@@ -897,13 +990,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildTimelineItem(TimelineLocation location, int index) {
-    final startFormatted = _formatTimeTo12Hour(location.startTime);
-    final endFormatted = _formatTimeTo12Hour(location.endTime);
-    final timeText = startFormatted.isNotEmpty
-        ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-            ? '$startFormatted - $endFormatted'
-            : startFormatted)
-        : '';
+    final timeText = _timelineTime(location);
 
     final semanticsLabel = timeText.isEmpty ? location.shortName : '${location.shortName}, $timeText';
 
@@ -912,10 +999,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       button: true,
       excludeSemantics: true,
       label: semanticsLabel,
-      onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
+      onTap: () => _launchMap(location.latitude, location.longitude),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => MapsUtil.launchMap(location.latitude, location.longitude),
+        onTap: () => _launchMap(location.latitude, location.longitude),
         child: Container(
           key: ValueKey('daily_summary_location_row_$index'),
           margin: const EdgeInsets.only(bottom: 6),
@@ -973,4 +1060,116 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
     confirmLabel: l10n.deleteRecapAction,
     destructive: true,
   );
+}
+
+// Format time from "17:00" to "5PM" format
+String _formatTimeTo12Hour(String? timeStr) {
+  if (timeStr == null || timeStr.isEmpty) return '';
+  final parts = timeStr.split(':');
+  if (parts.length != 2) return timeStr;
+  final hours = int.tryParse(parts[0]) ?? 0;
+  final minutes = int.tryParse(parts[1]) ?? 0;
+  final period = hours >= 12 ? 'PM' : 'AM';
+  final hour12 = hours == 0 ? 12 : (hours > 12 ? hours - 12 : hours);
+  if (minutes == 0) {
+    return '$hour12$period';
+  } else {
+    return '$hour12:${minutes.toString().padLeft(2, '0')}$period';
+  }
+}
+
+/// A stop's 12-hour time range, or its start time, or nothing.
+String _timelineTime(TimelineLocation location) {
+  final startFormatted = _formatTimeTo12Hour(location.startTime);
+  final endFormatted = _formatTimeTo12Hour(location.endTime);
+  return startFormatted.isNotEmpty
+      ? (endFormatted.isNotEmpty && startFormatted != endFormatted ? '$startFormatted - $endFormatted' : startFormatted)
+      : '';
+}
+
+/// The native "Your day's journey" sheet: the day's map as a temporary PNG fetched by Dart, Open in
+/// Maps for the first stop, and one row per timeline stop. This State owns the map file and deletes
+/// it on dispose, on a brightness or session change and when a fetch completes too late. Rows
+/// address stops by index; only Dart maps an index back to its coordinates.
+class RecapJourneySheet extends StatefulWidget {
+  const RecapJourneySheet({
+    super.key,
+    required this.locations,
+    required this.onLaunch,
+    required this.fallback,
+    this.staticMapResolver,
+  });
+
+  /// The day's stops.
+  final List<LocationPin> locations;
+
+  /// Opens a place in the map app.
+  final void Function(double latitude, double longitude) onLaunch;
+
+  /// The complete Flutter journey, already inside its sheet scaffold.
+  final Widget fallback;
+  final NativeStaticMapResolver? staticMapResolver;
+
+  @override
+  State<RecapJourneySheet> createState() => _RecapJourneySheetState();
+}
+
+class _RecapJourneySheetState extends State<RecapJourneySheet> {
+  late final _map = NativeStaticMap(resolver: widget.staticMapResolver);
+
+  @override
+  void dispose() {
+    _map.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilds on a theme change, so a new map in the other style replaces the current file.
+    Theme.of(context);
+    final width = (MediaQuery.sizeOf(context).width - 32).round();
+    if (widget.locations.isNotEmpty && width > 0) {
+      _map.show(
+        pins: [
+          for (final location in widget.locations) OmiMapPin(latitude: location.latitude, longitude: location.longitude)
+        ],
+        width: width,
+        height: 200,
+        brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark,
+      );
+    }
+    return ListenableBuilder(listenable: _map, builder: (context, _) => _surface(context));
+  }
+
+  Widget _surface(BuildContext context) {
+    final l10n = context.l10n;
+    final locations = widget.locations;
+    final stops = buildTimelineLocations(locations, unknownLabel: l10n.unknown);
+    return IosNativeSurface(
+      title: l10n.yourDaysJourney,
+      fallback: widget.fallback,
+      toolbar: [
+        NativeRow('recap_journey_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('recap_journey_map', [
+          if (_map.uri != null)
+            NativeRow('recap_journey_image', l10n.yourDaysJourney, kind: 'image', imageUri: _map.uri, maximumValue: 4),
+          if (_map.loading) NativeRow('recap_journey_map_loading', l10n.loading, kind: 'label'),
+          if (_map.failed) NativeRow('recap_journey_map_error', l10n.couldNotLoadMap, kind: 'label'),
+          // As the classic preview: Apple Maps takes no waypoints, so this opens the day's first stop.
+          if (locations.isNotEmpty)
+            NativeRow('recap_open_maps', l10n.openInMaps,
+                symbol: 'map', action: (_) => widget.onLaunch(locations.first.latitude, locations.first.longitude)),
+        ]),
+        NativeSection('recap_journey_timeline', [
+          for (final (index, stop) in stops.indexed)
+            NativeRow('recap_location_$index', stop.shortName,
+                subtitle: _timelineTime(stop),
+                symbol: 'mappin',
+                action: (_) => widget.onLaunch(stop.latitude, stop.longitude)),
+        ]),
+      ],
+    );
+  }
 }
