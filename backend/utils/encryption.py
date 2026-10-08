@@ -2,6 +2,7 @@ import base64
 import os
 import struct
 import threading
+from typing import Optional
 
 from cachetools import TTLCache
 from cryptography.hazmat.primitives import hashes
@@ -18,16 +19,22 @@ if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
         "ENCRYPTION_SECRET environment variable not set or is too short. " "It must be a securely managed 32-byte key."
     )
 
-_DERIVED_KEY_CACHE: TTLCache[str, bytes] = TTLCache(maxsize=10_000, ttl=86_400)
+# HKDF ``info`` values. Each purpose gets its own key from the same master secret and uid, so a
+# ciphertext made for one purpose never decrypts under another. Everything stored before purposes
+# existed is user data, which is why it is the default.
+USER_DATA_KEY_PURPOSE = b'user-data-encryption'
+
+_DERIVED_KEY_CACHE: TTLCache[tuple[bytes, str], bytes] = TTLCache(maxsize=10_000, ttl=86_400)
 _DERIVED_KEY_LOCK = threading.Lock()
 
 
-def derive_key(uid: str) -> bytes:
+def derive_key(uid: str, *, purpose: bytes = USER_DATA_KEY_PURPOSE) -> bytes:
     """
-    Derives a user-specific 32-byte key from the master secret and user ID (salt).
+    Derives a user-specific 32-byte key from the master secret and user ID (salt) for one purpose.
     """
+    cache_key = (purpose, uid)
     with _DERIVED_KEY_LOCK:
-        cached = _DERIVED_KEY_CACHE.get(uid)
+        cached = _DERIVED_KEY_CACHE.get(cache_key)
         if cached is not None:
             return cached
 
@@ -35,11 +42,11 @@ def derive_key(uid: str) -> bytes:
         algorithm=hashes.SHA256(),
         length=32,
         salt=uid.encode('utf-8'),
-        info=b'user-data-encryption',
+        info=purpose,
     )
     key = hkdf.derive(ENCRYPTION_SECRET)
     with _DERIVED_KEY_LOCK:
-        _DERIVED_KEY_CACHE[uid] = key
+        _DERIVED_KEY_CACHE[cache_key] = key
     return key
 
 
@@ -48,14 +55,19 @@ def clear_derived_key_cache() -> None:
         _DERIVED_KEY_CACHE.clear()
 
 
-def encrypt(data: str, uid: str) -> str:
+def _key_for(uid: str, purpose: Optional[bytes]) -> bytes:
+    # User-data callers keep the original derive_key(uid) call; only a purpose-specific caller passes more.
+    return derive_key(uid) if purpose is None else derive_key(uid, purpose=purpose)
+
+
+def encrypt(data: str, uid: str, *, purpose: Optional[bytes] = None) -> str:
     """
-    Encrypts a string using a user-specific key.
+    Encrypts a string using a user-specific key; ``purpose`` selects a key other than the user-data one.
     Returns a base64 encoded string containing nonce + ciphertext + tag.
     """
     if not data:
         return data
-    key = derive_key(uid)
+    key = _key_for(uid, purpose)
     aesgcm = AESGCM(key)
     nonce = os.urandom(12)  # GCM standard nonce size
 
@@ -70,15 +82,15 @@ def encrypt(data: str, uid: str) -> str:
     return base64.b64encode(encrypted_payload).decode('utf-8')
 
 
-def decrypt(encrypted_data: str, uid: str) -> str:
+def decrypt(encrypted_data: str, uid: str, *, purpose: Optional[bytes] = None) -> str:
     """
-    Decrypts a base64 encoded string using a user-specific key.
+    Decrypts a base64 encoded string using a user-specific key; ``purpose`` selects a key other than the user-data one.
     """
     if not encrypted_data:
         return encrypted_data
 
     try:
-        key = derive_key(uid)
+        key = _key_for(uid, purpose)
         aesgcm = AESGCM(key)
 
         encrypted_payload = base64.b64decode(encrypted_data.encode('utf-8'))
