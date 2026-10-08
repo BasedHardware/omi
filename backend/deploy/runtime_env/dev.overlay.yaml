@@ -35,9 +35,6 @@ overlay:
         SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        MENTOR_GATE_DEBOUNCE_ENABLED:
-          value: 'true'
-          category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -73,8 +70,6 @@ overlay:
           value: 'false'
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
-        STT_CONNECT_ORDER_FROM_CONFIG:
-          value: 'true'
         STT_RESILIENT_RECONNECT:
           value: 'false'
         STT_FAILOVER_RECOVERY_ENABLED:
@@ -91,10 +86,6 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'true'
@@ -173,6 +164,9 @@ overlay:
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
           category: rollout
+        REVIEW_SURFACE_MODE:
+          value: 'on'
+          category: rollout
     pusher:
       env:
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
@@ -194,9 +188,6 @@ overlay:
         SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        MENTOR_GATE_DEBOUNCE_ENABLED:
-          value: 'true'
-          category: rollout
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
           category: storage_retention
@@ -245,10 +236,6 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'true'
@@ -507,13 +494,13 @@ overlay:
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
             value: 'true'
+            category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -532,10 +519,6 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
@@ -703,10 +686,6 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'

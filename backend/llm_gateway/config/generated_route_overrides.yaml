@@ -1,9 +1,12 @@
-# Gateway-only model and reasoning policy. These overrides are applied after
-# model_config.py generates a lane, so legacy product routing remains unchanged.
+# Gateway model and reasoning policy. The profile supplies the managed default;
+# these overrides pin gateway dispatch while request-scoped BYOK remains separate.
 generated_route_overrides:
   - feature: app_generator
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: medium}
+  - feature: app_integration
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
   # Function tools on /v1/chat/completions require reasoning_effort=none for gpt-6-luna
   # (OpenAI rejects tools + medium/high effort on that surface).
   - feature: chat_agent
@@ -45,6 +48,9 @@ generated_route_overrides:
   - feature: external_structure
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: followup
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
   # File chat is no-tools single-shot completions capped at 2048 output tokens.
   # Unpinned effort rides the provider default, which can spend that cap on
   # hidden reasoning before any answer text (desktop proactivity's truncation
@@ -98,6 +104,9 @@ generated_route_overrides:
   - feature: memory_l2
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: medium}
+  - feature: onboarding
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
   - feature: notifications
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
@@ -116,12 +125,27 @@ generated_route_overrides:
   - feature: proactive_notification
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: screen_frame_judge
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
+  - feature: session_titles
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
   - feature: smart_glasses
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: trends
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
+  - feature: translation
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}
   - feature: what_matters_now
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
   - feature: wake_word_adjudication
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: high}
+  - feature: wrapped_analysis
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: none}

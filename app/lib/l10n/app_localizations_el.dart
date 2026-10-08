@@ -12517,16 +12517,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Προσαρμογή της εμπειρίας σας';
 
   @override
-  String get onboardingRatingPromptTitle => 'Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;';
+  String get onboardingRatingPromptTitle => 'Σας αρέσει το Omi;';
 
   @override
-  String get onboardingRatingPromptBody => 'Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️';
+  String get onboardingRatingPromptYes => 'Ναι';
 
   @override
-  String get onboardingRatingPromptYes => 'Ναι, θέλω να σας στηρίξω!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Όχι ακριβώς';
+  String get onboardingRatingPromptNo => 'Όχι';
 
   @override
   String get partialRecording => 'Μερική ηχογράφηση';

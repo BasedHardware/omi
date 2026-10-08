@@ -12225,16 +12225,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingSetupStepPersonalize => '正在个性化你的体验';
 
   @override
-  String get onboardingRatingPromptTitle => '等待的时候，Omi 用起来还顺手吗？';
+  String get onboardingRatingPromptTitle => '你喜欢 Omi 吗？';
 
   @override
-  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
+  String get onboardingRatingPromptYes => '是';
 
   @override
-  String get onboardingRatingPromptYes => '好的，我想支持你们！';
-
-  @override
-  String get onboardingRatingPromptNo => '不太满意';
+  String get onboardingRatingPromptNo => '否';
 
   @override
   String get partialRecording => '部分录音';

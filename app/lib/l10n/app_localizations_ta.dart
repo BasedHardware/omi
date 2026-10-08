@@ -12521,16 +12521,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'உங்கள் அனுபவம் தனிப்பயனாக்கப்படுகிறது';
 
   @override
-  String get onboardingRatingPromptTitle => 'காத்திருக்கும் நேரத்தில், Omi பயன்படுத்த இனிமையாக இருக்கிறதா?';
+  String get onboardingRatingPromptTitle => 'நீங்கள் Omi-ஐ ரசிக்கிறீர்களா?';
 
   @override
-  String get onboardingRatingPromptBody => '5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️';
+  String get onboardingRatingPromptYes => 'ஆம்';
 
   @override
-  String get onboardingRatingPromptYes => 'ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!';
-
-  @override
-  String get onboardingRatingPromptNo => 'அவ்வளவாக இல்லை';
+  String get onboardingRatingPromptNo => 'இல்லை';
 
   @override
   String get partialRecording => 'பகுதியளவு பதிவு';

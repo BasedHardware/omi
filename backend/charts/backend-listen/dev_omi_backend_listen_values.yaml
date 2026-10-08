@@ -113,8 +113,6 @@ env:
     value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
-  - name: MENTOR_GATE_DEBOUNCE_ENABLED
-    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
@@ -221,21 +219,15 @@ env:
     value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
-  - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
-    value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
-  - name: MEETING_RECEIPT_RECONCILER_ENABLED
-    value: "false"
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"
@@ -388,8 +380,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
-  - name: STT_CONNECT_ORDER_FROM_CONFIG
-    value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_FAILOVER_RECOVERY_ENABLED

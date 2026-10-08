@@ -422,14 +422,14 @@ def test_no_lane_declares_an_overflow_origin_and_no_flash_lite_route_moved():
         'translation',
         'screen_frame_judge',
     ):
-        assert get_model(feature) == 'gemini-2.5-flash-lite'
+        assert get_model(feature) == 'gpt-6-luna'
 
 
 def test_a_declared_origin_is_stamped_onto_route_options_without_moving_the_model(monkeypatch):
     monkeypatch.setitem(ptr.LANE_OVERFLOW_ORIGINS, 'session_titles', 'gemini-2.5-flash-lite')
     options = get_route_options('session_titles', 'gemini-2.5-flash-lite', 'gemini')
     assert options[OVERFLOW_ORIGIN_OPTION] == 'gemini-2.5-flash-lite'
-    assert get_model('session_titles') == 'gemini-2.5-flash-lite'
+    assert get_model('session_titles') == 'gpt-6-luna'
     untouched = get_route_options('followup', 'gemini-2.5-flash-lite', 'gemini')
     assert OVERFLOW_ORIGIN_OPTION not in untouched
 

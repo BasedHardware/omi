@@ -12465,16 +12465,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Tiek personalizēta jūsu pieredze';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kamēr gaidāt, vai Omi ir bijis patīkami lietot?';
+  String get onboardingRatingPromptTitle => 'Vai jums patīk Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 zvaigžņu vērtējums mums ļoti palīdz ❤️';
+  String get onboardingRatingPromptYes => 'Jā';
 
   @override
-  String get onboardingRatingPromptYes => 'Jā, es vēlos jūs atbalstīt!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ne gluži';
+  String get onboardingRatingPromptNo => 'Nē';
 
   @override
   String get partialRecording => 'Daļējs ieraksts';

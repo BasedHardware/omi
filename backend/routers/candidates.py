@@ -353,10 +353,11 @@ def accept_candidate(
 ):
     _require_candidate_write_control(uid, account_generation)
     try:
-        summary_arguments = {'summary_item': request.summary_item} if request and request.summary_item else {}
-        return candidate_service.accept_candidate(
-            uid, candidate_id, account_generation=account_generation, **summary_arguments
-        )
+        if request and request.summary_item:
+            return candidate_service.accept_candidate(
+                uid, candidate_id, account_generation=account_generation, summary_item=request.summary_item
+            )
+        return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except candidates_db.CandidateStoreError as exc:

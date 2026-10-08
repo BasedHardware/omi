@@ -12482,16 +12482,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персонализиране на вашето изживяване';
 
   @override
-  String get onboardingRatingPromptTitle => 'Докато чакате, приятно ли ви е да използвате Omi?';
+  String get onboardingRatingPromptTitle => 'Харесва ли ви Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оценка от 5 звезди наистина ни помага ❤️';
+  String get onboardingRatingPromptYes => 'Да';
 
   @override
-  String get onboardingRatingPromptYes => 'Да, искам да ви подкрепя!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не особено';
+  String get onboardingRatingPromptNo => 'Не';
 
   @override
   String get partialRecording => 'Частичен запис';

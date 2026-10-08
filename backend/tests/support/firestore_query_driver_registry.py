@@ -36,7 +36,7 @@ from tests.support.firestore_conversation_profiles import (
     SCAN_PROFILES,
     WITHOUT_PHOTOS_PROFILES,
 )
-from tests.support import firestore_outside_query_drivers as outside_drivers
+from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject

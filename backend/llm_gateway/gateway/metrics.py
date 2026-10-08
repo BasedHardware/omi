@@ -69,6 +69,12 @@ REQUEST_REJECTIONS_TOTAL = Counter(
     ['api_surface', 'error_class'],
 )
 
+LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL = Counter(
+    'llm_gateway_luna_unsupported_params_dropped_total',
+    'OpenAI request parameters omitted because gpt-6-luna does not accept them',
+    ['param'],
+)
+
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',

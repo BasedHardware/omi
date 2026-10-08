@@ -12346,16 +12346,13 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'מתאימים אישית את החוויה שלך';
 
   @override
-  String get onboardingRatingPromptTitle => 'בזמן שמחכים, נעים לכם להשתמש ב-Omi?';
+  String get onboardingRatingPromptTitle => 'נהנים מ-Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'דירוג של 5 כוכבים עוזר לנו מאוד ❤️';
+  String get onboardingRatingPromptYes => 'כן';
 
   @override
-  String get onboardingRatingPromptYes => 'כן, אני רוצה לתמוך בכם!';
-
-  @override
-  String get onboardingRatingPromptNo => 'לא ממש';
+  String get onboardingRatingPromptNo => 'לא';
 
   @override
   String get partialRecording => 'הקלטה חלקית';
