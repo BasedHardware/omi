@@ -286,15 +286,14 @@ def _enriched_or_terminal(conversation: Any) -> bool:
     """True when an earlier pass already enriched this row or stored a free-tier terminal.
 
     The deterministic minimum leaves overview, sections, action items, and events
-    empty, so ``structured_is_rich`` is false until enrichment. A projection store
-    leaves ``client_processing`` and no processing state; a bare minimum sets
-    ``processing_state``.
+    empty, so ``structured_is_rich`` is false until enrichment. A bare minimum
+    sets ``processing_state``. ``client_processing`` is not that evidence:
+    ingress can attach a projection to a deferred, still-processing row whose
+    capture never emitted.
     """
     if structured_is_rich(_field(conversation, 'structured')):
         return True
-    if _field(conversation, 'processing_state') is not None:
-        return True
-    return _field(conversation, 'client_processing') is not None
+    return _field(conversation, 'processing_state') is not None
 
 
 def owner_recognition_already_observed(

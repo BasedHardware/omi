@@ -765,3 +765,102 @@ def test_desktop_terminal_paths_count_once(monkeypatch, mode):
     total = _conversation_total()
     module.process_conversation('uid', 'en', stored, trigger=ProcessingTrigger.USER_REPROCESS)
     assert _conversation_total() == pytest.approx(total)
+
+
+def _stub_completed_reprocess(monkeypatch):
+    """Skip the model and derived writes so a USER_REPROCESS can finish."""
+
+    def _structured(*args, **kwargs):
+        return build_deterministic_minimum_structured(args[2]), False
+
+    module = process_conversation_mod
+    monkeypatch.setattr(module, '_enrich_meeting_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, '_get_structured', _structured)
+    monkeypatch.setattr(module, 'trigger_conversation_apps', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, '_extract_memories', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
+
+
+def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch):
+    module = process_conversation_mod
+    _stub_desktop_terminal(monkeypatch)
+    _stub_completed_reprocess(monkeypatch)
+    monkeypatch.setattr(module, 'free_tier_local_processing_enabled', lambda uid: False)
+    monkeypatch.setattr(module, 'should_defer_desktop_processing', lambda uid: True)
+    monkeypatch.setattr(module, 'basic_plan_gate_eager_extraction_enabled', lambda: False)
+    monkeypatch.setattr(module.lifecycle_service, 'create_processing_conversation', lambda *args, **kwargs: True)
+    before = _conversation_total()
+    deferred = module.process_conversation(
+        'uid',
+        'en',
+        _desktop_capture(),
+        client_projection=_desktop_projection(),
+    )
+    assert deferred.status == ConversationStatus.processing
+    assert deferred.deferred is True
+    assert deferred.client_processing is not None
+    assert deferred.processing_state is None
+    assert structured_is_rich(deferred.structured) is False
+    assert (
+        owner_recognition_already_observed(
+            deferred,
+            is_reprocess=True,
+            trigger=ProcessingTrigger.USER_REPROCESS,
+        )
+        is False
+    )
+    assert _conversation_total() == pytest.approx(before)
+    stored = module.process_conversation('uid', 'en', deferred, trigger=ProcessingTrigger.USER_REPROCESS)
+    assert stored.status == ConversationStatus.completed
+    assert _conversation_total() == pytest.approx(before + 1)
+    module.process_conversation('uid', 'en', stored, trigger=ProcessingTrigger.USER_REPROCESS)
+    assert _conversation_total() == pytest.approx(before + 1)
+
+
+def test_observer_failure_cannot_skip_persistence_callbacks(monkeypatch):
+    module = process_conversation_mod
+    _stub_desktop_terminal(monkeypatch)
+    monkeypatch.setattr(module, 'free_tier_local_processing_enabled', lambda uid: True)
+    monkeypatch.setattr(
+        module,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: module.FreeTierProcessingPlan(
+            mode='store_projection', reason='basic_not_entitled', decision=None
+        ),
+    )
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError('emit failed')
+
+    monkeypatch.setattr(module, 'emit_finalized_owner_recognition', _boom)
+
+    class _RaisingHandler(logging.Handler):
+        def handle(self, record):
+            raise RuntimeError('log handler failed')
+
+    handler = _RaisingHandler(level=logging.WARNING)
+    previous_level = module.logger.level
+    module.logger.addHandler(handler)
+    module.logger.setLevel(logging.WARNING)
+    seen = []
+    try:
+        stored = module.process_conversation(
+            'uid',
+            'en',
+            _desktop_capture(),
+            client_projection=_desktop_projection(),
+            persistence_observer=lambda current: seen.append(('persist', current)),
+            derived_effects_disposition_observer=lambda disposition: seen.append(('disposition', disposition)),
+        )
+    finally:
+        module.logger.removeHandler(handler)
+        module.logger.setLevel(previous_level)
+    assert stored.status == ConversationStatus.completed
+    assert seen == [
+        ('persist', True),
+        ('disposition', module.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS),
+    ]

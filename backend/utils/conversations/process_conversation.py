@@ -2876,11 +2876,14 @@ def process_conversation(
                 owner_profile_present=profile,
             )
         except Exception:
-            logger.warning(
-                'owner_recognition_outcome emit_failed uid=%s conversation=%s',
-                uid,
-                getattr(completed, 'id', None),
-            )
+            try:
+                logger.warning(
+                    'owner_recognition_outcome emit_failed uid=%s conversation=%s',
+                    uid,
+                    getattr(completed, 'id', None),
+                )
+            except Exception:
+                return
 
     def report_persistence(
         current: bool,
