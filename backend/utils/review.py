@@ -273,7 +273,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
                 f'vocabulary:{item.spelling.term_id}',
                 value,
                 action_id=f'review:{store.safe_id(item_id)}',
-                slot='vocabulary',
+                predicate='vocabulary',
             )
             applied = True
     except (

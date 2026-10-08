@@ -484,4 +484,4 @@ def test_real_spelling_fact_has_authority_600(harness):
     item = list(user.collection('memory_items').stream())[0].to_dict()
     assert item['subject_entity_id'] == 'vocabulary:1' and item['content'] == 'Paraform'
     assert item['write_reason'] == 'direct_user_statement'
-    assert item['slot'] == 'vocabulary'
+    assert item['predicate'] == 'vocabulary'

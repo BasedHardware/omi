@@ -307,7 +307,7 @@ def write_entity_summary(uid: str, entity_id: str, summary: str, *, updated_at: 
 
 
 def save_user_fact(
-    uid: str, entity_id: str, text: str, *, action_id: str | None = None, slot: str | None = None
+    uid: str, entity_id: str, text: str, *, action_id: str | None = None, predicate: str | None = None
 ) -> str:
     """Canonical direct-user append, authority 600; never a legacy projection write."""
     from models.product_memory import LedgerWriteReason, MemorySubjectScope
@@ -323,7 +323,7 @@ def save_user_fact(
         write_reason=LedgerWriteReason.direct_user_statement,
         subject_entity_id=entity_id,
         subject_scope=MemorySubjectScope.third_party,
-        slot=slot,
+        predicate=predicate,
         user_asserted=True,
         db_client=store.client(),
         _direct_user_authority=mint_direct_user_write_authority(),
