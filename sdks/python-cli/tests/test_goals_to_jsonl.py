@@ -111,6 +111,19 @@ class TestGoalsToJSONL(unittest.TestCase):
         )
         self.assertEqual(g2jsonl.derive_status({"is_active": True, "is_achieved": True}), "completed")
         self.assertEqual(g2jsonl.derive_status({"is_active": True, "is_achieved": False}), "active")
+        # Canonical API status field mapping
+        self.assertEqual(g2jsonl.derive_status({"status": "achieved", "is_active": False}), "completed")
+        self.assertEqual(g2jsonl.derive_status({"status": "completed", "is_active": False}), "completed")
+        # 100% progress goal derives completed even with is_achieved=False
+        self.assertEqual(
+            g2jsonl.derive_status({
+                "current_value": 20,
+                "target_value": 20,
+                "is_active": True,
+                "is_achieved": False,
+            }),
+            "completed",
+        )
 
     def test_parse_float_overflow(self):
         self.assertIsNone(g2jsonl.parse_float("9" * 400))

@@ -74,17 +74,19 @@ def normalize_bool_flag(value: Any) -> Optional[bool]:
 
 
 def derive_status(goal: Dict[str, Any]) -> str:
-    """Derive status strictly: inactive first, then completed/achieved, then active."""
+    """Derive status: status == 'achieved'/'completed' first, then inactive, then progress/active."""
+    raw_status = str(goal.get("status") or "").strip().lower()
+    if raw_status in ("achieved", "completed"):
+        return "completed"
+
     active_flag = normalize_bool_flag(goal.get("is_active"))
-    if active_flag is False:
+    if active_flag is False or raw_status in ("inactive", "archived"):
         return "inactive"
 
     achieved_flag = normalize_bool_flag(goal.get("is_achieved"))
     completed_flag = normalize_bool_flag(goal.get("is_completed"))
     if achieved_flag is True or completed_flag is True:
         return "completed"
-    if achieved_flag is False or completed_flag is False:
-        return "active"
 
     goal_type = str(goal.get("goal_type") or "").strip().lower()
     if goal_type == "boolean":
@@ -110,6 +112,9 @@ def derive_status(goal: Dict[str, Any]) -> str:
 
     if target == 0.0 and curr == 0.0:
         return "completed"
+
+    if achieved_flag is False or completed_flag is False:
+        return "active"
 
     return "active"
 
