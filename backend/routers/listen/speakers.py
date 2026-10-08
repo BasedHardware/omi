@@ -256,11 +256,15 @@ class SpeakerMatcher:
         self._profile_retry_after = time.monotonic() + 30.0
         if eligible:
             try:
+                stored_embedding = await self.host.persistence.call(
+                    user_db.get_user_speaker_embedding, self.host.request.uid
+                )
                 vector = await run_blocking(
                     sync_executor,
                     load_owner_embedding,
                     self.host.request.uid,
                     users=user_db,
+                    stored_embedding=stored_embedding,
                     allow_audio_repair=self.host.has_speech_profile,
                     audio_loader=get_profile_audio_if_exists,
                     read_file=_read_file,

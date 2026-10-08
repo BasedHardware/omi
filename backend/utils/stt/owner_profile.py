@@ -10,6 +10,8 @@ from database import owner_profile_updates as recovery_db
 from utils.other.storage import get_profile_audio_if_exists
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
+_UNREAD = object()
+
 
 def validated_embedding(value: Any) -> Optional[np.ndarray]:
     try:
@@ -29,12 +31,13 @@ def load_owner_embedding(
     uid: str,
     *,
     users: Any = users_db,
+    stored_embedding: Any = _UNREAD,
     allow_audio_repair: bool = True,
     audio_loader: Any = get_profile_audio_if_exists,
     read_file: Any = read_profile_file,
     extractor: Any = extract_embedding_from_bytes,
 ) -> Optional[np.ndarray]:
-    stored = users.get_user_speaker_embedding(uid)
+    stored = users.get_user_speaker_embedding(uid) if stored_embedding is _UNREAD else stored_embedding
     vector = validated_embedding(stored)
     if vector is not None or stored or not allow_audio_repair:
         return vector
