@@ -20,7 +20,8 @@ package com.friend.ios.brain
  * [turn, on, ##n, the, flash, ##lu, ##ght].
  *
  * The vocabulary is `vocab.txt` (30,522 rows) in assets, shipped as-is from the
- * source model. Unknown characters fall back to [UNK] 100.
+ * source model. Unknown words fall back to [UNK] 100 rather than being dropped --
+ * see [wordPiece] for why that distinction matters.
  */
 class BertWordPiece(vocab: Map<String, Int>) {
 
@@ -80,21 +81,55 @@ class BertWordPiece(vocab: Map<String, Int>) {
     return out
   }
 
+  /**
+   * Whether a character splits a token, following the reference's `_is_punctuation`:
+   * the four ASCII ranges, plus every Unicode `P*` category.
+   *
+   * The ASCII ranges alone left smart quotes and dashes attached to their
+   * neighbours, so "don’t" arrived as one word and "yes—and" as one word, and
+   * WordPiece then discarded those glued tokens outright. That is invisible in the
+   * happy path and quietly damaging on real dictation, which is full of curly
+   * quotes. The typed constants are used rather than magic numbers so a wrong
+   * ordinal cannot slip in.
+   */
   private fun isPunct(ch: Char): Boolean {
     val cp = ch.code
-    return (cp in 33..47) ||
-        (cp in 58..64) ||
-        (cp in 91..96) ||
-        (cp in 123..126)
+    if ((cp in 33..47) || (cp in 58..64) || (cp in 91..96) || (cp in 123..126)) return true
+    return when (Character.getType(ch)) {
+      // These constants are declared byte in java.lang.Character while getType()
+      // returns int, so they need widening to be comparable here.
+      Character.CONNECTOR_PUNCTUATION.toInt(),
+      Character.DASH_PUNCTUATION.toInt(),
+      Character.START_PUNCTUATION.toInt(),
+      Character.END_PUNCTUATION.toInt(),
+      Character.INITIAL_QUOTE_PUNCTUATION.toInt(),
+      Character.FINAL_QUOTE_PUNCTUATION.toInt(),
+      Character.OTHER_PUNCTUATION.toInt() -> true
+      else -> false
+    }
   }
 
   /**
    * Greedy longest-match WordPiece over one basic token. Splits into continuations
-   * when no whole word is in the vocab, and returns nothing (rather than [UNK]) when
-   * no substring is, which is how the reference handles out-of-vocab words.
+   * when no whole word is in the vocab.
+   *
+   * An unrepresentable word becomes [UNK] rather than disappearing. Returning empty
+   * here looked equivalent -- encode() filters empty results -- but it silently
+   * deletes the word from the utterance, so an out-of-vocab word contributed nothing
+   * to the embedding and the router scored the request as if those words had never
+   * been said. That is worse than a coarse embedding: it is an input the model was
+   * never shown. It also contradicted this class's own contract, which documents
+   * [UNK] 100 as the fallback.
    */
   private fun wordPiece(word: String): List<String> {
     if (word.isEmpty()) return emptyList()
+
+    // The reference caps a word at 100 characters and emits [UNK] beyond that. Without
+    // the cap the longest-match loop below tries every shorter substring of the word,
+    // which is quadratic in its length and runs on the routing worker thread -- one
+    // pathological token would stall routing behind it.
+    if (word.length > MAX_CHARS_PER_WORD) return listOf(UNK)
+
     if (vocab.containsKey(word)) return listOf(word)
 
     val pieces = ArrayList<String>()
@@ -110,7 +145,7 @@ class BertWordPiece(vocab: Map<String, Int>) {
         }
         end--
       }
-      if (match == null) return emptyList() // unrepresentable; reference drops it
+      if (match == null) return listOf(UNK)
       pieces.add(match!!)
       start = end
     }
@@ -119,6 +154,11 @@ class BertWordPiece(vocab: Map<String, Int>) {
 
   companion object {
     private val whitespace = mapOf(' ' to true, '\t' to true, '\n' to true, '\r' to true)
+
+    /** Reference cap on a single word before [UNK]; see [wordPiece]. */
+    private const val MAX_CHARS_PER_WORD = 100
+
+    private const val UNK = "[UNK]"
 
     fun fromAssetFile(text: String): BertWordPiece {
       val vocab = HashMap<String, Int>(32768)

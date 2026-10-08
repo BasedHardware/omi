@@ -139,6 +139,51 @@ class IntentRouter(private val context: Context) {
     }
 
     /**
+     * The decision table, as a pure function of scores. No model, no Context, no
+     * Android dependency, which is what makes the safety-critical part testable on
+     * the JVM.
+     *
+     * [route] does the embedding and delegates here. That split exists because this
+     * function is where a wrong answer does damage: the gate that decides whether
+     * the assistant acts, declines, or asks. Testing it through [route] would need
+     * a 90 MB model and a device for what is a pure comparison.
+     */
+    fun decide(
+        scores: Map<String, Double>,
+        margin: Double,
+        latencyMs: Long,
+    ): Decision {
+        val ranked = scores.entries.sortedByDescending { it.value }
+        val top = ranked[0]
+        val runnerUp = if (ranked.size > 1) ranked[1].key else ""
+
+        // The margin gate governs ambiguity between candidates only. It is not a
+        // decline for its own sake.
+        if (margin < ABSTAIN_MARGIN) {
+            val why = when {
+                scores.containsKey(NO_ACTION) && scores[NO_ACTION]!! >= top.value -> "out of domain"
+                scores.containsKey(OPEN_APP) && scores[OPEN_APP]!! >= top.value ->
+                    "app launch vs action"
+                else -> "ambiguous between ${top.key} and $runnerUp"
+            }
+            return Decision(top.key, margin, true, false, runnerUp, latencyMs, why)
+        }
+
+        // A confident no_action winner is a decline regardless of margin. This has
+        // to be a separate condition: the gate above only fires on ambiguity, so
+        // out-of-domain text winning by a wide margin otherwise fell through to the
+        // executable return below, and Dart's actionFor() handed the literal
+        // "no_action" sentinel back as an action. A caller cannot distinguish a
+        // sentinel from a real action string, which makes this the worst outcome
+        // available -- worse than a wrong action, and worse than declining wrongly.
+        if (top.key == NO_ACTION) {
+            return Decision(NO_ACTION, margin, true, false, runnerUp, latencyMs, "out of domain")
+        }
+
+        return Decision(top.key, margin, false, false, runnerUp, latencyMs, "")
+    }
+
+    /**
      * Routes one utterance. Blocking; roughly 600 ms per call on the reference
      * device, so call it off the UI thread.
      */
@@ -159,30 +204,9 @@ class IntentRouter(private val context: Context) {
         // Best prototype per action, then winner against every alternative.
         val scores = prototypes.mapValues { (_, protos) -> protos.maxOf { cosine(it, vec) } }
         val ranked = scores.entries.sortedByDescending { it.value }
-        val top = ranked[0]
-        val runnerUpValue = ranked[1].value
-        val margin = (top.value - runnerUpValue).toDouble()
+        val margin = (ranked[0].value - ranked[1].value).toDouble()
 
-        if (margin < ABSTAIN_MARGIN) {
-            val why =
-                if (NO_ACTION in scores && scores[NO_ACTION]!! >= top.value) "out of domain"
-                else if (OPEN_APP in scores && scores[OPEN_APP]!! >= top.value) "app launch vs action"
-                else "ambiguous between ${top.key} and ${ranked[1].key}"
-            return Decision(top.key, margin, true, false, ranked[1].key, ms, why)
-        }
-
-        // A confident no_action winner is still a decline, and this has to be
-        // decided here rather than by the margin gate above. The gate only fires on
-        // ambiguity between candidates, so "out of domain" won by a wide margin used
-        // to fall straight through to the return below with declined = false, and
-        // Dart's actionFor() handed the literal "no_action" sentinel back as an
-        // executable action. Emitting a sentinel as an action is worse than any
-        // accuracy miss, because the caller cannot tell it apart from a real action.
-        if (top.key == NO_ACTION) {
-            return Decision(NO_ACTION, margin, true, false, ranked[1].key, ms, "out of domain")
-        }
-
-        return Decision(top.key, margin, false, false, ranked[1].key, ms, "")
+        return decide(scores, margin, ms)
     }
 
     // ---------------------------------------------------------------- internals
