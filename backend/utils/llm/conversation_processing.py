@@ -53,8 +53,6 @@ from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
-    explicit_cache_switch_enabled,
     model_supports_explicit_cache,
     has_cacheable_prefix,
     marked_prefix_request,
@@ -1541,7 +1539,7 @@ Task: {app.memory_prompt}'''
         return strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
 
     gateway_mode_enabled = should_route_features_through_gateway()
-    explicit_cache_enabled = _gpt56_explicit_cache_enabled() and explicit_cache_switch_enabled()
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
     # Above the provider's floor the leading framing is a readable prefix: one write,
     # then a read on every later conversation this app summarizes inside the TTL.
     # Below it, marked_prefix_request declines and the request keeps its previous

@@ -262,7 +262,6 @@ ignore:
   - {"key":"OMI_YOLO_MODE","reason":"Local agent override restricted to non-production builds; not remote rollout authority"}
   - {"key":"PROVIDER_MODE","reason":"Local offline provider harness, not a product flag"}
 retired:
-  - {"key":"MEETING_NOTES_EPISODE_EVIDENCE_PERCENT","aliases":[],"kind":"hardcoded","retired":"2026-10-08","reason":"Removed unconsumed episode evidence capture after legacy notes writer deletion"}
   - {"key":"MEETING_NOTES_EPISODE_EVIDENCE_ENABLED","aliases":[],"kind":"hardcoded","retired":"2026-10-08","reason":"Removed unconsumed episode evidence capture after legacy notes writer deletion"}
   - {"key":"autoCreateSpeakersEnabled","kind":"hardcoded","retired":"2026-09-26","reason":"Shipped developer preference removed; create_speakers always true"}
   - {"key":"context_buckets","kind":"posthog","retired":"2026-09-24","reason":"Unused nominal enable row; bundle identity owns the active gate","posthog":{"row":"delete"}}

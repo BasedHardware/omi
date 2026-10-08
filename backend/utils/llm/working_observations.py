@@ -22,7 +22,6 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
     has_cacheable_prefix,
     prefix_cache_key,
-    explicit_cache_switch_enabled,
     model_supports_explicit_cache,
 )
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
@@ -464,7 +463,7 @@ def extract_l1_memory_archive_items_from_text(
         rejected_memory_examples=rejected_memory_examples,
     )
     static_system = legacy_messages[0][1]
-    explicit_cache_requested = prompt_cache_enabled and explicit_cache_switch_enabled()
+    explicit_cache_requested = prompt_cache_enabled
     prefix_candidate = explicit_cache_requested and has_cacheable_prefix(static_system)
     if llm is not None:
         model = llm

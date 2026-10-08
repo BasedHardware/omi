@@ -41,7 +41,6 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
     EXPLICIT_CACHE_MINIMUM_CHARACTERS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,
     gpt56_explicit_cache_enabled,
 )
 
@@ -82,7 +81,6 @@ def _run_app_result(memory_prompt=LONG_TASK, *, byok=False, gateway=True, explic
     with (
         patch.object(conv_proc, 'get_llm', side_effect=_get_llm),
         patch.object(conv_proc, 'should_route_features_through_gateway', lambda: gateway),
-        patch.object(conv_proc, 'explicit_cache_switch_enabled', lambda: explicit),
         patch.object(conv_proc, 'has_byok_keys', lambda: byok),
     ):
         conv_proc.get_app_result('a real transcript', [], _app(memory_prompt), language_code=language_code)
@@ -153,8 +151,6 @@ def test_app_result_cache_key_is_content_derived_stable_and_versioned():
         # Provider-switched routing drops marked content. Options and the key
         # are proposals to get_llm, whose resolved-model sanitizer filters them.
         ({'byok': True}, EXPLICIT_CACHE_OPTIONS),
-        # Kill switch: the field disappears with the feature.
-        ({'explicit': False}, None),
     ],
 )
 def test_app_result_falls_back_to_the_unmarked_request(kwargs, expected_options):
@@ -409,7 +405,6 @@ def test_the_gateway_prices_each_new_shape_the_way_we_expect():
 @pytest.mark.parametrize('reprocess', [False, True])
 def test_transcript_structure_resolved_model_gates_breakpoints(monkeypatch, byok, reprocess):
     """Exercise both real prompt builders under the gateway route with request-local keys."""
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
     monkeypatch.setattr(conv_proc, '_has_gpt56_cacheable_static_prefix', lambda text: True)
     monkeypatch.setattr(conv_proc, '_should_run_conversation_structure_shadow', lambda *a: False)
@@ -458,7 +453,6 @@ def test_shared_prefix_app_summary_gates_resolved_provider(monkeypatch, byok):
     # the gateway-only choke point without changing behavior.
     monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     token = byok_module._byok_ctx.set({'anthropic': 'sk-ant-test-not-real'} if byok else None)
     try:
         conv_proc.get_app_result(

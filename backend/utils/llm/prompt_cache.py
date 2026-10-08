@@ -16,7 +16,6 @@ nothing, so callers preflight with :func:`has_cacheable_prefix` first.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -49,20 +48,6 @@ def model_supports_explicit_cache(model: Any) -> bool:
 
 
 # Below this, the provider never serves a read, so a breakpoint is pure noise.
-GPT56_EXPLICIT_CACHE_ENABLED_ENV = 'OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED'
-
-
-def explicit_cache_switch_enabled() -> bool:
-    """The operator kill switch shared by every explicit-cache caller.
-
-    Callers still add their own route condition (the explicit contract is
-    GPT-5.6-only); this owns just the env semantics so a rollback is one
-    variable everywhere rather than one per feature.
-    """
-    value = os.getenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV)
-    if value is None:
-        return True
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 EXPLICIT_CACHE_MINIMUM_TOKENS = 1024

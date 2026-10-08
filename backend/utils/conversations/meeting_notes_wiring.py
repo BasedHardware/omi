@@ -48,11 +48,13 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
 
 
 def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_frames_context_enabled() -> bool:
