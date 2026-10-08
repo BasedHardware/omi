@@ -373,6 +373,8 @@ actor AgentRuntimeProcess {
       case "external_surface_run_complete_result": return .externalSurfaceRunCompleteResult
       case "chat_first_harness_executor_result": return .chatFirstHarnessExecutorResult
       case "owner_runtime_revoked": return .ownerRuntimeRevoked
+      case "approval_requested": return .approvalRequested
+      case "approval_resolved": return .approvalResolved
       default: return .unknown(type)
       }
     }
@@ -3170,6 +3172,8 @@ actor AgentRuntimeProcess {
       advertisedAgentControlTools = Set(tools)
       runtimeAdapterIDs = Set(message.payload["runtimeAdapterIds"] as? [String] ?? [])
       _ = bridgeLifecycle.reduce(.handshakeSucceeded)
+      clearToolApprovalCards()
+      if let declared = Self.clientCapabilitiesWireMessage(for: handshake) { _ = sendJson(declared) }
       resolveInitContinuations()
       Task { @MainActor in
         NotificationCenter.default.post(name: .agentRuntimeDidBecomeReady, object: nil)
@@ -3274,12 +3278,18 @@ actor AgentRuntimeProcess {
     case .chatFirstDeferralDelivery:
       if messageOwnerIsCurrentlyAuthorized(message) { handleChatFirstDeferralDelivery(message) }
 
+    case .approvalRequested, .approvalResolved:
+      routeToolApprovalFrame(message)
+
     case .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,
       .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
-      .externalSurfaceRunCompleteResult, .chatFirstHarnessExecutorResult,
-      .ownerRuntimeRevoked:
+      .externalSurfaceRunCompleteResult, .chatFirstHarnessExecutorResult:
+      completeKernelContractRequest(message)
+
+    case .ownerRuntimeRevoked:
+      clearToolApprovalCards()
       completeKernelContractRequest(message)
 
     case .result:
@@ -3303,7 +3313,7 @@ actor AgentRuntimeProcess {
     return nil
   }
 
-  private func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
+  func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
     guard let ownerID = message.payload["ownerId"] as? String else { return false }
     return RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: ownerID) != nil
@@ -4054,6 +4064,7 @@ actor AgentRuntimeProcess {
       }
     }
 
+    clearToolApprovalCards()
     let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
     if bridgeLifecycle.state == .starting {
       startupExitCode = exitCode
