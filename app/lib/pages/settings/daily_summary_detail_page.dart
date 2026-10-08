@@ -74,27 +74,17 @@ class DailySummaryDetailPage extends StatefulWidget {
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
 }
 
-class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with SingleTickerProviderStateMixin {
+class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> {
   DailySummary? _summary;
   bool _isLoading = true;
   bool _isSharing = false;
   bool _isDeleting = false;
   bool _isRegenerating = false;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeOut);
     _loadSummary();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadSummary() async {
@@ -103,7 +93,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _summary = widget.summary;
         _isLoading = false;
       });
-      _animationController.forward();
       // Track page view
       PlatformManager.instance.analytics.dailySummaryDetailViewed(
         summaryId: widget.summaryId,
@@ -119,7 +108,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _summary = summary;
         _isLoading = false;
       });
-      _animationController.forward();
       // Track page view
       if (summary != null) {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(
@@ -386,8 +374,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       enabled: !_isLoading && !_isSharing && !_isDeleting && !_isRegenerating && summary.overview.trim().isNotEmpty,
       child: _nativeContent(
           summary,
-          FadeTransition(
-            opacity: _fadeAnimation,
+          _FadeIn(
             child: CustomScrollView(
               slivers: [
                 _buildHeader(summary),
@@ -1091,6 +1078,32 @@ String _timelineTime(TimelineLocation location) {
 /// Maps for the first stop, and one row per timeline stop. This State owns the map file and deletes
 /// it on dispose, on a brightness or session change and when a fetch completes too late. Rows
 /// address stops by index; only Dart maps an index back to its coordinates.
+/// Fades the classic recap content in once it mounts. Its controller lives here, not on the page,
+/// so nothing ticks while the native presentation renders in place of this subtree.
+class _FadeIn extends StatefulWidget {
+  const _FadeIn({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FadeIn> createState() => _FadeInState();
+}
+
+class _FadeInState extends State<_FadeIn> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(duration: const Duration(milliseconds: 800), vsync: this)..forward();
+  late final _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+
+  @override
+  void dispose() {
+    _opacity.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(opacity: _opacity, child: widget.child);
+}
+
 class RecapJourneySheet extends StatefulWidget {
   const RecapJourneySheet({
     super.key,

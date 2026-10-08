@@ -122,6 +122,7 @@ void main() => runNativeHostSuite((checkNativeHost) {
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'conversation_map_group_0').action!(null)));
         await _frames(tester);
         expect(find.byType(ConversationMapClusterChooser), findsOneWidget);
+        expect(find.byType(UiKitView), findsNWidgets(2), reason: 'the sheet renders natively over the page');
         await tester.pump(const Duration(seconds: 2));
         expect(await captureNativeHostScreenshot('native-maps-recap-chooser-dark'), isNotEmpty);
         expect(nativeProjectedRow(tester, 'conversation_map_cluster_1').title, 'Place second');
@@ -161,6 +162,7 @@ void main() => runNativeHostSuite((checkNativeHost) {
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'recap_locations_map').action!(null)));
         await _frames(tester);
         expect(find.byType(RecapJourneySheet), findsOneWidget);
+        expect(find.byType(UiKitView), findsNWidgets(2), reason: 'the sheet renders natively over the page');
         await tester.pump(const Duration(seconds: 2));
         expect(await captureNativeHostScreenshot('native-maps-recap-journey-dark'), isNotEmpty);
         final uri = nativeProjectedRow(tester, 'recap_journey_image').imageUri!;

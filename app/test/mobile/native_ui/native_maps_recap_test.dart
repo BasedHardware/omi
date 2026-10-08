@@ -22,7 +22,7 @@ import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/ui/ui.dart' show OmiSpinner;
+import 'package:omi/ui/ui.dart' show OmiLoadingState, OmiSpinner;
 import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/widgets/native_static_map.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
@@ -96,8 +96,16 @@ Future<void> _settleIo(WidgetTester tester) async {
 
 Map _snapshot(WidgetTester tester) => tester.widget<UiKitView>(find.byType(UiKitView).last).creationParams as Map;
 
-List<NativeRow> _rows(WidgetTester tester) =>
-    IosNativeSurface.debugDispatchRows(tester.stateList<State<IosNativeSurface>>(find.byType(IosNativeSurface)).last);
+/// The rows the native surface currently shows. A surface that rejected its rows still answers its
+/// projection, so this also proves it renders natively and every row is valid: a silent fallback to
+/// the Flutter screen fails here.
+List<NativeRow> _rows(WidgetTester tester) {
+  expect(find.byType(UiKitView), findsWidgets, reason: 'The surface renders natively');
+  final rows =
+      IosNativeSurface.debugDispatchRows(tester.stateList<State<IosNativeSurface>>(find.byType(IosNativeSurface)).last);
+  expect(rows.where((row) => !row.valid).map((row) => row.id), isEmpty, reason: 'Every row is valid');
+  return rows;
+}
 
 NativeRow? _row(WidgetTester tester, String id) => _rows(tester).where((row) => row.id == id).firstOrNull;
 
@@ -195,6 +203,9 @@ void main() {
         launchMap: (latitude, longitude) => launched.add((latitude, longitude)),
         staticMapResolver: maps.resolve,
       )));
+      // Nothing is fetched, encoded or written until native presentation is confirmed.
+      expect(find.byType(OmiLoadingState), findsOneWidget);
+      expect(maps.requests, isEmpty);
       await NativeTestHost.settle(tester);
 
       final groups = buildConversationMapGroups(_places);
@@ -255,6 +266,44 @@ void main() {
       expect(_row(tester, 'conversation_map_image'), isNull);
       expect(_row(tester, 'conversation_map_error')!.title, 'Could not load map');
       expect(_row(tester, 'conversation_map_open'), isNotNull);
+    });
+
+    testWidgets('a superseded map is withdrawn, its file deleted and its late fetch discarded', (tester) async {
+      NativeTestHost.install();
+      addTearDown(tester.view.reset);
+      final maps = _Maps(directory);
+      await tester
+          .pumpWidget(NativeTestHost.app(ConversationMapPage(conversations: _places, staticMapResolver: maps.resolve)));
+      await NativeTestHost.settle(tester);
+      final first = maps.complete(0)!;
+      await tester.pump();
+      await tester.pump();
+      expect(_row(tester, 'conversation_map_image')!.imageUri, Uri.file(first.path).toString());
+
+      // A different width asks for a new map: the shown file is withdrawn and deleted.
+      tester.view.physicalSize = tester.view.physicalSize + const Offset(120, 0);
+      await tester.pump();
+      expect(maps.requests, hasLength(2));
+      expect(maps.requests[1].width, isNot(maps.requests[0].width));
+      expect(maps.requests[0].current(), isFalse);
+      expect(maps.requests[1].current(), isTrue);
+      await _settleIo(tester);
+      expect(first.existsSync(), isFalse);
+      expect(_row(tester, 'conversation_map_image'), isNull);
+
+      // Another width supersedes the pending request; its late completion is discarded and deleted.
+      tester.view.physicalSize = tester.view.physicalSize + const Offset(120, 0);
+      await tester.pump();
+      expect(maps.requests, hasLength(3));
+      expect(maps.requests[1].current(), isFalse);
+      final current = maps.complete(2)!;
+      final stale = maps.complete(1)!;
+      await tester.pump();
+      await tester.pump();
+      await _settleIo(tester);
+      expect(stale.existsSync(), isFalse);
+      expect(current.existsSync(), isTrue);
+      expect(_row(tester, 'conversation_map_image')!.imageUri, Uri.file(current.path).toString());
     });
 
     testWidgets('empty states choose No conversations yet or Unknown location', (tester) async {
@@ -483,7 +532,7 @@ void main() {
         await _tap(tester, host, 'recap_highlight_0');
         await tester.pump();
         expect(_count(calls, 'presentActivity'), 1);
-        expect(find.byType(Dialog), findsNothing, reason: 'No Flutter spinner under the native activity');
+        expect(find.byType(OmiSpinner), findsNothing, reason: 'No Flutter spinner under the native activity');
         switch (outcome) {
           case 'success':
             fetch.complete(null);
@@ -496,6 +545,7 @@ void main() {
         }
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));
+        expect(find.byType(OmiSpinner), findsNothing, reason: 'No Flutter spinner under the native activity');
         expect(_count(calls, 'dismissPresentation'), 1);
         if (outcome == 'error') expect(find.text('Something went wrong! Please try again later.'), findsOneWidget);
         await tester.pump(const Duration(seconds: 10));

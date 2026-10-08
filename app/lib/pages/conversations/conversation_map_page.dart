@@ -300,32 +300,48 @@ class _NativeConversationMap extends StatefulWidget {
 }
 
 class _NativeConversationMapState extends State<_NativeConversationMap> {
-  late final _map = NativeStaticMap(resolver: widget.page.staticMapResolver);
+  late final Future<bool> _support = supportsNativePresentation();
+
+  /// Created only once native presentation is confirmed, so an unsupported device never fetches,
+  /// encodes or writes the hidden map file.
+  NativeStaticMap? _staticMap;
 
   @override
   void dispose() {
-    _map.dispose();
+    _staticMap?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _support,
+      builder: (context, support) {
+        if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
+        if (support.data != true) return widget.classic;
+        return _native(context);
+      },
+    );
+  }
+
+  Widget _native(BuildContext context) {
+    final map = _staticMap ??= NativeStaticMap(resolver: widget.page.staticMapResolver);
     final groups = widget.groups;
     // Rebuilds on a theme change, so a new map in the other style replaces the current file.
     Theme.of(context);
     final width = (MediaQuery.sizeOf(context).width - 32).round();
     if (groups.isNotEmpty && width > 0) {
-      _map.show(
+      map.show(
         pins: [for (final group in groups) OmiMapPin(latitude: group.latitude, longitude: group.longitude)],
         width: width,
         height: 220,
         brightness: OmiColors.active == OmiPalette.light ? Brightness.light : Brightness.dark,
       );
     }
-    return ListenableBuilder(listenable: _map, builder: (context, _) => _surface(context, groups));
+    return ListenableBuilder(listenable: map, builder: (context, _) => _surface(context, map, groups));
   }
 
-  Widget _surface(BuildContext context, List<ConversationMapGroup> groups) {
+  Widget _surface(BuildContext context, NativeStaticMap map, List<ConversationMapGroup> groups) {
     final l10n = context.l10n;
     final page = widget.page;
     return IosNativeSurface(
@@ -339,11 +355,11 @@ class _NativeConversationMapState extends State<_NativeConversationMap> {
       sections: [
         if (groups.isNotEmpty) ...[
           NativeSection('conversation_map_preview', [
-            if (_map.uri != null)
+            if (map.uri != null)
               NativeRow('conversation_map_image', l10n.conversationMap,
-                  kind: 'image', imageUri: _map.uri, maximumValue: 4),
-            if (_map.loading) NativeRow('conversation_map_loading', l10n.loading, kind: 'label'),
-            if (_map.failed) NativeRow('conversation_map_error', l10n.couldNotLoadMap, kind: 'label'),
+                  kind: 'image', imageUri: map.uri, maximumValue: 4),
+            if (map.loading) NativeRow('conversation_map_loading', l10n.loading, kind: 'label'),
+            if (map.failed) NativeRow('conversation_map_error', l10n.couldNotLoadMap, kind: 'label'),
             NativeRow('conversation_map_open', l10n.openInMaps,
                 symbol: 'map', action: (_) => page._launch(groups.first.latitude, groups.first.longitude)),
           ]),
