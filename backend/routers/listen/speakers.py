@@ -565,7 +565,11 @@ class SpeakerMatcher:
             for start, end in fresh:
                 if remaining_seconds <= 0:
                     break
-                end = min(end, start + remaining_seconds)
+                if end - start > remaining_seconds:
+                    # Preserve the existing centered query for a long turn;
+                    # shorter disjoint intervals still pool without their gaps.
+                    center = (start + end) / 2
+                    start, end = center - remaining_seconds / 2, center + remaining_seconds / 2
                 chunk = ring_buffer.extract(start, end)
                 if not chunk:
                     self._record_exit('no_pcm', speaker_id)
