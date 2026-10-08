@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a dropped network connection or provider hiccup silently turning off BYOK keys — your saved keys now stay active when a validation check can't reach the provider, instead of chat falling back to Omi's metered service."
-}
