@@ -573,7 +573,7 @@ def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch
     assert legacy.calls == []
 
 
-def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
+def test_get_llm_chat_agent_managed_route_ignores_optional_direct_switch(monkeypatch):
     captured = {}
     gateway = FakeChatModel(name='gateway', calls=[])
     legacy = FakeChatModel(name='legacy', calls=[])
@@ -590,8 +590,9 @@ def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is legacy
-    assert captured == {}
+    assert result is gateway
+    assert captured == {'used_gateway': True}
+    assert legacy.calls == []
 
 
 def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
