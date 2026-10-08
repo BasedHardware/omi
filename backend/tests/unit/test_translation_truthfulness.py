@@ -255,6 +255,12 @@ def test_decision_metrics_wire_existing_skip_counter_with_bounded_reasons():
     assert metrics._decisions.labels(target_lang='en', decision='other', reason='other')._value.get() >= 1
 
 
+def test_translation_metrics_keep_luna_provider_attribution():
+    metrics = PrometheusTranslationMetrics()
+    metrics.batch('luna', 'en', 2)
+    assert metrics._batch_size.labels(provider='luna')._sum.get() >= 2
+
+
 async def test_defer_never_poison_shared_cache_or_teach_foreign_prior():
     store = DictTranslationStore()
     service, calls, client = nllb_service({}, store)

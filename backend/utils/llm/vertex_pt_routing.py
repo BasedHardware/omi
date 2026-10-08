@@ -597,3 +597,25 @@ def recovery_action(model: str, capacity: str, status: int, message: str, *, ove
     if overflow_enabled and capacity == REQUEST_TYPE_DEDICATED and capacity_error:
         return 'overflow'
     return 'none'
+
+
+RESERVED_CAPACITY_OPTION = 'reserved_capacity_only'
+LUNA_FALLBACK = {'provider': 'openai', 'model': 'gpt-6-luna'}
+
+
+def reserved_generation_model(anchor: str, states: Mapping[str, State], *, override: str = '') -> str | None:
+    """Resolve a desktop alias to the active model of the exclusive Flash order.
+
+    Unknown evidence never admits customer inference. Synthetic dedicated probes
+    remain responsible for discovery. Conflicting active models fail to Luna.
+    """
+    anchor = _normalize(anchor)
+    if anchor not in DESKTOP_TEXT_LANES:
+        return None
+    if override and _normalize(override) not in RESERVATIONS:
+        raise ValueError('OMI_VERTEX_PT_MODEL must name a declared reservation model')
+    order = RESERVATIONS[PT_MODEL_CURRENT].order
+    active = [m for m, spec in RESERVATIONS.items() if spec.order == order and states.get(m) == State.ACTIVE]
+    if len(active) != 1:
+        return None
+    return active[0]

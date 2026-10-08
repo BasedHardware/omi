@@ -207,6 +207,17 @@ def should_route_features_through_gateway() -> bool:
     return True
 
 
+def should_route_company_paid_features_through_gateway() -> bool:
+    """Company-paid generation is gateway-only; the rollout flag is no longer a fallback.
+
+    Keep ``should_route_features_through_gateway`` for compatibility surfaces
+    that still have an explicit migration state. Core ``get_llm`` callers use
+    this invariant so an unset flag or gateway outage can never send paid
+    requests directly to a provider.
+    """
+    return True
+
+
 def get_chat_agent_route() -> str:
     """Return the effective agentic-chat route: ``direct`` or ``gateway``.
 

@@ -52,69 +52,28 @@ class VertexPTPolicyMixin:
         self._reservation_state_context.set(states)
 
     def _attempt_plan(self, anchor: str, *, origin_model: str = '') -> list[tuple[str, str]]:
-        serving = self._serving_model(anchor, origin_model=origin_model)
-        logger.info(
-            'vertex_reservation_policy model=%s state=%s lane=backend_other action=%s',
-            serving if serving in RESERVATIONS else 'other',
-            effective_states(self._reservation_states, os.environ).get(serving, State.UNKNOWN).value,
-            self._capacity_for(serving),
-        )
-        return [(serving, self._capacity_for(serving))]
-
-    def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
-        intended = self._validated_pin(
-            lambda: ptr.desktop_serving_model(
+        try:
+            model = ptr.reserved_generation_model(
                 anchor,
-                override=self._env(self._pt_model_override_env),
-            )
-        )
-        return self._first_reachable(intended, origin_model=origin_model)
-
-    def _protected_models(self) -> frozenset[str]:
-        return self._validated_pin(
-            lambda: ptr.resolve_pt_models(
                 effective_states(self._reservation_states, os.environ),
                 override=self._env(self._pt_model_override_env),
             )
-        )
-
-    @staticmethod
-    def _validated_pin(resolve: Callable[[], T]) -> T:
-        """SCA-481: a prohibited or undeclared operator pin — a Pro/image-output
-        shape — fails the request closed instead of dispatching PayGo."""
-        try:
-            return resolve()
         except ValueError as exc:
             raise ProviderFailure(FailureClass.INVALID_CONFIG, str(exc)) from exc
-
-    def _capacity_for(self, model: str) -> str:
-        return ptr.reservation_capacity(
-            model,
-            effective_states(self._reservation_states, os.environ),
-            override=self._env(self._pt_model_override_env),
-        )
+        if model is None:
+            raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
+        return [(model, ptr.REQUEST_TYPE_DEDICATED)]
 
     def _recovery_attempts(
         self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
-        action = ptr.recovery_action(
-            served_model,
-            capacity or self._capacity_for(served_model),
-            status_code,
-            message,
-            overflow_enabled=self._overflow_enabled(),
-        )
-        if action == 'shared':
-            return [(served_model, ptr.REQUEST_TYPE_SHARED)]
-        if action == 'unavailable':
-            self._record_model_unavailable(served_model)
-            return [
-                (rung, ptr.REQUEST_TYPE_SHARED)
-                for rung in self._fallback_chain(served_model, origin_model=origin_model)
-            ]
-        if action == 'overflow':
-            return self._overflow_plan(served_model, origin_model=origin_model)
+        if capacity == ptr.REQUEST_TYPE_DEDICATED and (
+            ptr.is_provisioned_capacity_exhausted(status_code, message)
+            or ptr.is_provisioned_capacity_absent(status_code, message)
+            or ptr.is_model_unavailable(status_code, message)
+        ):
+            raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
         return []
 
     def _observe_attempt(
@@ -145,69 +104,6 @@ class VertexPTPolicyMixin:
             return
         if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':
             self._reservation_states = {**self._reservation_states, model: State.ACTIVE}
-
-    def _overflow_triggered(self, status_code: int, message: str) -> bool:
-        return ptr.is_provisioned_capacity_exhausted(status_code, message) or ptr.is_provisioned_capacity_absent(
-            status_code, message
-        )
-
-    def _overflow_plan(self, served_model: str, *, origin_model: str = '') -> list[tuple[str, str]]:
-        if not self._overflow_enabled():
-            return []
-        protected = self._protected_models()
-        if self._capacity_for(served_model) != ptr.REQUEST_TYPE_DEDICATED:
-            return []
-        try:
-            ladder = ptr.resolve_overflow_ladder(
-                pt_model='',
-                protected_models=protected,
-                override=self._env(self._overflow_model_override_env),
-                origin_model=origin_model or served_model,
-            )
-        except ValueError:
-            return []
-        plan: list[tuple[str, str]] = []
-        for rung in ladder:
-            if not self._model_believed_available(rung):
-                continue
-            plan.append((rung, ptr.REQUEST_TYPE_SHARED))
-        return plan
-
-    def _fallback_chain(self, model: str, *, origin_model: str = '') -> tuple[str, ...]:
-        try:
-            return ptr.resolve_fallback_chain(
-                model=model,
-                pt_model='',
-                protected_models=self._protected_models(),
-                unreachable=self._unreachable_models(),
-                override=self._env(self._overflow_model_override_env),
-                origin_model=origin_model,
-            )
-        except ValueError:
-            return ()
-
-    def _reservation_active(self, model: str) -> bool:
-        return effective_states(self._reservation_states, os.environ).get(model) == State.ACTIVE
-
-    def _model_believed_available(self, model: str) -> bool:
-        observed = self._model_unavailable_at.get(model)
-        if observed is None:
-            return True
-        return (self._now() - observed) >= self._probe_ttl_seconds
-
-    def _unreachable_models(self) -> frozenset[str]:
-        return frozenset(model for model in self._model_unavailable_at if not self._model_believed_available(model))
-
-    def _first_reachable(self, model: str, *, origin_model: str = '') -> str:
-        if self._model_believed_available(model):
-            return model
-        for rung in self._fallback_chain(model, origin_model=origin_model):
-            if self._model_believed_available(rung):
-                return rung
-        return model
-
-    def _record_model_unavailable(self, model: str) -> None:
-        self._model_unavailable_at[model] = self._now()
 
     def _record_model_available(self, model: str) -> None:
         self._model_unavailable_at.pop(model, None)

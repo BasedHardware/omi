@@ -127,7 +127,9 @@ def gateway_transport(monkeypatch):
     monkeypatch.setitem(
         gateway_app.dependency_overrides,
         dependencies.get_provider_registry,
-        lambda: ProviderRegistry({'gemini': provider}),
+        # Desktop text now routes to Luna through OpenAI. Embeddings retain
+        # their Gemini provider/model contract, so the fake serves both lanes.
+        lambda: ProviderRegistry({'openai': provider, 'gemini': provider}),
     )
     rows = []
 
@@ -184,10 +186,13 @@ async def test_gateway_attempts_keep_lane_platform_and_proxy_request_id(monkeypa
     assert row['client_platform'] == 'windows'
     assert row['prompt_tokens'] == 12
     if surface == 'embed':
+        assert row['provider'] == 'gemini'
         # Existing rate cards do not price gemini-embedding-001. Preserve its
         # unpriced status while retaining usage and attribution.
         assert row['cost_status'] == 'unpriced'
     else:
+        assert row['provider'] == 'openai'
+        assert row['configured_model'] == 'gpt-6-luna'
         assert row['estimated_cost_micro_usd'] is not None
 
 

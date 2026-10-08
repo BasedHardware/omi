@@ -732,6 +732,23 @@ def _provider_request(
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
+    provider_request.pop('reserved_capacity_only', None)
+    if provider_ref.provider == 'openai':
+        for key in ('google', 'pt_overflow_origin'):
+            provider_request.pop(key, None)
+        provider_request['messages'] = [
+            (
+                {
+                    **message,
+                    'tool_calls': [
+                        {k: v for k, v in call.items() if k != 'extra_content'} for call in message['tool_calls']
+                    ],
+                }
+                if isinstance(message, Mapping) and isinstance(message.get('tool_calls'), list)
+                else message
+            )
+            for message in provider_request['messages']
+        ]
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
     return provider_request
 
@@ -752,6 +769,9 @@ def _sanitize_openai_chat_completions_request(
     model = provider_ref.model
     if not uses_explicit_cache_and_chat_sanitizer(model):
         return
+    if provider_request.get('model') == 'gpt-6-luna':
+        provider_request.pop('top_p', None)
+        provider_request.pop('stop', None)
 
     tools = provider_request.get('tools')
     if tools:
