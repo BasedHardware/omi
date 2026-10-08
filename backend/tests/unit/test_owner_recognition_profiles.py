@@ -1,5 +1,7 @@
 """Owner recognition survives ancillary reads and observes newly taught profiles."""
 
+from database import owner_profile_updates as recovery_db
+
 import asyncio
 from types import SimpleNamespace
 from datetime import datetime, timezone
@@ -60,21 +62,21 @@ def test_owner_recovery_cas_enrollment_and_deletion_win(monkeypatch):
     path = ('users', 'u')
     stamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
     store.rows[path] = {'speaker_embedding_updated_at': stamp}
-    monkeypatch.setattr(users, 'get_firestore_client', lambda: store)
-    assert users.recover_user_speaker_embedding('u', [1.0, 0.0], expected_updated_at=stamp)
-    assert not users.recover_user_speaker_embedding('u', [0.0, 1.0], expected_updated_at=stamp)
+    monkeypatch.setattr(recovery_db, 'get_firestore_client', lambda: store)
+    assert recovery_db.recover_user_speaker_embedding('u', [1.0, 0.0], expected_updated_at=stamp)
+    assert not recovery_db.recover_user_speaker_embedding('u', [0.0, 1.0], expected_updated_at=stamp)
     assert store.rows[path]['speaker_embedding'] == [1.0, 0.0]
     store.rows[path] = {'speaker_embedding_updated_at': stamp}
     store.rows[('account_deletions', 'u')] = {'wipe_status': 'pending'}
-    assert not users.recover_user_speaker_embedding('u', [0.0, 1.0], expected_updated_at=stamp)
+    assert not recovery_db.recover_user_speaker_embedding('u', [0.0, 1.0], expected_updated_at=stamp)
     assert 'speaker_embedding' not in store.rows[path]
 
 
 @pytest.mark.parametrize('surface', ['sync', 'resolution'])
 def test_legacy_enrollment_audio_repair_reaches_all_consumers(monkeypatch, surface):
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
-    monkeypatch.setattr(users, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
-    monkeypatch.setattr(users, 'recover_user_speaker_embedding', lambda *a, **kw: True)
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
+    monkeypatch.setattr(recovery_db, 'recover_user_speaker_embedding', lambda *a, **kw: True)
     load = lambda uid, **kw: owner_profile.load_owner_embedding(
         uid,
         users=users,

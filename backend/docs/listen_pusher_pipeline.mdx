@@ -3658,3 +3658,7 @@ unrelated conversation database reads do not import its deletion-marker graph.
 New v1 cache writes record the already-supported optional evidence duration even
 when score instrumentation is off. Historical entries keep their grouping and
 PCM semantics; a missing duration cannot support a new positive or negative.
+
+Missing owner-vector publication is isolated in `database/owner_profile_updates.py`.
+Both new identity persistence helpers pin the customer data plane and read its
+account-deletion marker in the same transaction; no compute-plane fallback is used.

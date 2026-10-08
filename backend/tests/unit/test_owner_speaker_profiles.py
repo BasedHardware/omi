@@ -1,5 +1,7 @@
 """Live and sync owner caches share display names and stored voiceprints."""
 
+from database import owner_profile_updates as recovery_db
+
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -69,8 +71,8 @@ def test_live_audio_recovery_keeps_resolved_owner_name(profile_sources, monkeypa
     monkeypatch.setattr(speakers, '_read_file', lambda path: b'synthetic')
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]]))
     save = Mock(return_value=True)
-    monkeypatch.setattr(speakers.user_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
-    monkeypatch.setattr(speakers.user_db, 'recover_user_speaker_embedding', save)
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
+    monkeypatch.setattr(recovery_db, 'recover_user_speaker_embedding', save)
     matcher = speakers.SpeakerMatcher(
         SimpleNamespace(request=SimpleNamespace(uid='u'), persistence=_Persistence(), has_speech_profile=True)
     )

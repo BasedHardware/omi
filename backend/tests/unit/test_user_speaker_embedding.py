@@ -4,6 +4,8 @@ Tests the Firestore helpers (set/get_user_speaker_embedding), the speech profile
 upload extraction path, and the transcribe.py Firestore loading path.
 """
 
+from database import owner_profile_updates as recovery_db
+
 import asyncio
 import logging
 import sys
@@ -325,8 +327,8 @@ def live_owner_profile(monkeypatch):
     monkeypatch.setattr(runtime_module, 'get_user_has_speech_profile', world.blob)
     monkeypatch.setattr(speakers_module, 'get_profile_audio_if_exists', world.audio)
     monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', world.extract)
-    monkeypatch.setattr(speakers_module.user_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
-    monkeypatch.setattr(speakers_module.user_db, 'recover_user_speaker_embedding', world.store)
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
+    monkeypatch.setattr(recovery_db, 'recover_user_speaker_embedding', world.store)
     monkeypatch.setattr(speakers_module.user_db, 'get_people', world.people)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', lambda *a, **kw: ('test-stt', 'en', 'test'))
