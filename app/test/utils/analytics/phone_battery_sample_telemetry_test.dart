@@ -66,6 +66,7 @@ void main() {
     });
     expect(prefs.getKeys(), {PhoneBatterySampleTelemetry.lastSampleKey});
     expect(prefs.getInt(PhoneBatterySampleTelemetry.lastSampleKey), now.millisecondsSinceEpoch);
+    sampler.dispose();
   });
 
   testWidgets('rapid lifecycle changes collapse; five-minute boundary and double elapsed survive restart', (
@@ -93,6 +94,7 @@ void main() {
     expect(events, hasLength(2));
     expect(events.last.properties['seconds_since_previous_sample'], 300.25);
     expect(events.last.properties['seconds_since_previous_sample'], isA<double>());
+    sampler.dispose();
   });
 
   testWidgets('hidden and paused map to one background sample and cancel timer', (tester) async {
@@ -112,6 +114,7 @@ void main() {
     sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
     await tester.pump();
     expect(events.last.properties['sampling_trigger'], 'lifecycle_foreground');
+    sampler.dispose();
   });
 
   testWidgets('timer samples only resumed foreground; detach and dispose cancel it', (tester) async {
@@ -138,6 +141,7 @@ void main() {
     expect(reads, 0);
     expect(events, isEmpty);
     expect(prefs.getKeys(), isEmpty);
+    sampler.dispose();
   });
 
   testWidgets('persisted opt-out wins over analytics startup default', (tester) async {
@@ -147,6 +151,7 @@ void main() {
     expect(sampler.hasForegroundTimer, false);
     expect(reads, 0);
     expect(events, isEmpty);
+    sampler.dispose();
   });
 
   testWidgets('opt-out immediately cancels timer; re-opt-in schedules foreground only', (tester) async {
@@ -161,6 +166,7 @@ void main() {
     consent.value = false;
     consent.value = true;
     expect(sampler.hasForegroundTimer, false);
+    sampler.dispose();
   });
 
   testWidgets('failed battery read emits nothing and does not advance persisted sample', (tester) async {
@@ -174,6 +180,7 @@ void main() {
     sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
     await tester.pump();
     expect(events.single.properties.containsKey('seconds_since_previous_sample'), false);
+    sampler.dispose();
   });
 
   testWidgets('unknown or invalid level/charging never emits fake values', (tester) async {
@@ -193,6 +200,7 @@ void main() {
     }
     expect(events, isEmpty);
     expect(prefs.getKeys(), isEmpty);
+    sampler.dispose();
   });
 
   testWidgets('charging and battery extremes are real values; unsupported saver is omitted', (tester) async {
@@ -207,6 +215,7 @@ void main() {
     await tester.pump();
     expect(events.last.properties['battery_level'], 100);
     expect(events.last.properties['os_battery_saver'], false);
+    sampler.dispose();
   });
 
   testWidgets('overlapping triggers and opt-out during a read cannot emit', (tester) async {
@@ -222,6 +231,7 @@ void main() {
     await tester.pump();
     expect(events, isEmpty);
     expect(prefs.getKeys(), isEmpty);
+    sampler.dispose();
   });
 
   testWidgets('clock rollback skips reads and does not emit negative elapsed', (tester) async {
@@ -231,6 +241,7 @@ void main() {
     await tester.pump();
     expect(events, hasLength(1));
     expect(reads, 1);
+    sampler.dispose();
   });
 
   testWidgets('manager opt-out synchronously notifies sampler without lifecycle transition', (tester) async {
@@ -269,6 +280,7 @@ void main() {
     await tester.pump();
     expect(events.single.name, 'Phone Battery Sample');
     expect(sampler.hasForegroundTimer, true);
+    sampler.dispose();
   });
 
   test('default native channel and AnalyticsManager preserve build context', () async {
