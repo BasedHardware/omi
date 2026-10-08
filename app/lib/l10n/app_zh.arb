@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "给我们 5 星好评对我们真的很有帮助 ❤️",
     "onboardingRatingPromptYes": "好的，我想支持你们！",
     "onboardingRatingPromptNo": "不太满意",
-    "partialRecording": "部分录音"
+    "partialRecording": "部分录音",
+    "dateRangeStart": "开始日期",
+    "dateRangeEnd": "结束日期",
+    "openInMaps": "在地图中打开"
 }

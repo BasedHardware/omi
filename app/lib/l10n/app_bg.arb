@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Оценка от 5 звезди наистина ни помага ❤️",
     "onboardingRatingPromptYes": "Да, искам да ви подкрепя!",
     "onboardingRatingPromptNo": "Не особено",
-    "partialRecording": "Частичен запис"
+    "partialRecording": "Частичен запис",
+    "dateRangeStart": "Начална дата",
+    "dateRangeEnd": "Крайна дата",
+    "openInMaps": "Отваряне в „Карти“"
 }

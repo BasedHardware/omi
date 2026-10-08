@@ -1,5 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
@@ -36,13 +37,14 @@ String recapDateLabel(BuildContext context, String value) {
 /// Its first load, a failed load (with Try Again) and an empty answer each have one state
 /// (docs/ux-contract.md §13). The page's pull-to-refresh calls [DailySummariesListState.refresh].
 class DailySummariesList extends StatefulWidget {
-  const DailySummariesList({super.key, this.fetchSummaries, this.bottomPadding = 0});
+  const DailySummariesList({super.key, this.fetchSummaries, this.bottomPadding = 0, this.nativePage = false});
 
   /// Injectable for tests; defaults to the recaps endpoint.
   final DailySummariesFetcher? fetchSummaries;
 
   /// Space kept free after the last row.
   final double bottomPadding;
+  final bool nativePage;
 
   @override
   State<DailySummariesList> createState() => DailySummariesListState();
@@ -194,6 +196,37 @@ class DailySummariesListState extends State<DailySummariesList> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.nativePage) return _buildSliver(context);
+    final l10n = context.l10n;
+    return IosNativeSurface(
+        title: l10n.dailyRecaps,
+        loading: _isLoading,
+        failed: _loadFailed,
+        empty: '${l10n.noDailyRecapsYet}\n${l10n.dailyRecapsDescription}',
+        onRefresh: (_) => refresh(),
+        fallback: Scaffold(
+            appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.dailyRecaps)),
+            body: CustomScrollView(slivers: [_buildSliver(context)])),
+        toolbar: [
+          NativeRow('recaps_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop())
+        ],
+        sections: [
+          NativeSection('recaps_list', [
+            for (final (index, summary) in _summaries.indexed) ...[
+              NativeRow('recap_${summary.id}_$index', '${summary.dayEmoji} ${summary.headline}',
+                  subtitle: '${recapDateLabel(context, summary.date)} · ${_statsLabel(summary)}',
+                  action: (_) => _openSummary(summary)),
+              NativeRow('recap_delete_${summary.id}_$index', l10n.delete, destructive: true, action: (_) async {
+                await _handleSwipeDelete(summary);
+              }),
+            ],
+            if (_hasMore && _summaries.isNotEmpty)
+              NativeRow('recaps_more', l10n.showMore, enabled: !_isLoadingMore, action: (_) => _loadMore()),
+          ])
+        ]);
+  }
+
+  Widget _buildSliver(BuildContext context) {
     if (_isLoading) {
       return SliverToBoxAdapter(child: _buildLoadingShimmer());
     }

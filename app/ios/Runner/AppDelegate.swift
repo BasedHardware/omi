@@ -199,6 +199,32 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiNativeHome") {
+      registrar.register(NativeHomeViewFactory(messenger: messenger), withId: "com.omi.native_ui/home")
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiNativeSurface") {
+      registrar.register(NativeSurfaceViewFactory(messenger: messenger), withId: "com.omi.native_ui/surface")
+    }
+    let nativeUIConfig = FlutterMethodChannel(name: "com.omi.native_ui/config", binaryMessenger: messenger)
+    if #available(iOS 16.0, *) {
+      let presentations = NativeModalPresenter(rootController: { [weak self] in self?.window?.rootViewController })
+      nativeUIConfig.setMethodCallHandler { call, result in
+        do {
+          switch call.method {
+          case "isSupported": result(true)
+          case "present": try presentations.present(call.arguments, completion: result)
+          case "dismissPresentation":
+            if let id = call.arguments as? Int { presentations.dismiss(id: id) }
+            result(nil)
+          default: result(FlutterMethodNotImplemented)
+          }
+        } catch { result(FlutterError(code: "invalid_native_presentation", message: nil, details: nil)) }
+      }
+    } else {
+      nativeUIConfig.setMethodCallHandler { call, result in
+        result(call.method == "isSupported" ? false : FlutterMethodNotImplemented)
+      }
+    }
     let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
     periodicSyncChannel = syncChannel
     syncChannel.setMethodCallHandler { [weak self] call, result in

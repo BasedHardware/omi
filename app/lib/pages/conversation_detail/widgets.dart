@@ -207,6 +207,10 @@ class AppResultDetailWidget extends StatefulWidget {
   final bool Function()? canStartEditing;
   final bool asSliver;
 
+  /// Opens the editor once after mounting when it names this selection. The native editor that
+  /// handed it over already reported the start, so [onEditStarted] is not called again.
+  final ConversationSummarySelection? editRequest;
+
   const AppResultDetailWidget({
     super.key,
     required this.summarySelection,
@@ -219,6 +223,7 @@ class AppResultDetailWidget extends StatefulWidget {
     this.onEditCancelled,
     this.canStartEditing,
     this.asSliver = false,
+    this.editRequest,
   });
 
   @override
@@ -233,13 +238,41 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   String? _editingOriginalContent;
 
   @override
+  void initState() {
+    super.initState();
+    _takeEditRequest();
+  }
+
+  @override
+  void didUpdateWidget(AppResultDetailWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.editRequest, oldWidget.editRequest)) _takeEditRequest();
+  }
+
+  void _takeEditRequest() {
+    final request = widget.editRequest;
+    bool requested(ConversationSummarySelection selection) =>
+        request != null &&
+        request.kind == selection.kind &&
+        request.content == selection.content &&
+        request.appId == selection.appId &&
+        request.resultIndex == selection.resultIndex;
+    if (!requested(widget.summarySelection)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_isEditing && requested(widget.summarySelection)) {
+        _startEditing(widget.summarySelection.content.decodeString, handedOver: true);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _controller?.dispose();
     _focusNode?.dispose();
     super.dispose();
   }
 
-  void _startEditing(String currentContent) {
+  void _startEditing(String currentContent, {bool handedOver = false}) {
     final selection = widget.summarySelection;
     if (!selection.canEdit(widget.conversation)) return;
     if (widget.canStartEditing != null && !widget.canStartEditing!()) return;
@@ -253,7 +286,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
       _editingSelection = selection;
       _editingOriginalContent = currentContent;
     });
-    widget.onEditStarted?.call(selection);
+    if (!handedOver) widget.onEditStarted?.call(selection);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       focusNode.requestFocus();
     });
@@ -377,6 +410,9 @@ class GetAppsWidgets extends StatelessWidget {
   final void Function(ConversationSummarySelection selection)? onEditStarted;
   final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
+
+  /// See [AppResultDetailWidget.editRequest].
+  final ConversationSummarySelection? editRequest;
   const GetAppsWidgets({
     super.key,
     this.searchQuery = '',
@@ -385,6 +421,7 @@ class GetAppsWidgets extends StatelessWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.editRequest,
   });
 
   @override
@@ -433,6 +470,7 @@ class GetAppsWidgets extends StatelessWidget {
                 onEditCancelled: onEditCancelled == null ? null : (_) => onEditCancelled!(selection),
                 onSaveSummarySelection: onSaveSummarySelection,
                 asSliver: true,
+                editRequest: editRequest,
               ),
             const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xs)),
           ],

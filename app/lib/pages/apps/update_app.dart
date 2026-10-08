@@ -14,6 +14,8 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/native_app_owner_form.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;
@@ -24,9 +26,11 @@ class UpdateAppPage extends StatefulWidget {
 }
 
 class _UpdateAppPageState extends State<UpdateAppPage> {
+  bool _allowExit = false;
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<AddAppProvider>().prepareUpdate(widget.app);
     });
     super.initState();
@@ -43,7 +47,11 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
     );
     if (!confirmed || !context.mounted) return;
     final ok = await provider.updateApp();
-    if (ok && context.mounted) Navigator.pop(context);
+    if (ok && mounted && context.mounted) {
+      setState(() => _allowExit = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (context.mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -51,7 +59,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
     final l10n = context.l10n;
     return Consumer<AddAppProvider>(
       builder: (context, provider, child) {
-        return GestureDetector(
+        final classic = GestureDetector(
           onTap: () {
             FocusScope.of(context).unfocus();
           },
@@ -82,7 +90,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
             ),
             body: PopScope(
               onPopInvokedWithResult: (didPop, result) {
-                context.read<AddAppProvider>().clear();
+                if (didPop) context.read<AddAppProvider>().clear();
               },
               child: Builder(
                 builder: (context) {
@@ -256,6 +264,11 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                   ),
           ),
         );
+        return nativeAppOwnerForm(context, provider, classic,
+            updating: true,
+            allowExit: _allowExit,
+            onSave: () => _confirmAndUpdate(context, provider),
+            onDocs: () => launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction')));
       },
     );
   }

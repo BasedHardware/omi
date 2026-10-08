@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Valorar-nos amb 5 estrelles ens ajuda molt ❤️",
     "onboardingRatingPromptYes": "Sí, vull donar-vos suport!",
     "onboardingRatingPromptNo": "No gaire",
-    "partialRecording": "Enregistrament parcial"
+    "partialRecording": "Enregistrament parcial",
+    "dateRangeStart": "Data d'inici",
+    "dateRangeEnd": "Data de finalització",
+    "openInMaps": "Obre a Mapes"
 }

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-conversation-partial-recording.png",
+      "platform": "mobile-ios",
+      "description": "Native conversation detail with the partial-recording badge",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-native-home.png",
+      "platform": "mobile-ios",
+      "description": "Native Home inside the Flutter host",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-native-settings.png",
+      "platform": "mobile-ios",
+      "description": "Native Settings root",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-offline-sync.png",
+      "platform": "mobile-ios",
+      "description": "Native Offline Sync status",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

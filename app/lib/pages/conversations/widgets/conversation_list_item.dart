@@ -58,6 +58,130 @@ String conversationSnippet(ServerConversation conversation, {int maxChars = 160}
   return '${space > maxChars ~/ 2 ? cut.substring(0, space) : cut}…';
 }
 
+/// Both presentations share paywall checks, search seeks, analytics and return-state updates.
+Future<void> openConversationListRow(
+    BuildContext context, ConversationProvider provider, ServerConversation conversation,
+    {int conversationIndex = 0, bool isFromOnboarding = false}) async {
+  if (conversation.isLocked) {
+    if (!context.read<UsageProvider>().showSubscriptionUI) return;
+    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
+    routeToPage(context, const UsagePage(showUpgradeDialog: true));
+    return;
+  }
+  HapticFeedback.selectionClick();
+  // The detail page seeds its provider from the supplied conversation
+  // after its first frame. Notifying that provider before pushing the
+  // route delayed visible navigation and rebuilt listeners behind it.
+  final startingTitle = conversation.structured.title;
+
+  final searchQuery = provider.previousQuery;
+  final hoursSinceConversation = DateTime.now().difference(conversation.createdAt).inHours;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    provider.onConversationTap(conversation.id);
+    unawaited(
+      SchedulerBinding.instance.scheduleTask<void>(() {
+        if (!context.mounted) return;
+        if (searchQuery.isNotEmpty) {
+          ProductTelemetry.instance.value(
+            ProductValue.searchResultOpened,
+            surface: ProductSurface.conversations,
+            objectId: RecordReference.fromId(conversation.id),
+          );
+          PlatformManager.instance.analytics.conversationOpenedFromSearch(
+            conversation: conversation,
+            searchQuery: searchQuery,
+            conversationIndexInResults: conversationIndex,
+          );
+        } else {
+          PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
+            conversation: conversation,
+            conversationIndex: conversationIndex,
+            hoursSinceConversation: hoursSinceConversation,
+          );
+        }
+      }, Priority.idle),
+    );
+  });
+
+  final seek = searchMomentSeekFromSnippets(
+    snippets: conversation.matchSnippets,
+    searchQuery: searchQuery,
+  );
+
+  final resultFuture = routeToPage(
+    context,
+    ConversationDetailPage(
+      conversation: conversation,
+      isFromOnboarding: isFromOnboarding,
+      // Search matches explicitly open Transcript. Other rows
+      // let detail choose Transcript for retained fragments that
+      // have no generated summary after hydration.
+      initialTab: seek != null ? ConversationTab.transcript : null,
+      initialSeekStart: seek?.start,
+      initialSeekEnd: seek?.end,
+    ),
+  );
+  var result = await resultFuture;
+  if (context.mounted) {
+    // Don't upsert if the conversation was deleted while on the detail page
+    if (result is Map && result['deleted'] == true) return;
+    bool stillExists = provider.conversations.any((c) => c.id == conversation.id);
+    if (stillExists) {
+      String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
+      if (startingTitle != newTitle) {
+        conversation.structured.title = newTitle;
+        provider.upsertConversation(conversation);
+      }
+    }
+  }
+}
+
+ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
+      ConversationRowAction.open => ConversationActionAction.open,
+      ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+      ConversationRowAction.move => ConversationActionAction.moveFolder,
+      ConversationRowAction.share => ConversationActionAction.share,
+      ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
+      ConversationRowAction.separate => ConversationActionAction.separate,
+      ConversationRowAction.select => ConversationActionAction.select,
+      ConversationRowAction.delete => ConversationActionAction.delete,
+    };
+
+Future<void> showConversationListRowActions(
+    BuildContext context, ConversationProvider provider, ServerConversation conversation,
+    {bool allowSelection = true}) async {
+  HapticFeedback.mediumImpact();
+  final action = await showConversationActionsSheet(
+    context,
+    conversation,
+    canSelect: allowSelection && provider.isConversationEligibleForMerge(conversation.id),
+  );
+  if (action == null || !context.mounted) return;
+  trackConversationAction(_rowActionAnalytics(action, conversation.starred), ConversationActionSurface.rowLongPress);
+  switch (action) {
+    case ConversationRowAction.open:
+      await openConversationListRow(context, provider, conversation);
+    case ConversationRowAction.star:
+      await toggleConversationStarred(context, conversation);
+    case ConversationRowAction.move:
+      await moveConversationToFolder(context, conversation);
+    case ConversationRowAction.share:
+      await shareConversation(context, conversation);
+    case ConversationRowAction.recordings:
+      await showConversationRowRecordings(context, conversation);
+    case ConversationRowAction.separate:
+      await separateFromConversationRow(context, conversation);
+    case ConversationRowAction.select:
+      provider.enterSelectionMode();
+      provider.toggleConversationSelection(conversation.id);
+    case ConversationRowAction.delete:
+      if (!await confirmConversationDelete(context) || !context.mounted) return;
+      PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+      await deleteConversationsWithUndo(context, [conversation]);
+  }
+}
+
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
@@ -173,123 +297,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  Future<void> _open(BuildContext context, ConversationProvider provider) async {
-    if (widget.conversation.isLocked) {
-      if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-      routeToPage(context, const UsagePage(showUpgradeDialog: true));
-      return;
-    }
-    HapticFeedback.selectionClick();
-    // The detail page seeds its provider from the supplied conversation
-    // after its first frame. Notifying that provider before pushing the
-    // route delayed visible navigation and rebuilt listeners behind it.
-    final startingTitle = widget.conversation.structured.title;
+  Future<void> _open(BuildContext context, ConversationProvider provider) =>
+      openConversationListRow(context, provider, widget.conversation,
+          conversationIndex: widget.conversationIdx, isFromOnboarding: widget.isFromOnboarding);
 
-    final searchQuery = provider.previousQuery;
-    final hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      provider.onConversationTap(widget.conversation.id);
-      unawaited(
-        SchedulerBinding.instance.scheduleTask<void>(() {
-          if (!mounted) return;
-          if (searchQuery.isNotEmpty) {
-            ProductTelemetry.instance.value(
-              ProductValue.searchResultOpened,
-              surface: ProductSurface.conversations,
-              objectId: RecordReference.fromId(widget.conversation.id),
-            );
-            PlatformManager.instance.analytics.conversationOpenedFromSearch(
-              conversation: widget.conversation,
-              searchQuery: searchQuery,
-              conversationIndexInResults: widget.conversationIdx,
-            );
-          } else {
-            PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
-              conversation: widget.conversation,
-              conversationIndex: widget.conversationIdx,
-              hoursSinceConversation: hoursSinceConversation,
-            );
-          }
-        }, Priority.idle),
-      );
-    });
-
-    final seek = searchMomentSeekFromSnippets(snippets: widget.conversation.matchSnippets, searchQuery: searchQuery);
-
-    final resultFuture = routeToPage(
-      context,
-      ConversationDetailPage(
-        conversation: widget.conversation,
-        isFromOnboarding: widget.isFromOnboarding,
-        // Search matches explicitly open Transcript. Other rows
-        // let detail choose Transcript for retained fragments that
-        // have no generated summary after hydration.
-        initialTab: seek != null ? ConversationTab.transcript : null,
-        initialSeekStart: seek?.start,
-        initialSeekEnd: seek?.end,
-      ),
-    );
-    var result = await resultFuture;
-    if (context.mounted) {
-      // Don't upsert if the conversation was deleted while on the detail page
-      if (result is Map && result['deleted'] == true) return;
-      bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
-      if (stillExists) {
-        String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-        if (startingTitle != newTitle) {
-          widget.conversation.structured.title = newTitle;
-          provider.upsertConversation(widget.conversation);
-        }
-      }
-    }
-  }
-
-  static ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
-        ConversationRowAction.open => ConversationActionAction.open,
-        ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
-        ConversationRowAction.move => ConversationActionAction.moveFolder,
-        ConversationRowAction.share => ConversationActionAction.share,
-        ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
-        ConversationRowAction.separate => ConversationActionAction.separate,
-        ConversationRowAction.select => ConversationActionAction.select,
-        ConversationRowAction.delete => ConversationActionAction.delete,
-      };
-
-  /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
-  Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
-    HapticFeedback.mediumImpact();
-    final conversation = widget.conversation;
-    final action = await showConversationActionsSheet(
-      context,
-      conversation,
-      canSelect: widget.allowSelection && provider.isConversationEligibleForMerge(conversation.id),
-    );
-    if (action == null || !context.mounted) return;
-    trackConversationAction(_rowActionAnalytics(action, conversation.starred), ConversationActionSurface.rowLongPress);
-    switch (action) {
-      case ConversationRowAction.open:
-        await _open(context, provider);
-      case ConversationRowAction.star:
-        await toggleConversationStarred(context, conversation);
-      case ConversationRowAction.move:
-        await moveConversationToFolder(context, conversation);
-      case ConversationRowAction.share:
-        await shareConversation(context, conversation);
-      case ConversationRowAction.recordings:
-        await showConversationRowRecordings(context, conversation);
-      case ConversationRowAction.separate:
-        await separateFromConversationRow(context, conversation);
-      case ConversationRowAction.select:
-        provider.enterSelectionMode();
-        provider.toggleConversationSelection(conversation.id);
-      case ConversationRowAction.delete:
-        if (!await confirmConversationDelete(context) || !context.mounted) return;
-        PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-        await deleteConversationsWithUndo(context, [conversation]);
-    }
-  }
+  Future<void> _showActions(BuildContext context, ConversationProvider provider) =>
+      showConversationListRowActions(context, provider, widget.conversation, allowSelection: widget.allowSelection);
 
   @override
   Widget build(BuildContext context) {

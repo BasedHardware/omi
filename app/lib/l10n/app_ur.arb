@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "5 اسٹار ریٹنگ ہماری واقعی بہت مدد کرتی ہے ❤️",
     "onboardingRatingPromptYes": "ہاں، مجھے آپ کو سپورٹ کرنا ہے!",
     "onboardingRatingPromptNo": "زیادہ نہیں",
-    "partialRecording": "جزوی ریکارڈنگ"
+    "partialRecording": "جزوی ریکارڈنگ",
+    "dateRangeStart": "شروع ہونے کی تاریخ",
+    "dateRangeEnd": "ختم ہونے کی تاریخ",
+    "openInMaps": "نقشے میں کھولیں"
 }

@@ -2,6 +2,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -317,47 +318,136 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       contentId: summary.id,
       moment: AppReviewMoment.dailySummaryRead,
       enabled: !_isLoading && !_isSharing && !_isDeleting && !_isRegenerating && summary.overview.trim().isNotEmpty,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: CustomScrollView(
-          slivers: [
-            _buildHeader(summary),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  _buildOverviewCard(summary),
-                  const SizedBox(height: 24),
-                  _buildStatsRow(summary),
-                  if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
-                  if (summary.actionItems.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildActionItemsSection(summary)
-                  ],
-                  if (summary.unresolvedQuestions.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildUnresolvedQuestionsSection(summary),
-                  ],
-                  if (summary.decisionsMade.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildDecisionsMadeSection(summary),
-                  ],
-                  if (summary.memoriesLearned.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildMemoriesLearnedSection(summary),
-                  ],
-                  if (summary.knowledgeNuggets.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildKnowledgeNuggetsSection(summary),
-                  ],
-                  if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
-                ]),
-              ),
+      child: _nativeContent(
+          summary,
+          FadeTransition(
+            opacity: _fadeAnimation,
+            child: CustomScrollView(
+              slivers: [
+                _buildHeader(summary),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildOverviewCard(summary),
+                      const SizedBox(height: 24),
+                      _buildStatsRow(summary),
+                      if (summary.highlights.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildHighlightsSection(summary)
+                      ],
+                      if (summary.actionItems.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildActionItemsSection(summary)
+                      ],
+                      if (summary.unresolvedQuestions.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildUnresolvedQuestionsSection(summary),
+                      ],
+                      if (summary.decisionsMade.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildDecisionsMadeSection(summary),
+                      ],
+                      if (summary.memoriesLearned.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildMemoriesLearnedSection(summary),
+                      ],
+                      if (summary.knowledgeNuggets.isNotEmpty) ...[
+                        const SizedBox(height: 32),
+                        _buildKnowledgeNuggetsSection(summary),
+                      ],
+                      if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
+                    ]),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          )),
     );
+  }
+
+  Widget _nativeContent(DailySummary summary, Widget classic) {
+    final l10n = context.l10n;
+    final busy = _isSharing || _isDeleting || _isRegenerating;
+    return IosNativeSurface(title: summary.formattedDate, fallback: classic, toolbar: [
+      NativeRow('recap_back', l10n.back,
+          symbol: 'chevron.left', enabled: !busy, action: (_) => Navigator.of(context).pop()),
+      NativeRow('recap_share', l10n.share,
+          symbol: 'square.and.arrow.up', enabled: !busy, action: (_) => _shareSummary()),
+      NativeRow('recap_regenerate', l10n.regenerateRecap,
+          symbol: 'arrow.clockwise', enabled: !busy, action: (_) => _regenerateRecap()),
+      NativeRow('recap_delete', l10n.delete,
+          symbol: 'trash', destructive: true, enabled: !busy, action: (_) => _confirmDelete()),
+    ], sections: [
+      NativeSection('recap_overview', [
+        NativeRow('recap_headline', '${summary.dayEmoji} ${summary.headline}', kind: 'label'),
+        NativeRow('recap_overview_text', summary.overview, kind: 'label'),
+        NativeRow('recap_stats',
+            '${l10n.conversationCount(summary.stats.totalConversations)} · ${summary.stats.formattedDuration} · ${l10n.taskCount(summary.stats.actionItemsCount)}',
+            kind: 'label'),
+      ]),
+      NativeSection(
+          'recap_highlights',
+          [
+            for (final (index, item) in summary.highlights.indexed)
+              NativeRow('recap_highlight_$index', '${item.emoji} ${item.topic}',
+                  subtitle: item.summary,
+                  kind: item.conversationIds.isEmpty ? 'label' : 'button',
+                  action: item.conversationIds.isEmpty ? null : (_) => _openConversation(item.conversationIds.first))
+          ],
+          title: l10n.highlights),
+      NativeSection(
+          'recap_tasks',
+          [
+            for (final (index, item) in summary.actionItems.indexed)
+              NativeRow('recap_task_$index', item.description,
+                  subtitle: item.completed ? l10n.completed : '',
+                  kind: item.sourceConversationId == null ? 'label' : 'button',
+                  action:
+                      item.sourceConversationId == null ? null : (_) => _openConversation(item.sourceConversationId))
+          ],
+          title: l10n.actionItems),
+      NativeSection(
+          'recap_questions',
+          [
+            for (final (index, item) in summary.unresolvedQuestions.indexed)
+              NativeRow('recap_question_$index', item.question,
+                  kind: item.conversationId == null ? 'label' : 'button',
+                  action: item.conversationId == null ? null : (_) => _openConversation(item.conversationId))
+          ],
+          title: l10n.unresolvedQuestions),
+      NativeSection(
+          'recap_decisions',
+          [
+            for (final (index, item) in summary.decisionsMade.indexed)
+              NativeRow('recap_decision_$index', item.decision,
+                  kind: item.conversationId == null ? 'label' : 'button',
+                  action: item.conversationId == null ? null : (_) => _openConversation(item.conversationId))
+          ],
+          title: l10n.decisions),
+      NativeSection(
+          'recap_knowledge',
+          [
+            for (final (index, item) in summary.knowledgeNuggets.indexed)
+              NativeRow('recap_knowledge_$index', item.insight,
+                  kind: item.conversationId == null ? 'label' : 'button',
+                  action: item.conversationId == null ? null : (_) => _openConversation(item.conversationId))
+          ],
+          title: l10n.learnings),
+      if (summary.memoriesLearned.isNotEmpty)
+        NativeSection('recap_memories', [
+          NativeRow('recap_review_memories', l10n.memories,
+              action: (_) => showOmiSheet<void>(
+                  context: context,
+                  builder: (_) => SingleChildScrollView(child: _buildMemoriesLearnedSection(summary)))),
+        ]),
+      if (summary.locations.isNotEmpty)
+        NativeSection('recap_locations', [
+          NativeRow('recap_locations_map', l10n.yourDaysJourney,
+              action: (_) => showOmiSheet<void>(
+                  context: context, builder: (_) => SingleChildScrollView(child: _buildLocationsMap(summary)))),
+        ]),
+    ]);
   }
 
   Widget _buildHeader(DailySummary summary) {

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
@@ -5,6 +6,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -156,6 +159,15 @@ Future<bool> showOmiConfirm(
   String? cancelLabel,
   bool barrierDismissible = true,
 }) async {
+  final native = await _nativeConfirmation(context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      destructive: destructive,
+      dismissible: barrierDismissible);
+  if (native != null) return native.action == 'confirm';
+  if (!context.mounted) return false;
   final confirmed = await showDialog<bool>(
     context: context,
     barrierDismissible: barrierDismissible,
@@ -191,6 +203,18 @@ Future<OmiConfirmResult> showOmiConfirmWithOptOut(
   bool barrierDismissible = true,
 }) async {
   var dontAskAgain = initialOptOut;
+  final native = await _nativeConfirmation(context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      destructive: destructive,
+      dismissible: barrierDismissible,
+      optOut: NativeRow('opt_out', optOutLabel ?? context.l10n.dontAskAgain, kind: 'toggle', value: initialOptOut));
+  if (native != null) {
+    return OmiConfirmResult(confirmed: native.action == 'confirm', dontAskAgain: native.values['opt_out'] == true);
+  }
+  if (!context.mounted) return const OmiConfirmResult(confirmed: false, dontAskAgain: false);
   final confirmed = await showDialog<bool>(
     context: context,
     barrierDismissible: barrierDismissible,
@@ -236,6 +260,18 @@ Future<OmiConfirmResult> showOmiConfirmMenu(
   bool offerOptOut = false,
   String? optOutLabel,
 }) async {
+  // Only the iOS preview swaps the anchored menu for its system confirmation; Android keeps it. Release
+  // builds reduce this to the flag on iOS; the hermetic test host only lifts the flag, never the platform.
+  if (nativePresentationEnabled && Platform.isIOS) {
+    if (offerOptOut) {
+      return showOmiConfirmWithOptOut(context,
+          title: title, message: message, confirmLabel: confirmLabel, destructive: true, optOutLabel: optOutLabel);
+    }
+    return OmiConfirmResult(
+        confirmed: await showOmiConfirm(context,
+            title: title, message: message, confirmLabel: confirmLabel, destructive: true),
+        dontAskAgain: false);
+  }
   if (MediaQuery.textScalerOf(context).scale(1) > _OmiConfirmMenu.maxTextScale) {
     if (offerOptOut) {
       return showOmiConfirmWithOptOut(context,
@@ -490,7 +526,19 @@ Future<void> showOmiAlert(
   String? message,
   String? okLabel,
   bool barrierDismissible = true,
-}) {
+}) async {
+  final native = await showIosNativeModal(context,
+      title: title,
+      alert: true,
+      dismissible: barrierDismissible,
+      cancelId: 'acknowledge',
+      actions: [
+        NativeRow('acknowledge', okLabel ?? context.l10n.ok)
+      ],
+      sections: [
+        if (message != null) NativeSection('message', [NativeRow('message_text', message, kind: 'label')])
+      ]);
+  if (native != null || !context.mounted) return;
   return showDialog<void>(
     context: context,
     barrierDismissible: barrierDismissible,
@@ -507,6 +555,26 @@ Future<void> showOmiAlert(
     ),
   );
 }
+
+Future<NativeModalResult?> _nativeConfirmation(
+  BuildContext context, {
+  required String title,
+  String? message,
+  required String confirmLabel,
+  String? cancelLabel,
+  required bool destructive,
+  required bool dismissible,
+  NativeRow? optOut,
+}) =>
+    showIosNativeModal(context, title: title, alert: optOut == null, dismissible: dismissible, actions: [
+      NativeRow('cancel', cancelLabel ?? context.l10n.cancel, symbol: 'xmark'),
+      NativeRow('confirm', confirmLabel, destructive: destructive)
+    ], sections: [
+      NativeSection('confirmation', [
+        if (message != null) NativeRow('message', message, kind: 'label'),
+        if (optOut != null) optOut,
+      ])
+    ]);
 
 List<OmiDialogAction> _confirmActions(
   BuildContext context, {

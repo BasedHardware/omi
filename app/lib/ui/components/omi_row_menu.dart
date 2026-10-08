@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+
 import 'package:omi/ui/components/omi_icon_button.dart';
 import 'package:omi/ui/components/omi_sheet.dart';
 import 'package:omi/ui/omi_tokens.dart';
@@ -44,6 +48,20 @@ Future<void> showOmiRowMenu(
   required List<OmiMenuAction> actions,
 }) async {
   OmiHaptics.medium();
+  final native = await showIosNativeModal(context,
+      title: title ?? '',
+      actions: [
+        NativeRow('cancel', context.l10n.cancel, symbol: 'xmark'),
+        for (final (index, action) in actions.indexed)
+          NativeRow('action_$index', action.label, destructive: action.isDestructive),
+      ],
+      alert: true);
+  if (native != null) {
+    final chosen = actions.indexed.where((entry) => 'action_${entry.$1}' == native.action);
+    if (chosen.isNotEmpty) chosen.first.$2.onSelected();
+    return;
+  }
+  if (!context.mounted) return;
   final chosen = await showOmiSheet<OmiMenuAction>(
     context: context,
     title: title,

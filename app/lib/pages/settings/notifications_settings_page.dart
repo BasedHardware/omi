@@ -1,6 +1,7 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -72,11 +73,33 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22; // Default to 10 PM
 
+  // Shared by the Flutter row and the native projection of this page.
+  final _liveActivity = LiveActivitySettingsController();
+
   @override
   void initState() {
     super.initState();
+    _liveActivity.addListener(_onLiveActivityChanged);
     _loadSettings();
     PlatformManager.instance.analytics.dailySummarySettingsOpened();
+  }
+
+  @override
+  void dispose() {
+    _liveActivity
+      ..removeListener(_onLiveActivityChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onLiveActivityChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setLiveActivityEnabled(bool value) async {
+    if (!await _liveActivity.setEnabled(value) && mounted) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -222,11 +245,11 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
       body: Column(
         children: [
-          const LiveActivitySettings(),
+          LiveActivitySettings(controller: _liveActivity),
           Expanded(
             child: _isLoading
                 ? const NotificationsSettingsLoadingShimmer()
@@ -245,6 +268,52 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           ),
         ],
       ),
+    );
+    return IosNativeSurface(
+      title: context.l10n.notifications,
+      fallback: classic,
+      loading: _isLoading,
+      toolbar: [
+        NativeRow('notifications_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+          Navigator.of(context).pop();
+        })
+      ],
+      sections: [
+        // Like the Flutter row, the Lock Screen choice does not wait for the server settings.
+        if (_liveActivity.supported)
+          NativeSection('live_activity', [
+            NativeRow('capture_live_activity_toggle', context.l10n.showOnLockScreen,
+                kind: 'toggle',
+                value: _liveActivity.enabled,
+                enabled: !_liveActivity.saving,
+                action: (value) => _setLiveActivityEnabled(value as bool)),
+          ]),
+        if (!_isLoading) ...[
+          NativeSection(
+              'frequency',
+              [
+                NativeRow('notification_frequency', context.l10n.notificationFrequency,
+                    subtitle: _getFrequencyDescription(context, _notificationFrequency),
+                    kind: 'choice',
+                    value: '$_notificationFrequency',
+                    options: {for (var value = 0; value <= 5; value++) '$value': _getFrequencyLabel(context, value)},
+                    action: (value) => _updateNotificationFrequency(int.parse(value as String)))
+              ],
+              footer: context.l10n.notificationFrequencyDescription),
+          NativeSection('recap', [
+            NativeRow('notification_recap', context.l10n.dailySummary,
+                kind: 'toggle',
+                value: _dailySummaryEnabled,
+                action: (value) => _updateDailySummaryEnabled(value as bool)),
+            NativeRow('notification_hour', context.l10n.deliveryTime,
+                kind: 'choice',
+                value: '$_dailySummaryHour',
+                enabled: _dailySummaryEnabled,
+                options: {for (var hour = 0; hour < 24; hour++) '$hour': _formatHourDisplay(context, hour)},
+                action: (value) => _updateDailySummaryHour(int.parse(value as String))),
+          ]),
+        ],
+      ],
     );
   }
 

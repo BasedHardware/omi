@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +16,11 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/services/auth_service.dart';
+
+part 'media_viewer_native.dart';
 
 /// Full-screen photo viewer that replaces `FullScreenImageViewer` (a single network image, e.g.
 /// app store thumbnails) and `PhotoViewerPage` (a paged gallery of base64 conversation photos).
@@ -127,6 +134,9 @@ class MediaViewerPage extends StatefulWidget {
 }
 
 class _MediaViewerPageState extends State<MediaViewerPage> {
+  final Map<int, Future<String?>> _nativeUris = {};
+  final Set<File> _nativeFiles = {};
+  final GlobalKey _nativeShareKey = GlobalKey();
   late int _currentIndex;
   late final PageController _pageController;
   final GlobalKey _shareButtonKey = GlobalKey();
@@ -168,6 +178,10 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   @override
   void dispose() {
     _pageController.dispose();
+    for (final file in _nativeFiles) {
+      unawaited(_removeNativeFile(file));
+    }
+    _nativeFiles.clear();
     super.dispose();
   }
 
@@ -242,7 +256,10 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         file = XFile(scratch.path, mimeType: mime);
       }
       await SharePlus.instance.share(
-        ShareParams(files: [file], sharePositionOrigin: shareSheetOrigin(_shareButtonKey)),
+        ShareParams(
+            files: [file],
+            sharePositionOrigin:
+                shareSheetOrigin(_nativeShareKey.currentContext == null ? _shareButtonKey : _nativeShareKey)),
       );
     } catch (e) {
       Logger.debug('Failed to share media: $e');
@@ -380,7 +397,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       ),
     );
 
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: widget.appBarBackgroundColor,
@@ -401,5 +418,6 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       ),
       body: widget.wrapBodyInSafeArea ? SafeArea(child: body) : body,
     );
+    return _nativeMediaSurface(classic);
   }
 }

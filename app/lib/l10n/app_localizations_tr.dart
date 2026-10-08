@@ -12462,4 +12462,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Kısmi kayıt';
+
+  @override
+  String get dateRangeStart => 'Başlangıç tarihi';
+
+  @override
+  String get dateRangeEnd => 'Bitiş tarihi';
+
+  @override
+  String get openInMaps => 'Haritalar\'da aç';
 }

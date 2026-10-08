@@ -12552,4 +12552,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Enregistrement partiel';
+
+  @override
+  String get dateRangeStart => 'Date de début';
+
+  @override
+  String get dateRangeEnd => 'Date de fin';
+
+  @override
+  String get openInMaps => 'Ouvrir dans Plans';
 }

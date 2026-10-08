@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 stjärnor hjälper oss verkligen mycket ❤️",
     "onboardingRatingPromptYes": "Ja, jag vill stötta er!",
     "onboardingRatingPromptNo": "Inte direkt",
-    "partialRecording": "Delvis inspelning"
+    "partialRecording": "Delvis inspelning",
+    "dateRangeStart": "Startdatum",
+    "dateRangeEnd": "Slutdatum",
+    "openInMaps": "Öppna i Kartor"
 }

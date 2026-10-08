@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "revision": 2,
+  "appearance": "system",
+  "locale": "en",
+  "loading": false,
+  "failed": false,
+  "hasMore": true,
+  "localRecordingCount": 1,
+  "groups": [
+    {
+      "id": "today",
+      "title": "Today",
+      "conversations": [
+        {
+          "id": "conversation-1",
+          "title": "Design catch-up",
+          "timestamp": "Oct 3, 2026, 10:00 AM",
+          "locked": false,
+          "starred": true,
+          "status": "completed",
+          "summary": "**Decisions**\nKeep the existing API and recording services.\n\nMove presentation to SwiftUI in stages.",
+          "transcript": [
+            {
+              "id": "conversation-1:0:segment-1",
+              "speaker": "You",
+              "text": "Let us start with native conversation browsing."
+            },
+            {
+              "id": "conversation-1:1:segment-2",
+              "speaker": "Speaker 1",
+              "text": "Keep sign-in, recordings and backend calls working as they do today."
+            }
+          ],
+          "externalText": ""
+        },
+        {
+          "id": "locked-1",
+          "title": "Conversation",
+          "timestamp": "Oct 3, 2026, 9:00 AM",
+          "locked": true,
+          "starred": false,
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "copy": {
+    "conversations": "Conversations",
+    "summary": "Summary",
+    "transcript": "Transcript",
+    "loading": "Loading\u2026",
+    "empty": "No conversations yet",
+    "error": "Could not load conversations.",
+    "retry": "Try again",
+    "more": "More options",
+    "viewAll": "View All",
+    "loadMore": "Show more",
+    "recordings": "Recordings",
+    "noSummary": "No summary yet",
+    "noTranscript": "No transcript available.",
+    "starred": "Starred",
+    "lockedHint": "Upgrade to Unlimited"
+  },
+  "direction": "ltr"
+}

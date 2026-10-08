@@ -12263,4 +12263,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get partialRecording => '부분 녹음';
+
+  @override
+  String get dateRangeStart => '시작일';
+
+  @override
+  String get dateRangeEnd => '종료일';
+
+  @override
+  String get openInMaps => '지도에서 열기';
 }

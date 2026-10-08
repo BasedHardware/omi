@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 tärni aitavad meid tõesti palju ❤️",
     "onboardingRatingPromptYes": "Jah, tahan teid toetada!",
     "onboardingRatingPromptNo": "Pigem mitte",
-    "partialRecording": "Osaline salvestus"
+    "partialRecording": "Osaline salvestus",
+    "dateRangeStart": "Alguskuupäev",
+    "dateRangeEnd": "Lõppkuupäev",
+    "openInMaps": "Ava kaardirakenduses"
 }

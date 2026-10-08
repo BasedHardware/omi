@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_settings.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -17,6 +20,7 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// The Settings group pages. The Settings sheet shows Account, the five groups here, Integrations
@@ -51,15 +55,18 @@ ValueKey<String> settingsRowKey(SettingsDestination destination) => ValueKey('se
 
 /// The shared page shell: back button, title, and grouped rows on the page colour.
 class _GroupPage extends StatelessWidget {
-  const _GroupPage({required this.pageKey, required this.title, required this.children});
+  const _GroupPage(
+      {required this.pageKey, required this.title, required this.children, this.nativeSections, this.fallback});
 
   final String pageKey;
   final String title;
   final List<Widget> children;
+  final List<NativeSection>? nativeSections;
+  final Widget? fallback;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       key: ValueKey(pageKey),
       appBar: AppBar(leading: const OmiBackButton(), title: Text(title)),
       body: ListView(
@@ -67,6 +74,14 @@ class _GroupPage extends StatelessWidget {
         children: children,
       ),
     );
+    final sections = nativeSections ??
+        nativeSettingsSections(children, trailingText: (widget) => widget is SettingsTag ? widget.label : null);
+    if (sections == null) return classic;
+    return IosNativeSurface(title: title, sections: sections, fallback: fallback ?? classic, toolbar: [
+      NativeRow('settings_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+        Navigator.of(context).pop();
+      })
+    ]);
   }
 }
 
@@ -185,6 +200,51 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
     return _GroupPage(
       pageKey: 'settings_page_recording',
       title: l10n.recordingAndTranscription,
+      nativeSections: [
+        NativeSection('transcription', [
+          NativeRow('recording_transcription', l10n.transcription,
+              kind: 'navigation',
+              symbol: 'mic',
+              subtitle: _transcriptionValue(),
+              action: (_) => open(SettingsDestination.transcription)),
+          NativeRow('recording_language', l10n.language,
+              kind: 'navigation', symbol: 'globe', action: (_) => open(SettingsDestination.language)),
+          NativeRow('recording_vocabulary', l10n.customVocabulary,
+              kind: 'navigation', symbol: 'book', action: (_) => open(SettingsDestination.customVocabulary)),
+        ]),
+        NativeSection('speakers', [
+          NativeRow('recording_profile', l10n.speechProfile,
+              kind: 'navigation', symbol: 'waveform', action: (_) => open(SettingsDestination.voiceProfile)),
+          NativeRow('recording_people', l10n.identifyingOthers,
+              kind: 'navigation', symbol: 'person.2', action: (_) => open(SettingsDestination.people)),
+          NativeRow('recording_voice', l10n.voiceResponseMode,
+              kind: 'choice',
+              value: '${_prefs.voiceResponseMode}',
+              options: {
+                for (final mode in [0, 1, 2]) '$mode': _voiceResponseModeLabel(mode)
+              }, action: (value) {
+            final mode = int.parse(value as String);
+            setState(() => _prefs.voiceResponseMode = mode);
+            PlatformManager.instance.analytics.voiceResponseModeChanged(mode);
+          }),
+        ]),
+        NativeSection(
+            'recording',
+            [
+              NativeRow('recording_timeout', l10n.conversationTimeout,
+                  kind: 'navigation',
+                  symbol: 'clock',
+                  subtitle: l10n.setWhenConversationsAutoEnd,
+                  action: (_) => open(SettingsDestination.conversationTimeout)),
+              NativeRow('recording_batch', l10n.transcribeLaterTitle,
+                  kind: 'toggle',
+                  value: _prefs.batchModeEnabled,
+                  subtitle: batchStorageFull ? l10n.transcribeLaterStorageFull : l10n.transcribeLaterDescription,
+                  action: (value) => _setTranscribeLater(value as bool)),
+            ],
+            title: l10n.recording,
+            footer: l10n.beta),
+      ],
       children: [
         OmiSettingsGroup(
           children: [
@@ -300,6 +360,21 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
     return _GroupPage(
       pageKey: 'settings_page_notifications',
       title: l10n.notificationsAndDisplay,
+      nativeSections: [
+        NativeSection('display', [
+          NativeRow('display_notifications', l10n.notifications,
+              action: (_) => open(SettingsDestination.notifications)),
+          NativeRow('display_conversations', l10n.conversationDisplay,
+              action: (_) => open(SettingsDestination.conversationDisplay)),
+          NativeRow('display_appearance', l10n.appearance,
+              kind: 'choice',
+              value: appearance.name,
+              options: {for (final mode in ThemeMode.values) mode.name: _appearanceLabel(mode)},
+              action: (value) => context
+                  .read<AppearanceProvider>()
+                  .setMode(ThemeMode.values.firstWhere((mode) => mode.name == value))),
+        ])
+      ],
       children: [
         OmiSettingsGroup(
           children: [
@@ -334,7 +409,7 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return _GroupPage(
+    final classic = _GroupPage(
       pageKey: 'settings_page_privacy',
       title: l10n.dataAndPrivacy,
       children: [
@@ -363,6 +438,26 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
         ),
       ],
     );
+    if (!iosSwiftUiEnabled) return classic;
+    return ValueListenableBuilder<bool>(
+        valueListenable: DataExport.exportInProgress,
+        builder: (context, exporting, _) => _GroupPage(
+                pageKey: 'settings_page_privacy',
+                title: l10n.dataAndPrivacy,
+                fallback: classic,
+                nativeSections: [
+                  NativeSection('privacy_actions', [
+                    NativeRow('privacy_protection', l10n.dataProtection,
+                        action: (_) => open(SettingsDestination.dataPrivacy)),
+                    NativeRow('privacy_export', l10n.exportAllData,
+                        subtitle: exporting ? l10n.loading : l10n.exportConversationsToJson,
+                        enabled: !exporting,
+                        action: (_) => open(SettingsDestination.exportData)),
+                    NativeRow('privacy_import', l10n.importData,
+                        subtitle: l10n.importDataFromOtherSources, action: (_) => open(SettingsDestination.importData)),
+                  ])
+                ],
+                children: const []));
   }
 }
 
@@ -446,6 +541,15 @@ class _HelpAboutGroupPageState extends State<HelpAboutGroupPage> with _GroupRows
     return _GroupPage(
       pageKey: 'settings_page_help',
       title: l10n.helpAndAbout,
+      nativeSections: [
+        NativeSection('help_actions', [
+          if (PlatformService.isIntercomSupported)
+            NativeRow('help_center', l10n.helpCenter, action: (_) => open(SettingsDestination.helpCenter)),
+          NativeRow('help_changes', l10n.whatsNew, action: (_) => open(SettingsDestination.whatsNew)),
+          NativeRow('help_version', '${_version ?? ''} (${_buildNumber ?? ''})',
+              subtitle: _shortDeviceInfo ?? '', action: (_) => _copyVersionInfo()),
+        ])
+      ],
       children: [
         OmiSettingsGroup(
           children: [

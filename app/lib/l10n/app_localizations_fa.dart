@@ -12448,4 +12448,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get partialRecording => 'ضبط ناقص';
+
+  @override
+  String get dateRangeStart => 'تاریخ شروع';
+
+  @override
+  String get dateRangeEnd => 'تاریخ پایان';
+
+  @override
+  String get openInMaps => 'باز کردن در نقشه‌ها';
 }

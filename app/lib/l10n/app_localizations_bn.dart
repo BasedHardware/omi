@@ -12450,4 +12450,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get partialRecording => 'আংশিক রেকর্ডিং';
+
+  @override
+  String get dateRangeStart => 'শুরুর তারিখ';
+
+  @override
+  String get dateRangeEnd => 'শেষের তারিখ';
+
+  @override
+  String get openInMaps => 'মানচিত্রে খুলুন';
 }

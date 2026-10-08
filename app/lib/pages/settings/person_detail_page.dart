@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -5,6 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/native_read_session.dart';
+import 'package:omi/mobile/native_ui/native_conversation_projection.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/person_name_dialog.dart';
@@ -14,6 +20,7 @@ import 'package:omi/pages/settings/widgets/person_confidence.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -38,10 +45,28 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
   bool _hasMore = true;
   bool _loading = false;
   bool _failed = false;
+  late final NativeReadSession _readSession;
+  StreamSubscription<int>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    final owner = iosSwiftUiEnabled ? AuthService.instance.captureSessionSnapshot() : null;
+    _readSession = NativeReadSession(
+      isCurrent: () =>
+          mounted && (owner == null ? !iosSwiftUiEnabled : AuthService.instance.isSessionSnapshotCurrent(owner)),
+    );
+    if (iosSwiftUiEnabled) {
+      _authSubscription = AuthService.instance.sessionGenerationEvents.listen((_) {
+        if (!_readSession.active && mounted) {
+          setState(() {
+            _conversations.clear();
+            _hasMore = false;
+            _loading = false;
+          });
+        }
+      });
+    }
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) _loadMore();
     });
@@ -50,24 +75,26 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
 
   @override
   void dispose() {
+    _readSession.dispose();
+    _authSubscription?.cancel();
     _scroll.dispose();
     super.dispose();
   }
 
   Future<void> _loadMore() async {
-    if (_loading || !_hasMore) return;
+    if (!_readSession.active || _loading || !_hasMore) return;
     setState(() {
       _loading = true;
       _failed = false;
     });
-    final result = await searchConversationsServerResult(
-      '',
-      page: _page + 1,
-      limit: _pageSize,
-      includeDiscarded: false,
-      speakerId: widget.personId,
-    );
-    if (!mounted) return;
+    final result = await _readSession.read(() => searchConversationsServerResult(
+          '',
+          page: _page + 1,
+          limit: _pageSize,
+          includeDiscarded: false,
+          speakerId: widget.personId,
+        ));
+    if (!mounted || result == null || !_readSession.active) return;
     setState(() {
       _loading = false;
       if (!result.isSuccess) {
@@ -125,17 +152,25 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     final provider = context.watch<PeopleProvider>();
     final index = provider.people.indexWhere((p) => p.id == widget.personId);
     if (index == -1) {
-      return Scaffold(
+      final classic = Scaffold(
         backgroundColor: OmiColors.surface0,
         appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.people)),
         body: OmiEmptyState(icon: Icons.person_off_outlined, title: l10n.noPeopleYet),
       );
+      return IosNativeSurface(
+          title: l10n.people,
+          sections: const [],
+          empty: l10n.noPeopleYet,
+          fallback: classic,
+          toolbar: [
+            NativeRow('person_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+          ]);
     }
     final person = provider.people[index];
     final dates = OmiDateFormat.of(context);
     final samples = person.speechSamples ?? const <String>[];
     final transcripts = person.speechSampleTranscripts ?? const <String>[];
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         leading: const OmiBackButton(),
@@ -242,6 +277,88 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
           ],
         ),
       ),
+    );
+    return IosNativeSurface(
+      title: person.name,
+      fallback: classic,
+      onRefresh: (_) => _refresh(),
+      toolbar: [
+        NativeRow('person_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('person_edit', l10n.editPerson,
+            symbol: 'pencil', action: (_) => showPersonNameDialog(context, provider, person: person)),
+        NativeRow('person_delete', l10n.deletePersonLabel,
+            symbol: 'trash', destructive: true, action: (_) => _confirmDeletePerson(provider, person)),
+      ],
+      sections: [
+        NativeSection('person_confidence', [
+          NativeRow('person_evidence', confidenceLabel(context, person.confidence),
+              kind: 'navigation',
+              subtitle: personReasonLine(context, person),
+              level: confidenceLevel(person.confidence),
+              action: (_) => showPersonConfidenceSheet(context, person)),
+        ]),
+        NativeSection('person_stats', [
+          NativeRow('person_conversations', l10n.conversations,
+              kind: 'label', subtitle: person.conversationCount?.toString() ?? '–'),
+          NativeRow('person_talk_time', l10n.personTalkTime,
+              kind: 'label',
+              subtitle: person.talkSeconds == null ? '–' : OmiDuration.compact(person.talkSeconds!.round(), l10n)),
+          NativeRow('person_last_heard', l10n.personLastHeard,
+              kind: 'label', subtitle: person.lastHeardAt == null ? '–' : dates.dayHeader(person.lastHeardAt!)),
+        ]),
+        NativeSection('person_pinning', [
+          NativeRow('person_pin', l10n.pinAction,
+              subtitle: l10n.pinPersonHonestLine,
+              kind: 'toggle',
+              value: person.pinned,
+              action: (_) => togglePersonPinned(context, provider, person)),
+        ]),
+        NativeSection(
+            'person_samples',
+            [
+              if (samples.isEmpty) NativeRow('person_no_samples', l10n.voiceSettingsSaveOthersSubtitle, kind: 'label'),
+              for (final (sampleIndex, sample) in samples.indexed) ...[
+                NativeRow('person_sample_$sampleIndex', l10n.sampleNumber(sampleIndex + 1),
+                    subtitle: sampleIndex < transcripts.length ? transcripts[sampleIndex] : '',
+                    symbol: provider.currentPlayingPersonIndex == index &&
+                            provider.currentPlayingIndex == sampleIndex &&
+                            provider.isPlaying
+                        ? 'pause.fill'
+                        : 'play.fill',
+                    action: (_) => provider.playPause(index, sampleIndex, sample)),
+                NativeRow('person_delete_sample_$sampleIndex', l10n.delete,
+                    symbol: 'trash',
+                    destructive: true,
+                    action: (_) => _confirmDeleteSample(provider, index, person, sampleIndex)),
+              ],
+            ],
+            title: l10n.speechProfile),
+        NativeSection(
+            'person_history',
+            [
+              for (final conversation in _conversations)
+                NativeRow(
+                    'person_conversation_${conversation.id}',
+                    projectNativeConversation(conversation,
+                        title: conversation.structured.title,
+                        timestamp: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                        lockedTitle: l10n.conversations,
+                        speaker: (_) => '')['title'] as String,
+                    kind: 'navigation',
+                    subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                    symbol: conversation.isLocked ? 'lock.fill' : 'bubble.left',
+                    action: (_) => _open(conversation)),
+              if (_loading) NativeRow('person_loading', l10n.loading, kind: 'label'),
+              if (_failed)
+                NativeRow('person_retry', l10n.tryAgain,
+                    subtitle: l10n.somethingWentWrongTryAgain, action: (_) => _loadMore()),
+              if (!_loading && !_failed && _conversations.isEmpty)
+                NativeRow('person_history_empty', l10n.noConversationsYet, kind: 'label'),
+              if (_hasMore && !_loading && !_failed)
+                NativeRow('person_load_more', l10n.showMore, action: (_) => _loadMore(), onVisible: (_) => _loadMore()),
+            ],
+            title: l10n.conversations),
+      ],
     );
   }
 }

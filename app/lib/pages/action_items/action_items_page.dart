@@ -1,5 +1,7 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/providers/home_provider.dart';
 
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
@@ -444,7 +446,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired;
 
-        return Scaffold(
+        final classic = Scaffold(
           body: Stack(
             children: [
               GestureDetector(
@@ -480,6 +482,84 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // conversations merge bar). Don't mount it here.
             ],
           ),
+        );
+        if (provider.isSelectionMode) return classic;
+        return IosNativeSurface(
+          title: context.l10n.tasks,
+          fallback: classic,
+          loading: provider.isLoading && provider.actionItems.isEmpty,
+          failed: showTypedStatus,
+          empty: context.l10n.noTasksYet,
+          searchPlaceholder: context.l10n.searchActionItems,
+          searchValue: provider.searchQuery,
+          search: (value) => provider.setSearchQuery(value as String),
+          onRefresh: (_) => provider.forceRefreshActionItems(),
+          toolbar: [
+            NativeRow('tasks_home', context.l10n.home,
+                symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
+            NativeRow('tasks_add', context.l10n.newTask,
+                symbol: 'plus',
+                action: (_) =>
+                    _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today))),
+            NativeRow('tasks_menu', context.l10n.moreOptions, kind: 'menu', symbol: 'ellipsis', options: {
+              'completed':
+                  provider.showCompletedView ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+              'select': context.l10n.selectActionItems,
+              'selectAll': context.l10n.selectAllTasksMenu,
+            }, action: (value) {
+              if (value == 'completed') {
+                provider.toggleShowCompletedView();
+              }
+              if (value == 'select') {
+                _searchFocusNode.unfocus();
+                provider.startSelection();
+              }
+              if (value == 'selectAll') {
+                provider.startSelection();
+                provider.selectAllItems();
+              }
+            }),
+          ],
+          sections: [
+            for (final category in TaskCategory.values)
+              NativeSection(
+                  category.name,
+                  [
+                    for (final item in _getOrderedItems(category, categorizedItems[category] ?? []))
+                      if (!provider.isSearching || provider.filteredActionItems.any((match) => match.id == item.id))
+                        NativeRow('task_${item.id}', item.description,
+                            kind: 'task',
+                            value: item.completed,
+                            subtitle: [
+                              if (item.dueAt != null) OmiDateFormat.of(context).dateTime(item.dueAt!),
+                              if (_getGoalTitleForTask(item) != null) _getGoalTitleForTask(item)!
+                            ].join(' · '),
+                            options: {
+                              'open': context.l10n.open,
+                              'select': context.l10n.selectOption,
+                              'delete': context.l10n.delete,
+                              if (item.indentLevel > 0) 'outdent': context.l10n.outdentTask
+                            }, action: (value) async {
+                          if (value is bool) {
+                            await _toggleCompleted(provider, item);
+                          } else if (value == 'open') {
+                            _showEditSheet(item);
+                          } else if (value == 'delete') {
+                            _deleteTask(item);
+                          } else if (value == 'select') {
+                            provider.startSelectionWithItem(item.id);
+                          } else if (value == 'outdent') {
+                            _decrementIndent(item.id);
+                          }
+                        }),
+                  ],
+                  title: _getCategoryTitle(context, category)),
+            if (provider.hasMore)
+              NativeSection('pagination', [
+                NativeRow('tasks_load_more', context.l10n.showMore,
+                    enabled: !provider.isFetching, action: (_) => provider.loadMoreActionItems())
+              ]),
+          ],
         );
       },
     );

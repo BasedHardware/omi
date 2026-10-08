@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
@@ -21,6 +22,7 @@ class FilterBottomSheet extends StatelessWidget {
       title: AppLocalizations.of(context).filters,
       padding: EdgeInsets.zero,
       builder: (context) => const FilterBottomSheet(),
+      nativeBuilder: (context) => const FilterBottomSheet(),
     );
   }
 
@@ -30,7 +32,7 @@ class FilterBottomSheet extends StatelessWidget {
       height: MediaQuery.sizeOf(context).height * 0.75,
       child: Consumer<AppProvider>(
         builder: (context, provider, child) {
-          return Column(
+          final classic = Column(
             children: [
               // Content
               Expanded(
@@ -116,9 +118,91 @@ class FilterBottomSheet extends StatelessWidget {
               ),
             ],
           );
+          return _nativeFilters(context, provider, classic);
         },
       ),
     );
+  }
+
+  Widget _nativeFilters(BuildContext context, AppProvider provider, Widget classic) {
+    final l10n = AppLocalizations.of(context);
+    NativeRow filter(String id, String title, String key, String group) =>
+        NativeRow(id, title, kind: 'toggle', value: provider.isFilterSelected(key, group), action: (_) {
+          provider.addOrRemoveFilter(key, group);
+          final selected = provider.isFilterSelected(key, group);
+          switch (group) {
+            case 'Apps':
+              provider.applyFilters();
+              PlatformManager.instance.analytics.appsTypeFilter(key, selected);
+            case 'Rating':
+              PlatformManager.instance.analytics.appsRatingFilter(key, selected);
+            case 'Sort':
+              PlatformManager.instance.analytics.appsSortFilter(key, selected);
+          }
+        });
+    void apply({bool reset = false}) {
+      if (reset) {
+        provider.clearFilters();
+        PlatformManager.instance.analytics.appsClearFilters();
+      }
+      Navigator.of(context).pop();
+      Future.microtask(() => provider.applyFilters());
+    }
+
+    return IosNativeSurface(title: l10n.filters, fallback: classic, sections: [
+      NativeSection('app_filter_authorship', [filter('app_filter_mine', l10n.myApps, 'My Apps', 'Apps')],
+          title: l10n.apps),
+      NativeSection(
+          'app_filter_ratings',
+          [
+            for (var rating = 1; rating <= 5; rating++)
+              filter('app_filter_rating:$rating', '$rating+', '$rating+ Stars', 'Rating')
+          ],
+          title: l10n.rating),
+      if (provider.categories.isNotEmpty)
+        NativeSection(
+            'app_filter_categories',
+            [
+              for (final category in provider.categories)
+                NativeRow('app_filter_category:${category.id}', category.getLocalizedTitle(context),
+                    kind: 'toggle', value: provider.isCategoryFilterSelected(category), action: (_) {
+                  provider.addOrRemoveCategoryFilter(category);
+                  PlatformManager.instance.analytics
+                      .appsCategoryFilter(category.title, provider.isCategoryFilterSelected(category));
+                })
+            ],
+            title: l10n.categories),
+      NativeSection(
+          'app_filter_sort',
+          [
+            for (final entry in {
+              'A-Z': 'A-Z',
+              'Z-A': 'Z-A',
+              'Highest Rating': l10n.highestRating,
+              'Lowest Rating': l10n.lowestRating,
+              'Most Installs': l10n.mostInstalls
+            }.entries)
+              filter('app_filter_sort:${entry.key}', entry.value, entry.key, 'Sort')
+          ],
+          title: l10n.sortBy),
+      if (provider.capabilities.isNotEmpty)
+        NativeSection(
+            'app_filter_capabilities',
+            [
+              for (final capability in provider.capabilities)
+                NativeRow('app_filter_capability:${capability.id}', capability.getLocalizedTitle(context),
+                    kind: 'toggle', value: provider.isCapabilityFilterSelected(capability), action: (_) {
+                  provider.addOrRemoveCapabilityFilter(capability);
+                  PlatformManager.instance.analytics
+                      .appsCapabilityFilter(capability.title, provider.isCapabilityFilterSelected(capability));
+                })
+            ],
+            title: l10n.capabilities)
+    ], toolbar: [
+      NativeRow('app_filter_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).pop()),
+      NativeRow('app_filter_reset', l10n.resetFilters, action: (_) => apply(reset: true)),
+      NativeRow('app_filter_apply', l10n.applyFilters, symbol: 'checkmark', action: (_) => apply())
+    ]);
   }
 
   Widget _buildSectionTitle(String title) {

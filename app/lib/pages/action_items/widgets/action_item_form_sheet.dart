@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -174,6 +177,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   }
 
   void _deleteActionItem() {
+    if (_isSaving) return;
     if (!widget.isEditing) return;
     final provider = context.read<ActionItemsProvider>();
     unawaited(deleteTaskWithUndo(context, provider, widget.actionItem!));
@@ -245,7 +249,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return OmiEditSheet(
+    final classic = OmiEditSheet(
       title: widget.isEditing ? l10n.editActionItem : l10n.newTask,
       isDirty: _isDirty,
       enabled: !_isSaving,
@@ -403,6 +407,54 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
         ),
       ),
     );
+    return IosNativeEdit(
+        title: widget.isEditing ? l10n.editActionItem : l10n.newTask,
+        isDirty: _isDirty,
+        enabled: !_isSaving,
+        failed: _saveFailed,
+        fallback: classic,
+        sections: [
+          NativeSection('task_editor', [
+            if (widget.isEditing)
+              NativeRow('task_completed', l10n.completed,
+                  kind: 'toggle',
+                  value: _isCompleted,
+                  enabled: !_isSaving,
+                  action: (value) => _toggleCompleted(value as bool)),
+            NativeRow('task_description', l10n.actionItemDescriptionHint,
+                kind: 'text',
+                maximumLength: _kTaskMaxLength,
+                value: _textController.text,
+                enabled: !_isSaving, action: (value) {
+              final text = value as String;
+              if (text.characters.length > _kTaskMaxLength) throw StateError('task_too_long');
+              setState(() => _textController.text = text);
+            }),
+            NativeRow('task_date', l10n.addDueDate,
+                kind: 'date',
+                value: _selectedDueDate?.millisecondsSinceEpoch.toString() ?? '',
+                minimumDate: (widget.actionItem?.createdAt ?? DateTime.now()).millisecondsSinceEpoch.toString(),
+                enabled: !_isSaving,
+                action: (value) =>
+                    setState(() => _selectedDueDate = DateTime.fromMillisecondsSinceEpoch(int.parse(value as String)))),
+            if (_selectedDueDate != null)
+              NativeRow('task_clear_date', l10n.clearDueDate, enabled: !_isSaving, action: (_) => _clearDueDate()),
+            NativeRow('task_quick_date', l10n.addDueDate,
+                kind: 'menu',
+                options: {'0': l10n.today, '1': l10n.tomorrow, '7': l10n.nextWeek},
+                enabled: !_isSaving,
+                action: (value) => _selectQuickDate(int.parse(value as String))),
+            if (widget.isEditing) ...[
+              NativeRow('task_share', l10n.share, enabled: !_isSaving, action: (_) => _shareActionItem()),
+              NativeRow('task_delete', l10n.deleteActionItem,
+                  destructive: true, enabled: !_isSaving, action: (_) => _deleteActionItem()),
+            ],
+          ])
+        ],
+        toolbar: [
+          NativeRow('task_save', _saveFailed ? l10n.tryAgain : l10n.save,
+              enabled: !_isSaving && _textController.text.trim().isNotEmpty, action: (_) => _saveActionItem()),
+        ]);
   }
 }
 

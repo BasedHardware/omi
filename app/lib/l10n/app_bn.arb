@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "৫ স্টার রেটিং দিলে আমরা সত্যিই অনেক সাহায্য পাই ❤️",
     "onboardingRatingPromptYes": "হ্যাঁ, আমি আপনাদের সমর্থন করতে চাই!",
     "onboardingRatingPromptNo": "তেমন না",
-    "partialRecording": "আংশিক রেকর্ডিং"
+    "partialRecording": "আংশিক রেকর্ডিং",
+    "dateRangeStart": "শুরুর তারিখ",
+    "dateRangeEnd": "শেষের তারিখ",
+    "openInMaps": "মানচিত্রে খুলুন"
 }

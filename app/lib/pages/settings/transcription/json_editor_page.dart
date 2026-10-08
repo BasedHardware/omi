@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/transcription/transcription_fields.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -75,7 +76,7 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(widget.title),
@@ -114,6 +115,39 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
         ],
       ),
     );
+    final l10n = context.l10n;
+    final templates =
+        widget.isResponseSchema ? SttResponseSchema.templates.keys : SttProviderConfig.requestTemplates.keys;
+    final liveTemplates =
+        widget.isResponseSchema ? SttResponseSchema.liveTemplates : SttProviderConfig.liveRequestTemplates;
+    return IosNativeSurface(title: widget.title, fallback: classic, toolbar: [
+      NativeRow('json_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      NativeRow('json_reset', l10n.reset, action: (_) => _setJson(widget.onReset())),
+      NativeRow('json_save', l10n.save,
+          enabled: _parseError == null, action: (_) => Navigator.of(context).pop(_controller.text)),
+    ], sections: [
+      if (_showTemplateSelector)
+        NativeSection(
+            'json_templates',
+            [
+              NativeRow('json_template', l10n.selectProviderTemplate,
+                  kind: 'menu',
+                  options: {
+                    for (final name in templates) name: liveTemplates.contains(name) ? '$name · ${l10n.live}' : name
+                  },
+                  action: (value) => _applyTemplate(value as String)),
+            ],
+            title: l10n.useTemplateFrom,
+            footer: widget.isResponseSchema ? l10n.quicklyPopulateResponse : l10n.quicklyPopulateRequest),
+      NativeSection('json_editor', [
+        if (_parseError != null) NativeRow('json_error', l10n.invalidJsonError, kind: 'label'),
+        NativeRow('json_text', widget.title, kind: 'text', maximumLength: 262144, value: _controller.text,
+            action: (value) {
+          _controller.text = value as String;
+          _parseJson();
+        }),
+      ]),
+    ]);
   }
 
   Widget _buildTemplateSelector() {

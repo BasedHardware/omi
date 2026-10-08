@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "5 žvaigždučių įvertinimas mums labai padeda ❤️",
     "onboardingRatingPromptYes": "Taip, noriu jus palaikyti!",
     "onboardingRatingPromptNo": "Ne visai",
-    "partialRecording": "Dalinis įrašas"
+    "partialRecording": "Dalinis įrašas",
+    "dateRangeStart": "Pradžios data",
+    "dateRangeEnd": "Pabaigos data",
+    "openInMaps": "Atidaryti „Žemėlapiuose“"
 }

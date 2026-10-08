@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️",
     "onboardingRatingPromptYes": "ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!",
     "onboardingRatingPromptNo": "அவ்வளவாக இல்லை",
-    "partialRecording": "பகுதியளவு பதிவு"
+    "partialRecording": "பகுதியளவு பதிவு",
+    "dateRangeStart": "தொடக்கத் தேதி",
+    "dateRangeEnd": "முடிவுத் தேதி",
+    "openInMaps": "வரைபடங்களில் திறக்க"
 }

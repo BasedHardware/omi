@@ -1,9 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/native_rich_text.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
+import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
@@ -14,6 +20,7 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
@@ -21,9 +28,22 @@ import 'package:uuid/uuid.dart';
 import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
+import 'summarized_apps_sheet.dart';
+
+part 'summary_tab_native.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final ValueChanged<List<NativeSection>>? onNativePresentation;
+  final VoidCallback? onNativeInteraction;
+
+  /// Restores the complete classic page, which then edits the selection in place, when the native
+  /// summary editor is unavailable.
+  final ValueChanged<ConversationSummarySelection>? onNativeUnavailable;
+
+  /// Classic only: a selection handed over by an unavailable native editor, whose in-place editor
+  /// opens once without counting another start.
+  final ConversationSummarySelection? editRequest;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -31,6 +51,10 @@ class SummaryTab extends StatefulWidget {
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.onNativePresentation,
+      this.onNativeInteraction,
+      this.onNativeUnavailable,
+      this.editRequest,
       this.searchQuery = '',
       this.currentResultIndex = -1,
       this.onTapWhenSearchEmpty});
@@ -40,7 +64,11 @@ class SummaryTab extends StatefulWidget {
 }
 
 class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  void _nativeRebuild(VoidCallback update) => setState(update);
   bool _isEditing = false;
+  bool _nativeScheduled = false;
+  final Map<String, List<NativeRow>> _nativeContributions = {};
+  final Map<String, String> _nativeContributionValues = {};
   @override
   bool get wantKeepAlive => true;
 
@@ -80,6 +108,26 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                   hasSummary: hasSummaryFeedback,
                   hasRecording: hasRecordingFeedback,
                 );
+          if (widget.onNativePresentation != null) {
+            _publishNativeSummary();
+            return CustomScrollView(slivers: [
+              if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                ConversationScreenshotsSection(
+                    key: ValueKey('conversation-screenshots-${conversation.id}'),
+                    conversationId: conversation.id,
+                    onNativePresentation: (rows) => _acceptNativeContribution('screenshots', rows)),
+              if (feedbackKind == FeedbackPromptKind.summary)
+                SummaryFeedbackPrompt(
+                    key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                    conversationId: conversation?.id,
+                    onNativePresentation: (rows) => _acceptNativeContribution('summary_feedback', rows)),
+              if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                RecordingQualityFeedbackPrompt(
+                    key: ValueKey('recording-feedback-${conversation.id}'),
+                    recordingId: conversation.id,
+                    onNativePresentation: (rows) => _acceptNativeContribution('recording_feedback', rows)),
+            ]);
+          }
           return AppReviewPrompt(
             contentId: conversation?.id ?? '',
             moment: AppReviewMoment.conversationRead,
@@ -105,6 +153,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                editRequest: widget.editRequest,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
                                 canStartEditing: () {
@@ -178,8 +227,10 @@ class SummaryFeedbackPrompt extends StatefulWidget {
   /// Test seam for the [submitMobileFeedback] request path; production leaves
   /// this null and submits through the real ledger API.
   final MobileFeedbackSubmit? submitFeedback;
+  final ValueChanged<List<NativeRow>>? onNativePresentation;
 
-  const SummaryFeedbackPrompt({super.key, required this.conversationId, this.submitFeedback});
+  const SummaryFeedbackPrompt(
+      {super.key, required this.conversationId, this.submitFeedback, this.onNativePresentation});
 
   @override
   State<SummaryFeedbackPrompt> createState() => _SummaryFeedbackPromptState();
@@ -194,8 +245,10 @@ class RecordingQualityFeedbackPrompt extends StatefulWidget {
   /// Test seam for the [submitMobileFeedback] request path; production leaves
   /// this null and submits through the real ledger API.
   final MobileFeedbackSubmit? submitFeedback;
+  final ValueChanged<List<NativeRow>>? onNativePresentation;
 
-  const RecordingQualityFeedbackPrompt({super.key, required this.recordingId, this.submitFeedback});
+  const RecordingQualityFeedbackPrompt(
+      {super.key, required this.recordingId, this.submitFeedback, this.onNativePresentation});
 
   @override
   State<RecordingQualityFeedbackPrompt> createState() => _RecordingQualityFeedbackPromptState();
@@ -203,6 +256,7 @@ class RecordingQualityFeedbackPrompt extends StatefulWidget {
 
 class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbackPrompt> {
   ProductAttempt? _attempt;
+  bool _nativeScheduled = false;
   bool _dismissed = false;
   bool _responded = false;
   bool _saving = false;
@@ -358,8 +412,40 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     super.dispose();
   }
 
+  void _publishNativeFeedback() {
+    if (_nativeScheduled || widget.onNativePresentation == null) return;
+    _nativeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _nativeScheduled = false;
+      if (!mounted || widget.onNativePresentation == null) return;
+      final available = widget.recordingId?.isNotEmpty == true && !_dismissed && !_responded && _eligible == true;
+      widget.onNativePresentation!(available
+          ? [
+              NativeRow('detail_recording_feedback', context.l10n.feedbackTitleAudioQuality,
+                  kind: 'label', subtitle: context.l10n.feedbackSubtitleAudioQuality, onVisible: (_) {
+                if (!_visible) {
+                  setState(() => _visible = true);
+                }
+                return _claimIfVisible();
+              }, onHidden: (_) {
+                if (mounted && _visible) setState(() => _visible = false);
+              }),
+              NativeRow('detail_recording_feedback_open', context.l10n.feedbackGiveFeedback,
+                  enabled: !_saving && _policyClaimed, action: (_) => _openFeedbackSheet()),
+              NativeRow('detail_recording_feedback_close', context.l10n.close,
+                  symbol: 'xmark', enabled: !_saving && _policyClaimed, action: (_) => _dismiss()),
+            ]
+          : []);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.onNativePresentation != null) {
+      _publishNativeFeedback();
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
     if (widget.recordingId == null || widget.recordingId!.isEmpty || _dismissed || _responded || _eligible != true) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
@@ -420,6 +506,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
 
 class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
   ProductAttempt? _attempt;
+  bool _nativeScheduled = false;
   bool _dismissed = false;
   bool _responded = false;
   bool _saving = false;
@@ -602,8 +689,40 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     super.dispose();
   }
 
+  void _publishNativeFeedback() {
+    if (_nativeScheduled || widget.onNativePresentation == null) return;
+    _nativeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _nativeScheduled = false;
+      if (!mounted || widget.onNativePresentation == null) return;
+      final available = widget.conversationId?.isNotEmpty == true && !_dismissed && !_responded && _eligible == true;
+      widget.onNativePresentation!(available
+          ? [
+              NativeRow('detail_summary_feedback', context.l10n.wasThisHelpful, kind: 'label', subtitle: '',
+                  onVisible: (_) {
+                if (!_visible) {
+                  setState(() => _visible = true);
+                }
+                return _claimIfVisible();
+              }, onHidden: (_) {
+                if (mounted && _visible) setState(() => _visible = false);
+              }),
+              NativeRow('detail_summary_feedback_open', context.l10n.feedbackGiveFeedback,
+                  enabled: !_saving && _policyClaimed, action: (_) => _openFeedbackSheet()),
+              NativeRow('detail_summary_feedback_close', context.l10n.close,
+                  symbol: 'xmark', enabled: !_saving && _policyClaimed, action: (_) => _dismiss()),
+            ]
+          : []);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.onNativePresentation != null) {
+      _publishNativeFeedback();
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
     if (widget.conversationId == null ||
         widget.conversationId!.isEmpty ||
         _dismissed ||

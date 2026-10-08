@@ -12510,4 +12510,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get partialRecording => 'Делумна снимка';
+
+  @override
+  String get dateRangeStart => 'Датум на почеток';
+
+  @override
+  String get dateRangeEnd => 'Датум на завршување';
+
+  @override
+  String get openInMaps => 'Отвори во Мапи';
 }

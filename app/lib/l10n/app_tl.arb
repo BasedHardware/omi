@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "Malaking tulong sa amin ang 5 stars ❤️",
     "onboardingRatingPromptYes": "Oo, gusto ko kayong suportahan!",
     "onboardingRatingPromptNo": "Hindi masyado",
-    "partialRecording": "Bahagyang pagrekord"
+    "partialRecording": "Bahagyang pagrekord",
+    "dateRangeStart": "Petsa ng simula",
+    "dateRangeEnd": "Petsa ng pagtatapos",
+    "openInMaps": "Buksan sa Maps"
 }

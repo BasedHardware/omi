@@ -12478,4 +12478,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get partialRecording => 'Daļējs ieraksts';
+
+  @override
+  String get dateRangeStart => 'Sākuma datums';
+
+  @override
+  String get dateRangeEnd => 'Beigu datums';
+
+  @override
+  String get openInMaps => 'Atvērt Kartēs';
 }

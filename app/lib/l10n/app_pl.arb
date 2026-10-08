@@ -3886,5 +3886,8 @@
     "onboardingRatingPromptBody": "Ocena 5 gwiazdek naprawdę nam pomaga ❤️",
     "onboardingRatingPromptYes": "Tak, chcę Was wesprzeć!",
     "onboardingRatingPromptNo": "Niezbyt",
-    "partialRecording": "Częściowe nagranie"
+    "partialRecording": "Częściowe nagranie",
+    "dateRangeStart": "Data początkowa",
+    "dateRangeEnd": "Data końcowa",
+    "openInMaps": "Otwórz w Mapach"
 }

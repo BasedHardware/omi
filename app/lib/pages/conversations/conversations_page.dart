@@ -1,5 +1,11 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/search/global_search.dart';
+import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -251,12 +257,13 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps});
+  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps, this.nativeLibrary = false});
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
   /// false so initState does not queue loopback I/O on the fake-async clock.
   final bool requestInitialLoad;
+  final bool nativeLibrary;
 
   /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
   final RecentRecapsLoader? loadRecaps;
@@ -516,7 +523,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           processingByDate: processingByDate,
         );
 
-        return RefreshIndicator(
+        final classic = RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
@@ -661,6 +668,71 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ],
           ),
         );
+        if (!widget.nativeLibrary) return classic;
+        final l10n = context.l10n;
+        final fallback = Scaffold(
+            appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.conversations)),
+            body: Stack(children: [
+              Positioned.fill(child: classic),
+              const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar())
+            ]));
+        if (snapshot.isSelectionModeActive) return fallback;
+        final denied = apiPhase == ApiViewPhase.authenticationRequired || apiPhase == ApiViewPhase.terminal;
+        return IosNativeSurface(
+            title: l10n.conversations,
+            fallback: fallback,
+            loading: isShowingConversationSkeleton,
+            failed: apiPhase == ApiViewPhase.error || denied,
+            empty: l10n.noConversationsYet,
+            onRefresh: (_) async {
+              context.read<CaptureProvider>().refreshInProgressConversations();
+              await Future.wait(
+                  [convoProvider.getInitialConversations(), context.read<LocalRecordingsProvider>().refresh()]);
+            },
+            toolbar: [
+              NativeRow('library_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+              NativeRow('library_search', l10n.search,
+                  symbol: 'magnifyingglass', action: (_) => showGlobalSearch(context)),
+            ],
+            sections: [
+              if (!denied) ...[
+                for (final date in mergedDates)
+                  NativeSection(
+                      'library_${date.toIso8601String()}',
+                      [
+                        for (final (index, conversation)
+                            in (convoProvider.groupedConversations[date] ?? <ServerConversation>[]).indexed)
+                          NativeRow('library_conversation_${conversation.id}',
+                              conversation.isLocked ? l10n.conversations : conversationRowTitle(context, conversation),
+                              subtitle:
+                                  OmiDateFormat.of(context).timestamp(conversation.startedAt ?? conversation.createdAt),
+                              kind: 'menu',
+                              options: {'open': l10n.open, 'actions': l10n.moreOptions},
+                              action: (value) => value == 'open'
+                                  ? openConversationListRow(context, convoProvider, conversation,
+                                      conversationIndex: index)
+                                  : showConversationListRowActions(context, convoProvider, conversation)),
+                        for (final recording in recordingsByDate[date] ?? <LocalRecording>[])
+                          NativeRow('library_recording_${recording.id}', l10n.recordings,
+                              subtitle: OmiDateFormat.of(context)
+                                  .timestamp(DateTime.fromMillisecondsSinceEpoch(recording.timerStart * 1000)),
+                              action: (_) => showRecordingDetailSheet(context, recording)),
+                        if (processingByDate[date] case final processing?)
+                          NativeRow('library_processing_${processing.id}', l10n.processing,
+                              action: (_) => showOmiSheet<void>(
+                                  context: context,
+                                  builder: (_) => ProcessingConversationWidget(conversation: processing))),
+                      ],
+                      title: OmiDateFormat.of(context).dayHeader(date)),
+                if (convoProvider.hasMoreConversations)
+                  NativeSection('library_paging', [
+                    NativeRow('library_more', l10n.showMore, enabled: !convoProvider.isLoadingConversations,
+                        action: (_) {
+                      _requestMoreIfNeeded(convoProvider);
+                    }),
+                  ]),
+              ]
+            ]);
       },
     );
   }

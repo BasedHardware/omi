@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
@@ -28,7 +29,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/speaker_label.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
+import 'package:omi/widgets/photos_grid.dart';
 
 /// The conversation detail's Transcript tab: the speaker-summary action, then the transcript (or
 /// the imported text of an external conversation), with segment editing and speaker naming.
@@ -38,6 +42,7 @@ class TranscriptWidgets extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final ConversationPlaybackController? playbackController;
+  final ValueChanged<List<NativeSection>>? onNativePresentation;
 
   const TranscriptWidgets({
     super.key,
@@ -46,6 +51,7 @@ class TranscriptWidgets extends StatefulWidget {
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
     this.playbackController,
+    this.onNativePresentation,
   });
 
   @override
@@ -53,6 +59,8 @@ class TranscriptWidgets extends StatefulWidget {
 }
 
 class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
+  bool _nativeScheduled = false;
+  bool _nativeObserving = false;
   @override
   bool get wantKeepAlive => true;
 
@@ -63,9 +71,128 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       context.read<SpeakerTagOutcomeController?>() ?? (_ownOutcome = SpeakerTagOutcomeController());
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.onNativePresentation != null && !_nativeObserving) {
+      _nativeObserving = true;
+      _outcome.addListener(_publishNativePresentation);
+    }
+  }
+
+  @override
   void dispose() {
+    if (_nativeObserving) _outcome.removeListener(_publishNativePresentation);
     _ownOutcome?.dispose();
     super.dispose();
+  }
+
+  // Presentation only: commands call the same edit/attribution owners below. Resolve a
+  // segment by its server id at dispatch time so a refreshed transcript cannot edit a neighbour.
+  void _publishNativePresentation() {
+    if (widget.onNativePresentation == null || _nativeScheduled) return;
+    _nativeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _nativeScheduled = false;
+      if (!mounted || widget.onNativePresentation == null) return;
+      final provider = context.read<ConversationDetailProvider>();
+      final conversation = provider.conversation;
+      final segments = conversation.transcriptSegments;
+      final l10n = context.l10n;
+      final names = SpeakerNames.forSegments(segments,
+          people: context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople,
+          l10n: l10n,
+          unresolved: conversation.speakerResolution?.status == 'unavailable');
+      widget.playbackController?.updateSegments(segments);
+      final rows = <NativeRow>[];
+      if (provider.offerSpeakerSummaryRefresh) {
+        rows.add(NativeRow('detail_speaker_summary', l10n.updateSummaryWithNewNames,
+            enabled: !provider.loadingReprocessConversation,
+            symbol: 'arrow.clockwise',
+            action: (_) => provider.reprocessConversation()));
+      }
+      final outcome = _outcome.outcome;
+      if (outcome != null) {
+        rows.addAll([
+          NativeRow('detail_speaker_outcome', l10n.speakerTagPromptLabeledToast(outcome.personName),
+              kind: 'label',
+              subtitle: '${l10n.speakerLabelLinesLabeled(outcome.linesLabeled)}\n'
+                  '${l10n.speakerLabelVoiceStatus(outcome.voiceState)}\n'
+                  '${l10n.speakerLabelVoiceDetail(outcome.voiceState, outcome.personName)}'),
+          if (outcome.matches.isNotEmpty)
+            NativeRow('detail_speaker_matches', l10n.speakerLabelText('other', ''),
+                subtitle: l10n.speakerLabelEarlierMatches(outcome.matches.length),
+                action: (_) => _reviewEarlierMatches(outcome)),
+          NativeRow('detail_speaker_outcome_close', l10n.close, symbol: 'xmark', action: (_) => _outcome.dismiss()),
+        ]);
+      }
+      if (segments.isEmpty && conversation.photos.isEmpty) {
+        final external = (conversation.externalIntegration?.text ?? '').decodeString;
+        final title = switch (provider.detailLoad) {
+          ConversationDetailLoad.loading => l10n.loadingTranscript,
+          ConversationDetailLoad.failed => l10n.transcriptLoadFailed,
+          _ => external.isNotEmpty
+              ? external
+              : conversation.status == ConversationStatus.processing ||
+                      conversation.status == ConversationStatus.in_progress ||
+                      provider.isReprocessingOpenConversation
+                  ? l10n.processingConversationProgress
+                  : conversation.status == ConversationStatus.failed
+                      ? l10n.conversationProcessingFailedMessage
+                      : l10n.noTranscriptAvailable,
+        };
+        rows.add(NativeRow('detail_transcript_status', title, kind: 'label'));
+        if (provider.detailLoad == ConversationDetailLoad.failed || conversation.status == ConversationStatus.failed) {
+          rows.add(NativeRow('detail_transcript_retry', l10n.tryAgain,
+              enabled: !provider.loadingReprocessConversation,
+              action: (_) => provider.detailLoad == ConversationDetailLoad.failed
+                  ? provider.refreshConversation(trackLoad: true)
+                  : provider.reprocessConversation()));
+        }
+      }
+      final autoLabelIds = firstAutoLabelSegmentIds(segments);
+      for (final segment in segments) {
+        rows.add(NativeRow('detail_segment:${segment.id}', segment.text,
+            kind: 'transcript',
+            subtitle: '${names.forSegment(segment)} · ${OmiDuration.offset(segment.start)}',
+            options: {
+              'edit': l10n.edit,
+              'speaker': l10n.speakerLabelText('other', ''),
+            }, action: (value) {
+          if (provider.conversationOrNull?.id != conversation.id) return;
+          final current = provider.conversation.transcriptSegments;
+          final index = current.indexWhere((item) => item.id == segment.id);
+          if (index < 0) return;
+          final item = current[index];
+          if (value == 'edit') {
+            _editSegmentText(provider, index);
+          } else if (value == 'speaker') {
+            _nameSpeaker(provider, item.id, item.speakerId);
+          } else {
+            widget.onSegmentTap?.call(item);
+          }
+        }));
+        if (autoLabelIds.contains(segment.id)) {
+          rows.addAll([
+            NativeRow('detail_speaker_confirm:${segment.id}', l10n.yes,
+                action: (_) => _confirmSpeakerLabel(provider, segment)),
+            NativeRow(
+                'detail_speaker_reject:${segment.id}', l10n.speakerLabelText('notPerson', names.forSegment(segment)),
+                action: (_) => _rejectSpeakerLabel(provider, segment)),
+          ]);
+        }
+      }
+      for (final photo in conversation.photos) {
+        rows.add(NativeRow('detail_photo:${photo.id}', photo.description ?? l10n.photos, symbol: 'photo', action: (_) {
+          final current = provider.conversationOrNull;
+          if (current?.id != conversation.id) return;
+          final index = current!.photos.indexWhere((candidate) => candidate.id == photo.id);
+          if (index < 0) return;
+          MediaViewerPage.open(context, items: mediaItemsForPhotos(current.photos, current.id), initialIndex: index);
+        }));
+      }
+      widget.onNativePresentation!([NativeSection('detail_transcript', rows, title: l10n.transcript)]);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _dismissSearchIfEmpty() {
@@ -134,6 +261,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     if (!_readyForTranscriptEdit(provider)) return;
     final segments = provider.conversation.transcriptSegments;
     final segment = segments[segmentIndex];
+    final conversationId = provider.conversation.id;
     final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final speakerName = SpeakerNames.forSegments(
       segments,
@@ -148,9 +276,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       segment: segment,
       speakerName: speakerName,
       onSave: (newText) {
+        if (provider.conversationOrNull?.id != conversationId) return;
+        final currentIndex = provider.conversation.transcriptSegments.indexWhere((line) => line.id == segment.id);
+        if (currentIndex < 0) return;
         saved = true;
         PlatformManager.instance.analytics.editSegmentTextSaved();
-        provider.saveEditingSegmentText(segmentIndex, newText);
+        provider.saveEditingSegmentText(currentIndex, newText);
       },
       onDismissed: () {
         if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
@@ -160,6 +291,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 
   void _nameSpeaker(ConversationDetailProvider provider, String segmentId, int speakerId) {
     if (!_readyForTranscriptEdit(provider)) return;
+    final conversationId = provider.conversation.id;
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
@@ -169,7 +301,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         return _startSpeakerAssignment(
           provider,
-          provider.conversation.id,
+          conversationId,
           speakerId,
           personId,
           personName,
@@ -178,6 +310,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         );
       },
       onSpeakerRejected: (kind) async {
+        if (provider.conversationOrNull?.id != conversationId) return false;
         final segment = provider.conversation.transcriptSegments.where((s) => s.id == segmentId).firstOrNull;
         return segment != null && await provider.rejectSpeakerLabel(segment, kind);
       },
@@ -300,6 +433,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (widget.onNativePresentation != null) context.watch<PeopleProvider?>();
     return Listener(
       onPointerDown: (_) => _dismissSearchIfEmpty(),
       child: GestureDetector(
@@ -308,6 +442,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         onTap: _dismissSearchIfEmpty,
         child: Consumer<ConversationDetailProvider>(
           builder: (context, provider, child) {
+            _publishNativePresentation();
             final conversation = provider.conversation;
             final segments = conversation.transcriptSegments;
             final photos = conversation.photos;

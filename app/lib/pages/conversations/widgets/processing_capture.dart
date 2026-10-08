@@ -29,7 +29,13 @@ import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key, this.showsCall = false});
+  const ConversationCaptureWidget({super.key, this.showsCall = false, this.onPresentation});
+
+  /// Native presentation reuses this card's lifecycle, labels and controls without painting it.
+  /// Called after every build, including a reset followed by the current card in
+  /// the same frame. Consumers must be idempotent and coalesce presentation
+  /// updates; receiving a snapshot must never start or stop capture.
+  final ValueChanged<CaptureCardPresentation?>? onPresentation;
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
@@ -83,6 +89,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onPresentation != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPresentation?.call(null);
+      });
+    }
     // During an Omi call the call is what's recording now. Home shows it here (the call page owns
     // its controls); the Conversations tab has its own call banner instead.
     final call = context.watch<PhoneCallProvider>();
@@ -138,31 +149,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         }
 
         return GestureDetector(
-          onTap: () async {
-            // Offline/batch mode has no live transcript — the card is informational,
-            // so swallow taps instead of opening the (empty) capturing page. Covers both
-            // device batch and the phone-mic Transcribe Later session.
-            if (provider.isPhoneMicBatchRecording ||
-                (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
-              return;
-            }
-            final isCaptureActive = provider.recordingState == RecordingState.record ||
-                provider.recordingState == RecordingState.systemAudioRecord ||
-                provider.recordingState == RecordingState.deviceRecord ||
-                provider.recordingState == RecordingState.initialising ||
-                provider.recordingState == RecordingState.interrupted ||
-                provider.recordingState == RecordingState.pause ||
-                provider.havingRecordingDevice ||
-                provider.isPaused;
-            if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
-            PlatformManager.instance.analytics.liveTranscriptCardClicked(
-              hasSegments: provider.segments.isNotEmpty,
-              hasPhotos: provider.photos.isNotEmpty,
-              segmentCount: provider.segments.length,
-              photoCount: provider.photos.length,
-            );
-            routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
-          },
+          onTap: () => _openCapture(provider),
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
@@ -174,18 +161,83 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     );
   }
 
+  Future<void> _openCapture(CaptureProvider provider) async {
+    // Offline/batch mode has no live transcript — the card is informational,
+    // so swallow taps instead of opening the (empty) capturing page. Covers both
+    // device batch and the phone-mic Transcribe Later session.
+    if (provider.isPhoneMicBatchRecording ||
+        (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
+      return;
+    }
+    final isCaptureActive = provider.recordingState == RecordingState.record ||
+        provider.recordingState == RecordingState.systemAudioRecord ||
+        provider.recordingState == RecordingState.deviceRecord ||
+        provider.recordingState == RecordingState.initialising ||
+        provider.recordingState == RecordingState.interrupted ||
+        provider.recordingState == RecordingState.pause ||
+        provider.havingRecordingDevice ||
+        provider.isPaused;
+    if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
+    PlatformManager.instance.analytics.liveTranscriptCardClicked(
+      hasSegments: provider.segments.isNotEmpty,
+      hasPhotos: provider.photos.isNotEmpty,
+      segmentCount: provider.segments.length,
+      photoCount: provider.photos.length,
+    );
+    routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
+  }
+
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
   static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
-  Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-        width: double.maxFinite,
-        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
-        decoration:
-            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
-        child: child,
-      );
+  Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) {
+    final publish = widget.onPresentation;
+    if (publish != null) {
+      final children = child is Column ? child.children : [child];
+      final card = children.whereType<LiveCaptureCard>().firstOrNull;
+      final controls = children.whereType<Padding>().map((p) => p.child).whereType<_OfflineControls>().firstOrNull;
+      final call = context.read<PhoneCallProvider>();
+      final presentation = card == null
+          ? null
+          : CaptureCardPresentation(
+              card: card,
+              controls: [
+                for (final action in controls?.actions ?? <_OfflineAction>[])
+                  (
+                    label: action.label,
+                    onTap: action.onTap,
+                    symbol: action.icon == Icons.pause_rounded
+                        ? 'pause.fill'
+                        : action.icon == Icons.play_arrow_rounded
+                            ? 'play.fill'
+                            : action.icon == Icons.stop_rounded
+                                ? 'stop.fill'
+                                : 'plus',
+                  )
+              ],
+              onOpen: () {
+                if (call.callState == PhoneCallState.active ||
+                    call.callState == PhoneCallState.connecting ||
+                    call.callState == PhoneCallState.ringing) {
+                  return routeToPage(context, const ActiveCallPage());
+                }
+                return _openCapture(context.read<CaptureProvider>());
+              },
+            );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) publish(presentation);
+      });
+      return const SizedBox.shrink();
+    }
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      width: double.maxFinite,
+      padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
+      decoration: decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
+      child: child,
+    );
+  }
 
   /// Updates the remembered pendant capture and says whether it dropped: no source is live, the
   /// pendant it came from is still paired but not connected. See [_droppedSource].
@@ -448,6 +500,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 }
 
 typedef _OfflineAction = ({IconData icon, String label, VoidCallback onTap});
+
+class CaptureCardPresentation {
+  const CaptureCardPresentation({required this.card, required this.controls, required this.onOpen});
+  final LiveCaptureCard card;
+  final List<({String label, String symbol, VoidCallback onTap})> controls;
+  final Future<dynamic> Function() onOpen;
+}
 
 /// The Transcribe Later controls: the first two side by side when both labels fit whole at the
 /// current width and text size, otherwise one per row; Stop always takes its own row. Each is an

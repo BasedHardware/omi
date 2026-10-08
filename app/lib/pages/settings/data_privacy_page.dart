@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -163,7 +164,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
         final isLoading = provider.isLoading;
         final isMigrating = provider.isMigrating;
 
-        return Scaffold(
+        final classic = Scaffold(
           appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.dataPrivacy)),
           body: Stack(
             children: [
@@ -253,6 +254,47 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
             ],
           ),
         );
+        // Keep the native Shortcuts control when this compiler exposes it.
+        if (_shortcutsHintSupported && _appShortcutsAvailable) return classic;
+        final l10n = context.l10n;
+        final apps = context.watch<AppProvider>().apps.where((app) => app.enabled && app.worksExternally()).toList();
+        return IosNativeSurface(
+            title: l10n.dataPrivacy,
+            fallback: classic,
+            loading: isLoading && !isMigrating,
+            toolbar: [
+              NativeRow('privacy_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop())
+            ],
+            sections: [
+              NativeSection('encryption', [
+                NativeRow('encryption_info', l10n.dataEncryptedBanner, kind: 'label'),
+                NativeRow('privacy_policy', l10n.learnMore, action: (_) async {
+                  final url = Uri.parse('https://www.omi.me/pages/privacy');
+                  if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
+                }),
+              ]),
+              if (Platform.isIOS)
+                NativeSection('siri', [
+                  NativeRow('siri_index', l10n.siriIndexSetting,
+                      kind: 'toggle',
+                      subtitle: l10n.siriIndexSettingDescription,
+                      value: _siriEnabled,
+                      enabled: !isLoading || isMigrating,
+                      action: (value) => _setSiriEnabled(value as bool)),
+                ]),
+              NativeSection(
+                  'app_access',
+                  [
+                    if (apps.isEmpty) NativeRow('app_access_empty', l10n.noAppsExternalAccess, kind: 'label'),
+                    for (final app in apps)
+                      NativeRow('app_${app.id}', app.getName(),
+                          subtitle: _getAccessDescription(context, app),
+                          enabled: !isLoading || isMigrating,
+                          action: (_) => routeToPage(context, AppDetailPage(app: app, preventAutoOpenHomePage: true))),
+                  ],
+                  title: l10n.appAccess,
+                  footer: l10n.appAccessDesc),
+            ]);
       },
     );
   }

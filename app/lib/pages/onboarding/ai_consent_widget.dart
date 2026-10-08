@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:provider/provider.dart';
 
@@ -44,7 +45,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
   @override
   Widget build(BuildContext context) {
     final linkStyle = OmiType.footnote.copyWith(color: OmiColors.textPrimary, decoration: TextDecoration.underline);
-    return OnboardingStep(
+    final classic = OnboardingStep(
       card: OnboardingCard(
         crossAxisAlignment: CrossAxisAlignment.start,
         content: [
@@ -86,5 +87,25 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
         ],
       ),
     );
+    final provider = context.read<AuthenticationProvider>();
+    return IosNativeSurface(title: context.l10n.dataAndPrivacy, fallback: classic, sections: [
+      NativeSection('consent', [
+        NativeRow('consent_message', context.l10n.consentDataMessage,
+            kind: 'label', subtitle: context.l10n.yourDataIsProtected),
+        NativeRow('consent_privacy', context.l10n.privacyPolicy, action: (_) {
+          provider.openPrivacyPolicy();
+        }),
+        NativeRow('consent_terms', context.l10n.termsOfService, action: (_) {
+          provider.openTermsOfService();
+        }),
+      ]),
+      NativeSection('consent_actions', [
+        NativeRow('consent_agree', context.l10n.agreeAndContinue, action: (_) {
+          OmiHaptics.selection();
+          widget.onAgree();
+        }),
+        NativeRow('consent_account', context.l10n.useDifferentAccount, action: (_) => widget.onUseDifferentAccount()),
+      ]),
+    ]);
   }
 }

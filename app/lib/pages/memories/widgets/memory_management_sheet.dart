@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
@@ -10,12 +11,14 @@ import 'package:omi/ui/ui.dart';
 class MemoryManagementSheet extends StatelessWidget {
   final MemoriesProvider provider;
 
-  const MemoryManagementSheet({super.key, required this.provider});
+  const MemoryManagementSheet({super.key, required this.provider, this.native = false});
+  final bool native;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, child) {
+        if (native) return _native(context);
         return SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -30,6 +33,75 @@ class MemoryManagementSheet extends StatelessWidget {
         );
       },
     );
+  }
+
+  Widget _native(BuildContext context) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+        title: l10n.memoryManagement,
+        fallback: OmiSheetScaffold(title: l10n.memoryManagement, child: MemoryManagementSheet(provider: provider)),
+        toolbar: [
+          NativeRow('memory_management_close', l10n.close,
+              symbol: 'xmark', action: (_) => Navigator.of(context).maybePop())
+        ],
+        sections: [
+          NativeSection(
+              'memory_categories',
+              [
+                NativeRow('memory_category_all', l10n.filterAll,
+                    symbol: provider.selectedCategories.isEmpty ? 'checkmark' : null,
+                    action: (_) => provider.clearCategoryFilter()),
+                for (final entry in {
+                  MemoryCategory.system: l10n.filterSystem,
+                  MemoryCategory.interesting: l10n.filterInteresting,
+                  MemoryCategory.manual: l10n.filterManual,
+                }.entries)
+                  NativeRow('memory_category_${entry.key.name}', entry.value,
+                      kind: 'toggle',
+                      value: provider.selectedCategories.contains(entry.key),
+                      action: (_) => provider.toggleCategoryFilter(entry.key)),
+              ],
+              title: l10n.filterMemories),
+          NativeSection('memory_collection', [
+            if (provider.memoryBeliefEnabled)
+              NativeRow('memory_collection_view', l10n.allMemories,
+                  kind: 'choice',
+                  value: provider.collectionView.name,
+                  options: {
+                    MemoryCollectionView.usefulNow.name: l10n.current,
+                    MemoryCollectionView.history.name: l10n.memoryHistory,
+                    MemoryCollectionView.all.name: l10n.allMemories
+                  },
+                  action: (value) => provider.setCollectionView(MemoryCollectionView.values.byName(value as String))),
+            NativeRow('memory_this_device', l10n.memoryThisDevice,
+                kind: 'toggle',
+                value: provider.filterThisDeviceOnly,
+                action: (value) => provider.setFilterThisDeviceOnly(value as bool)),
+          ]),
+          NativeSection('memory_counts', [
+            NativeRow('memory_total', l10n.totalMemoriesCount(provider.memories.length), kind: 'label'),
+            NativeRow('memory_public', l10n.publicMemories,
+                kind: 'label',
+                subtitle: provider.memories
+                    .where((memory) => !memory.deleted && memory.visibility.name == 'public')
+                    .length
+                    .toString()),
+            NativeRow('memory_private', l10n.privateMemories,
+                kind: 'label',
+                subtitle: provider.memories
+                    .where((memory) => !memory.deleted && memory.visibility.name == 'private')
+                    .length
+                    .toString()),
+          ]),
+          NativeSection('memory_bulk', [
+            NativeRow('memory_make_private', l10n.makeAllPrivate,
+                symbol: 'lock', action: (_) => _makeAllMemoriesPrivate(context)),
+            NativeRow('memory_make_public', l10n.makeAllPublic,
+                symbol: 'globe', action: (_) => _makeAllMemoriesPublic(context)),
+            NativeRow('memory_clear', l10n.deleteAllMemories,
+                symbol: 'trash', destructive: true, action: (_) => _confirmDeleteAllMemories(context)),
+          ]),
+        ]);
   }
 
   Widget _buildFilterSection(BuildContext context) {

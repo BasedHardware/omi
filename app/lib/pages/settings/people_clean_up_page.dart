@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/widgets/people_list.dart';
 import 'package:omi/pages/settings/widgets/person_avatar.dart';
 import 'package:omi/pages/settings/widgets/person_confidence.dart';
@@ -43,7 +44,7 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
     final l10n = context.l10n;
     final tickedCount = _candidates.where((p) => _ticked.contains(p.id)).length;
     final allTicked = _candidates.isNotEmpty && tickedCount == _candidates.length;
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         leading: const OmiBackButton(),
@@ -121,6 +122,44 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
                 ),
               ],
             ),
+    );
+    return IosNativeSurface(
+      title: l10n.cleanUpTitle,
+      fallback: classic,
+      toolbar: [
+        NativeRow('cleanup_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+        if (_candidates.isNotEmpty)
+          NativeRow('cleanup_select_all', allTicked ? l10n.deselectAll : l10n.selectAll, action: (_) {
+            OmiHaptics.selection();
+            setState(() => allTicked ? _ticked.clear() : _ticked.addAll(_candidates.map((person) => person.id)));
+          }),
+      ],
+      sections: [
+        if (_candidates.isEmpty)
+          NativeSection('cleanup_empty', [
+            NativeRow('cleanup_empty_label', l10n.cleanUpNothingTitle,
+                subtitle: l10n.cleanUpNothingMessage, kind: 'label')
+          ])
+        else ...[
+          NativeSection(
+              'cleanup_candidates',
+              [
+                for (final person in _candidates)
+                  NativeRow('cleanup_person_${person.id}', person.name,
+                      kind: 'toggle',
+                      value: _ticked.contains(person.id),
+                      subtitle: personReasonLine(context, person),
+                      level: confidenceLevel(person.confidence),
+                      action: (_) => _toggle(person)),
+              ],
+              title: l10n.cleanUpLead(_candidates.length),
+              footer: l10n.cleanUpPinnedNote),
+          NativeSection('cleanup_actions', [
+            NativeRow('cleanup_delete', tickedCount == 0 ? l10n.delete : l10n.deletePeopleCountAction(tickedCount),
+                destructive: true, enabled: tickedCount > 0, action: (_) => _delete()),
+          ]),
+        ],
+      ],
     );
   }
 }

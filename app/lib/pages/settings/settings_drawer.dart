@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_settings.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +12,7 @@ import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -21,13 +25,18 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
 /// Developer Settings keeps only developer tools.
 class SettingsDrawer extends StatefulWidget {
-  const SettingsDrawer({super.key});
+  const SettingsDrawer({super.key, this.asRoot = false});
+  final bool asRoot;
 
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
 
   /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
   static Future<void> show(BuildContext context) {
+    if (iosSwiftUiEnabled) {
+      return Navigator.of(context).push<void>(
+          MaterialPageRoute(fullscreenDialog: true, builder: (_) => const Scaffold(body: SettingsDrawer())));
+    }
     // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
     // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
     // a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
@@ -54,7 +63,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Future<void> _open(SettingsDestination destination) async {
+    final prefs = SharedPreferencesUtil();
+    final profile = (prefs.userPrimaryLanguage, prefs.hasSpeakerProfile, prefs.transcriptionModel);
     await openSettingsDestination(context, destination);
+    if (mounted &&
+        widget.asRoot &&
+        profile != (prefs.userPrimaryLanguage, prefs.hasSpeakerProfile, prefs.transcriptionModel)) {
+      context.read<CaptureProvider>().onRecordProfileSettingChanged();
+    }
     // The Account row shows the name, which may have changed on the page just closed.
     if (mounted) setState(() {});
   }
@@ -300,7 +316,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
             ),
           ),
-          const OmiCloseButton(),
+          if (!widget.asRoot) const OmiCloseButton(),
         ],
       ),
     );
@@ -309,19 +325,54 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    return Column(
-      children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
-        const SizedBox(height: OmiSpacing.xs),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child:
-                _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
-          ),
-        ),
-      ],
-    );
+    final classic = SafeArea(
+        top: iosSwiftUiEnabled,
+        bottom: false,
+        child: Column(
+          children: [
+            AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+            const SizedBox(height: OmiSpacing.xs),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: _isSearching && _searchQuery.trim().isNotEmpty
+                    ? _buildSearchResults(context)
+                    : _buildSettings(context),
+              ),
+            ),
+          ],
+        ));
+    final settings = _buildSettings(context) as Column;
+    final sections = _searchQuery.trim().isNotEmpty
+        ? [
+            NativeSection('settings_search', [
+              for (final entry in searchSettings(context.l10n, _searchQuery, _searchScope(context)))
+                NativeRow('settings_search_${entry.destination.name}', entry.title(context.l10n),
+                    kind: entry.destination == SettingsDestination.signOut ? 'button' : 'navigation',
+                    destructive: entry.destination == SettingsDestination.signOut,
+                    action: (_) => _open(entry.destination))
+            ])
+          ]
+        : nativeSettingsSections(settings.children,
+            trailingText: (widget) => widget is SettingsTag ? widget.label : null);
+    if (sections == null) return classic;
+    return IosNativeSurface(
+        title: context.l10n.settings,
+        largeTitle: true,
+        sections: sections,
+        fallback: classic,
+        empty: context.l10n.noResultsFound,
+        search: (value) {
+          setState(() => _searchQuery = value as String);
+        },
+        searchValue: _searchQuery,
+        searchPlaceholder: context.l10n.searchSettings,
+        toolbar: [
+          if (!widget.asRoot)
+            NativeRow('settings_close', context.l10n.close, symbol: 'xmark', action: (_) {
+              Navigator.of(context).pop();
+            })
+        ]);
   }
 }

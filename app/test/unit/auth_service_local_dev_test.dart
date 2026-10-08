@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 
 void main() {
@@ -43,4 +44,29 @@ void main() {
       expect(Env.profile, isNot(AppEnvironmentProfile.localDev));
     });
   });
+
+  test('installing a harness token gateway returns the one it replaced, so a test can put it back', () {
+    const first = _Gateway('first-owner');
+    final original = AuthService.installLocalHarnessTokenGateway(first);
+    addTearDown(() => AuthService.installLocalHarnessTokenGateway(original));
+
+    expect(AuthService.installLocalHarnessTokenGateway(const _Gateway('second-owner')), same(first));
+    expect(AuthService.installLocalHarnessTokenGateway(first),
+        isA<_Gateway>().having((g) => g.uid, 'uid', 'second-owner'));
+  });
+}
+
+final class _Gateway implements AuthTokenGateway {
+  const _Gateway(this.uid);
+
+  final String uid;
+
+  @override
+  AuthUserSnapshot? get currentUser => AuthUserSnapshot(uid: uid);
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async => null;
+
+  @override
+  Future<void> signOut() async {}
 }

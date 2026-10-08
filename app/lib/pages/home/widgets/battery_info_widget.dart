@@ -229,10 +229,12 @@ class HomeRecordButton extends StatefulWidget {
   const HomeRecordButton({super.key});
 
   @override
-  State<HomeRecordButton> createState() => _HomeRecordButtonState();
+  State<HomeRecordButton> createState() => HomeRecordButtonState();
 }
 
-class _HomeRecordButtonState extends State<HomeRecordButton> {
+class HomeRecordButtonState extends State<HomeRecordButton> {
+  Future<void> performPrimaryAction() => _startRecording(context);
+  void showOptions() => _showRecordOptions(context);
   static const _optionsTipKey = 'v2/homeRecordOptionsTipShown';
 
   void _showRecordOptions(BuildContext context) {

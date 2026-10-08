@@ -11408,5 +11408,8 @@
     "onboardingRatingPromptBody": "Ацэнка ў 5 зорак вельмі нам дапаможа ❤️",
     "onboardingRatingPromptYes": "Так, хачу вас падтрымаць!",
     "onboardingRatingPromptNo": "Не асабліва",
-    "partialRecording": "Частковы запіс"
+    "partialRecording": "Частковы запіс",
+    "dateRangeStart": "Дата пачатку",
+    "dateRangeEnd": "Дата завяршэння",
+    "openInMaps": "Адкрыць у Картах"
 }

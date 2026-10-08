@@ -12495,4 +12495,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get partialRecording => 'Частичен запис';
+
+  @override
+  String get dateRangeStart => 'Начална дата';
+
+  @override
+  String get dateRangeEnd => 'Крайна дата';
+
+  @override
+  String get openInMaps => 'Отваряне в „Карти“';
 }

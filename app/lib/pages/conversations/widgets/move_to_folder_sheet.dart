@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -18,12 +19,37 @@ class MoveToFolderSheet extends StatelessWidget {
   final String? conversationId;
   final String? currentFolderId;
 
-  const MoveToFolderSheet({super.key, this.conversationId, this.currentFolderId});
+  const MoveToFolderSheet({super.key, this.conversationId, this.currentFolderId, this.nativeTitle});
+  final String? nativeTitle;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<FolderProvider>(
       builder: (context, provider, child) {
+        if (nativeTitle != null) {
+          return IosNativeSurface(
+              title: nativeTitle!,
+              loading: provider.isLoading,
+              empty: context.l10n.noFoldersAvailable,
+              fallback: OmiSheetScaffold(
+                  title: nativeTitle,
+                  child: MoveToFolderSheet(conversationId: conversationId, currentFolderId: currentFolderId)),
+              toolbar: [
+                NativeRow('move_folder_close', context.l10n.close,
+                    symbol: 'xmark', action: (_) => Navigator.of(context).maybePop())
+              ],
+              sections: [
+                NativeSection('move_folders', [
+                  for (final folder in provider.folders)
+                    NativeRow('move_folder_${folder.id}', '${folder.icon} ${folder.name}',
+                        subtitle: folder.description ?? '',
+                        symbol: folder.id == currentFolderId ? 'checkmark' : 'folder',
+                        kind: folder.id == currentFolderId ? 'label' : 'button',
+                        action:
+                            folder.id == currentFolderId ? null : (_) => _moveToFolder(context, provider, folder.id))
+                ])
+              ]);
+        }
         if (provider.isLoading) {
           return const SizedBox(height: 200, child: OmiLoadingState());
         }
@@ -156,6 +182,10 @@ Future<String?> showMoveToFolderSheet(
     useRootNavigator: true,
     builder: (context) =>
         MoveToFolderSheet(conversationId: move ? conversationId : null, currentFolderId: currentFolderId),
+    nativeBuilder: (context) => MoveToFolderSheet(
+        conversationId: move ? conversationId : null,
+        currentFolderId: currentFolderId,
+        nativeTitle: context.l10n.moveToFolder),
   );
 }
 
@@ -167,5 +197,6 @@ Future<String?> showMoveConversationsToFolderSheet(BuildContext context, {requir
     title: context.l10n.moveConversationsTo(count),
     useRootNavigator: true,
     builder: (context) => const MoveToFolderSheet(),
+    nativeBuilder: (context) => MoveToFolderSheet(nativeTitle: context.l10n.moveConversationsTo(count)),
   );
 }

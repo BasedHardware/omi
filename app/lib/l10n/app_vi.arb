@@ -3851,5 +3851,8 @@
     "onboardingRatingPromptBody": "Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️",
     "onboardingRatingPromptYes": "Có, tôi muốn ủng hộ các bạn!",
     "onboardingRatingPromptNo": "Không hẳn",
-    "partialRecording": "Bản ghi một phần"
+    "partialRecording": "Bản ghi một phần",
+    "dateRangeStart": "Ngày bắt đầu",
+    "dateRangeEnd": "Ngày kết thúc",
+    "openInMaps": "Mở trong Bản đồ"
 }

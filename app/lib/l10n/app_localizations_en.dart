@@ -12438,4 +12438,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get partialRecording => 'Partial recording';
+
+  @override
+  String get dateRangeStart => 'Start date';
+
+  @override
+  String get dateRangeEnd => 'End date';
+
+  @override
+  String get openInMaps => 'Open in Maps';
 }

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/components/omi_sheet.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -19,6 +20,23 @@ enum MemoryReviewSource {
   final String analyticsValue;
 
   const MemoryReviewSource(this.analyticsValue);
+}
+
+/// Presents [MemoryReviewCard] in the app's sheet. The signature is a frozen seam shared across
+/// screens: the daily recap opens its review through it, and the chat owner adds a native builder.
+Future<void> showMemoryReviewSheet(
+  BuildContext context, {
+  required List<MemoryReviewItem> items,
+  required MemoryReviewSource source,
+  String? impressionKey,
+  String? title,
+}) {
+  return showOmiSheet<void>(
+    context: context,
+    builder: (_) => SingleChildScrollView(
+      child: MemoryReviewCard(items: items, source: source, impressionKey: impressionKey, title: title),
+    ),
+  );
 }
 
 /// "Things I learned today" — up to three memories Omi stored, each with

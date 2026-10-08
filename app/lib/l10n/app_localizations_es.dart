@@ -12486,4 +12486,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get partialRecording => 'Grabación parcial';
+
+  @override
+  String get dateRangeStart => 'Fecha de inicio';
+
+  @override
+  String get dateRangeEnd => 'Fecha de finalización';
+
+  @override
+  String get openInMaps => 'Abrir en Mapas';
 }

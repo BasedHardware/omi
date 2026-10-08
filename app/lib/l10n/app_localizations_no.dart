@@ -12450,4 +12450,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delvis opptak';
+
+  @override
+  String get dateRangeStart => 'Startdato';
+
+  @override
+  String get dateRangeEnd => 'Sluttdato';
+
+  @override
+  String get openInMaps => 'Åpne i Kart';
 }

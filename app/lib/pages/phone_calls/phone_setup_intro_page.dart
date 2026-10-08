@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_number_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -10,7 +11,7 @@ class PhoneSetupIntroPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
@@ -79,6 +80,31 @@ class PhoneSetupIntroPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.phoneCallsWithOmi,
+      fallback: classic,
+      toolbar: [
+        NativeRow('phone_setup_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ],
+      sections: [
+        NativeSection('phone_setup_disclosure', [
+          NativeRow('phone_setup_subtitle', l10n.phoneCallsSubtitle, kind: 'label', symbol: 'phone'),
+          NativeRow('phone_setup_step1', l10n.phoneSetupStep1Title,
+              kind: 'label', subtitle: l10n.phoneSetupStep1Subtitle),
+          NativeRow('phone_setup_step2', l10n.phoneSetupStep2Title,
+              kind: 'label', subtitle: l10n.phoneSetupStep2Subtitle),
+          NativeRow('phone_setup_step3', l10n.phoneSetupStep3Title,
+              kind: 'label', subtitle: l10n.phoneSetupStep3Subtitle),
+          NativeRow('phone_setup_consent', l10n.callRecordingConsentDisclaimer, kind: 'label'),
+          NativeRow('phone_setup_continue', l10n.phoneGetStarted, action: (_) {
+            OmiHaptics.medium();
+            routeToPage(context, const PhoneSetupNumberPage());
+          }),
+        ]),
+      ],
     );
   }
 }

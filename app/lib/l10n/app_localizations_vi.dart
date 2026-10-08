@@ -12445,4 +12445,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get partialRecording => 'Bản ghi một phần';
+
+  @override
+  String get dateRangeStart => 'Ngày bắt đầu';
+
+  @override
+  String get dateRangeEnd => 'Ngày kết thúc';
+
+  @override
+  String get openInMaps => 'Mở trong Bản đồ';
 }

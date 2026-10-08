@@ -3886,5 +3886,8 @@
     "onboardingRatingPromptBody": "Memberi kami bintang 5 sangat membantu kami ❤️",
     "onboardingRatingPromptYes": "Ya, saya ingin mendukung kalian!",
     "onboardingRatingPromptNo": "Kurang",
-    "partialRecording": "Rekaman sebagian"
+    "partialRecording": "Rekaman sebagian",
+    "dateRangeStart": "Tanggal mulai",
+    "dateRangeEnd": "Tanggal berakhir",
+    "openInMaps": "Buka di Peta"
 }

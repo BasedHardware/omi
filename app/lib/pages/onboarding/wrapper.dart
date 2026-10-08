@@ -482,6 +482,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             children: [
               if (index == kAuthPage || showBackground) _background(),
               OnboardingStepLayout(
+                nativeNavigation: index != kKnowledgeGraphPage,
+                nativeProgress: kProgressSteps.contains(index)
+                    ? context.l10n.onboardingStepOf(kProgressSteps.indexOf(index) + 1, kProgressSteps.length)
+                    : '',
                 reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,
                 progress: kProgressSteps.contains(index)

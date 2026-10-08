@@ -3886,5 +3886,8 @@
     "onboardingRatingPromptBody": "5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️",
     "onboardingRatingPromptYes": "Evet, size destek olmak istiyorum!",
     "onboardingRatingPromptNo": "Pek değil",
-    "partialRecording": "Kısmi kayıt"
+    "partialRecording": "Kısmi kayıt",
+    "dateRangeStart": "Başlangıç tarihi",
+    "dateRangeEnd": "Bitiş tarihi",
+    "openInMaps": "Haritalar'da aç"
 }

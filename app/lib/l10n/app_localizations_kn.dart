@@ -12487,4 +12487,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get partialRecording => 'ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ';
+
+  @override
+  String get dateRangeStart => 'ಪ್ರಾರಂಭ ದಿನಾಂಕ';
+
+  @override
+  String get dateRangeEnd => 'ಅಂತಿಮ ದಿನಾಂಕ';
+
+  @override
+  String get openInMaps => 'ನಕ್ಷೆಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
 }
