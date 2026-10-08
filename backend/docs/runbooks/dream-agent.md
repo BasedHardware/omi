@@ -84,7 +84,7 @@ storage encryption/compression and clear stale evidence references and
 `client_processing` in the same reversible patch. Memory duplicate merges
 supersede both canonical facts; undo appends two direct-user tails, preserving
 original history. People merges keep redirect identities. Derived entity-page
-summaries use the existing cache writer. Slow tasks become pending Candidates,
+summaries use the existing cache writer with a reversible journal entry. Slow tasks become pending Candidates,
 never accepted action items. Per-type demotion keeps proposed edits in the run
 report as `suggest_only`. Questions use the existing Review queue and its shared
 three-answer UTC daily budget. Image-only questions may enqueue short-lived
@@ -116,6 +116,6 @@ Feedback collection requires `on`; shadow stores only privacy-checked would-file
 reports in the user's encrypted run document.
 
 Local safety suites: `test_dream_agent.py`, `test_dream_lanes.py` and
-`test_dream_tools.py`, through `backend/test.sh`. Repository typechecking,
+`test_dream_tools.py`, `test_dream_memory_merge.py`, and `test_dream_cohort.py`, through `backend/test.sh`. Repository typechecking,
 Firestore query guards, Review/harness regressions and `make preflight` are
 separate checks. No live canary or deployed acceptance is claimed.

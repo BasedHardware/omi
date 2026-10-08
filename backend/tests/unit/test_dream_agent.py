@@ -266,3 +266,53 @@ def test_dirty_hook_uses_created_task_id_and_suppresses_dream_writes(monkeypatch
     finally:
         dream_dirty.dream_writing.reset(token)
     assert len(calls) == 1
+
+
+def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
+    lease = dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission)
+    state = admission.rows[('dream_users', UID)]
+    state.update(sequence=3, score=4)
+    dream_store.finish(
+        UID, lease, {'proposed': {'private': 'synthetic text'}}, success=True, watermark=2, firestore_client=admission
+    )
+    state = admission.rows[('dream_users', UID)]
+    assert state['watermark'] == 2 and state['sequence'] == 3 and state['score'] == 2
+    assert state['lease'] is None
+    report = admission.rows[('users', UID, 'dream_runs', lease['run_id'])]
+    assert 'review_encrypted_v1' in report['source']
+    assert 'synthetic text' not in str(report)
+
+
+def test_timeout_retains_lease_and_spend_reservation(admission):
+    lease = dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission)
+    dream_store.finish(
+        UID, lease, {'status': 'failed'}, success=False, watermark=2, release=False, firestore_client=admission
+    )
+    assert admission.rows[('dream_users', UID)]['lease'] == lease
+    assert admission.rows[('dream_users', UID)]['watermark'] == 0
+    assert admission.rows[('dream_spend', NOW.date().isoformat())]['reserved_usd'] == pytest.approx(0.24)
+
+
+def test_dirty_notification_supports_keyword_only_invocations(monkeypatch):
+    captured = []
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setattr(dream_dirty, 'mark_dirty', lambda *args: captured.append(args))
+    fn = dream_dirty.after_write('action_items')(lambda uid, action_item_data: 'new-id')
+    assert fn(uid=UID, action_item_data={'description': 'Synthetic'}) == 'new-id'
+    assert captured == [(UID, [('action_items', 'new-id')])]
+
+
+def test_feedback_storage_has_no_uid_and_rotates_distinct_hash(monkeypatch):
+    from types import SimpleNamespace
+
+    stored = []
+    document = SimpleNamespace(set=lambda row: stored.append(row))
+    database = SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: document))
+    monkeypatch.setenv('DREAM_AGENT_FEEDBACK_SALT', 'synthetic-secret-with-at-least-32-characters')
+    for day in (8, 8, 15):
+        dream_feedback.store(
+            UID, feedback(), {'text': 'Synthetic source'}, [], now=NOW.replace(day=day), firestore_client=database
+        )
+    assert all(UID not in str(row) for row in stored)
+    assert stored[0]['distinct'] == stored[1]['distinct']
+    assert stored[0]['distinct'] != stored[2]['distinct']

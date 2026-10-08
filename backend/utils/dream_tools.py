@@ -74,7 +74,7 @@ def apply_edit(uid, edit, records):
         entity_id = row.get('entity_id')
         if not entity_id:
             raise ValueError('dream_invalid_entity')
-        write_entity_summary(uid, entity_id, edit.after)
+        write_entity_summary(uid, entity_id, edit.after, change=change, edit_key=key)
         return 'applied'
     if edit.kind == 'merge_people':
         other = records.get(edit.other)

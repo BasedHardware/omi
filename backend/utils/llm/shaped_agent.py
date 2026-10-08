@@ -1,4 +1,4 @@
-"""Opt-in shaped invocation foundation: notes and mobile/app agentic chat only.
+"""Opt-in shaped invocation foundation: notes, mobile/app chat and dream polish.
 
 Discard/Jev, fair use, embeddings, desktop completions proxy, screen-frame judge,
 public shared chat, file completions, stateless reply generation, memory

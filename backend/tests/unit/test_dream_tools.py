@@ -120,3 +120,22 @@ def test_name_substitution_preserves_ids_and_boundaries():
     assert result['id'] == 'Alise'
     assert result['sections'][0]['text'] == 'Alice uses Alise2'
     assert result['sections'][0]['source_segment_ids'] == ['Alise']
+
+
+def test_memory_merge_key_survives_new_tail_ids_after_undo():
+    edit = Edit(
+        kind='merge_memories',
+        target='memory_items/one',
+        other='memory_items/two',
+        after='Merged',
+        reason='Duplicate',
+        evidence=['memory_items/one'],
+    )
+    records = {
+        edit.target: {'content': 'Synthetic fact', 'subject_entity_id': 'person:p'},
+        edit.other: {'content': 'Same synthetic fact', 'subject_entity_id': 'person:p'},
+    }
+    original_key = dream_tools.edit_key(edit, records)
+    later = edit.model_copy(update={'target': 'memory_items/undo-tail-1', 'other': 'memory_items/undo-tail-2'})
+    tails = {later.target: records[edit.target], later.other: records[edit.other]}
+    assert dream_tools.edit_key(later, tails) == original_key

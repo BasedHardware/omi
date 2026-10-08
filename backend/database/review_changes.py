@@ -29,6 +29,7 @@ class _Unchanged(Exception):
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
     'people': {'name', 'aliases', 'organization', 'subtitle'},
+    'entity_pages': {'summary', 'updated_at'},
     'conversations': {
         'user_title',
         'structured.title',
@@ -47,7 +48,7 @@ class AgentEdit(BaseModel):
     """Internal writer input. Patch keys are constrained to supported reversible fields."""
 
     model_config = ConfigDict(extra='forbid')
-    collection: Literal['knowledge_nodes', 'people', 'conversations', 'action_items']
+    collection: Literal['knowledge_nodes', 'people', 'conversations', 'action_items', 'entity_pages']
     document_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     patch: dict
 
@@ -134,7 +135,15 @@ def record_agent_change(
         for edit, _, data in rows:
             if expected_documents is not None and data != expected_documents.get(edit.document_id):
                 raise store.ReviewConflict('Entity changed while preparing merge')
-            if not data or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
+            if data is None and edit.collection == 'entity_pages':
+                data = {}
+            if (
+                (not data and edit.collection != 'entity_pages')
+                or data.get('deleted')
+                or data.get('is_locked')
+                or data.get('is_dismissed')
+                or data.get('discarded')
+            ):
                 raise store.ReviewNotFound('Edit target not found')
             records.append(
                 {
@@ -159,8 +168,11 @@ def record_agent_change(
         result.update(journal)
 
         def write(transaction):
-            for edit, target, _ in rows:
-                transaction.update(target, edit.patch)
+            for edit, target, prior in rows:
+                if edit.collection == 'entity_pages' and prior is None:
+                    transaction.set(target, edit.patch)
+                else:
+                    transaction.update(target, edit.patch)
             transaction.set(ref, store.encode_doc(uid, journal))
 
         return {'mutations': mutations, 'projection_writer': write}
@@ -278,7 +290,13 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         for edit in data['edits']:
             target = store.user(uid).collection(edit['collection']).document(edit['document_id'])
             current = target.get(transaction=tx).to_dict()
-            if not current or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
+            if (
+                current is None
+                or (not current and edit['collection'] != 'entity_pages')
+                or current.get('deleted')
+                or current.get('is_dismissed')
+                or current.get('discarded')
+            ):
                 raise store.ReviewConflict('Edit target no longer available')
             if any(_get(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')

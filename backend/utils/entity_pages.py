@@ -11,9 +11,17 @@ from uuid import uuid4
 from fastapi import HTTPException
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from database import action_items, conversations, knowledge_graph, review_queries, review_store as store, users
+from database import (
+    action_items,
+    conversations,
+    knowledge_graph,
+    review_queries,
+    review_changes,
+    review_store as store,
+    users,
+)
 from models.entity_pages import ConversationRef, EntityPage, Fact, FactSource, TaskRef
-from models.review import EntityRef, ReviewItem
+from models.review import EntityRef, ReviewItem, ReviewChange
 
 MAX_RELATED = 30
 
@@ -297,15 +305,32 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
     )
 
 
-def write_entity_summary(uid: str, entity_id: str, summary: str, *, updated_at: datetime | None = None) -> None:
+def write_entity_summary(
+    uid: str,
+    entity_id: str,
+    summary: str,
+    *,
+    updated_at: datetime | None = None,
+    change: ReviewChange | None = None,
+    edit_key: str | None = None,
+) -> None:
     """Dream writer: the cache never replaces authoritative facts."""
     store.require_enabled()
     entity_id = resolve_entity(uid, entity_id)['entity_id']
     if len(summary) > 16000:
         raise ValueError('Entity summary is too long')
-    store.user(uid).collection('entity_pages').document(entity_id).set(
-        store.encode_doc(uid, {'summary': summary, 'updated_at': updated_at or datetime.now(timezone.utc)}), merge=True
-    )
+    patch = store.encode_doc(uid, {'summary': summary, 'updated_at': updated_at or datetime.now(timezone.utc)})
+    if change is not None:
+        if not edit_key:
+            raise ValueError('Journaled summary requires an edit key')
+        review_changes.record_agent_change(
+            uid,
+            change,
+            [review_changes.AgentEdit(collection='entity_pages', document_id=entity_id, patch=patch)],
+            edit_key=edit_key,
+        )
+    else:
+        store.user(uid).collection('entity_pages').document(entity_id).set(patch, merge=True)
 
 
 def save_user_fact(
