@@ -258,6 +258,7 @@ actor ConversationFinalizationService {
   }
 
   private func uploadLocalSegments(sessionId: Int64, allowBackendIdOverride: Bool = false) async throws -> Bool {
+    let uploadGeneration = await RewindDatabase.shared.poolGeneration()
     guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId) else {
       throw TranscriptionStorageError.sessionNotFound
     }
@@ -352,7 +353,12 @@ actor ConversationFinalizationService {
     let response = try await apiClient.createConversationFromSegments(request)
     if response.status == "deleted" {
       // A terminal deletion ack resolves this exact upload; never hydrate or retry it.
-      try await TranscriptionStorage.shared.deleteSession(id: sessionId)
+      do {
+        try await TranscriptionStorage.shared.deleteSession(id: sessionId, expectedGeneration: uploadGeneration)
+      } catch is CancellationError {
+        // The old owner's outbox can resolve on its next retry; do not mark a new owner's row failed.
+        return false
+      }
       return false
     }
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing

@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
@@ -454,6 +455,13 @@ class ListenSessionRuntime:
                 reason='reconnect_budget',
                 retry_after=retry_after,
             )
+            return False
+        if self.client_conversation_id and await self.persistence.call(
+            conversation_tombstones.is_deleted, self.request.uid, self.client_conversation_id
+        ):
+            # Check before bootstrap/registration so rejection has no session to tear down.
+            # A create already past this point can still race a deletion commit.
+            await self.request.websocket.close(code=1008, reason='Conversation was deleted')
             return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(

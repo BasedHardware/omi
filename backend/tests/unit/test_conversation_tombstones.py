@@ -6,12 +6,11 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
-import uuid
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from types import SimpleNamespace, MethodType
+from unittest.mock import MagicMock, AsyncMock
 
-from fastapi import HTTPException, WebSocketException
+from fastapi import HTTPException
 import pytest
 
 from database import conversation_tombstones as tombstones
@@ -161,7 +160,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store):
     assert not tombstones.is_deleted('u', 'c')
 
 
-def test_live_client_chosen_deleted_id_is_rejected_before_binding(store):
+def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):
     tombstones.record_deletion('u', 'c')
     calls = []
 
@@ -169,24 +168,26 @@ def test_live_client_chosen_deleted_id_is_rejected_before_binding(store):
         calls.append(fn)
         return fn(*args)
 
+    websocket = SimpleNamespace(close=AsyncMock())
     host = SimpleNamespace(
-        request=SimpleNamespace(uid='u', source='desktop'),
+        request=SimpleNamespace(uid='u', websocket=websocket),
         client_conversation_id='c',
-        recording_session_id=None,
         persistence=SimpleNamespace(call=call),
+        _bootstrap=AsyncMock(),
     )
+    register = MagicMock()
     namespace = {
         'conversation_tombstones': tombstones,
-        'WebSocketException': WebSocketException,
-        'uuid': uuid,
-        'select_recording_session_id': lambda **kw: 'recording',
-        'ConversationSource': lambda value: value,
-        'logger': MagicMock(),
+        'register_listen_session': register,
+        'listen_reconnect_budget': SimpleNamespace(admit=lambda *args: (True, 0)),
     }
-    create = function('routers/listen/conversations.py', 'create_new_in_progress_conversation', namespace)
-    with pytest.raises(WebSocketException) as error:
-        asyncio.run(create(SimpleNamespace(host=host)))
-    assert error.value.code == 1008
+    admit = function('routers/listen/runtime.py', '_admit', namespace)
+    host._admit = MethodType(admit, host)
+    run = function('routers/listen/runtime.py', '_run', namespace)
+    asyncio.run(run(host))
+    websocket.close.assert_awaited_once_with(code=1008, reason='Conversation was deleted')
+    host._bootstrap.assert_not_awaited()
+    register.assert_not_called()
     assert calls == [tombstones.is_deleted]
 
 

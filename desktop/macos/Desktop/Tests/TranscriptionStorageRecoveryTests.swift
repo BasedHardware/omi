@@ -52,6 +52,42 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     XCTAssertEqual(bundle?.segments.count, 0)
   }
 
+  func testStaleServerHydrationCannotUndoConfirmedDelete() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop", clientConversationId: "chosen-id")
+    try await appendEvidence(id, start: 0, end: 10)
+    try await TranscriptionStorage.shared.deleteByBackendId("chosen-id")
+    let stale = makeServerConversation(
+      id: "chosen-id", createdAt: Date(), startedAt: Date(), finishedAt: Date(),
+      title: "Stale title", overview: "Stale overview", starred: false, folderId: nil,
+      transcriptSegments: [
+        TranscriptSegment(
+          id: "stale-segment", backendId: "stale-segment", text: "Deleted transcript",
+          speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 10)
+      ],
+      transcriptSegmentsIncluded: true)
+    _ = try await TranscriptionStorage.shared.syncServerConversation(stale)
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(session?.deleted, true)
+    let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: id)
+    XCTAssertEqual(bundle?.segments.count, 0)
+    let visible = try await TranscriptionStorage.shared.getSyncedSessions()
+    XCTAssertFalse(visible.contains { $0.backendId == "chosen-id" })
+  }
+
+  func testDeletionAckCannotPurgeAnotherDatabaseGeneration() async throws {
+    let generation = await RewindDatabase.shared.poolGeneration()
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+    let other = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    do {
+      try await TranscriptionStorage.shared.deleteSession(id: other, expectedGeneration: generation)
+      XCTFail("Stale upload acknowledgement must be rejected")
+    } catch is CancellationError {}
+    let survivor = try await TranscriptionStorage.shared.getSession(id: other)
+    XCTAssertNotNil(survivor)
+  }
+
   func testUUIDMatchesBackendVector() {
     XCTAssertEqual(
       ConversationDeletionIdentity.fromSegmentsID(uid: "uid1", clientSessionID: "deleted-session"),
@@ -230,7 +266,6 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     )
     try await TranscriptionStorage.shared.updateStarred(id: sessionId, starred: true)
     try await TranscriptionStorage.shared.updateFolderByBackendId(backendId, folderId: "local-folder")
-    try await TranscriptionStorage.shared.deleteByBackendId(backendId)
 
     let storedLocalShell = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let localShell = try XCTUnwrap(storedLocalShell)

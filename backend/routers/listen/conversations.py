@@ -7,9 +7,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
-from fastapi import WebSocketException
-from database import conversation_tombstones
-
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
@@ -408,12 +405,6 @@ class LiveConversationController:
             source = ConversationSource.omi
         use_client_conversation_id = bool(self.host.client_conversation_id) and not rollover
         proposed_id = self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
-        if use_client_conversation_id and await self.host.persistence.call(
-            conversation_tombstones.is_deleted, request.uid, proposed_id
-        ):
-            # A client-chosen ID must never reopen user-deleted capture. As with
-            # from-segments, a create already past this point can race deletion.
-            raise WebSocketException(code=1008, reason="Conversation was deleted")
         proposed_id_is_server_generated = not use_client_conversation_id
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,

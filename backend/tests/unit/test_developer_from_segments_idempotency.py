@@ -909,3 +909,36 @@ def test_deleted_session_ack_skips_existing_row_and_processing(monkeypatch):
     lookup.assert_called_once_with('uid1', cid)
     read.assert_not_called()
     process.assert_not_called()
+
+
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+def test_deleted_ack_through_both_http_entrypoints(monkeypatch, path):
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: True)
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    payload = _request(client_session_id='deleted-session').model_dump(mode='json')
+    for _ in range(2):
+        response = TestClient(app).post(path, json=payload)
+        assert response.status_code == 200
+        assert response.json()['status'] == 'deleted'
+        assert response.json()['id'] == developer._from_segments_conversation_id('uid1', 'deleted-session')
+    process.assert_not_called()
+
+
+def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
+    monkeypatch.setattr(
+        developer.conversation_tombstones, 'is_deleted', MagicMock(side_effect=RuntimeError('unavailable'))
+    )
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    with pytest.raises(RuntimeError, match='unavailable'):
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='session'))
+    process.assert_not_called()

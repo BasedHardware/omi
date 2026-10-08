@@ -327,16 +327,21 @@ actor TranscriptionStorage {
   }
 
   /// Delete a session and its segments
-  func deleteSession(id: Int64) async throws {
+  func deleteSession(id: Int64, expectedGeneration: Int? = nil) async throws {
     let db = try await ensureInitialized()
 
-    let backendId = try await getSession(id: id)?.backendId
-
-    try await db.write { database in
+    if let expectedGeneration {
+      let snapshot = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+      guard snapshot.generation == expectedGeneration, snapshot.pool === db else { throw CancellationError() }
+    }
+    // Pin the pool across the write; an owner switch must never retarget this row ID.
+    let backendId = try await db.write { database in
+      let backendId = try TranscriptionSessionRecord.fetchOne(database, key: id)?.backendId
       try database.execute(
         sql: "DELETE FROM transcription_sessions WHERE id = ?",
         arguments: [id]
       )
+      return backendId
     }
 
     log("TranscriptionStorage: Deleted session \(id)")
@@ -411,8 +416,8 @@ actor TranscriptionStorage {
           guard let id = session.id else { continue }
           try database.execute(
             sql:
-              "UPDATE transcription_sessions SET deleted = 1, backendSynced = 1, status = ?, updatedAt = ? WHERE id = ?",
-            arguments: [TranscriptionSessionStatus.completed.rawValue, Date(), id]
+              "UPDATE transcription_sessions SET deleted = 1, backendSynced = 1, backendId = ?, status = ?, updatedAt = ? WHERE id = ?",
+            arguments: [backendId, TranscriptionSessionStatus.completed.rawValue, Date(), id]
           )
           try database.execute(sql: "DELETE FROM transcription_segments WHERE sessionId = ?", arguments: [id])
         }
@@ -953,6 +958,7 @@ actor TranscriptionStorage {
           .filter(Column("backendId") == conversation.id)
           .fetchOne(database)
         {
+          if existingSession.deleted, let id = existingSession.id { return (id, false) }
           // Firestore update_time is the only server freshness authority.
           // Local cache-write time and recording timestamps are unrelated clocks.
           let incomingIsOlder: Bool
@@ -1016,6 +1022,9 @@ actor TranscriptionStorage {
 
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard let session = try TranscriptionSessionRecord.fetchOne(database, key: sessionId), !session.deleted else {
+          return
+        }
         let existingSegments =
           try TranscriptionSegmentRecord
           .filter(Column("sessionId") == sessionId)
