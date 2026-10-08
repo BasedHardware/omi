@@ -81,7 +81,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -249,12 +249,6 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
           category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -323,7 +317,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -381,12 +375,6 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -547,7 +535,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: 'cohort'
+            value: 'on'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
@@ -672,12 +660,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -713,6 +695,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
@@ -840,12 +825,6 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -986,12 +965,6 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'

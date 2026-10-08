@@ -10,7 +10,6 @@ decision models. This module owns no provider, tool catalog, or skill catalog.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 from dataclasses import dataclass, replace
@@ -27,16 +26,11 @@ SHARED_CONTRACT = (
 
 
 def route_for_uid(uid: str | None) -> str:
-    """Unknown modes fail closed. Hashing is stable across processes and mounts."""
+    """Unknown modes fail closed; cohort is an alias for the full shaped rollout."""
     mode = os.getenv(FLAG, 'off').strip().lower()
-    if mode == 'on':
+    if mode in ('on', 'cohort'):
         return 'new'
-    if mode != 'cohort' or not uid:
-        return 'old'
-    if uid == COHORT_UID:
-        return 'new'
-    bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:8], 'big') % 100
-    return 'shadow' if bucket < 5 else 'old'
+    return 'old'
 
 
 @dataclass(frozen=True)

@@ -89,6 +89,12 @@ class _ChatOpenAI(_BaseChatModel):
         self.model = self.model_name
         self.temperature = kwargs.get('temperature')
         self.openai_api_base = kwargs.get('base_url', '')
+        self.metadata = {}
+
+    def model_copy(self, update=None, deep=False):
+        clone = _ChatOpenAI(**self._constructor_kwargs)
+        clone.metadata = {**self.metadata, **(update or {}).get('metadata', {})}
+        return clone
 
 
 class _ChatGoogleGenerativeAI(_BaseChatModel):
@@ -467,7 +473,8 @@ class TestGetLlm:
     def test_caches_instances_same_feature(self):
         llm1 = get_llm('conv_action_items')
         llm2 = get_llm('conv_action_items')
-        assert llm1 is llm2
+        assert llm1.metadata['omi_resolved_model'] == llm2.metadata['omi_resolved_model']
+        assert llm1._constructor_kwargs == llm2._constructor_kwargs
 
     def test_different_features_use_distinct_gateway_lanes(self):
         # Gateway lane identity is feature-specific even when the upstream model matches.
@@ -854,7 +861,8 @@ class TestExpandedCallsiteCoverage:
             'daily_summary',
         ]:
             assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
-        assert calls.count('conv_structure') >= 2, "conv_structure should appear at least twice"
+        # The shaped writer replaces the legacy writer's duplicate feature callsite.
+        assert calls.count('conv_structure') == 1
         assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
 
     def test_memories_all_keys(self):

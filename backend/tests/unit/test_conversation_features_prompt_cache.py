@@ -1,3 +1,5 @@
+import os
+
 """Three GPT-5.6 features were paying the cache-write premium for writes nobody reads.
 
 The provider serves a cache READ only from a prefix that ends on a message
@@ -33,6 +35,16 @@ from routers import desktop_chat
 from utils.llm import chat as chat_module
 from utils.llm import conversation_processing as conv_proc
 from utils.llm.model_config import LUNA_MODEL
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
+
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
     EXPLICIT_CACHE_MINIMUM_CHARACTERS,

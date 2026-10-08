@@ -240,7 +240,7 @@ env:
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
-    value: "cohort"
+    value: "on"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
@@ -274,10 +274,6 @@ env:
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_ENABLED
-    value: 'true'
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_PERCENT
-    value: '1'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
