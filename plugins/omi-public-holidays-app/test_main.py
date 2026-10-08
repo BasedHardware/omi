@@ -192,6 +192,54 @@ class PublicHolidayRequestTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             main.HolidayRequest(country_code=7, year=2026)
 
+    def test_null_and_omitted_year_defaults_to_current_utc_year(self):
+        current_year = main._current_utc_year()
+        self.assertEqual(main.HolidayRequest(country_code="US").year, current_year)
+        self.assertEqual(main.HolidayRequest(country_code="US", year=None).year, current_year)
+        self.assertEqual(main.HolidayRequest(country_code="US", year="").year, current_year)
+        self.assertEqual(main.LongWeekendRequest(country_code="DE").year, current_year)
+        self.assertEqual(main.LongWeekendRequest(country_code="DE", year=None).year, current_year)
+        self.assertEqual(main.LongWeekendRequest(country_code="DE", year="").year, current_year)
+
+    def test_string_numeric_fields_are_coerced(self):
+        req = main.HolidayRequest(country_code="US", year="2027", limit="15")
+        self.assertEqual(req.year, 2027)
+        self.assertEqual(req.limit, 15)
+
+        next_req = main.NextHolidayRequest(country_code="FR", limit="4")
+        self.assertEqual(next_req.limit, 4)
+
+        weekend_req = main.LongWeekendRequest(country_code="IT", year="2028", limit="10")
+        self.assertEqual(weekend_req.year, 2028)
+        self.assertEqual(weekend_req.limit, 10)
+
+    def test_null_and_empty_limits_default_properly(self):
+        self.assertEqual(main.HolidayRequest(country_code="US", limit=None).limit, main.MAX_ITEMS)
+        self.assertEqual(main.HolidayRequest(country_code="US", limit="").limit, main.MAX_ITEMS)
+        self.assertEqual(main.NextHolidayRequest(country_code="US", limit=None).limit, 8)
+        self.assertEqual(main.NextHolidayRequest(country_code="US", limit="").limit, 8)
+        self.assertEqual(main.LongWeekendRequest(country_code="US", limit=None).limit, main.MAX_ITEMS)
+        self.assertEqual(main.LongWeekendRequest(country_code="US", limit="").limit, main.MAX_ITEMS)
+
+    def test_boolean_values_rejected_for_year_and_limit(self):
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", year=True)
+        with self.assertRaises(ValueError):
+            main.HolidayRequest(country_code="US", limit=False)
+        with self.assertRaises(ValueError):
+            main.NextHolidayRequest(country_code="US", limit=True)
+        with self.assertRaises(ValueError):
+            main.LongWeekendRequest(country_code="US", year=False)
+
+    def test_invalid_and_out_of_range_year_and_limit_raise_value_error(self):
+        for bad_year in (1969, 2101, "nineteen-ninety", 0, -1):
+            with self.subTest(bad_year=bad_year), self.assertRaises(ValueError):
+                main.HolidayRequest(country_code="US", year=bad_year)
+
+        for bad_limit in (0, 21, "abc", -5):
+            with self.subTest(bad_limit=bad_limit), self.assertRaises(ValueError):
+                main.HolidayRequest(country_code="US", limit=bad_limit)
+
 
 class PublicHolidayFormattingTests(unittest.TestCase):
     def test_format_holiday_handles_unexpected_types(self):
@@ -232,6 +280,36 @@ class PublicHolidayHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(response.error)
         self.assertIn("Unknown holiday", response.result)
         self.assertIn("New Year", response.result)
+
+    async def test_list_supported_countries_defensive_handling(self):
+        # Mixed valid, non-dict, and missing fields
+        payload = [
+            None,
+            "not-a-dict",
+            {"countryCode": "US", "name": "United States"},
+            {"countryCode": None, "name": "Missing Code"},
+            {"countryCode": "CA", "name": "Canada"},
+            {"only_name": "No Code"},
+        ]
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=payload)):
+            response = await main.list_supported_countries()
+        self.assertIsNone(response.error)
+        self.assertIn("Supported countries:", response.result)
+        self.assertIn("- US: United States", response.result)
+        self.assertIn("- CA: Canada", response.result)
+        self.assertNotIn("None", response.result)
+
+        # All malformed entries
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=[None, "invalid"])):
+            empty_response = await main.list_supported_countries()
+        self.assertIsNone(empty_response.result)
+        self.assertIn("returned no valid countries", empty_response.error)
+
+        # Empty response
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=[])):
+            none_response = await main.list_supported_countries()
+        self.assertIsNone(none_response.result)
+        self.assertIn("returned no countries", none_response.error)
 
 
 class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
