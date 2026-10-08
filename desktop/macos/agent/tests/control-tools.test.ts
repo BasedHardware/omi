@@ -1219,6 +1219,31 @@ describe("agent control tools", () => {
       store.close();
     });
 
+    it("gives the model no tool that clears a chat or ends its grants", async () => {
+      const { store, kernel, sessionId, finish } = await liveSendMessageRun("no-tool");
+      const minted = store.insertGrant({
+        sessionId,
+        runId: null,
+        capability: "desktop.messaging.send",
+        operation: "send_message",
+        resourcePattern: "+15551234567",
+        effect: "allow",
+        source: "user",
+        expiresAtMs: Date.now() + 60 * 60_000,
+      });
+      // Only the app's own journal_clear_turns message ends a chat's grants;
+      // neither name is a tool, even with trusted direct control.
+      for (const name of ["journal_clear_turns", "end_chat_approval_scope"]) {
+        for (const context of [ownerContext(kernel), trustedOwnerContext(kernel)]) {
+          const result = parseToolResult(await handleAgentControlToolCall(context, name, { sessionId }));
+          expect(result.error.code).toBe("unknown_control_tool");
+        }
+      }
+      expect(store.getRow("SELECT revoked_at_ms FROM grants WHERE grant_id = ?", [minted.grantId]).revoked_at_ms).toBeNull();
+      await finish();
+      store.close();
+    });
+
     it("caps a session grant at 24 hours", async () => {
       const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
 

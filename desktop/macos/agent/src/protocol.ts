@@ -10,6 +10,7 @@ export const RUNTIME_CAPABILITIES = [
   "runtime_adapter_availability",
   "chat_first_capability_projection",
   "request_scoped_model_credentials",
+  "desktop_tool_approval_requests",
 ] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
@@ -633,6 +634,19 @@ export interface RefreshOwnerMessage {
 }
 
 /**
+ * A client declares that it renders device tool approval cards. Interim gate:
+ * until a client says so, the relay keeps today's immediate
+ * `approval_required` instead of parking a call nobody can answer. The Swift
+ * card PR turns parking on by default and deletes this capability.
+ */
+export const CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS = "desktop_tool_approval_cards";
+
+export interface ClientCapabilitiesMessage extends ProtocolEnvelope {
+  type: "client_capabilities";
+  capabilities: string[];
+}
+
+/**
  * Local/offline-only E2E probe for the real Chat-first Swift tool executor.
  * The kernel derives capability from the already-resolved session; this message
  * cannot carry or manufacture a rollout projection.
@@ -686,6 +700,7 @@ export type InboundMessage =
   | ChatFirstDeferralDeliveryResultMessage
   | ChatFirstHarnessExecutorBeginMessage
   | ModelHeadersResultMessage
+  | ClientCapabilitiesMessage
   | RefreshOwnerMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
@@ -771,6 +786,70 @@ export interface AuthorizedToolExecutionMessage extends OutboundEnvelope {
   chatFirstControlGeneration?: number;
   /** Bounded policy recovery telemetry; absent for ordinary authorized calls. */
   policyRecovery?: "permission_delegation_to_native";
+}
+
+export interface ApprovalOption {
+  id: "allow_once" | "allow_session" | "deny";
+  effect: "allow" | "deny";
+  /** `run`: this invocation only; `session`: mints a scoped, expiring grant via `resolve_desktop_dispatch`. */
+  scope: "run" | "session" | "request";
+}
+
+/**
+ * A sensitive device tool invocation is parked behind one `approval` dispatch.
+ * Swift renders it and answers through signed direct control
+ * (`resolve_desktop_dispatch` with `resolution.decision` and, for
+ * `allow_session`, a grant scoped to `capability`/`operation`/`resourceRef`).
+ * This frame carries no authority: only the resolved dispatch admits the
+ * invocation, and only for the exact `invocationId` + `inputHash` shown here.
+ */
+export interface ApprovalRequestedMessage extends OutboundEnvelope {
+  type: "approval_requested";
+  approvalId: string;
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  invocationId: string;
+  adapterId: string;
+  surfaceKind: string;
+  policy: "default_user_approval";
+  toolName: string;
+  capability: string;
+  operation: string;
+  resourceRef: string | null;
+  inputHash: string;
+  effectClass: "read_only" | "idempotent_write" | "non_idempotent_write";
+  title: string;
+  decisionPrompt: string;
+  /** Bounded, display-safe projection of the tool input, never the raw input. */
+  preview: Record<string, string | number | boolean>;
+  previewTruncated: boolean;
+  reason: string;
+  options: ApprovalOption[];
+  /** Always `deny` today; typed as an option id so a client never hardcodes the policy. */
+  defaultOptionId: ApprovalOption["id"];
+  requestedAtMs: number;
+  /** After this the runtime fails the invocation closed as `approval_denied`. */
+  expiresAtMs: number;
+}
+
+/** Every parked approval ends with exactly one of these, whatever ended it. */
+export interface ApprovalResolvedMessage extends OutboundEnvelope {
+  type: "approval_resolved";
+  approvalId: string;
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  invocationId: string;
+  toolName: string;
+  decision: "allow" | "deny" | "expired" | "cancelled";
+  selectedOptionId: string | null;
+  grantId: string | null;
+  resolvedBy: string;
+  resolvedAtMs: number;
+  automatic: boolean;
 }
 
 export interface ExternalAuthorityError {
@@ -1349,6 +1428,8 @@ export type OutboundMessage =
   | AuthSuccessMessage
   | CancelAckMessage
   | AuthorizedToolExecutionMessage
+  | ApprovalRequestedMessage
+  | ApprovalResolvedMessage
   | ExternalSurfaceRunBeginResultMessage
   | ExternalSurfaceToolResultMessage
   | ExternalSurfaceRunCompleteResultMessage
@@ -1390,6 +1471,8 @@ export type OutboundMessageDraft =
   | DraftEnvelope<ErrorMessage>
   | DraftEnvelope<CancelAckMessage>
   | DraftEnvelope<AuthorizedToolExecutionMessage>
+  | DraftEnvelope<ApprovalRequestedMessage>
+  | DraftEnvelope<ApprovalResolvedMessage>
   | DraftEnvelope<ExternalSurfaceRunBeginResultMessage>
   | DraftEnvelope<ExternalSurfaceToolResultMessage>
   | DraftEnvelope<ExternalSurfaceRunCompleteResultMessage>
