@@ -3652,3 +3652,9 @@ competing print defeats automatic carry; distinct covered audio remains reserved
 The late-audio identity transaction also reads the account deletion marker before
 writing. Its placement coverage index is initialized even when no segment is long
 enough to embed, so short-only conversations abstain without an unbound index.
+
+Late identity persistence lives in `database/speaker_resolution_updates.py` so
+unrelated conversation database reads do not import its deletion-marker graph.
+New v1 cache writes record the already-supported optional evidence duration even
+when score instrumentation is off. Historical entries keep their grouping and
+PCM semantics; a missing duration cannot support a new positive or negative.

@@ -61,7 +61,7 @@ def test_late_audio_retry_persists_identity_without_processing(env, monkeypatch)
 
     monkeypatch.setattr(stage, 'resolve_speakers_for_processing', resolve)
     monkeypatch.setattr(
-        stage.conversations_db,
+        stage.identity_updates_db,
         'persist_speaker_resolution_if_current',
         lambda uid, payload, **kw: writes.append((payload, kw)) or True,
     )
@@ -79,7 +79,7 @@ def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch
         property(lambda snap: (snap.to_dict() or {}).get('test_revision')),
         raising=False,
     )
-    monkeypatch.setattr(stage.conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(stage.identity_updates_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(stage.conversations_db, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(stage.conversations_db, '_sync_conversation_search_index', lambda *a: None)
     payload = {
@@ -103,13 +103,13 @@ def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch
         'test_revision': at + timedelta(seconds=1),
         'data_protection_level': 'standard',
     }
-    assert not stage.conversations_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
+    assert not stage.identity_updates_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
     assert 'transcript_segments' not in store.rows[path]
     store.rows[path]['test_revision'] = at
-    assert stage.conversations_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
+    assert stage.identity_updates_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
     decoded = stage.conversations_db._decode_transcript_segments_strict(
         'u1', store.rows[path]['transcript_segments'], bool(store.rows[path].get('transcript_segments_compressed'))
     )
     assert decoded[0]['is_user'] is True
     store.rows[('account_deletions', 'u1')] = {'wipe_status': 'pending'}
-    assert not stage.conversations_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
+    assert not stage.identity_updates_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)

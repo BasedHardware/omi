@@ -32,6 +32,7 @@ import config.speaker_match_scores as match_scores
 import httpx
 import numpy as np
 
+import database.speaker_resolution_updates as identity_updates_db
 import database.conversations as conversations_db
 import database.users as users_db
 from config.audio_timeline import live_speaker_span_resolution_enabled
@@ -934,7 +935,7 @@ def refresh_completed_speaker_identity(uid: str, conversation_id: str) -> bool:
         conversation = Conversation(**raw)
         if not resolve_speakers_for_processing(uid, conversation, budget_seconds=5.0):
             return False
-        return conversations_db.persist_speaker_resolution_if_current(
+        return identity_updates_db.persist_speaker_resolution_if_current(
             uid, conversation.model_dump(), expected_updated_at=raw['updated_at']
         )
     except Exception as error:
