@@ -6,12 +6,13 @@ import unittest
 from datetime import timedelta
 from pathlib import Path
 
-recipe_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_digest.py"
-spec = importlib.util.spec_from_file_location("conversations_digest", recipe_path)
+recipe_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_digest.py"
+spec = importlib.util.spec_from_file_location("conversations_to_digest", recipe_path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 text = module.text
+escape_cell = module.escape_cell
 parse_time = module.parse_time
 parse_offset = module.parse_offset
 hours = module.hours
@@ -111,6 +112,20 @@ class TestConversationsDigest(unittest.TestCase):
     def test_cli_usage(self):
         with self.assertRaises(SystemExit):
             main([])
+
+    def test_escape_pipe_in_table_cells(self):
+        self.assertEqual(escape_cell("normal text"), "normal text")
+        self.assertEqual(escape_cell("Work | Operations"), "Work \\| Operations")
+        convs = {
+            "c_pipe": {
+                "id": "c_pipe",
+                "started_at": "2026-09-14T10:00:00Z",
+                "finished_at": "2026-09-14T11:00:00Z",
+                "structured": {"title": "Design | Arch", "category": "Tech | Architecture"},
+            }
+        }
+        output_md = digest(convs, timedelta(0))
+        self.assertIn("| Tech \\| Architecture | 1 | 1.0 |", output_md)
 
 
 if __name__ == "__main__":

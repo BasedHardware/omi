@@ -20,12 +20,6 @@ accepts several files and counts each conversation ID once.
 Run the converter:
 
 ```sh
-python sdks/python-cli/examples/conversations_digest.py --utc-offset +09:00 week_digest.md week.json
-```
-
-The alias `conversations_to_digest.py` is also available:
-
-```sh
 python sdks/python-cli/examples/conversations_to_digest.py --utc-offset +09:00 week_digest.md week.json
 ```
 
