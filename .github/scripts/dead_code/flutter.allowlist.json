@@ -53,8 +53,8 @@
       "reason": "AppsPage left the shell (the catalog is Settings > Integrations), but protected spine oracles (app/test/spine/b1_surface_contract.dart) import it; remove with the B1 contract revision"
     },
     {
-      "path": "app/lib/mobile/native_ui/native_asset_image.dart",
-      "reason": "iOS SwiftUI preview seam for bundled device artwork; the device discovery, settings and tutorial screen batches import it next"
+      "path": "app/lib/widgets/omi_confirm_dialog.dart",
+      "reason": "legacy confirm entry point kept as a thin wrapper over the shared dialog (docs/ux-contract.md lists it); its last app caller moved to the shared dialog and omi_dialogs_test still covers it"
     }
   ]
 }
