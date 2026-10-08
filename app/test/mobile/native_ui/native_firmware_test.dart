@@ -326,6 +326,14 @@ void main() {
     late FirmwareUpdatePromptCoordinator coordinator;
     late FirmwareUpdatePrompt prompt;
 
+    setUpAll(() async {
+      try {
+        await ServiceManager.init();
+      } catch (_) {
+        // Already initialized by another test.
+      }
+    });
+
     setUp(() {
       coordinator = FirmwareUpdatePromptCoordinator()..setAvailableVersion('3.0.1');
       prompt = coordinator.beginPresentation()!;
@@ -403,6 +411,21 @@ void main() {
       final dfu = firmwareUpdatePageFor(omiGlass: false, device: _omi(), omiGlassDetails: details);
       expect(dfu, isA<FirmwareUpdate>());
       expect((dfu as FirmwareUpdate).isRollback, false);
+    });
+
+    testWidgets('an accepted prompt keeps its page when the device unpairs and the route rebuilds', (tester) async {
+      await tester.pumpWidget(const SizedBox());
+      final context = tester.element(find.byType(SizedBox));
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
+      provider.pairedDevice = _omi(name: 'OmiGlass');
+      final navigator = _RecordingNavigator();
+      provider.acceptFirmwareUpdatePrompt(navigator);
+      final route = navigator.routes.single as MaterialPageRoute;
+      expect(route.builder(context), isA<OmiGlassOtaUpdate>());
+      // The glass reboots during its Wi-Fi OTA and drops its pairing; a root rebuild re-runs the builder.
+      provider.pairedDevice = null;
+      expect(route.builder(context), isA<OmiGlassOtaUpdate>());
     });
   });
 
@@ -625,13 +648,25 @@ void main() {
     });
 
     testWidgets('a failed flash shows its error and allows leaving', (tester) async {
-      final host = await pump(tester, _Device(prepare: () async => throw StateError('device refused')));
+      final host = await pump(tester,
+          _Device(prepare: () async => throw StateError('device refused /private/var/mobile/tmp/picked/omi-dev.zip')));
       await _send(tester, host, 'flash_start');
       expect(_ids(host), ['flash_file_name', 'flash_progress', 'flash_error']);
-      expect(_row(host, 'flash_error')!['title'], _l10n.firmwareUpdateFailedMessage);
-      expect(jsonEncode(_snapshot(host)), isNot(contains('device refused')));
+      // The developer keeps the diagnostic; the picked file's private path is reduced to its name.
+      expect(_row(host, 'flash_error')!['title'], 'Bad state: device refused omi-dev.zip');
+      expect(jsonEncode(_snapshot(host)), isNot(contains('/private/var')));
       expect(_toolbar(host), ['flash_back']);
       expect(_canPop(tester), true);
     });
   });
+}
+
+class _RecordingNavigator extends NavigatorState {
+  final routes = <Route<dynamic>>[];
+
+  @override
+  Future<T?> push<T extends Object?>(Route<T> route) {
+    routes.add(route);
+    return Future<T?>.value();
+  }
 }

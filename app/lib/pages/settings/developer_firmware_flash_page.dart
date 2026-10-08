@@ -181,11 +181,17 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
           ]),
         if (error != null)
           NativeSection('flash_error_section', [
-            // The exception text can name the picked file's path; only fixed copy crosses the bridge.
-            NativeRow('flash_error', l10n.firmwareUpdateFailedMessage,
+            NativeRow('flash_error', _nativeErrorText(error),
                 kind: 'label', symbol: 'xmark.octagon', destructive: true),
           ]),
       ],
     );
+  }
+
+  /// The classic page's diagnostic, with the picked file's private path reduced to its display name
+  /// and bounded so a long stack-like message cannot bloat the snapshot.
+  String _nativeErrorText(String error) {
+    final text = error.replaceAll(widget.zipFilePath, widget.fileName).characters;
+    return text.length <= 500 ? text.toString() : '${text.take(499)}…';
   }
 }

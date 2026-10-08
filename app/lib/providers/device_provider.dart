@@ -1284,13 +1284,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       coordinator: _firmwareUpdatePromptCoordinator,
       prompt: prompt,
       version: _latestFirmwareVersion,
-      onAccept: (navigator) {
-        setFirmwareUpdateInProgress(true);
-        navigator.push(omiPageRoute(
-            builder: (context) => firmwareUpdatePageFor(
-                omiGlass: _isOmiGlassDevice, device: pairedDevice, omiGlassDetails: _latestOmiGlassFirmwareDetails)));
-      },
+      onAccept: acceptFirmwareUpdatePrompt,
     ));
+  }
+
+  /// Opens the update page for an accepted prompt. The page type is decided once, here: an OmiGlass
+  /// unpairs while it reboots during its Wi-Fi OTA, and a route rebuild must not swap its page for DFU.
+  @visibleForTesting
+  void acceptFirmwareUpdatePrompt(NavigatorState navigator) {
+    setFirmwareUpdateInProgress(true);
+    final omiGlass = _isOmiGlassDevice;
+    navigator.push(omiPageRoute(
+        builder: (context) => firmwareUpdatePageFor(
+            omiGlass: omiGlass, device: pairedDevice, omiGlassDetails: _latestOmiGlassFirmwareDetails)));
   }
 
   Future setisDeviceStorageSupport() async {
