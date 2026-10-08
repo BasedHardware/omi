@@ -189,6 +189,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
       child: IosNativeSurface(
         title: l10n.createApiKey,
         fallback: OmiSheetScaffold(title: l10n.createApiKey, child: classic),
+        loading: _isCreating,
+        loadingLabel: l10n.creating,
         toolbar: [
           NativeRow('dev_key_cancel', l10n.cancel,
               symbol: 'xmark', enabled: !_isCreating, action: (_) => Navigator.of(context).maybePop()),

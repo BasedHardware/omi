@@ -107,6 +107,7 @@ class _AppKeysOwner extends AddAppProvider {
   final Map<String, List<AppApiKey>> served;
   Completer<void>? loadGate;
   Completer<AppApiKey>? createGate;
+  Completer<void>? deleteGate;
   final loads = <String>[];
   final deleted = <String>[];
   var creates = 0;
@@ -135,6 +136,7 @@ class _AppKeysOwner extends AddAppProvider {
   @override
   Future<void> deleteApiKey(String appId, String keyId) async {
     deleted.add(keyId);
+    await deleteGate?.future;
     served[appId]?.removeWhere((key) => key.id == keyId);
     await loadApiKeys(appId);
   }
@@ -255,6 +257,31 @@ void main() {
       await tester.pump();
       expect(presents.where((call) => call.method == 'present'), hasLength(1), reason: 'Revoking is confirmed first');
       expect(owner.deleted, ['key-02']);
+    });
+
+    testWidgets('a revoke in flight shows native progress until it finishes', (tester) async {
+      final host = NativeTestHost.install();
+      _mockConfig(present: (_) async => _choose('confirm'));
+      final owner = _AppKeysOwner({
+        'app-a': [_appKey('key-01')]
+      })
+        ..deleteGate = Completer<void>();
+      await _pumpAppKeys(tester, owner);
+      expect(tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).loading, false);
+      _decode(await host.sendFromNative(
+          host.created.single, const MethodCall('action', {'id': 'app_api_key:0', 'value': 'revoke'})));
+      await tester.pump();
+      expect(owner.deleted, ['key-01']);
+      final busy = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      expect(busy.loading, true);
+      expect(busy.loadingLabel, 'Deleting…');
+      expect(_row(tester, 'app_api_key:0').enabled, false);
+      owner.deleteGate!.complete();
+      await NativeTestHost.settle(tester);
+      final idle = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      expect(idle.loading, false);
+      expect(idle.loadingLabel, isNull);
+      expect(_sectionRows(tester), isEmpty);
     });
 
     testWidgets('a declined confirmation keeps the key', (tester) async {
@@ -479,6 +506,7 @@ void main() {
       await tester.tap(find.text('open'));
       await NativeTestHost.settle(tester);
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'The sheet is drawn natively, not by its fallback');
       return result;
     }
 
@@ -543,6 +571,9 @@ void main() {
       unawaited(Future.sync(() => _row(tester, 'dev_key_create').action!(null)));
       await tester.pump();
       expect(owner.created, hasLength(1));
+      final busy = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      expect(busy.loading, true, reason: 'The native sheet shows progress while the key is created');
+      expect(busy.loadingLabel, 'Creating…');
       AuthService.instance.handleAuthUserChanged('another-owner');
       owner.createGate!.complete();
       await tester.pumpAndSettle();
@@ -627,6 +658,7 @@ void main() {
       await tester.pumpWidget(
           NativeTestHost.app(ChangeNotifierProvider<McpProvider>.value(value: owner, child: const DeveloperMcpPage())));
       await NativeTestHost.settle(tester);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'The page is drawn natively, not by its fallback');
       return owner;
     }
 
