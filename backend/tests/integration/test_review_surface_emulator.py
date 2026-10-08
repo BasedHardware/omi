@@ -326,7 +326,8 @@ def test_correction_uses_real_ledger_authority_and_page_fact(harness, monkeypatc
     assert client.post('/v1/entities/org/corrections', json={'text': ' '}).status_code == 422
 
 
-def test_canonical_memory_journal_reverses_real_fact(harness, monkeypatch):
+@pytest.mark.parametrize('intervening_correction', [False, True])
+def test_canonical_memory_journal_reverses_real_fact(harness, monkeypatch, intervening_correction):
     client, uid, user, db = harness
     _canonical_control(user, uid)
     from database.review_memory_changes import MemoryEdit
@@ -364,9 +365,36 @@ def test_canonical_memory_journal_reverses_real_fact(harness, monkeypatch):
         ]
 
     assert active_content() == ['Partner name is Paraform']
+    if intervening_correction:
+        from utils.memory import knowledge_ledger
+
+        original = knowledge_ledger.amend_user_fact
+
+        def correct_before_undo(owner, memory_id, content, **kwargs):
+            original(
+                owner,
+                memory_id,
+                'A newer user correction',
+                **dict(
+                    kwargs,
+                    provenance=LedgerProvenance(
+                        source_id=memory_id, source_type='explicit_user_correction', action_id='intervening'
+                    ),
+                ),
+            )
+            return original(owner, memory_id, content, **kwargs)
+
+        monkeypatch.setattr(knowledge_ledger, 'amend_user_fact', correct_before_undo)
+        response = client.post('/v1/review/changes/memory-change/undo')
+        assert response.status_code == 409, response.text
+        assert active_content() == ['A newer user correction']
+        return
     response = client.post('/v1/review/changes/memory-change/undo')
     assert response.status_code == 200, response.text
     assert active_content() == ['Partner name is Pairform']
+    row_count = len(list(user.collection('memory_items').stream()))
+    assert client.post('/v1/review/changes/memory-change/undo').status_code == 200
+    assert len(list(user.collection('memory_items').stream())) == row_count
     assert client.post('/v1/review/changes/memory-change/redo').status_code == 200
     assert active_content() == ['Partner name is Paraform']
     assert not journal.agent_change_allowed(uid, 'partner-spelling')

@@ -23,8 +23,8 @@ A person keeps `person:{people id}` and a project keeps its workstream id.
 - Canonical fact replacements use the same writer with
   `memory_edit=database.review_memory_changes.MemoryEdit(memory_id=..., content=...)`.
   This creates a durable intent then delegates to canonical knowledge-ledger
-  append/supersede. Undo and redo use the existing explicit-user fact-history
-  revert path, appending a fresh authority-600 tail. Historical memory documents
+  append/supersede. Undo and redo use the existing explicit-user amendment
+  boundary with the reserved active-row snapshot, appending a fresh authority-600 tail. Historical memory documents
   remain read-only. A source revision conflict refuses the operation.
 - `database.review_changes.agent_change_allowed(uid, edit_key)` tells the agent
   whether the user has undone a semantic operation. Use a stable operation key

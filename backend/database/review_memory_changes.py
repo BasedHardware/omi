@@ -81,8 +81,9 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
 
 
 def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> ReviewChange:
-    from utils.memory.memory_service import MemoryService
+    from models.product_memory import LedgerWriteReason, MemoryItem, MemorySubjectScope
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+    from utils.memory.knowledge_ledger import LedgerProvenance, amend_user_fact
 
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     if data['change']['undone'] == undone and data.get('phase') == 'applied':
@@ -93,26 +94,60 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
     @firestore.transactional
     def reserve(tx):
         current = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
-        active = store.user(uid).collection('memory_items').document(current['active_memory_id']).get(transaction=tx)
         if current.get('phase') not in {'applied', desired}:
             raise store.ReviewConflict('Memory change is in progress')
-        if current.get('phase') == 'applied' and (not active.exists or active.to_dict().get('status') != 'active'):
-            raise store.ReviewConflict('Memory has a newer edit')
+        if current['phase'] == 'applied' and current['change']['undone'] == undone:
+            return current, False
+        active = store.user(uid).collection('memory_items').document(current['active_memory_id']).get(transaction=tx)
+        if current['phase'] == 'applied':
+            if not active.exists or active.to_dict().get('status') != 'active':
+                raise store.ReviewConflict('Memory has a newer edit')
+            current['source'] = active.to_dict()
         revision = current.get('revision', 0) + (1 if current.get('phase') == 'applied' else 0)
-        tx.update(ref, {'phase': desired, 'revision': revision})
+        current.update(phase=desired, revision=revision)
+        tx.update(ref, store.encode_doc(uid, {'phase': desired, 'revision': revision, 'source': current['source']}))
         if undone:
             tx.set(
                 marker, {'edit_key': data['edit_key'], 'change_id': change_id, 'created_at': datetime.now(timezone.utc)}
             )
-        return revision
+        return current, True
 
-    revision = reserve(store.client().transaction())
-    selected = data['memory_edit']['memory_id'] if undone else data['after_memory_id']
-    operation_id = str(uuid5(NAMESPACE_URL, f'{uid}:{change_id}:{revision}:{desired}'))
-    row = MemoryService(db_client=store.client()).revert_superseded_ledger_fact(uid, selected, operation_id)
+    current, apply = reserve(store.client().transaction())
+    if not apply:
+        return ReviewChange.model_validate(current['change'])
+    source = MemoryItem.model_validate(current['source'])
+    operation_id = str(uuid5(NAMESPACE_URL, f"{uid}:{change_id}:{current['revision']}:{desired}"))
+    content = current['before']['content'] if undone else current['memory_edit']['content']
+    try:
+        memory_id = amend_user_fact(
+            uid,
+            source.memory_id,
+            content,
+            provenance=LedgerProvenance(
+                source_id=source.memory_id, source_type='explicit_user_revert', action_id=operation_id
+            ),
+            write_reason=LedgerWriteReason.direct_user_statement,
+            slot=source.slot,
+            subject_scope=source.subject_scope or MemorySubjectScope.primary_user,
+            subject_entity_id=source.subject_entity_id,
+            curation_weight=source.curation_weight,
+            visibility=source.visibility,
+            db_client=store.client(),
+            required_source_item=source,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise store.ReviewConflict('Memory has a newer edit') from exc
     # Revert appends a fresh direct-user tail; never resurrects an old row in place.
-    if read_canonical_memory_item(uid, row.id, db_client=store.client()) is None:
+    if read_canonical_memory_item(uid, memory_id, db_client=store.client()) is None:
         raise store.ReviewConflict('Reverted memory readback unavailable')
-    change = dict(data['change'], undone=undone)
-    ref.update(store.encode_doc(uid, {'phase': 'applied', 'active_memory_id': row.id, 'change': change}))
+    change = dict(current['change'], undone=undone)
+
+    @firestore.transactional
+    def finish(tx):
+        latest = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
+        if latest['revision'] != current['revision'] or latest['phase'] not in {desired, 'applied'}:
+            raise store.ReviewConflict('Memory change is in progress')
+        tx.update(ref, store.encode_doc(uid, {'phase': 'applied', 'active_memory_id': memory_id, 'change': change}))
+
+    finish(store.client().transaction())
     return ReviewChange.model_validate(change)
