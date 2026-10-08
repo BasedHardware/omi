@@ -235,7 +235,13 @@ raise SystemExit(2)
             [sys.executable, "-c", "import time; time.sleep(30)", marker],
             start_new_session=True,
         )
-        self.addCleanup(lambda: unrelated.poll() is not None or unrelated.kill())
+
+        def _stop_unrelated(proc=unrelated):
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+        self.addCleanup(_stop_unrelated)
         payload = {
             "schema_version": 1,
             "label": "substring",
@@ -244,7 +250,7 @@ raise SystemExit(2)
             "supervisor_pid": 99999999,
             "supervisor_start": "absent",
             "leader_pid": 99999999,
-            "leader_pgid": 99999999,
+            "leader_pgid": None,
             "leader_start": "absent",
             "limits": {"shutdown_deadline_seconds": 1},
         }
@@ -254,7 +260,7 @@ raise SystemExit(2)
             check=False,
             timeout=10,
         )
-        self.assertNotEqual(finished.returncode, 1)
+        self.assertIn(finished.returncode, (0, 2))
         self.assertTrue(alive(unrelated.pid))
         self.assertTrue(alive(self.foreign.pid))
 
