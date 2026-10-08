@@ -146,6 +146,9 @@ overlay:
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
           category: rollout
+        REVIEW_SURFACE_MODE:
+          value: 'on'
+          category: rollout
     pusher:
       env:
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
@@ -477,6 +480,9 @@ overlay:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
             value: 'true'
+            category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames

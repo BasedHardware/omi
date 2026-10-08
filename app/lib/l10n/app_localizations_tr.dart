@@ -12449,16 +12449,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Deneyiminiz kişiselleştiriliyor';
 
   @override
-  String get onboardingRatingPromptTitle => 'Beklerken, Omi\'yi kullanmak hoşunuza gitti mi?';
+  String get onboardingRatingPromptTitle => 'Omi\'yi beğeniyor musunuz?';
 
   @override
-  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️';
+  String get onboardingRatingPromptYes => 'Evet';
 
   @override
-  String get onboardingRatingPromptYes => 'Evet, size destek olmak istiyorum!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pek değil';
+  String get onboardingRatingPromptNo => 'Hayır';
 
   @override
   String get partialRecording => 'Kısmi kayıt';

@@ -12507,16 +12507,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalitzant la teva experiència';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mentre esperes, t\'agrada utilitzar Omi?';
+  String get onboardingRatingPromptTitle => 'T\'agrada Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Valorar-nos amb 5 estrelles ens ajuda molt ❤️';
+  String get onboardingRatingPromptYes => 'Sí';
 
   @override
-  String get onboardingRatingPromptYes => 'Sí, vull donar-vos suport!';
-
-  @override
-  String get onboardingRatingPromptNo => 'No gaire';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Enregistrament parcial';

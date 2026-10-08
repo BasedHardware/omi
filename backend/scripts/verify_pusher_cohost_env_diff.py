@@ -71,6 +71,9 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
     }
 )
+# The API domain and the Review routes run on backend-listen. Pusher's
+# pusher/main.py entrypoint does not mount routers/review.py.
+_REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -164,7 +167,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "X_OAUTH_CLIENT_SECRET",
         }
     )
-    | _TRANSLATION_LISTEN_ONLY,
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -262,7 +266,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "X_OAUTH_CLIENT_SECRET",
         }
     )
-    | _TRANSLATION_LISTEN_ONLY,
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY,
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {

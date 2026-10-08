@@ -12441,16 +12441,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Přizpůsobujeme váš zážitek';
 
   @override
-  String get onboardingRatingPromptTitle => 'Než to doběhne, líbí se vám Omi?';
+  String get onboardingRatingPromptTitle => 'Líbí se vám Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Hodnocení 5 hvězdiček nám opravdu hodně pomůže ❤️';
+  String get onboardingRatingPromptYes => 'Ano';
 
   @override
-  String get onboardingRatingPromptYes => 'Ano, chci vás podpořit!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Moc ne';
+  String get onboardingRatingPromptNo => 'Ne';
 
   @override
   String get partialRecording => 'Částečná nahrávka';

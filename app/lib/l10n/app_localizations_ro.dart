@@ -12492,16 +12492,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Se personalizează experiența ta';
 
   @override
-  String get onboardingRatingPromptTitle => 'Cât aștepți, ți-a plăcut să folosești Omi?';
+  String get onboardingRatingPromptTitle => 'Îți place Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat ❤️';
+  String get onboardingRatingPromptYes => 'Da';
 
   @override
-  String get onboardingRatingPromptYes => 'Da, vreau să vă susțin!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nu prea';
+  String get onboardingRatingPromptNo => 'Nu';
 
   @override
   String get partialRecording => 'Înregistrare parțială';
