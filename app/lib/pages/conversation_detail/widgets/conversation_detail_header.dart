@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
@@ -322,9 +323,28 @@ Future<void> showConversationFolderSheet(
 /// Private or Shared, opened from the conversation's ⋯ menu.
 abstract final class ConversationVisibilitySheet {
   static void show(BuildContext context, ServerConversation conversation) {
-    final provider = context.read<ConversationDetailProvider>();
+    final choose = chooser(context, conversation);
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.visibility,
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      builder: (sheetContext) => _options(sheetContext, conversation, choose),
+      nativeBuilder: (sheetContext) => native(sheetContext, conversation, choose),
+    );
+  }
 
-    Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
+  /// Applies [target] from the sheet at `sheetContext`: the current value only closes; another one
+  /// is shown at once, saved through [setVisibility] and reverted if that fails. A shared result
+  /// then opens [share]. Both presentations choose through this.
+  @visibleForTesting
+  static Future<void> Function(BuildContext sheetContext, ConversationVisibility target) chooser(
+    BuildContext context,
+    ServerConversation conversation, {
+    Future<bool> Function(String conversationId, String visibility)? setVisibility,
+    void Function(ServerConversation conversation)? share,
+  }) {
+    final provider = context.read<ConversationDetailProvider>();
+    return (sheetContext, target) async {
       if (conversation.visibility == target) {
         Navigator.pop(sheetContext);
         return;
@@ -332,7 +352,7 @@ abstract final class ConversationVisibilitySheet {
       final previousVisibility = conversation.visibility;
       provider.updateVisibilityLocally(target);
       Navigator.pop(sheetContext);
-      final success = await setConversationVisibility(conversation.id, visibility: target.value);
+      final success = await (setVisibility ?? _setVisibility)(conversation.id, target.value);
       if (!success) {
         provider.updateVisibilityLocally(previousVisibility);
         if (context.mounted) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
@@ -343,32 +363,72 @@ abstract final class ConversationVisibilitySheet {
         fromVisibility: previousVisibility.value,
         toVisibility: target.value,
       );
-      if (target == ConversationVisibility.shared && context.mounted) shareConversationLink(conversation);
-    }
+      if (target == ConversationVisibility.shared && context.mounted) (share ?? shareConversationLink)(conversation);
+    };
+  }
 
-    showOmiSheet<void>(
-      context: context,
-      title: context.l10n.visibility,
-      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-      builder: (sheetContext) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _option(
-            icon: Icons.lock_outline,
-            label: context.l10n.private,
-            description: context.l10n.onlyYouCanSeeConversation,
-            isSelected: conversation.visibility == ConversationVisibility.private_,
-            onTap: () => choose(sheetContext, ConversationVisibility.private_),
-          ),
-          _option(
-            icon: Icons.public,
-            label: context.l10n.shared,
-            description: context.l10n.anyoneWithLinkCanView,
-            isSelected: conversation.visibility == ConversationVisibility.shared,
-            onTap: () => choose(sheetContext, ConversationVisibility.shared),
-          ),
-        ],
+  static Future<bool> _setVisibility(String conversationId, String visibility) =>
+      setConversationVisibility(conversationId, visibility: visibility);
+
+  /// The native sheet: Private and Shared with their descriptions; the current one carries a check.
+  @visibleForTesting
+  static Widget native(
+    BuildContext sheetContext,
+    ServerConversation conversation,
+    Future<void> Function(BuildContext sheetContext, ConversationVisibility target) choose,
+  ) {
+    final l10n = sheetContext.l10n;
+    final current = conversation.visibility;
+    return IosNativeSurface(
+      title: l10n.visibility,
+      fallback: OmiSheetScaffold(
+        title: l10n.visibility,
+        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+        child: _options(sheetContext, conversation, choose),
       ),
+      toolbar: [
+        NativeRow('visibility_close', l10n.close,
+            symbol: 'xmark', action: (_) => Navigator.of(sheetContext).maybePop()),
+      ],
+      sections: [
+        NativeSection('visibility', [
+          NativeRow('visibility_private', l10n.private,
+              subtitle: l10n.onlyYouCanSeeConversation,
+              symbol: current == ConversationVisibility.private_ ? 'checkmark.circle.fill' : 'lock',
+              action: (_) => choose(sheetContext, ConversationVisibility.private_)),
+          NativeRow('visibility_shared', l10n.shared,
+              subtitle: l10n.anyoneWithLinkCanView,
+              symbol: current == ConversationVisibility.shared ? 'checkmark.circle.fill' : 'globe',
+              action: (_) => choose(sheetContext, ConversationVisibility.shared)),
+        ]),
+      ],
+    );
+  }
+
+  static Widget _options(
+    BuildContext sheetContext,
+    ServerConversation conversation,
+    Future<void> Function(BuildContext sheetContext, ConversationVisibility target) choose,
+  ) {
+    final l10n = sheetContext.l10n;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _option(
+          icon: Icons.lock_outline,
+          label: l10n.private,
+          description: l10n.onlyYouCanSeeConversation,
+          isSelected: conversation.visibility == ConversationVisibility.private_,
+          onTap: () => choose(sheetContext, ConversationVisibility.private_),
+        ),
+        _option(
+          icon: Icons.public,
+          label: l10n.shared,
+          description: l10n.anyoneWithLinkCanView,
+          isSelected: conversation.visibility == ConversationVisibility.shared,
+          onTap: () => choose(sheetContext, ConversationVisibility.shared),
+        ),
+      ],
     );
   }
 

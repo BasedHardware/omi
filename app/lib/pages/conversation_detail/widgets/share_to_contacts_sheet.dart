@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/share_links.dart';
@@ -33,6 +34,7 @@ void showShareToContactsBottomSheet(BuildContext context, ServerConversation con
     title: context.l10n.shareViaSms,
     padding: EdgeInsets.zero,
     builder: (_) => ShareToContactsBottomSheet(conversation: conversation),
+    nativeBuilder: (_) => ShareToContactsBottomSheet(conversation: conversation, native: true),
   );
 }
 
@@ -40,7 +42,10 @@ void showShareToContactsBottomSheet(BuildContext context, ServerConversation con
 class ShareToContactsBottomSheet extends StatefulWidget {
   final ServerConversation conversation;
 
-  const ShareToContactsBottomSheet({super.key, required this.conversation});
+  /// Presents natively, with this sheet's Flutter content as the fallback.
+  final bool native;
+
+  const ShareToContactsBottomSheet({super.key, required this.conversation, this.native = false});
 
   @override
   State<ShareToContactsBottomSheet> createState() => _ShareToContactsBottomSheetState();
@@ -54,6 +59,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
   bool _isPreparingShare = false;
   String? _errorMessage;
   bool _permissionDenied = false;
+
+  /// The contacts could not be read; distinct from a failed share, which keeps the list.
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -74,6 +82,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       _isLoading = true;
       _errorMessage = null;
       _permissionDenied = false;
+      _loadFailed = false;
     });
 
     // Request contacts permission using flutter_contacts' own method
@@ -114,6 +123,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       // Sort by display name
       shareableContacts.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
 
+      if (!mounted) return;
       setState(() {
         _contacts = shareableContacts;
         _filteredContacts = shareableContacts;
@@ -123,6 +133,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       if (!mounted) return;
       setState(() {
         _isLoading = false;
+        _loadFailed = true;
         _errorMessage = '${context.l10n.failedToLoadContacts}: $e';
       });
     }
@@ -235,8 +246,92 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     }
   }
 
+  Future<void> _openSettings() async {
+    if (Platform.isIOS) {
+      await launchUrl(Uri.parse('app-settings:'));
+    } else {
+      await launchUrl(Uri.parse('package:com.friend.ios'));
+    }
+  }
+
+  void _clearSelection() => setState(() {
+        for (var contact in _contacts) {
+          contact.isSelected = false;
+        }
+      });
+
+  String _shareLabel(int selectedCount) => selectedCount == 0
+      ? context.l10n.selectContactsToShare
+      : selectedCount > 1
+          ? context.l10n.shareWithContactsCount(selectedCount)
+          : context.l10n.shareWithContactCount(selectedCount);
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.native) return _buildClassic(context);
+    final l10n = context.l10n;
+    final selectedCount = _selectedContacts.length;
+    final shareError = _loadFailed || _permissionDenied ? null : _errorMessage;
+    final positions = {for (final (index, contact) in _contacts.indexed) contact: index};
+    return IosNativeSurface(
+      title: l10n.shareViaSms,
+      fallback: OmiSheetScaffold(title: l10n.shareViaSms, padding: EdgeInsets.zero, child: _buildClassic(context)),
+      loading: _isLoading || _isPreparingShare,
+      failed: _loadFailed,
+      errorMessage: _loadFailed ? _errorMessage : null,
+      // Retry after a failed read only: reloading a loaded list would drop the selection.
+      onRefresh: _loadFailed ? (_) => _loadContacts() : null,
+      search: _permissionDenied
+          ? null
+          : (value) {
+              _searchController.text = value as String;
+              _filterContacts(value);
+            },
+      searchValue: _searchController.text,
+      searchPlaceholder: l10n.searchContactsHint,
+      toolbar: [
+        NativeRow('contacts_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        if (selectedCount > 0) NativeRow('contacts_clear', l10n.clearAllSelection, action: (_) => _clearSelection()),
+        if (!_permissionDenied)
+          // Text, not an icon: the label carries the selected count.
+          NativeRow('contacts_share', _shareLabel(selectedCount),
+              enabled: selectedCount > 0 && !_isPreparingShare, action: (_) => _openNativeSms()),
+      ],
+      sections: [
+        if (_permissionDenied)
+          NativeSection('contacts_permission', [
+            NativeRow('contacts_permission_required', l10n.contactsPermissionRequired,
+                kind: 'label', subtitle: l10n.grantContactsPermissionForSms, symbol: 'person.crop.circle'),
+            NativeRow('contacts_open_settings', l10n.openSettings, symbol: 'gear', action: (_) => _openSettings()),
+          ])
+        else if (!_isLoading && !_loadFailed) ...[
+          NativeSection('contacts_status', [
+            NativeRow('contacts_hint', l10n.selectContactsToShareSummary, kind: 'label'),
+            if (selectedCount > 0)
+              NativeRow('contacts_selected', l10n.contactsSelectedCount(selectedCount), kind: 'label'),
+            if (shareError != null)
+              NativeRow('contacts_error', shareError,
+                  kind: 'label', symbol: 'exclamationmark.circle', destructive: true),
+          ]),
+          NativeSection('contacts', [
+            if (_filteredContacts.isEmpty)
+              NativeRow('contacts_empty',
+                  _searchController.text.isEmpty ? l10n.noContactsWithPhoneNumbers : l10n.noContactsMatchSearch,
+                  kind: 'label', symbol: 'magnifyingglass'),
+            // Keyed by position in the full list, so a toggle sent while a search refilters still
+            // reaches the contact the person saw.
+            for (final contact in _filteredContacts)
+              NativeRow('contact:${positions[contact]}', contact.displayName,
+                  kind: 'toggle', subtitle: contact.phoneNumber, value: contact.isSelected, action: (value) {
+                if (value != contact.isSelected) _toggleContactSelection(contact);
+              }),
+          ]),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildClassic(BuildContext context) {
     final selectedCount = _selectedContacts.length;
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.75,
@@ -276,11 +371,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   OmiButton.tertiary(
                     label: context.l10n.clearAllSelection,
                     size: OmiButtonSize.compact,
-                    onPressed: () => setState(() {
-                      for (var contact in _contacts) {
-                        contact.isSelected = false;
-                      }
-                    }),
+                    onPressed: _clearSelection,
                   ),
                 ],
               ),
@@ -309,11 +400,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               child: OmiButton(
                 expand: true,
                 isLoading: _isPreparingShare,
-                label: selectedCount == 0
-                    ? context.l10n.selectContactsToShare
-                    : selectedCount > 1
-                        ? context.l10n.shareWithContactsCount(selectedCount)
-                        : context.l10n.shareWithContactCount(selectedCount),
+                label: _shareLabel(selectedCount),
                 onPressed: selectedCount == 0 ? null : _openNativeSms,
               ),
             ),
@@ -335,13 +422,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         action: OmiButton(
           label: context.l10n.openSettings,
           size: OmiButtonSize.compact,
-          onPressed: () async {
-            if (Platform.isIOS) {
-              await launchUrl(Uri.parse('app-settings:'));
-            } else {
-              await launchUrl(Uri.parse('package:com.friend.ios'));
-            }
-          },
+          onPressed: _openSettings,
         ),
       );
     }

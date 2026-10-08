@@ -79,6 +79,19 @@ extension _NativeSummaryPresentation on _SummaryTabState {
               enabled: !_isEditing && !provider.loadingReprocessConversation,
               action: (_) => _editNativeSummary(selection)));
         }
+        // The app that wrote this summary opens its page, as in the classic summary. Omi's own summary,
+        // and an app the catalog no longer knows, show no row.
+        final app = selection.isApp && selection.content.isNotEmpty ? provider.findAppById(selection.appId) : null;
+        if (app != null) {
+          final description = app.description.decodeString.trim().characters;
+          rows.add(NativeRow('detail_summary_app', app.name.decodeString,
+              kind: 'navigation',
+              subtitle: description.length > 160 ? '${description.take(160)}…' : description.toString(),
+              imageUri: nativeImageUri(app.getImageUrl()), action: (_) async {
+            PlatformManager.instance.analytics.pageOpened('App Detail');
+            await routeToPage(context, AppDetailPage(app: app));
+          }));
+        }
       }
       final geolocation = conversation.discarded ? null : conversation.geolocation;
       if (geolocation?.latitude != null && geolocation?.longitude != null) {

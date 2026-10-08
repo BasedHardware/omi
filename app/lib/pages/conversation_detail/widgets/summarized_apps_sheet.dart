@@ -9,6 +9,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -26,39 +27,43 @@ Future<void> showSummarizedAppsSheet(BuildContext context) {
     title: context.l10n.summaryTemplate,
     padding: EdgeInsets.zero,
     builder: (_) => const SummarizedAppsBottomSheet(),
+    nativeBuilder: (_) => const SummarizedAppsBottomSheet(native: true),
   );
 }
 
 /// Body of the summary-template picker; present it with [showSummarizedAppsSheet].
 class SummarizedAppsBottomSheet extends StatelessWidget {
-  const SummarizedAppsBottomSheet({super.key});
+  /// Presents natively, with the Flutter list as the fallback.
+  final bool native;
+
+  const SummarizedAppsBottomSheet({super.key, this.native = false});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.7,
-      child: Consumer<ConversationDetailProvider>(
-        builder: (context, provider, _) {
-          final currentSelection = provider.getSummarySelection();
-          final currentAppId = currentSelection.isApp ? currentSelection.appId : null;
+    final list = Consumer<ConversationDetailProvider>(
+      builder: (context, provider, _) {
+        final currentSelection = provider.getSummarySelection();
+        final currentAppId = currentSelection.isApp ? currentSelection.appId : null;
 
-          PlatformManager.instance.analytics.summarizedAppSheetViewed(
-            conversationId: provider.conversation.id,
-            currentSummarizedAppId: currentAppId,
-          );
+        PlatformManager.instance.analytics.summarizedAppSheetViewed(
+          conversationId: provider.conversation.id,
+          currentSummarizedAppId: currentAppId,
+        );
 
-          return _AppsList(provider: provider, currentAppId: currentAppId);
-        },
-      ),
+        return _AppsList(provider: provider, currentAppId: currentAppId, native: native);
+      },
     );
+    if (native) return list;
+    return SizedBox(height: MediaQuery.sizeOf(context).height * 0.7, child: list);
   }
 }
 
 class _AppsList extends StatefulWidget {
   final ConversationDetailProvider provider;
   final String? currentAppId;
+  final bool native;
 
-  const _AppsList({required this.provider, required this.currentAppId});
+  const _AppsList({required this.provider, required this.currentAppId, this.native = false});
 
   @override
   State<_AppsList> createState() => _AppsListState();
@@ -183,16 +188,17 @@ class _AppsListState extends State<_AppsList> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// The picker's groups, shared by both presentations: the suggested templates, then the default
+  /// app (unless suggested), the last used app, and the rest with the user's own apps first, A-Z.
+  ({
+    String? preferredAppId,
+    App? preferredApp,
+    App? lastUsedApp,
+    List<String> suggestedAppIds,
+    List<App> otherApps,
+  }) _layout() {
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
-
-    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
-
-    if (isLoading) {
-      return _buildShimmerLoading();
-    }
 
     // Get preferred (default) app ID and find it in enabled apps
     final preferredAppId = widget.provider.preferredSummarizationAppId;
@@ -225,6 +231,145 @@ class _AppsListState extends State<_AppsList> {
       if (!aIsOwned && bIsOwned) return 1;
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
+    return (
+      preferredAppId: preferredAppId,
+      preferredApp: preferredApp,
+      lastUsedApp: lastUsedApp,
+      suggestedAppIds: suggestedAppIds,
+      otherApps: otherApps,
+    );
+  }
+
+  /// The native picker. A row's context menu offers "Set Default" in place of the swipe.
+  ///
+  /// Rows index [_nativeAppIds], which only grows: a refetch that re-sorts the list never moves an
+  /// id to another app, so a tap Swift sends before it sees the new order still reaches its app.
+  Widget _buildNative(BuildContext context, {required bool isLoading}) {
+    final l10n = context.l10n;
+    final suggestedApps = widget.provider.cachedSuggestedApps;
+    final layout = _layout();
+    final ids = <String>{};
+    NativeRow? appRow(App app, {required bool available, bool isDefault = false, bool isLastUsed = false}) {
+      if (!ids.add(app.id)) return null;
+      var index = _nativeAppIds.indexOf(app.id);
+      if (index < 0) {
+        index = _nativeAppIds.length;
+        _nativeAppIds.add(app.id);
+      }
+      final installing = _AppsListState._installingApps[app.id] == true;
+      final description = app.description.decodeString.trim().characters;
+      return NativeRow(
+        'template_app:$index',
+        app.name.decodeString,
+        kind: 'navigation',
+        imageUri: nativeImageUri(app.getImageUrl()),
+        subtitle: installing
+            ? l10n.installingApp
+            : [
+                if (description.isNotEmpty)
+                  description.length > _nativeDescriptionLength
+                      ? '${description.take(_nativeDescriptionLength)}…'
+                      : description.toString(),
+                if (isDefault) l10n.defaultLabel,
+                if (isLastUsed && !isDefault) l10n.lastUsedLabel,
+              ].join(' · '),
+        symbol: app.id == widget.currentAppId ? 'checkmark' : null,
+        enabled: !installing,
+        options: {'default': l10n.setDefaultButton},
+        action: (value) {
+          if (value == 'default') return _confirmDefaultSummaryApp(context, widget.provider, app);
+          if (available) {
+            _handleAppTap(context, app);
+          } else {
+            _handleUnavailableAppTap(context, app);
+          }
+        },
+      );
+    }
+
+    final preferredAppId = layout.preferredAppId;
+    final hasPreferred = preferredAppId?.isNotEmpty == true;
+    final preferredApp = layout.preferredApp;
+    final lastUsedApp = layout.lastUsedApp;
+    // Classic repeats a suggested last-used app under Other with its badge; one row per app keeps
+    // the badge on the suggested row instead.
+    final suggestedRows = [
+      for (final app in suggestedApps)
+        appRow(app,
+            available: widget.provider.isSuggestedAppAvailable(app.id),
+            isDefault: hasPreferred && app.id == preferredAppId,
+            isLastUsed: app.id == lastUsedApp?.id && app.id != preferredAppId),
+    ].nonNulls.toList();
+    final otherRows = [
+      if (preferredApp != null && !layout.suggestedAppIds.contains(preferredApp.id))
+        appRow(preferredApp, available: true, isDefault: true),
+      if (lastUsedApp != null && lastUsedApp.id != preferredAppId)
+        appRow(lastUsedApp, available: true, isLastUsed: true),
+      for (final app in layout.otherApps) appRow(app, available: true),
+    ].nonNulls.toList();
+    return IosNativeSurface(
+      title: l10n.summaryTemplate,
+      loading: isLoading,
+      fallback: OmiSheetScaffold(
+        title: l10n.summaryTemplate,
+        padding: EdgeInsets.zero,
+        // A Builder lays the classic list out only if the fallback is ever shown.
+        child: SizedBox(height: MediaQuery.sizeOf(context).height * 0.7, child: Builder(builder: _buildClassic)),
+      ),
+      toolbar: [
+        NativeRow('template_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: isLoading
+          ? const []
+          : [
+              if (suggestedRows.isNotEmpty)
+                NativeSection('template_suggested', suggestedRows, title: l10n.suggestedTemplates),
+              if (otherRows.isNotEmpty)
+                NativeSection('template_other', otherRows,
+                    title: suggestedApps.isNotEmpty ? l10n.otherTemplates : l10n.availableTemplates),
+              NativeSection(
+                  'template_creative',
+                  [
+                    NativeRow('template_create', l10n.createCustomTemplate,
+                        kind: 'navigation', symbol: 'plus', action: (_) => _openCreateTemplate(context)),
+                    NativeRow('template_all', l10n.allTemplates,
+                        kind: 'navigation', symbol: 'folder', action: (_) => _openAllTemplates(context)),
+                  ],
+                  title: l10n.getCreative),
+            ],
+    );
+  }
+
+  static const _nativeDescriptionLength = 160;
+
+  /// Each app's row index, in the order the native picker first listed it.
+  final List<String> _nativeAppIds = [];
+
+  @override
+  Widget build(BuildContext context) {
+    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final suggestedApps = widget.provider.cachedSuggestedApps;
+    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
+    if (widget.native) return _buildNative(context, isLoading: isLoading);
+    return _buildClassic(context);
+  }
+
+  Widget _buildClassic(BuildContext context) {
+    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final suggestedApps = widget.provider.cachedSuggestedApps;
+
+    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
+
+    if (isLoading) {
+      return _buildShimmerLoading();
+    }
+
+    final layout = _layout();
+    final preferredAppId = layout.preferredAppId;
+    final preferredApp = layout.preferredApp;
+    final lastUsedApp = layout.lastUsedApp;
+    final suggestedAppIds = layout.suggestedAppIds;
+    final otherApps = layout.otherApps;
 
     return ListView(
       children: [
@@ -389,6 +534,56 @@ class _AppsListState extends State<_AppsList> {
   }
 }
 
+/// Asks before making [app] the default summary template, then saves it through [provider].
+Future<void> _confirmDefaultSummaryApp(BuildContext context, ConversationDetailProvider? provider, App app) async {
+  final confirmed = await showOmiConfirm(
+    context,
+    title: context.l10n.setDefaultApp,
+    message: context.l10n.setDefaultAppContent(app.name.decodeString),
+    confirmLabel: context.l10n.setDefaultButton,
+  );
+  if (!confirmed || provider == null) return;
+  final saved = await provider.setPreferredSummarizationApp(app.id);
+  if (!context.mounted) return;
+  if (saved) {
+    OmiFeedback.confirm(context, context.l10n.setAsDefaultSuccess(app.name.decodeString));
+  } else {
+    OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+  }
+}
+
+/// Create Template: closes the picker and opens the quick create sheet.
+void _openCreateTemplate(BuildContext context) {
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
+
+  // Close the current bottom sheet first
+  Navigator.pop(context);
+
+  // Show the quick create template bottom sheet
+  showCreateTemplateBottomSheet(context, conversationId: conversationId);
+}
+
+/// All Templates: closes the picker and opens the Summary apps catalog.
+void _openAllTemplates(BuildContext context) {
+  Navigator.pop(context);
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
+
+  // Navigate to Summary (memories) capability apps page
+  final appProvider = context.read<AppProvider>();
+  final memoriesApps = appProvider.apps.where((app) => app.worksWithMemories()).toList();
+
+  routeToPage(
+    context,
+    CapabilityAppsPage(
+      capability: AppCapability(title: context.l10n.summary, id: 'memories'),
+      apps: memoriesApps,
+    ),
+  );
+  PlatformManager.instance.analytics.pageOpened('Summary Apps');
+}
+
 class _AppListItem extends StatefulWidget {
   final App app;
   final bool isSelected;
@@ -421,22 +616,7 @@ class _AppListItemState extends State<_AppListItem> {
       key: Key('dismissible_${widget.app.id}'),
       direction: DismissDirection.horizontal,
       confirmDismiss: (direction) async {
-        // Show confirmation dialog
-        final confirmed = await _showSetDefaultConfirmation(context);
-
-        if (confirmed == true) {
-          // Set as preferred app
-          if (widget.provider != null) {
-            final saved = await widget.provider!.setPreferredSummarizationApp(widget.app.id);
-            if (context.mounted) {
-              if (saved) {
-                OmiFeedback.confirm(context, context.l10n.setAsDefaultSuccess(widget.app.name.decodeString));
-              } else {
-                OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
-              }
-            }
-          }
-        }
+        await _confirmDefaultSummaryApp(context, widget.provider, widget.app);
 
         // Always return false to prevent dismissal - we just want the swipe action, not removal
         return false;
@@ -444,15 +624,6 @@ class _AppListItemState extends State<_AppListItem> {
       background: _buildSwipeBackground(isLeft: true),
       secondaryBackground: _buildSwipeBackground(isLeft: false),
       child: _buildListTile(),
-    );
-  }
-
-  Future<bool> _showSetDefaultConfirmation(BuildContext context) {
-    return showOmiConfirm(
-      context,
-      title: context.l10n.setDefaultApp,
-      message: context.l10n.setDefaultAppContent(widget.app.name.decodeString),
-      confirmLabel: context.l10n.setDefaultButton,
     );
   }
 
@@ -631,16 +802,7 @@ class _CreateTemplateListItem extends StatelessWidget {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
           trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-          onTap: () {
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
-
-            // Close the current bottom sheet first
-            Navigator.pop(context);
-
-            // Show the quick create template bottom sheet
-            showCreateTemplateBottomSheet(context, conversationId: conversationId);
-          },
+          onTap: () => _openCreateTemplate(context),
         ),
         Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
@@ -668,24 +830,7 @@ class _EnableAppsListItem extends StatelessWidget {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
           trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-          onTap: () {
-            Navigator.pop(context);
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
-
-            // Navigate to Summary (memories) capability apps page
-            final appProvider = context.read<AppProvider>();
-            final memoriesApps = appProvider.apps.where((app) => app.worksWithMemories()).toList();
-
-            routeToPage(
-              context,
-              CapabilityAppsPage(
-                capability: AppCapability(title: context.l10n.summary, id: 'memories'),
-                apps: memoriesApps,
-              ),
-            );
-            PlatformManager.instance.analytics.pageOpened('Summary Apps');
-          },
+          onTap: () => _openAllTemplates(context),
         ),
         Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],

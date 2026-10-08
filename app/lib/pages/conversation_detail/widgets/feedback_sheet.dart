@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -59,7 +60,58 @@ Future<void> showFeedbackReasonSheet(
     context: context,
     title: title,
     builder: (context) => _FeedbackReasonSheet(population: population, onSubmit: onSubmit),
+    nativeBuilder: (context) => FeedbackReasonNativeSheet(title: title, population: population, onSubmit: onSubmit),
   );
+}
+
+/// Picks one option: the same haptic, close and submit for both presentations.
+void _chooseFeedback(
+  BuildContext context,
+  void Function(int value, MobileFeedbackReason? reason) onSubmit,
+  int value,
+  MobileFeedbackReason? reason,
+) {
+  OmiHaptics.selection();
+  Navigator.pop(context);
+  onSubmit(value, reason);
+}
+
+/// The native presentation of [showFeedbackReasonSheet]: the population's reasons in their fixed
+/// order, "All good", and "Chat with us" while Intercom is available. Closing submits nothing.
+class FeedbackReasonNativeSheet extends StatelessWidget {
+  const FeedbackReasonNativeSheet({super.key, required this.title, required this.population, required this.onSubmit});
+
+  final String title;
+  final FeedbackReasonPopulation population;
+  final void Function(int value, MobileFeedbackReason? reason) onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: title,
+      fallback: OmiSheetScaffold(title: title, child: _FeedbackReasonSheet(population: population, onSubmit: onSubmit)),
+      toolbar: [
+        NativeRow('feedback_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('feedback_reasons', [
+          for (final reason in feedbackReasonsFor(population))
+            NativeRow('feedback_reason_${reason.name}', feedbackReasonLabel(l10n, reason),
+                action: (_) => _chooseFeedback(context, onSubmit, -1, reason)),
+        ]),
+        NativeSection('feedback_more', [
+          NativeRow('feedback_all_good', l10n.feedbackAllGood,
+              symbol: 'hand.thumbsup', action: (_) => _chooseFeedback(context, onSubmit, 1, null)),
+          // Opens the messenger only: nothing is submitted and the sheet stays open.
+          if (IntercomManager.instance.isIntercomEnabled)
+            NativeRow('feedback_chat_with_us', l10n.feedbackChatWithUs,
+                symbol: 'bubble.left.and.bubble.right',
+                action: (_) => IntercomManager.instance.intercom.displayMessenger()),
+        ]),
+      ],
+    );
+  }
 }
 
 class _FeedbackReasonSheet extends StatelessWidget {
@@ -68,11 +120,8 @@ class _FeedbackReasonSheet extends StatelessWidget {
 
   const _FeedbackReasonSheet({required this.population, required this.onSubmit});
 
-  void _choose(BuildContext context, int value, MobileFeedbackReason? reason) {
-    OmiHaptics.selection();
-    Navigator.pop(context);
-    onSubmit(value, reason);
-  }
+  void _choose(BuildContext context, int value, MobileFeedbackReason? reason) =>
+      _chooseFeedback(context, onSubmit, value, reason);
 
   @override
   Widget build(BuildContext context) {
