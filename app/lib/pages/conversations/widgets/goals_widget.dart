@@ -17,63 +17,325 @@ import 'package:omi/utils/l10n_extensions.dart';
 ///
 /// A target of one billion previously produced one billion divisions. Flutter
 /// walks the divisions during every slider paint even when tick marks are
-/// hidden, which can block the UI thread for several seconds.
-@visibleForTesting
+/// hidden, which can block the UI thread for several seconds. The native progress control steps by
+/// one exactly when this is set.
 int? goalSliderDivisions(double targetValue) {
   if (!targetValue.isFinite || targetValue <= 0 || targetValue > 100) return null;
   final roundedTarget = targetValue.round();
   return targetValue == roundedTarget ? roundedTarget : null;
 }
 
+/// At most this many goals; adding another explains the limit instead.
+const int maxGoalCount = 4;
+
+/// The emojis the goal sheet offers when editing.
+const List<String> goalEmojiChoices = [
+  '🎯',
+  '💪',
+  '📚',
+  '💰',
+  '🏃',
+  '🧘',
+  '💡',
+  '🔥',
+  '⭐',
+  '🚀',
+  '💎',
+  '🏆',
+  '📈',
+  '❤️',
+  '🎨',
+  '🎵',
+  '✈️',
+  '🏠',
+  '🌱',
+  '⏰',
+];
+
+/// Each goal's emoji (goal id -> emoji), kept on this device only. Listeners repaint on change.
+class GoalEmojis extends ChangeNotifier {
+  GoalEmojis({this.onSaved});
+
+  static const String _goalsEmojiKey = 'goals_tracker_emojis';
+
+  /// Runs after the emojis were written.
+  final VoidCallback? onSaved;
+
+  Map<String, String> _goalEmojis = {};
+  bool _disposed = false;
+
+  String of(String goalId) => _goalEmojis[goalId] ?? '🎯';
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final emojisJson = prefs.getString(_goalsEmojiKey);
+
+      if (emojisJson != null && !_disposed) {
+        final Map<String, dynamic> decoded = json.decode(emojisJson);
+        _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  void set(String goalId, String emoji) {
+    _goalEmojis[goalId] = emoji;
+    if (!_disposed) notifyListeners();
+  }
+
+  void remove(String goalId) {
+    _goalEmojis.remove(goalId);
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> save() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final emojisJson = json.encode(_goalEmojis);
+      await prefs.setString(_goalsEmojiKey, emojisJson);
+      onSaved?.call();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+
+/// The emoji a new goal starts with, picked from keywords in its [title].
+String goalSmartEmoji(String title) {
+  final lowerTitle = title.toLowerCase();
+  // Keyword to emoji mapping - order matters (more specific first)
+  final Map<List<String>, String> keywordMap = {
+    // Money/Business goals
+    ['revenue', 'money', 'income', 'profit', 'sales', '\$', 'dollar', 'earn']: '💰',
+    [
+      'users',
+      'customers',
+      'clients',
+      'subscribers',
+      'followers',
+      'growth',
+      'million',
+      '1m',
+      '10k',
+      '100k',
+      'mrr',
+      'arr',
+    ]: '🚀',
+    ['startup', 'launch', 'business', 'company']: '🏆',
+    ['invest', 'stock', 'crypto', 'trading']: '📈',
+
+    // Health/Fitness goals
+    ['workout', 'gym', 'exercise', 'lift', 'muscle', 'strength', 'pushup', 'pullup']: '💪',
+    ['run', 'marathon', 'jog', 'cardio', 'steps', 'walk', 'mile', 'km']: '🏃',
+    ['weight', 'lose', 'fat', 'diet', 'calories', 'kg', 'lbs', 'pounds']: '⚖️',
+    ['meditat', 'mindful', 'yoga', 'breath', 'calm', 'peace', 'zen']: '🧘',
+    ['sleep', 'rest', 'hours']: '😴',
+    ['water', 'hydrat', 'drink']: '💧',
+    ['health', 'wellness', 'healthy']: '❤️',
+
+    // Learning/Education goals
+    ['read', 'book', 'pages', 'chapter']: '📚',
+    ['learn', 'study', 'course', 'class', 'skill', 'certif']: '🎓',
+    ['code', 'program', 'develop', 'app', 'software', 'tech']: '💻',
+    ['language', 'spanish', 'french', 'chinese', 'english', 'german']: '🗣️',
+
+    // Creative goals
+    ['write', 'blog', 'article', 'post', 'content', 'words']: '✍️',
+    ['video', 'youtube', 'tiktok', 'film']: '🎬',
+    ['music', 'song', 'piano', 'guitar', 'sing']: '🎵',
+    ['art', 'draw', 'paint', 'design', 'create']: '🎨',
+    ['photo', 'picture', 'camera']: '📸',
+
+    // Productivity goals
+    ['task', 'todo', 'complete', 'finish', 'done']: '✅',
+    ['habit', 'daily', 'streak', 'consistent', 'routine']: '🔥',
+    ['time', 'hour', 'minute', 'focus', 'pomodoro', 'productive']: '⏰',
+    ['project', 'ship', 'deliver', 'deadline']: '🎯',
+
+    // Travel/Lifestyle goals
+    ['travel', 'trip', 'visit', 'country', 'city', 'vacation']: '✈️',
+    ['home', 'house', 'apartment', 'move', 'buy']: '🏠',
+    ['save', 'saving', 'budget', 'emergency fund']: '🏦',
+
+    // Social/Relationship goals
+    ['friend', 'social', 'network', 'connect', 'meet']: '👥',
+    ['family', 'kids', 'parent']: '👨‍👩‍👧',
+    ['date', 'relationship', 'love']: '💕',
+
+    // General achievement
+    ['goal', 'target', 'achieve', 'accomplish']: '🎯',
+    ['win', 'first', 'best', 'top', 'champion']: '🏆',
+    ['grow', 'improve', 'better', 'progress']: '🌱',
+    ['star', 'success', 'excellent']: '⭐',
+  };
+
+  // Check each keyword group
+  for (final entry in keywordMap.entries) {
+    for (final keyword in entry.key) {
+      if (lowerTitle.contains(keyword)) {
+        return entry.value;
+      }
+    }
+  }
+
+  // Default emoji if no match
+  return '🎯';
+}
+
+/// A goal value as the list shows it: whole numbers plainly, others to one decimal.
+String goalValueLabel(double v) {
+  return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+}
+
+/// "current/target", as the goal list shows progress.
+String goalProgressLabel(Goal goal) => '${goalValueLabel(goal.currentValue)}/${goalValueLabel(goal.targetValue)}';
+
+/// Opens the add sheet, or explains the limit once there are [maxGoalCount] goals.
+void addGoal(BuildContext context, GoalEmojis emojis) {
+  final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+  if (goalsProvider.goals.length >= maxGoalCount) {
+    OmiFeedback.info(context, context.l10n.maximumGoalsAllowed(maxGoalCount));
+    return;
+  }
+
+  PlatformManager.instance.analytics.goalAddButtonTapped(source: 'home');
+  OmiHaptics.light();
+  showGoalFormSheet(
+    context,
+    onSave: (title, current, target, _) => saveGoal(goalsProvider, emojis, null, title, current, target, null),
+  );
+}
+
+/// Opens [goal] in the edit sheet, with its emoji and Delete.
+void editGoal(BuildContext context, Goal goal, GoalEmojis emojis) {
+  final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+  OmiHaptics.light();
+  showGoalFormSheet(
+    context,
+    goal: goal,
+    emojiChoices: goalEmojiChoices,
+    initialEmoji: emojis.of(goal.id),
+    onSave: (title, current, target, emoji) => saveGoal(goalsProvider, emojis, goal, title, current, target, emoji),
+    onDelete: () {
+      PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'button');
+      deleteGoalAndEmoji(context, goal, emojis);
+    },
+  );
+}
+
+/// Updates [existingGoal], or creates a goal with a keyword emoji, then stores the emojis.
+Future<void> saveGoal(
+  GoalsProvider goalsProvider,
+  GoalEmojis emojis,
+  Goal? existingGoal,
+  String title,
+  double current,
+  double target,
+  String? emoji,
+) async {
+  if (existingGoal != null) {
+    await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
+
+    PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
+    if (emoji != null) {
+      PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
+      emojis.set(existingGoal.id, emoji);
+    }
+  } else {
+    final smartEmoji = goalSmartEmoji(title);
+    final created = await goalsProvider.createGoal(
+      title: title,
+      goalType: 'numeric',
+      targetValue: target,
+      currentValue: current,
+    );
+
+    if (created != null) {
+      PlatformManager.instance.analytics.goalCreated(
+        goalId: created.id,
+        titleLength: title.length,
+        targetValue: target,
+        source: 'home',
+      );
+      emojis.set(created.id, smartEmoji);
+    }
+  }
+
+  await emojis.save();
+}
+
+/// Immediate with Undo (D5); the emoji is forgotten once the delete commits.
+void deleteGoalAndEmoji(BuildContext context, Goal goal, GoalEmojis emojis) {
+  final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+  deleteGoalWithUndo(
+    context,
+    goalsProvider,
+    goal,
+    onDeleted: () {
+      emojis.remove(goal.id);
+      emojis.save();
+    },
+  );
+}
+
+/// Feedback while the progress changes; the provider repaints once it is saved.
+void updateGoalProgressUI(Goal goal, double newValue) {
+  if (newValue == goal.currentValue) return;
+  OmiHaptics.light();
+}
+
+/// Saves the progress through the existing owner (storage and API).
+Future<void> saveGoalProgress(GoalsProvider goalsProvider, Goal goal, double newValue) async {
+  await goalsProvider.updateGoalProgress(goal.id, newValue);
+}
+
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
-  const GoalsWidget({super.key, this.onRefresh, this.showHeader = true});
+  const GoalsWidget({super.key, this.onRefresh, this.showHeader = true, this.emojis});
 
   final VoidCallback? onRefresh;
 
   /// False when the host page's app bar already carries the "Goals" title and the add action.
   final bool showHeader;
 
+  /// Shared with the host page; null keeps the widget's own, loaded on mount.
+  final GoalEmojis? emojis;
+
   @override
   State<GoalsWidget> createState() => GoalsWidgetState();
 }
 
 class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
-  static const String _goalsEmojiKey = 'goals_tracker_emojis';
-  static const int _maxGoals = 4;
+  GoalEmojis? _ownEmojis;
 
-  // Available emojis for goals
-  static const List<String> _availableEmojis = [
-    '🎯',
-    '💪',
-    '📚',
-    '💰',
-    '🏃',
-    '🧘',
-    '💡',
-    '🔥',
-    '⭐',
-    '🚀',
-    '💎',
-    '🏆',
-    '📈',
-    '❤️',
-    '🎨',
-    '🎵',
-    '✈️',
-    '🏠',
-    '🌱',
-    '⏰',
-  ];
-
-  // Local emoji storage (goalId -> emoji)
-  Map<String, String> _goalEmojis = {};
+  GoalEmojis get _emojis => widget.emojis ?? (_ownEmojis ??= GoalEmojis(onSaved: () => widget.onRefresh?.call()));
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadEmojis();
+    _emojis.addListener(_repaint);
+    if (widget.emojis == null) _emojis.load();
+  }
+
+  @override
+  void didUpdateWidget(GoalsWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previous = oldWidget.emojis ?? _ownEmojis;
+    if (!identical(previous, _emojis)) {
+      previous?.removeListener(_repaint);
+      _emojis.addListener(_repaint);
+      if (widget.emojis == null) _emojis.load();
+    }
+  }
+
+  void _repaint() {
+    if (mounted) setState(() {});
   }
 
   void refresh() {
@@ -83,6 +345,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _emojis.removeListener(_repaint);
+    _ownEmojis?.dispose();
     super.dispose();
   }
 
@@ -91,195 +355,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       Provider.of<GoalsProvider>(context, listen: false).refresh();
     }
-  }
-
-  Future<void> _loadEmojis() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final emojisJson = prefs.getString(_goalsEmojiKey);
-
-      if (emojisJson != null && mounted) {
-        final Map<String, dynamic> decoded = json.decode(emojisJson);
-        setState(() {
-          _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
-        });
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _saveEmojis() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final emojisJson = json.encode(_goalEmojis);
-      await prefs.setString(_goalsEmojiKey, emojisJson);
-      widget.onRefresh?.call();
-    } catch (_) {}
-  }
-
-  String _getSmartEmoji(String title) {
-    final lowerTitle = title.toLowerCase();
-
-    // Keyword to emoji mapping - order matters (more specific first)
-    final Map<List<String>, String> keywordMap = {
-      // Money/Business goals
-      ['revenue', 'money', 'income', 'profit', 'sales', '\$', 'dollar', 'earn']: '💰',
-      [
-        'users',
-        'customers',
-        'clients',
-        'subscribers',
-        'followers',
-        'growth',
-        'million',
-        '1m',
-        '10k',
-        '100k',
-        'mrr',
-        'arr',
-      ]: '🚀',
-      ['startup', 'launch', 'business', 'company']: '🏆',
-      ['invest', 'stock', 'crypto', 'trading']: '📈',
-
-      // Health/Fitness goals
-      ['workout', 'gym', 'exercise', 'lift', 'muscle', 'strength', 'pushup', 'pullup']: '💪',
-      ['run', 'marathon', 'jog', 'cardio', 'steps', 'walk', 'mile', 'km']: '🏃',
-      ['weight', 'lose', 'fat', 'diet', 'calories', 'kg', 'lbs', 'pounds']: '⚖️',
-      ['meditat', 'mindful', 'yoga', 'breath', 'calm', 'peace', 'zen']: '🧘',
-      ['sleep', 'rest', 'hours']: '😴',
-      ['water', 'hydrat', 'drink']: '💧',
-      ['health', 'wellness', 'healthy']: '❤️',
-
-      // Learning/Education goals
-      ['read', 'book', 'pages', 'chapter']: '📚',
-      ['learn', 'study', 'course', 'class', 'skill', 'certif']: '🎓',
-      ['code', 'program', 'develop', 'app', 'software', 'tech']: '💻',
-      ['language', 'spanish', 'french', 'chinese', 'english', 'german']: '🗣️',
-
-      // Creative goals
-      ['write', 'blog', 'article', 'post', 'content', 'words']: '✍️',
-      ['video', 'youtube', 'tiktok', 'film']: '🎬',
-      ['music', 'song', 'piano', 'guitar', 'sing']: '🎵',
-      ['art', 'draw', 'paint', 'design', 'create']: '🎨',
-      ['photo', 'picture', 'camera']: '📸',
-
-      // Productivity goals
-      ['task', 'todo', 'complete', 'finish', 'done']: '✅',
-      ['habit', 'daily', 'streak', 'consistent', 'routine']: '🔥',
-      ['time', 'hour', 'minute', 'focus', 'pomodoro', 'productive']: '⏰',
-      ['project', 'ship', 'deliver', 'deadline']: '🎯',
-
-      // Travel/Lifestyle goals
-      ['travel', 'trip', 'visit', 'country', 'city', 'vacation']: '✈️',
-      ['home', 'house', 'apartment', 'move', 'buy']: '🏠',
-      ['save', 'saving', 'budget', 'emergency fund']: '🏦',
-
-      // Social/Relationship goals
-      ['friend', 'social', 'network', 'connect', 'meet']: '👥',
-      ['family', 'kids', 'parent']: '👨‍👩‍👧',
-      ['date', 'relationship', 'love']: '💕',
-
-      // General achievement
-      ['goal', 'target', 'achieve', 'accomplish']: '🎯',
-      ['win', 'first', 'best', 'top', 'champion']: '🏆',
-      ['grow', 'improve', 'better', 'progress']: '🌱',
-      ['star', 'success', 'excellent']: '⭐',
-    };
-
-    // Check each keyword group
-    for (final entry in keywordMap.entries) {
-      for (final keyword in entry.key) {
-        if (lowerTitle.contains(keyword)) {
-          return entry.value;
-        }
-      }
-    }
-
-    // Default emoji if no match
-    return '🎯';
-  }
-
-  String _getGoalEmoji(String goalId) {
-    return _goalEmojis[goalId] ?? '🎯';
-  }
-
-  void addGoal() {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    if (goalsProvider.goals.length >= _maxGoals) {
-      OmiFeedback.info(context, context.l10n.maximumGoalsAllowed(_maxGoals));
-      return;
-    }
-
-    PlatformManager.instance.analytics.goalAddButtonTapped(source: 'home');
-    OmiHaptics.light();
-    showGoalFormSheet(context, onSave: (title, current, target, _) => _saveGoal(null, title, current, target, null));
-  }
-
-  void _editGoal(Goal goal) {
-    OmiHaptics.light();
-    showGoalFormSheet(
-      context,
-      goal: goal,
-      emojiChoices: _availableEmojis,
-      initialEmoji: _getGoalEmoji(goal.id),
-      onSave: (title, current, target, emoji) => _saveGoal(goal, title, current, target, emoji),
-      onDelete: () {
-        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'button');
-        _deleteGoal(goal);
-      },
-    );
-  }
-
-  Future<void> _saveGoal(Goal? existingGoal, String title, double current, double target, String? emoji) async {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-
-    if (existingGoal != null) {
-      await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
-
-      PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
-      if (emoji != null) {
-        PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
-        if (mounted) setState(() => _goalEmojis[existingGoal.id] = emoji);
-      }
-    } else {
-      final smartEmoji = _getSmartEmoji(title);
-      final created = await goalsProvider.createGoal(
-        title: title,
-        goalType: 'numeric',
-        targetValue: target,
-        currentValue: current,
-      );
-
-      if (created != null) {
-        PlatformManager.instance.analytics.goalCreated(
-          goalId: created.id,
-          titleLength: title.length,
-          targetValue: target,
-          source: 'home',
-        );
-        if (mounted) setState(() => _goalEmojis[created.id] = smartEmoji);
-      }
-    }
-
-    await _saveEmojis();
-  }
-
-  /// Immediate with Undo (D5); the emoji is forgotten once the delete commits.
-  void _deleteGoal(Goal goal) {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    deleteGoalWithUndo(
-      context,
-      goalsProvider,
-      goal,
-      onDeleted: () {
-        _goalEmojis.remove(goal.id);
-        if (mounted) setState(() {});
-        _saveEmojis();
-      },
-    );
-  }
-
-  String _rawNum(double v) {
-    return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
   }
 
   /// Colour carries state only: on track (green), under way (amber), not started (grey).
@@ -322,13 +397,13 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.title3)),
-                      if (goals.length < _maxGoals)
+                      if (goals.length < maxGoalCount)
                         Transform.translate(
                           // Keeps the painted circle on the card's right edge.
                           offset: const Offset((kOmiMinTapTarget - 32) / 2, 0),
                           child: OmiIconButton.filled(
                             label: context.l10n.addGoal,
-                            onPressed: addGoal,
+                            onPressed: () => addGoal(context, _emojis),
                             diameter: 32,
                             fillColor: OmiColors.surface2,
                             color: OmiColors.textSecondary,
@@ -354,7 +429,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   Widget _buildGoalItem(Goal goal, bool isLast) {
     final progress = goal.progressPercentage;
     final color = _getColor(progress);
-    final emoji = _getGoalEmoji(goal.id);
+    final emoji = _emojis.of(goal.id);
 
     return Dismissible(
       key: Key(goal.id),
@@ -367,11 +442,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       ),
       onDismissed: (direction) {
         PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
-        _deleteGoal(goal);
+        deleteGoalAndEmoji(context, goal, _emojis);
       },
       child: GestureDetector(
         onTap: () {
-          _editGoal(goal);
+          editGoal(context, goal, _emojis);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
           });
@@ -426,7 +501,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 min: 0,
                                 max: goal.targetValue,
                                 divisions: goalSliderDivisions(goal.targetValue),
-                                onChanged: (value) => _updateGoalProgressUI(goal, value),
+                                onChanged: (value) => updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) {
                                   PlatformManager.instance.analytics.goalProgressChanged(
                                     goalId: goal.id,
@@ -434,7 +509,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                     newValue: value,
                                     targetValue: goal.targetValue,
                                   );
-                                  _saveGoalProgress(goal, value);
+                                  saveGoalProgress(context.read<GoalsProvider>(), goal, value);
                                 },
                               ),
                             ),
@@ -442,7 +517,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          goalProgressLabel(goal),
                           style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -455,18 +530,5 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         ),
       ),
     );
-  }
-
-  // Update UI state only (called during drag) - use provider for immediate feedback
-  void _updateGoalProgressUI(Goal goal, double newValue) {
-    if (newValue == goal.currentValue) return;
-    OmiHaptics.light();
-    // The provider will notify listeners and the UI will update
-  }
-
-  // Save to storage and API (called when drag ends)
-  Future<void> _saveGoalProgress(Goal goal, double newValue) async {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    await goalsProvider.updateGoalProgress(goal.id, newValue);
   }
 }

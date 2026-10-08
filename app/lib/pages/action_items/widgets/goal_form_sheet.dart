@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/mobile/native_ui/ios_native_edit.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -12,7 +14,8 @@ typedef GoalSaveCallback = FutureOr<void> Function(String title, double current,
 
 /// Opens the one goal sheet (Home and the Tasks page share it): a new goal, or [goal] for editing.
 /// Cancel and Save are explicit, unsaved edits are guarded, and Delete (edit mode) is immediate
-/// with Undo through [onDelete].
+/// with Undo through [onDelete]. With the SwiftUI preview the sheet is a native form over the same
+/// controllers, validation and callbacks.
 Future<void> showGoalFormSheet(
   BuildContext context, {
   Goal? goal,
@@ -156,10 +159,12 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
     );
   }
 
+  void _setText(TextEditingController controller, Object? value) => setState(() => controller.text = value as String);
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return OmiEditSheet(
+    final classic = OmiEditSheet(
       title: _isEditing ? l10n.editGoal : l10n.addGoal,
       isDirty: _isDirty,
       actions: [
@@ -245,6 +250,50 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
           ],
         ),
       ),
+    );
+    final emoji = _emoji;
+    return IosNativeEdit(
+      title: _isEditing ? l10n.editGoal : l10n.addGoal,
+      isDirty: _isDirty,
+      fallback: classic,
+      sections: [
+        NativeSection('goal_editor', [
+          if (_isEditing && widget.emojiChoices.isNotEmpty && emoji != null && emoji.isNotEmpty)
+            NativeRow(
+              'goal_emoji',
+              l10n.icon,
+              kind: 'choice',
+              value: emoji,
+              // A goal may carry a keyword emoji the picker does not list; it stays selectable.
+              options: {
+                if (!widget.emojiChoices.contains(emoji)) emoji: emoji,
+                for (final choice in widget.emojiChoices) choice: choice,
+              },
+              action: (value) {
+                OmiHaptics.selection();
+                setState(() => _emoji = value as String);
+              },
+            ),
+          NativeRow('goal_title', l10n.goalTitle,
+              kind: 'text', value: _titleController.text, action: (value) => _setText(_titleController, value)),
+          NativeRow('goal_current', l10n.current,
+              kind: 'text',
+              keyboard: 'decimal',
+              value: _currentController.text,
+              action: (value) => _setText(_currentController, value)),
+          NativeRow('goal_target', l10n.target,
+              kind: 'text',
+              keyboard: 'decimal',
+              value: _targetController.text,
+              action: (value) => _setText(_targetController, value)),
+          if (_isEditing && widget.onDelete != null)
+            NativeRow('goal_delete', l10n.deleteGoal, destructive: true, action: (_) => _delete()),
+        ]),
+      ],
+      toolbar: [
+        NativeRow('goal_save', _isEditing ? l10n.save : l10n.addGoal,
+            enabled: _titleController.text.trim().isNotEmpty, action: (_) => _save()),
+      ],
     );
   }
 }

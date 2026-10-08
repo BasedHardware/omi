@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -12,12 +13,21 @@ class AcceptSharedTasksSheet extends StatefulWidget {
   final List<Map<String, dynamic>> tasks;
   final VoidCallback? onAccepted;
 
+  /// The SwiftUI preview's sheet: a native list over the same accept action, with this sheet as its
+  /// fallback.
+  final bool native;
+
+  /// The existing accept call; replaceable in tests.
+  final Future<Map<String, dynamic>?> Function(String token) acceptSharedTasks;
+
   const AcceptSharedTasksSheet({
     super.key,
     required this.token,
     required this.senderName,
     required this.tasks,
     this.onAccepted,
+    this.native = false,
+    this.acceptSharedTasks = action_items_api.acceptSharedActionItems,
   });
 
   @override
@@ -28,10 +38,12 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
   bool _isAccepting = false;
 
   Future<void> _acceptTasks() async {
+    // A second native command can arrive before the disabled projection reaches Swift.
+    if (_isAccepting) return;
     setState(() => _isAccepting = true);
     final l10n = context.l10n;
 
-    final result = await action_items_api.acceptSharedActionItems(widget.token);
+    final result = await widget.acceptSharedTasks(widget.token);
 
     if (!mounted) return;
 
@@ -58,7 +70,7 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
     final l10n = context.l10n;
     // Paints its own surface so it also works under a transparent showModalBottomSheet; the shell
     // (title, close X, insets) is the shared one.
-    return ConstrainedBox(
+    final classic = ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
       child: Material(
         color: OmiColors.surface1,
@@ -133,6 +145,33 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
           ),
         ),
       ),
+    );
+    if (!widget.native) return classic;
+    final title = l10n.sharedTasksTitle(widget.senderName, widget.tasks.length);
+    return IosNativeSurface(
+      title: title,
+      fallback: classic,
+      toolbar: [
+        NativeRow('shared_tasks_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('shared_tasks_accept', l10n.sharedTasksAddButton(widget.tasks.length),
+            enabled: !_isAccepting, action: (_) => _acceptTasks()),
+      ],
+      sections: [
+        NativeSection('shared_tasks', [
+          NativeRow('shared_tasks_sender', title, kind: 'label', subtitle: l10n.addToYourTaskList),
+          for (final (index, task) in widget.tasks.indexed)
+            NativeRow(
+              'shared_task:$index',
+              task['description'] as String? ?? '',
+              kind: 'label',
+              symbol: 'circle',
+              subtitle: switch (task['due_at'] as String?) {
+                final dueAt? => l10n.taskDueDate(_formatDueDate(dueAt)),
+                null => '',
+              },
+            ),
+        ]),
+      ],
     );
   }
 }

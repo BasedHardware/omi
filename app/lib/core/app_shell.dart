@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/mobile/mobile_app.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
@@ -30,6 +32,7 @@ import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -214,23 +217,10 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => AcceptSharedTasksSheet(
-        token: token,
-        senderName: data['sender_name'] ?? context.l10n.sharedTasksUnknownSender,
-        tasks: (data['tasks'] as List<dynamic>? ?? [])
-            .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
-            .toList(),
-        onAccepted: () {
-          // Refresh action items after accepting
-          if (mounted) {
-            context.read<ActionItemsProvider>().forceRefreshActionItems();
-          }
-        },
-      ),
+    showSharedTasksSheet(
+      context,
+      token: token,
+      data: data,
     );
   }
 
@@ -410,4 +400,50 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     return const MobileApp();
   }
+}
+
+/// Opens the accept sheet for shared tasks [data]. The SwiftUI preview on iOS uses the shared sheet
+/// shell with a native list; every other build keeps the transparent modal sheet. Accepting refreshes
+/// the action items unless [onAccepted] replaces that.
+@visibleForTesting
+Future<void> showSharedTasksSheet(
+  BuildContext context, {
+  required String token,
+  required Map<String, dynamic> data,
+  VoidCallback? onAccepted,
+  bool? nativePreview,
+  Future<Map<String, dynamic>?> Function(String token) acceptSharedTasks = action_items_api.acceptSharedActionItems,
+}) {
+  AcceptSharedTasksSheet sheet({bool native = false}) => AcceptSharedTasksSheet(
+        token: token,
+        senderName: data['sender_name'] ?? context.l10n.sharedTasksUnknownSender,
+        tasks: (data['tasks'] as List<dynamic>? ?? [])
+            .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
+            .toList(),
+        onAccepted: onAccepted ??
+            () {
+              // Refresh action items after accepting
+              if (context.mounted) {
+                context.read<ActionItemsProvider>().forceRefreshActionItems();
+              }
+            },
+        native: native,
+        acceptSharedTasks: acceptSharedTasks,
+      );
+  if (nativePreview ?? (iosSwiftUiEnabled && Platform.isIOS)) {
+    // The sheet draws its own title and close X, so the shell adds none.
+    return showOmiSheet<void>(
+      context: context,
+      showCloseButton: false,
+      padding: EdgeInsets.zero,
+      builder: (_) => sheet(),
+      nativeBuilder: (_) => sheet(native: true),
+    );
+  }
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => sheet(),
+  );
 }
