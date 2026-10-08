@@ -27,6 +27,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
+from llm_gateway.gateway.metrics import LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -728,6 +729,11 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    if provider_ref.provider == 'openai' and provider_ref.model == 'gpt-6-luna':
+        thinking = provider_request.get('google')
+        thinking = thinking.get('thinking_config') if isinstance(thinking, Mapping) else None
+        if isinstance(thinking, Mapping):
+            provider_request['reasoning_effort'] = _gemini_thinking_effort_for_luna(thinking)
     if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
@@ -761,8 +767,9 @@ def _sanitize_openai_chat_completions_request(
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Temperature must also stay at the model default (1). gpt-x-luna keeps this
-    sanitizer; whether that model still rejects the same params is unverified.
+    The dedicated ``gpt-6-luna`` route keeps mapped Gemini reasoning effort but
+    drops unsupported ``top_p`` and ``stop``. Temperature must stay at the model
+    default (1).
     """
     if provider_ref.provider != 'openai':
         return
@@ -770,11 +777,13 @@ def _sanitize_openai_chat_completions_request(
     if not uses_explicit_cache_and_chat_sanitizer(model):
         return
     if provider_request.get('model') == 'gpt-6-luna':
-        provider_request.pop('top_p', None)
-        provider_request.pop('stop', None)
+        for param in ('top_p', 'stop'):
+            if param in provider_request:
+                provider_request.pop(param, None)
+                LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param=param).inc()
 
     tools = provider_request.get('tools')
-    if tools:
+    if tools and model != 'gpt-6-luna':
         effort = provider_request.get('reasoning_effort')
         if effort not in (None, 'none'):
             provider_request['reasoning_effort'] = 'none'
@@ -787,6 +796,28 @@ def _sanitize_openai_chat_completions_request(
         isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or temperature != 1
     ):
         provider_request.pop('temperature', None)
+
+
+def _gemini_thinking_effort_for_luna(thinking: Mapping[str, Any]) -> str:
+    """Map Gemini thinking controls to Luna effort levels.
+
+    Budget mapping is stable and intentionally coarse: absent or zero is
+    ``none``, 1 through 1024 is ``low``, and larger budgets are ``medium``.
+    Gemini levels map minimal/low/medium/high to none/low/medium/medium.
+    Unknown or malformed controls use ``none``.
+    """
+    level = thinking.get('thinking_level', thinking.get('thinkingLevel'))
+    if level in {'minimal', 'none'}:
+        return 'none'
+    if level == 'low':
+        return 'low'
+    if level in {'medium', 'high'}:
+        return 'medium'
+
+    budget = thinking.get('thinking_budget', thinking.get('thinkingBudget'))
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+        return 'none'
+    return 'low' if budget <= 1024 else 'medium'
 
 
 def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
