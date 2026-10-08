@@ -5,6 +5,8 @@ Import endpoints for importing data from external sources.
 import asyncio
 import logging
 import os
+import re
+
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -12,8 +14,10 @@ from utils.executors import db_executor, storage_executor, run_blocking, start_b
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 import database.import_jobs as import_jobs_db
+import database.import_quotas as import_quotas_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
@@ -128,7 +132,7 @@ async def import_transcript_files(
     language: str = 'en',
     tz: str = 'UTC',
     origin: str = 'other',
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'import:upload')),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'import:upload', fail_closed=True)),
 ):
     """
     Start importing transcripts exported from other tools.
@@ -138,6 +142,16 @@ async def import_transcript_files(
     same file is skipped. ``tz`` reads dates in file names, and ``origin`` is ``plaud``
     or ``other``. Poll GET /v1/import/jobs/{job_id} for progress.
     """
+    language = language.strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,16}', language):
+        language = 'en'
+    try:
+        admitted = await run_blocking(db_executor, import_quotas_db.reserve_import_quota, uid, 'upload', 1)
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail='Import quota unavailable') from exc
+    if admitted is None:
+        raise HTTPException(status_code=429, detail='Monthly transcript upload limit reached. Try again later.')
+
     filename = os.path.basename((file.filename or '').replace('\\', '/'))
     if not filename.lower().endswith(UPLOAD_EXTENSIONS):
         raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
@@ -209,7 +223,7 @@ def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> Non
     The file goes even when the job update raises.
     """
     try:
-        import_jobs_db.update_import_job(
+        import_jobs_db.update_import_job_unless_cancelled(
             job_id,
             {
                 'status': ImportJobStatus.failed.value,
@@ -319,10 +333,10 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
         raise HTTPException(status_code=404, detail="Import job not found")
     if job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
-    if job.get('status') not in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
-        raise HTTPException(status_code=409, detail="Only a pending or processing import can be cancelled")
-
-    import_jobs_db.update_import_job(job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'})
+    if not import_jobs_db.cancel_import_job_if_active(job_id):
+        if import_jobs_db.get_import_job(job_id) is None:
+            raise HTTPException(status_code=404, detail='Import job not found')
+        raise HTTPException(status_code=409, detail='Only a pending or processing import can be cancelled')
     return ImportJobResponse(
         job_id=job['id'],
         status=ImportJobStatus.cancelled,

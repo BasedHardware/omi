@@ -21,6 +21,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from zipfile import ZIP_BZIP2, ZIP_DEFLATED, ZIP_LZMA, ZIP_STORED, ZipFile
 
 import pytest
@@ -1078,6 +1080,8 @@ class _Store:
 
 @pytest.fixture
 def job(monkeypatch):
+    monkeypatch.setattr(tf.import_quotas_db, 'reserve_import_quota', lambda *_args: 'reservation')
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', lambda *_args: None)
     store = _Store()
     updates: list = []
     state = {'status': ImportJobStatus.pending.value}
@@ -2459,3 +2463,136 @@ def test_per_file_failures_reach_users_as_plain_reasons(tmp_path, job, monkeypat
     assert final['error'] == f'None of the 1 file(s) could be imported ({reason}).'
     assert not any(name in final['error'] for name in ('BadZipFile', 'InvalidArgument', 'KeyError', 'Error'))
     assert 'error_class=' in caplog.text, 'the exception class is still logged'
+
+
+@pytest.mark.parametrize('data', [b'hello\x81\x8d\x8f', ('hello' + '\ufffd' * 3).encode('utf-8')])
+def test_replacement_heavy_text_is_not_a_transcript(data):
+    assert tf._decode_transcript(data) is None
+    assert tf.parse_transcript_file('renamed.txt', data) is None
+
+
+def test_windows_text_with_a_rare_replacement_is_still_readable():
+    data = b'Windows meeting transcript with caf\xe9 and useful notes. ' * 2 + b'\x81'
+    assert tf._decode_transcript(data) is not None
+
+
+def test_byte_quota_charges_only_new_conversations(tmp_path, job, monkeypatch):
+    reserve, release = MagicMock(return_value='bytes-1'), MagicMock()
+    monkeypatch.setattr(tf.import_quotas_db, 'reserve_import_quota', reserve)
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', release)
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+    reserve.assert_called_once_with(UID, 'byte', len(SRT.encode('utf-8')))
+    release.assert_not_called()
+    reserve.reset_mock()
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+    reserve.assert_called_once_with(UID, 'byte', len(SRT.encode('utf-8')))
+    release.assert_called_once_with(UID, 'byte', 'bytes-1')
+    assert len(job.store.docs) == 1
+
+
+def test_failed_create_releases_the_byte_reservation(tmp_path, job, monkeypatch):
+    release = MagicMock()
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', release)
+    monkeypatch.setattr(
+        tf.lifecycle_service, 'persist_imported_conversation', MagicMock(side_effect=RuntimeError('down'))
+    )
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+
+    release.assert_called_once_with(UID, 'byte', 'reservation')
+    assert not job.store.docs
+
+
+@pytest.mark.parametrize('allow_first', [True, False])
+def test_worker_finishes_with_monthly_limit_reason_and_skips_remaining_files(tmp_path, job, monkeypatch, allow_first):
+    reserve = MagicMock(side_effect=['bytes-1', None] if allow_first else [None])
+    monkeypatch.setattr(tf.import_quotas_db, 'reserve_import_quota', reserve)
+
+    _run(tmp_path, 'export.zip', _zip({'a.srt': SRT, 'b.vtt': VTT, 'c.txt': OTTER_STYLE_TXT}))
+
+    assert job.final()['status'] == 'completed'
+    assert job.final()['conversations_created'] == int(allow_first)
+    assert 'monthly import limit reached' in job.final()['error']
+    assert job.state['processed_files'] == 3
+    assert reserve.call_count == (2 if allow_first else 1)
+
+
+@pytest.mark.parametrize('status', ['pending', 'processing', 'completed', 'failed', 'cancelled', None])
+def test_cancel_transaction_only_applies_to_active_jobs(status):
+    client = StrictFirestore()
+    ref = client.collection('import_jobs').document('job-1')
+    if status is not None:
+        ref.create({'status': status})
+
+    applied = tf.import_jobs_db.cancel_import_job_if_active('job-1', firestore_client=client)
+
+    assert applied == (status in ('pending', 'processing'))
+    assert ref.get().to_dict() == (
+        {'status': 'cancelled', 'error': 'Cancelled by user'} if applied else {'status': status} if status else None
+    )
+
+
+def test_a_shutdown_while_a_file_is_queued_reserves_no_bytes(tmp_path, job, monkeypatch):
+    """Cancelled before its file thread starts, an import never reserves quota for that file."""
+    reserve, release = MagicMock(return_value='bytes-1'), MagicMock()
+    monkeypatch.setattr(tf.import_quotas_db, 'reserve_import_quota', reserve)
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', release)
+    pool = ThreadPoolExecutor(max_workers=1)
+    monkeypatch.setattr(tf, 'storage_executor', pool)
+    occupied, release_pool = threading.Event(), threading.Event()
+    job_cancelled = tf._job_cancelled
+
+    def before_the_file(job_id):
+        # Another request takes the storage pool's only thread before the file is queued.
+        pool.submit(lambda: (occupied.set(), release_pool.wait(5)))
+        return job_cancelled(job_id)
+
+    monkeypatch.setattr(tf, '_job_cancelled', before_the_file)
+    path = tmp_path / 'export.zip'
+    path.write_bytes(_zip({'a.srt': SRT}))
+
+    async def main():
+        task = asyncio.create_task(
+            tf.process_transcript_import('job-1', UID, str(path), original_filename='export.zip')
+        )
+        while not (occupied.is_set() and pool._work_queue.qsize() == 1):
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.05)
+        release_pool.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    try:
+        asyncio.run(main())
+    finally:
+        release_pool.set()
+        pool.shutdown(wait=True)
+
+    reserve.assert_not_called()
+    release.assert_not_called()
+    assert job.store.docs == {}
+    assert job.final()['error'] == tf.INTERRUPTED_ERROR
+
+
+def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job, monkeypatch):
+    """The file thread outlives the cancelled task; a save that then fails gives the bytes back."""
+    release = MagicMock()
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', release)
+    blocked, unblock = threading.Event(), threading.Event()
+
+    def slow_failing_save(uid, payload):
+        blocked.set()
+        unblock.wait(5)
+        raise RuntimeError('firestore down')
+
+    monkeypatch.setattr(tf.lifecycle_service, 'persist_imported_conversation', slow_failing_save)
+
+    _cancel_while(tmp_path, _zip({'a.srt': SRT}), blocked, unblock)
+    deadline = time.monotonic() + 5
+    while not release.called and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    release.assert_called_once_with(UID, 'byte', 'reservation')
+    assert job.store.docs == {}

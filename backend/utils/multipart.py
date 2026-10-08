@@ -76,6 +76,10 @@ class MultipartMaxPartSizeRoute(APIRoute):
         original_route_handler = super().get_route_handler()
 
         async def custom_route_handler(request: Request):
+            if self.path == '/v1/import/transcripts':
+                scheme, _, token = request.headers.get('authorization', '').partition(' ')
+                if scheme.lower() != 'bearer' or not token.strip():
+                    raise HTTPException(status_code=401, detail='Bearer token required')
             if self.multipart_limits is not None and not _is_multipart(request):
                 # The limits bound a multipart body; any other body would be read unbounded,
                 # and before auth, by the route's own form handling.
