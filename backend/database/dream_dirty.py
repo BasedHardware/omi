@@ -32,6 +32,8 @@ def after_write(collection: str):
                     ids = [data]
                 if collection == 'action_items' and not isinstance(data, str):
                     ids = [result] if isinstance(result, str) else result if isinstance(result, list) else ids
+                if collection == 'memory_items' and isinstance(result, str):
+                    ids = [result]
                 if collection == 'candidates' and isinstance(result, CandidateRecord):
                     ids = [result.candidate_id]
                 notify(uid, [(collection, value) for value in ids])

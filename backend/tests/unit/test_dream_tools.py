@@ -55,7 +55,7 @@ def test_transcript_fix_uses_encoded_reversible_patch_and_snapshot_fence(monkeyp
         'structured': {
             'title': 'Alise meeting',
             'overview': 'Alise discussed Widgets',
-            'sections': [{'text': 'Alise met us', 'source_segment_ids': ['s1']}],
+            'sections': [{'heading': 'Alise meeting', 'body_markdown': 'Alise met us', 'source_segment_ids': ['s1']}],
             'note_claims': [],
         },
         'transcript_segments': [{'id': 's1', 'text': 'Alise said hi', 'start': 0, 'end': 1}],
@@ -80,6 +80,8 @@ def test_transcript_fix_uses_encoded_reversible_patch_and_snapshot_fence(monkeyp
     assert decoded['transcript_segments'][0]['text'] == 'Alice said hi'
     assert decoded['structured']['title'] == 'Alice meeting'
     assert decoded['structured']['overview'] == 'Alice discussed Widgets'
+    assert decoded['structured']['sections'][0]['heading'] == 'Alice meeting'
+    assert decoded['structured']['sections'][0]['body_markdown'] == 'Alice met us'
     assert decoded['structured']['sections'][0]['source_segment_ids'] == []
     assert patch['client_processing'] is None
     assert kwargs['expected_documents'] == {'c1': stored}

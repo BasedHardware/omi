@@ -48,7 +48,18 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
         return {
             k: (
                 _replace_tree(v, before, after)
-                if k in {'text', 'title', 'description', 'content', 'overview', 'sections', 'items'}
+                if k
+                in {
+                    'text',
+                    'title',
+                    'description',
+                    'content',
+                    'overview',
+                    'sections',
+                    'items',
+                    'heading',
+                    'body_markdown',
+                }
                 else v
             )
             for k, v in value.items()
@@ -63,6 +74,8 @@ def apply_edit(uid, edit, records):
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
     row = records[edit.target]
+    if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
+        raise ValueError('dream_invalid_spelling')
     change = ReviewChange(
         change_id=str(uuid5(NAMESPACE_URL, uid + ":" + key)),
         kind='other',
@@ -116,8 +129,6 @@ def apply_edit(uid, edit, records):
             'completed_at': datetime.now(timezone.utc) if edit.kind == 'close_task' else None,
         }
     elif edit.kind == 'spelling':
-        if not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50:
-            raise ValueError('dream_invalid_spelling')
         if collection == 'people':
             if raw.get('name') != row.get('name'):
                 raise review_store.ReviewConflict('Dream person changed')

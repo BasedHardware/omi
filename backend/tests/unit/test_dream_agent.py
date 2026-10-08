@@ -350,3 +350,12 @@ def test_evidence_shrinks_to_the_triage_budget():
     assert len(__import__('json').loads(messages[0]['content'])['records']) == 50
     framed = dream_agent.mount(Triage, 6000).messages(messages)
     assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000
+
+
+def test_canonical_dirty_hook_uses_committed_id_when_input_has_no_id(monkeypatch):
+    calls = []
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setattr(dream_dirty, 'mark_dirty', lambda *a: calls.append(a))
+    writer = dream_dirty.after_write('memory_items')(lambda uid, data: 'canonical-generated-id')
+    writer(uid=UID, data={'content': 'Synthetic new memory'})
+    assert calls == [(UID, [('memory_items', 'canonical-generated-id')])]

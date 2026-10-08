@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from database import review_memory_merges as merges, review_store
-from models.product_memory import MemoryItem
+from models.product_memory import MemoryItem, MemoryTier
+from utils import dream_reads
 from models.review import ReviewChange
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -125,3 +126,10 @@ def test_undo_appends_two_tails_and_blocks_reapply(monkeypatch):
     # Repeating the completed request performs no additional canonical writes.
     merges.set_undone(UID, change.change_id, True, journal)
     assert len(captured) == 2
+
+
+def test_dream_reads_do_not_surface_archived_canonical_items(monkeypatch):
+    archived = memory('archived', 'Synthetic private archive').model_copy(update={'tier': MemoryTier.archive})
+    monkeypatch.setattr(dream_reads, 'read_canonical_memory_item', lambda *a: archived)
+    monkeypatch.setattr(dream_reads, 'memory_item_to_memorydb', lambda *a: pytest.fail('archive projected'))
+    assert dream_reads.read_record(UID, 'memory_items/archived') is None
