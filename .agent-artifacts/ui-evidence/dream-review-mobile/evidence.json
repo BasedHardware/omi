@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-review-entry-card.png",
+      "platform": "mobile-android",
+      "description": "Home: the Questions for you card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-review-question-cards.png",
+      "platform": "mobile-android",
+      "description": "Review: three simple question cards",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-sheet-who-said-this.png",
+      "platform": "mobile-android",
+      "description": "Detail sheet: who said this",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-sheet-task-dismiss-reasons.png",
+      "platform": "mobile-android",
+      "description": "Detail sheet: suggested task after tapping Dismiss",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-sheet-same-person.png",
+      "platform": "mobile-android",
+      "description": "Detail sheet: same person",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-conversation-chips-inline-question.png",
+      "platform": "mobile-android",
+      "description": "Conversation: entity chips and inline speaker question",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-android-person-page.png",
+      "platform": "mobile-android",
+      "description": "Person page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-android-organization-page.png",
+      "platform": "mobile-android",
+      "description": "Organization page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-android-project-page.png",
+      "platform": "mobile-android",
+      "description": "Project page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-android-recent-changes.png",
+      "platform": "mobile-android",
+      "description": "Recent Changes with Undo",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-android-tasks-grouped-by-project.png",
+      "platform": "mobile-android",
+      "description": "Tasks grouped by project",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-review-caught-up.png",
+      "platform": "mobile-android",
+      "description": "Review: caught up",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
