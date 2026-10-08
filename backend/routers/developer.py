@@ -1,4 +1,3 @@
-from database import conversation_tombstones
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -17,6 +16,7 @@ import database.goals as goals_db
 import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder

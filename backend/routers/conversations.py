@@ -1,4 +1,3 @@
-from database import conversation_tombstones
 import asyncio
 import hashlib
 
@@ -12,6 +11,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
