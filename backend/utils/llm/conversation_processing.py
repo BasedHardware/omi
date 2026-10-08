@@ -55,6 +55,7 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
     GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
     explicit_cache_switch_enabled,
+    model_supports_explicit_cache,
     has_cacheable_prefix,
     marked_prefix_request,
     prefix_cache_key,
@@ -164,7 +165,7 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 def _gpt56_explicit_cache_enabled() -> bool:
     # The route half stays local so this module's gateway seam remains patchable;
     # the kill-switch half is owned once, in prompt_cache, for every caller.
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled() and not has_byok_keys()
+    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -1021,14 +1022,6 @@ def extract_action_items(
             timing_importance_rules=timing_importance_rules,
         )
     gateway_cache_enabled = explicit_cache_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
-    prompt = cast(Any, ChatPromptTemplate).from_messages(
-        [
-            _gpt56_cacheable_system_message(
-                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
-            ),
-            ('system', context_message),
-        ]
-    )
     if gateway_cache_enabled:
         cache_key = ACTION_ITEMS_CACHE_KEY
     elif gateway_mode_enabled:
@@ -1037,6 +1030,15 @@ def extract_action_items(
         cache_key = 'omi-extract-actions'
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     action_items_llm = get_llm('conv_action_items', cache_key=cache_key, prompt_cache_options=cache_options)
+    gateway_cache_enabled = gateway_cache_enabled and model_supports_explicit_cache(action_items_llm)
+    prompt = cast(Any, ChatPromptTemplate).from_messages(
+        [
+            _gpt56_cacheable_system_message(
+                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
+            ),
+            ('system', context_message),
+        ]
+    )
     chain = prompt | action_items_llm | action_items_parser
 
     current_time = datetime.now(timezone.utc)
@@ -1187,7 +1189,11 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     # response_format and prompt_cache_breakpoint. The shaped notes mount never
     # carries a cache breakpoint; parser-based extraction needs no provider
     # cache hint to work on any lane.
-    model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    model = get_llm(
+        'conv_structure',
+        request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+        prompt_cache_options=GPT56_EXPLICIT_CACHE_OPTIONS if _gpt56_explicit_cache_enabled() else None,
+    )
     extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
     mount = Mount(
         instructions=mount.instructions + '\n\n' + extraction_parser.get_format_instructions(),
@@ -1311,14 +1317,6 @@ def get_transcript_structure(
         instructions_text = instructions_text.format(format_instructions=parser.get_format_instructions())
     explicit_cache_enabled = _gpt56_explicit_cache_enabled()
     gateway_cache_enabled = explicit_cache_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
-    prompt = cast(Any, ChatPromptTemplate).from_messages(
-        [
-            _gpt56_cacheable_system_message(
-                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
-            ),
-            ('system', context_message),
-        ]
-    )
     legacy_prompt_values = {
         'conversation_context': conversation_context,
         'language_code': language_code,
@@ -1342,6 +1340,17 @@ def get_transcript_structure(
             cache_key=cache_key,
             prompt_cache_options=cache_options,
             request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+        )
+        gateway_cache_enabled = gateway_cache_enabled and model_supports_explicit_cache(structure_llm)
+        if not gateway_cache_enabled:
+            legacy_prompt_values['format_instructions'] = parser.get_format_instructions()
+        prompt = cast(Any, ChatPromptTemplate).from_messages(
+            [
+                _gpt56_cacheable_system_message(
+                    instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
+                ),
+                ('system', context_message),
+            ]
         )
         chain = prompt | structure_llm | parser
         response = _coerce_structured(chain.invoke(legacy_prompt_values))
@@ -1512,15 +1521,14 @@ def get_app_result(
 Name: {app.name}
 Description: {app.description}
 Task: {app.memory_prompt}'''
-        explicit_cache_enabled = (
-            shared_conversation_cache_supported() and explicit_cache_switch_enabled() and not has_byok_keys()
-        )
+        explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
         cache_enabled = explicit_cache_enabled and has_cacheable_prefix(instructions)
         model = get_llm(
             'conv_app_result',
             cache_key=prefix_cache_key(APP_RESULT_CACHE_NAMESPACE, instructions) if cache_enabled else None,
             prompt_cache_options=GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None,
         )
+        cache_enabled = cache_enabled and model_supports_explicit_cache(model)
         response = model.invoke(
             [
                 _gpt56_cacheable_system_message(instructions, cache_enabled=cache_enabled, formatted=True),
@@ -1538,18 +1546,23 @@ Task: {app.memory_prompt}'''
     # then a read on every later conversation this app summarizes inside the TTL.
     # Below it, marked_prefix_request declines and the request keeps its previous
     # shape — explicit mode, no breakpoint, no routing key — which is how a unique
-    # prompt opts out of billable writes. BYOK is excluded: a BYOK key can route
-    # this feature off GPT-5.6, where a typed cache field is not a valid content part.
-    marked_key, marked_messages = (
-        marked_prefix_request(APP_RESULT_CACHE_NAMESPACE, app_framing, app_conversation_block)
-        if explicit_cache_enabled
-        else (None, None)
+    # prompt opts out of billable writes. The resolved model gates the candidate
+    # marked messages below; get_llm filters request options after BYOK resolution.
+    marked_key = (
+        prefix_cache_key(APP_RESULT_CACHE_NAMESPACE, app_framing)
+        if explicit_cache_enabled and has_cacheable_prefix(app_framing)
+        else None
     )
     # The None/legacy split keys on gateway mode (like get_transcript_structure) so
     # gateway-on requests never fall back to a legacy implicit routing key.
     cache_key = marked_key or (None if gateway_mode_enabled else 'omi-app-result')
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
+    _, marked_messages = (
+        marked_prefix_request(APP_RESULT_CACHE_NAMESPACE, app_framing, app_conversation_block)
+        if explicit_cache_enabled and model_supports_explicit_cache(app_result_llm)
+        else (None, None)
+    )
     response = app_result_llm.invoke(marked_messages or prompt)
     content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
     return content

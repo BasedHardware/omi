@@ -228,6 +228,8 @@ env:
     value: "on"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED

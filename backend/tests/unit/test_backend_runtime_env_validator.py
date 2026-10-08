@@ -126,7 +126,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     this catches.
     """
     flags = (
-        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\1\n        {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},'
+        r'\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
@@ -3543,3 +3544,31 @@ def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts()
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
         assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+
+
+@pytest.mark.parametrize(
+    'platform,host',
+    [('gke', 'backend-listen'), ('gke', 'pusher'), ('cloud_run', 'backend'), ('cloud_run', 'backend-sync')],
+)
+def test_shaped_admission_rejects_omitted_mode_on_each_host(cap_env, platform, host):
+    validator, config = cap_env('dev')
+    service = config['gke'][host] if platform == 'gke' else config['cloud_run']['services'][host]
+    del service['env']['OMI_SHAPED_AGENT_MODE']
+    errors = validator.validate_conversation_finalization_capabilities('dev', config)
+    assert any(
+        e.scope == f'dev/{platform}/{host}' and 'OMI_SHAPED_AGENT_MODE must be a literal' in e.message for e in errors
+    )
+
+
+@pytest.mark.parametrize('mode', ['on', 'cohort', 'off', 'true', 'garbage', ''])
+def test_shaped_admission_matches_runtime_modes(cap_env, mode):
+    validator, config = cap_env('dev')
+    for service in [
+        config['gke']['backend-listen'],
+        config['gke']['pusher'],
+        config['cloud_run']['services']['backend'],
+        config['cloud_run']['services']['backend-sync'],
+    ]:
+        service['env']['OMI_SHAPED_AGENT_MODE']['value'] = mode
+    errors = validator.validate_conversation_finalization_capabilities('dev', config)
+    assert bool([e for e in errors if 'OMI_SHAPED_AGENT_MODE' in e.message]) is (mode not in {'on', 'cohort', 'off'})

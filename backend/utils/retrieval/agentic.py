@@ -86,7 +86,7 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
-from utils.llm.prompt_cache import gpt56_explicit_cache_enabled, EXPLICIT_CACHE_OPTIONS
+from utils.llm.prompt_cache import gpt56_explicit_cache_enabled, EXPLICIT_CACHE_OPTIONS, model_supports_explicit_cache
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
 from utils.chat_followup import (
     FOLLOWUP_DELIMITER,
@@ -1410,7 +1410,7 @@ provided chat scope; never retrieve outside its conversation or time window.
 """
 
 
-def chat_mount(tool_schemas: list) -> Mount:
+def chat_mount(tool_schemas: list, *, cache_breakpoint: bool = False) -> Mount:
     return Mount(
         instructions=(
             'You are Omi. Answer the current user request accurately and concisely. '
@@ -1422,7 +1422,7 @@ def chat_mount(tool_schemas: list) -> Mount:
         tools=tuple(tool_schemas),
         skills=(_CHAT_RETRIEVAL_SKILL, _CHAT_TOOL_SKILL),
         budget=Budget(turns=12, tool_calls=25, deadline_seconds=AGENT_STREAM_MAX_DURATION_SECONDS),
-        cache_breakpoint=True,
+        cache_breakpoint=cache_breakpoint,
     )
 
 
@@ -1440,8 +1440,7 @@ async def _run_shaped_chat_stream(
     safety_guard,
     configurable,
 ) -> Optional[str]:
-    mount = chat_mount(tool_schemas)
-    cache_enabled = gpt56_explicit_cache_enabled()
+    explicit_cache_requested = gpt56_explicit_cache_enabled()
     evidence = [
         {
             'role': 'user',
@@ -1458,10 +1457,14 @@ async def _run_shaped_chat_stream(
     ]
     usage_token = set_usage_context(configurable['user_id'], 'chat_agent')
     try:
-        model = get_llm('chat_agent', streaming=True)
+        model = get_llm(
+            'chat_agent',
+            streaming=True,
+            prompt_cache_options=EXPLICIT_CACHE_OPTIONS if explicit_cache_requested else None,
+        )
+        cache_enabled = explicit_cache_requested and model_supports_explicit_cache(model)
+        mount = chat_mount(tool_schemas, cache_breakpoint=cache_enabled)
         params = {'tools': list(mount.tools), 'tool_choice': 'auto', 'max_completion_tokens': 8192}
-        if cache_enabled:
-            params['extra_body'] = {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}
         model = model.bind(**params)
 
         async def model_turn(shape, history):

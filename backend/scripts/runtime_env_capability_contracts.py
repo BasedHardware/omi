@@ -54,6 +54,7 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # silently run different pipelines. An omitted flag must fail admission, not
 # fall through to the process-local False default.
 SUMMARY_PIPELINE_FLAGS = (
+    'OMI_SHAPED_AGENT_MODE',
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
@@ -216,6 +217,10 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                             f'(its reader accepts nothing else), got {literal_env[flag]!r}',
                         )
                     )
+                continue
+            if flag == 'OMI_SHAPED_AGENT_MODE':
+                if literal_env[flag].strip().casefold() not in {'on', 'cohort', 'off'}:
+                    errors.append(ValidationError(scope, f'{flag} must be on/cohort/off, got {literal_env[flag]!r}'))
                 continue
             if literal_env[flag].strip().casefold() not in _SUMMARY_FLAG_LITERALS:
                 errors.append(

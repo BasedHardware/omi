@@ -71,6 +71,7 @@ def _run_app_result(memory_prompt=LONG_TASK, *, byok=False, gateway=True, explic
     captured = {}
 
     llm = MagicMock()
+    llm.model_name = 'claude-sonnet-4-6' if byok else LUNA_MODEL
     llm.invoke.side_effect = lambda payload: captured.__setitem__('payload', payload) or SimpleNamespace(
         content='summary'
     )
@@ -151,9 +152,9 @@ def test_app_result_cache_key_is_content_derived_stable_and_versioned():
         # still carries the explicit-mode opt-out so the provider cannot bill an
         # unreadable automatic cache write.
         ({'memory_prompt': SHORT_TASK}, EXPLICIT_CACHE_OPTIONS),
-        # A BYOK key can route this feature off GPT-5.6, where a typed cache field
-        # is not a valid content part: no cache field at all.
-        ({'byok': True}, None),
+        # Provider-switched routing drops marked content. Options and the key
+        # are proposals to get_llm, whose resolved-model sanitizer filters them.
+        ({'byok': True}, EXPLICIT_CACHE_OPTIONS),
         # Kill switch: the field disappears with the feature.
         ({'explicit': False}, None),
     ],
@@ -162,7 +163,7 @@ def test_app_result_falls_back_to_the_unmarked_request(kwargs, expected_options)
     """Every guard must land on an unmarked request, never on an unreadable cache write."""
     captured = _run_app_result(**kwargs)
     assert isinstance(captured['payload'], str)
-    assert captured['llm_kwargs']['cache_key'] is None
+    assert bool(captured['llm_kwargs']['cache_key']) is bool(kwargs.get('byok'))
     assert captured['llm_kwargs']['prompt_cache_options'] == expected_options
 
 
@@ -428,7 +429,7 @@ def test_the_gateway_prices_each_new_shape_the_way_we_expect():
 
 @pytest.mark.parametrize('byok', [False, True])
 @pytest.mark.parametrize('reprocess', [False, True])
-def test_transcript_structure_byok_omits_cache_hints(monkeypatch, byok, reprocess):
+def test_transcript_structure_resolved_model_gates_breakpoints(monkeypatch, byok, reprocess):
     """Exercise both real prompt builders under the gateway route with request-local keys."""
     monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
@@ -442,12 +443,14 @@ def test_transcript_structure_byok_omits_cache_hints(monkeypatch, byok, reproces
     prompt_cls = MagicMock()
     prompt_cls.from_messages.return_value = prompt
     monkeypatch.setattr(conv_proc, 'ChatPromptTemplate', prompt_cls)
-    model_factory = MagicMock(return_value=MagicMock())
+    resolved_model = MagicMock()
+    resolved_model.model_name = 'claude-sonnet-4-6' if byok else LUNA_MODEL
+    model_factory = MagicMock(return_value=resolved_model)
     monkeypatch.setattr(conv_proc, 'get_llm', model_factory)
     monkeypatch.setattr(conv_proc, '_build_conversation_context', lambda *a, **k: 'Transcript evidence')
     token = byok_module._byok_ctx.set({'anthropic': 'sk-ant-test-not-real'} if byok else None)
     try:
-        assert conv_proc._gpt56_explicit_cache_enabled() is (not byok)
+        assert conv_proc._gpt56_explicit_cache_enabled()
         kwargs = dict(
             transcript='Conversation evidence',
             started_at=datetime(2026, 10, 8, tzinfo=timezone.utc),
@@ -462,15 +465,14 @@ def test_transcript_structure_byok_omits_cache_hints(monkeypatch, byok, reproces
         byok_module._byok_ctx.reset(token)
     messages = prompt_cls.from_messages.call_args.args[0]
     assert ('prompt_cache_breakpoint' in str(messages)) is (not byok and not reprocess)
-    assert model_factory.call_args.kwargs['prompt_cache_options'] == (None if byok else EXPLICIT_CACHE_OPTIONS)
-    if byok:
-        assert model_factory.call_args.kwargs['cache_key'] is None
+    assert model_factory.call_args.kwargs['prompt_cache_options'] == EXPLICIT_CACHE_OPTIONS
 
 
 @pytest.mark.parametrize('byok', [False, True])
-def test_shared_prefix_app_summary_preserves_byok_cache_exclusion(monkeypatch, byok):
+def test_shared_prefix_app_summary_gates_resolved_provider(monkeypatch, byok):
     captured = {}
     model = MagicMock()
+    model.model_name = 'claude-sonnet-4-6' if byok else LUNA_MODEL
     model.invoke.side_effect = lambda messages: captured.update(messages=messages) or SimpleNamespace(content='summary')
     factory = MagicMock(return_value=model)
     monkeypatch.setattr(conv_proc, 'get_llm', factory)
@@ -490,5 +492,5 @@ def test_shared_prefix_app_summary_preserves_byok_cache_exclusion(monkeypatch, b
     finally:
         byok_module._byok_ctx.reset(token)
     assert ('prompt_cache_breakpoint' in str(captured['messages'])) is (not byok)
-    assert factory.call_args.kwargs['prompt_cache_options'] == (None if byok else EXPLICIT_CACHE_OPTIONS)
-    assert bool(factory.call_args.kwargs['cache_key']) is (not byok)
+    assert factory.call_args.kwargs['prompt_cache_options'] == EXPLICIT_CACHE_OPTIONS
+    assert bool(factory.call_args.kwargs['cache_key'])

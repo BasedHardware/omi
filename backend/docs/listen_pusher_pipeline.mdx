@@ -19,6 +19,12 @@ An off, unset, or unknown mode disables shaped serving; restoring the legacy
 notes/mobile chat path requires an image revert, not a flag flip. Stateless chat
 generation remains on its separate OpenAI-compatible runner.
 
+Dev finalization hosts declare the same shaped mode as prod. Admission requires
+`OMI_SHAPED_AGENT_MODE` on every finalization host and enforces literal agreement.
+Explicit-cache options pass through `get_llm` after BYOK model resolution; notes,
+structure, chat and memory content breakpoints require that resolved model to be
+GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
+
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
