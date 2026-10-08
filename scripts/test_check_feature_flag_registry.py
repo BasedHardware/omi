@@ -219,16 +219,19 @@ class RegistryFixture(unittest.TestCase):
         self.write("backend/other.py", "OLD_FLAG_KEY = 'old-kill-v1'\n")
         self.assertIn("retired name reintroduced: old-kill-v1", "\n".join(self.errors()))
 
-    def test_retired_hardcoded_omits_posthog_and_duplicates_fail(self) -> None:
+    def test_retired_env_and_hardcoded_omit_posthog_and_duplicates_fail(self) -> None:
         hardcoded = {"key": "oldPrefKey", "kind": "hardcoded", "retired": "2026-09-26", "reason": "Removed"}
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[hardcoded]))
         self.assertEqual(self.errors(), [])
         with_posthog = dict(hardcoded, posthog={"row": "delete"})
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[with_posthog]))
-        self.assertIn("retired hardcoded entries must omit posthog", "\n".join(self.errors()))
+        self.assertIn("retired hardcoded/env entries must omit posthog", "\n".join(self.errors()))
         bad_kind = {"key": "old-env-v1", "kind": "env", "retired": "2026-09-26", "reason": "Removed"}
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[bad_kind]))
-        self.assertIn("retired requires kind: posthog or hardcoded", "\n".join(self.errors()))
+        self.assertEqual(self.errors(), [])
+        self.write("backend/other.py", "import os\nos.getenv('old-env-v1')\n")
+        self.assertIn("retired name reintroduced: old-env-v1", "\n".join(self.errors()))
+        self.write("backend/other.py", "")
         duplicate = dict(hardcoded, key="EXAMPLE_ENABLED")
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[duplicate]))
         self.assertIn("duplicate key or alias: EXAMPLE_ENABLED", "\n".join(self.errors()))

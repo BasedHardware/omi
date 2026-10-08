@@ -189,6 +189,7 @@ def accept_candidate(
     *,
     account_generation: int,
     summary_item: Optional[SummaryTaskReference] = None,
+    review_edits: Optional[dict] = None,
 ) -> CandidateResolutionReceipt:
     candidate = candidates_db.get_candidate(uid, candidate_id)
     if candidate is None:
@@ -220,6 +221,10 @@ def accept_candidate(
             _sync_task_reminder(uid, receipt.task_id)
         return receipt
 
+    if review_edits is not None:
+        from utils.review_candidate_edits import edited_candidate
+
+        candidate = edited_candidate(candidate, review_edits)
     expected_task_links = None
     final_goal_id = candidate.goal_id
     final_workstream_id = candidate.workstream_id
@@ -236,12 +241,17 @@ def accept_candidate(
         if final_workstream_id is None:
             final_workstream_id = expected_task_links[1]
     task_links.validate_task_links(uid, goal_id=final_goal_id, workstream_id=final_workstream_id)
-    if summary_item is None:
+    if summary_item is None and review_edits is not None:
         receipt = candidates_db.resolve_task_candidate(
             uid,
             candidate_id,
             account_generation=account_generation,
             expected_task_links=expected_task_links,
+            review_edits=review_edits,
+        )
+    elif summary_item is None:
+        receipt = candidates_db.resolve_task_candidate(
+            uid, candidate_id, account_generation=account_generation, expected_task_links=expected_task_links
         )
     else:
         receipt = candidates_db.resolve_task_candidate(

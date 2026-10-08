@@ -112,11 +112,11 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if kind == "posthog":
                     if entry.get("posthog") != {"row": "delete"}:
                         errors.append(f"{label}: retired posthog rows require posthog row: delete")
-                elif kind == "hardcoded":
+                elif kind in {"hardcoded", "env"}:
                     if "posthog" in entry:
-                        errors.append(f"{label}: retired hardcoded entries must omit posthog")
+                        errors.append(f"{label}: retired hardcoded/env entries must omit posthog")
                 else:
-                    errors.append(f"{label}: retired requires kind: posthog or hardcoded")
+                    errors.append(f"{label}: retired requires kind: posthog, hardcoded, or env")
                 if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
                     errors.append(f"{label}: retired requires reason")
                 try:

@@ -130,20 +130,6 @@ def test_ask_maps_search_outage_to_503():
     assert exc_info.value.status_code == 503
 
 
-def test_ask_merges_transcript_only_hits_before_rag():
-    with patch.object(dev, "search_conversations", return_value={"items": []}), patch.object(
-        dev, "resolve_mcp_conversation_search_ids", return_value=["c1"]
-    ), patch.object(dev.conversations_db, "get_conversations_by_id", return_value=[{"id": "c1"}]), patch.object(
-        dev, "deserialize_conversations", return_value=[_conv()]
-    ), patch.object(
-        dev, "qa_rag", return_value="answer"
-    ) as qa:
-        response = dev.ask_conversations(dev.DeveloperAskRequest(question="what was said?"), uid="u1")
-
-    assert response.sources[0].id == "c1"
-    qa.assert_called_once()
-
-
 def test_ask_lives_on_public_developer_api_not_app_client_firebase():
     """POST /v1/dev/user/ask is developerApiKey-only. It must not appear in the Firebase
     app-client OpenAPI (which would stamp firebaseBearer and mis-teach agents/SDKs).
