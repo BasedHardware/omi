@@ -76,6 +76,7 @@ describe("device health stats route", () => {
       if (query.includes("Mobile Device Health Daily")) {
         return [["3.0.21", 10, 4, 3, 5.03, 9.61, 0.26, 1]];
       }
+      if (query.includes("SELECT count() AS n")) return [[0]];
       return [];
     });
 
@@ -98,7 +99,33 @@ describe("device health stats route", () => {
         n_with_cliffs: 1,
       },
     ]);
-    expect(posthogResults).toHaveBeenCalledTimes(2);
+    // Drain query is empty, so a count query confirms there are no events.
+    expect(posthogResults).toHaveBeenCalledTimes(3);
+    expect(
+      queries().some((query) => query.includes("SELECT count() AS n"))
+    ).toBe(true);
+  });
+
+  it("reports measured_no_valid_pairs when events exist but no pair survives", async () => {
+    configure();
+    posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
+      if (query.includes("Mobile Device Health Daily")) return [];
+      if (query.includes("SELECT count() AS n")) return [[7]];
+      return [];
+    });
+
+    const body = await (await GET(request("?days=14"))).json();
+    expect(body.phone_health).toEqual({
+      status: "measured_no_valid_pairs",
+      series: [],
+      n_events: 7,
+    });
+    const countQuery = queries().find((query) =>
+      query.includes("SELECT count() AS n")
+    );
+    expect(countQuery).toContain("event = 'Phone Battery Sample'");
+    expect(countQuery).toContain("timestamp >= now() - INTERVAL 14 DAY");
+    expect(posthogResults).toHaveBeenCalledTimes(3);
   });
 
   it("keeps a null valid-drain quantile null", async () => {
@@ -127,6 +154,8 @@ describe("device health stats route", () => {
         },
       ],
     });
+    // A non-empty pair series skips the event-count query.
+    expect(posthogResults).toHaveBeenCalledTimes(2);
   });
 
   it("sends the pendant quantile guard and a bounded phone window query", async () => {
@@ -137,7 +166,7 @@ describe("device health stats route", () => {
     const pendant = sent.find((query) =>
       query.includes("Mobile Device Health Daily")
     );
-    const phone = sent.find((query) => query.includes("Phone Battery Sample"));
+    const phone = sent.find((query) => query.includes("FROM pairs"));
     expect(pendant).toBeTruthy();
     expect(phone).toBeTruthy();
     expect(pendant).toContain("quantileIf");
@@ -150,12 +179,23 @@ describe("device health stats route", () => {
     expect(phone).not.toContain("quantileIf");
   });
 
+  it("treats unknown charging as drain on both endpoints", async () => {
+    configure();
+    posthogResults.mockResolvedValue([]);
+    await GET(request("?days=14"));
+    const phone = queries().find((query) => query.includes("FROM pairs"));
+    expect(phone).toContain("(charging = false OR isNull(charging))");
+    expect(phone).toContain("(prev_charging = false OR isNull(prev_charging))");
+    expect(phone).not.toContain("prev_charging != true");
+  });
+
   it("retries PostHog 504 and does not retry a 400", async () => {
     configure();
     vi.useFakeTimers();
     let phoneAttempts = 0;
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
-      if (query.includes("Phone Battery Sample")) {
+      if (query.includes("SELECT count() AS n")) return [[0]];
+      if (query.includes("FROM pairs")) {
         phoneAttempts += 1;
         if (phoneAttempts < 3)
           throw new Error("PostHog API error: 504 timeout");
@@ -180,6 +220,17 @@ describe("device health stats route", () => {
     );
     const rejected = await GET(request("?days=14"));
     expect(rejected.status).toBe(500);
+    expect(posthogResults).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves 429 to posthogResults and does not retry it outside", async () => {
+    configure();
+    posthogResults.mockRejectedValue(
+      new Error("PostHog API error: 429 throttle")
+    );
+    const response = await GET(request("?days=14"));
+    expect(response.status).toBe(500);
+    // Pendant and the pair query each run once. The count query never starts.
     expect(posthogResults).toHaveBeenCalledTimes(2);
   });
 

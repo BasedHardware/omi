@@ -9,13 +9,14 @@ export const DEVICE_HEALTH_MAX_DAYS = 30;
 
 const POSTHOG_MAX_ATTEMPTS = 3;
 
-function isRetryablePostHogStatus(status: number): boolean {
-  return status === 429 || status === 502 || status === 503 || status === 504;
+// 429 stays inside posthogFetch (called by posthogResults). Retrying it here
+// would stack on that inner backoff and reach nine requests per query. The
+// outer loop is only for gateway and timeout failures, with escalating backoff.
+function isOuterRetryablePostHogStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
 }
 
-// attempt is 1-based (the attempt that just failed). Same escalating backoff
-// the other HogQL routes use for 429/502/503/504, on top of posthogResults'
-// own 429 retry inside posthogFetch.
+// attempt is 1-based (the attempt that just failed).
 function retryDelayMs(attempt: number): number {
   const jitter = Math.floor(Math.random() * 250);
   return 1000 * attempt + jitter;
@@ -59,6 +60,8 @@ export function pendantHealthQuery(days: number): string {
 // it. Both lags are computed once in `pairs`; the aggregate stays outside.
 // The timestamp predicate is repeated on the outer query so the scan stays
 // bounded — a filter that exists only inside the CTE 504s.
+// Unknown charging counts as drain on either endpoint; only an explicit
+// true excludes the interval. `!= true` drops NULL and would hide those pairs.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (
@@ -90,9 +93,21 @@ export function phoneHealthQuery(days: number): string {
       AND elapsed_s BETWEEN 900 AND 7200
       AND level_drop > 0
       AND (charging = false OR isNull(charging))
-      AND prev_charging != true
+      AND (prev_charging = false OR isNull(prev_charging))
     GROUP BY os, build
     ORDER BY os, build
+  `;
+}
+
+// Cheap existence check, run only when the pair query returns no rows.
+// Zero events means the sampler has not shipped; events with no surviving
+// pair are a real measurement.
+export function phoneEventCountQuery(days: number): string {
+  return `
+    SELECT count() AS n
+    FROM events
+    WHERE event = 'Phone Battery Sample'
+      AND timestamp >= now() - INTERVAL ${days} DAY
   `;
 }
 
@@ -119,6 +134,7 @@ export interface PhoneHealthRow {
 
 export type PhoneHealthPayload =
   | { status: "awaiting_instrumentation"; series: [] }
+  | { status: "measured_no_valid_pairs"; series: []; n_events: number }
   | { status: "ok"; series: PhoneHealthRow[] };
 
 export interface DeviceHealthResponse {
@@ -140,7 +156,7 @@ async function queryPostHog(
       const status = posthogStatus(error);
       const retry =
         status != null &&
-        isRetryablePostHogStatus(status) &&
+        isOuterRetryablePostHogStatus(status) &&
         attempt < POSTHOG_MAX_ATTEMPTS;
       if (!retry) throw error;
       await new Promise((resolve) =>
@@ -221,10 +237,22 @@ export async function computeDeviceHealth(
   ]);
 
   const series = mapPhone(asRows(phoneRows));
-  const phone_health: PhoneHealthPayload =
-    series.length === 0
-      ? { status: "awaiting_instrumentation", series: [] }
-      : { status: "ok", series };
+  let phone_health: PhoneHealthPayload;
+  if (series.length > 0) {
+    phone_health = { status: "ok", series };
+  } else {
+    const countRows = await queryPostHog(
+      host,
+      projectId,
+      apiKey,
+      phoneEventCountQuery(days)
+    );
+    const nEvents = count(asRows(countRows)[0]?.[0]);
+    phone_health =
+      nEvents === 0
+        ? { status: "awaiting_instrumentation", series: [] }
+        : { status: "measured_no_valid_pairs", series: [], n_events: nEvents };
+  }
 
   return {
     days,
