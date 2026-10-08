@@ -228,6 +228,13 @@ do not hand-edit those paths to match a specific machine.
 - **Redis**: Caching
 - **Typesense**: Search
 
+### Unsynced task recovery
+
+- `TasksStore.retryUnsyncedItems` re-reads each pending row before creating it; the enumerated list is not current task state. Deleted, missing, synced or already-linked rows are skipped.
+- `UnsyncedTaskCreateProjection` preserves supported stored fields through the existing action-item create endpoint. Malformed evidence/metadata remains pending rather than being acknowledged after a lossy upload. Cached active/completed status follows the locally edited completion flag.
+- `UnsyncedTaskSyncOperations` provides deterministic effect injection while the retry loop retains its existing owner/session and in-flight leases. Test the production loop plus captured HTTP request, not just the generic API wrapper.
+- This projection does not supply idempotent POST identity, atomic recurring rollover or an in-flight edit outbox; those guarantees require separate delivery design.
+
 ### Screen activity sync rollout
 
 - `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
