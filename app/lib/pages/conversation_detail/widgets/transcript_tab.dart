@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -147,6 +148,17 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               action: (_) => provider.detailLoad == ConversationDetailLoad.failed
                   ? provider.refreshConversation(trackLoad: true)
                   : provider.reprocessConversation()));
+        }
+      }
+      if (segments.isNotEmpty) {
+        final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+        rows.add(NativeRow('detail_transcript_heading', _TranscriptHeading.label(l10n, conversation),
+            kind: 'label', symbol: 'text.alignleft'));
+        if (_TranscriptHeading._hasUnnamedVoice(conversation, people)) {
+          rows.add(NativeRow('detail_unresolved_notice', l10n.unresolvedSpeakersNotice,
+              symbol: 'info.circle',
+              action: (_) => showOmiAlert(context,
+                  title: context.l10n.unresolvedSpeakersTitle, message: context.l10n.unresolvedSpeakersMessage)));
         }
       }
       final autoLabelIds = firstAutoLabelSegmentIds(segments);
@@ -578,6 +590,12 @@ class _TranscriptHeading extends StatelessWidget {
     return voices.length + (ownerIds.isEmpty ? 0 : 1);
   }
 
+  /// "Transcript", with the speaker count when it can be counted.
+  static String label(AppLocalizations l10n, ServerConversation conversation) {
+    final count = _speakerCount(conversation);
+    return [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
+  }
+
   static bool _hasUnnamedVoice(ServerConversation conversation, List<Person> people) {
     if (conversation.speakerResolution?.status != 'unavailable') return false;
     return conversation.transcriptSegments.any((segment) {
@@ -591,8 +609,7 @@ class _TranscriptHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final count = _speakerCount(conversation);
-    final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
+    final label = _TranscriptHeading.label(l10n, conversation);
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),
       child: Column(

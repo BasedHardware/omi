@@ -9,12 +9,20 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/conversations/widgets/speaker_review_native.dart';
 import 'package:omi/pages/settings/widgets/person_avatar.dart';
 import 'package:omi/pages/settings/widgets/person_confidence.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+// Home's library (home/page.dart, whose native presentation part opens the review sheet and projects
+// the For You feed) reaches both through its existing import of this file.
+export 'package:omi/pages/conversations/widgets/speaker_review_native.dart' show NativeSpeakerReview;
+export 'package:omi/pages/home/widgets/home_for_you.dart' show HomeForYou;
 
 /// "Help Omi recognize voices": a small daily set of short clips from the last 48 hours. Each clip
 /// plays with its words and when it was said; candidates are ranked by voice match; every answer
@@ -151,15 +159,29 @@ Future<void> _giveAnswer(
   String? personId,
   String? name,
   String? displayName,
+}) {
+  // The question view is replaced by the answered view once staged; toasts need the card's context.
+  final host = context.findAncestorStateOfType<_SpeakerTagPromptCardState>()?.context ?? context;
+  return giveSpeakerTagAnswer(host, provider, answer, personId: personId, name: name, displayName: displayName);
+}
+
+/// Stages an answer, offers Undo for 5 s, then sends it (or drops it on Undo). [host] outlives the
+/// question view (the card, or the native review sheet), so its toasts and error still show.
+/// Shared by the Flutter card and the native review; the provider stays the owner of every answer.
+Future<void> giveSpeakerTagAnswer(
+  BuildContext host,
+  SpeakerTagPromptsProvider provider,
+  SpeakerTagAnswer answer, {
+  String? personId,
+  String? name,
+  String? displayName,
 }) async {
-  final l10n = context.l10n;
+  final l10n = host.l10n;
   if (answer == SpeakerTagAnswer.skip) {
     OmiHaptics.selection();
     await provider.answer(answer);
     return;
   }
-  // The question view is replaced by the answered view once staged; toasts need the card's context.
-  final host = context.findAncestorStateOfType<_SpeakerTagPromptCardState>()?.context ?? context;
   final people = host.read<PeopleProvider?>();
   OmiHaptics.light();
   provider.stage(answer, personId: personId, name: name, displayName: displayName);
@@ -190,6 +212,37 @@ Future<void> _giveAnswer(
   }
 }
 
+/// Gives one answer: [personId] for a known person, [name] for a new one, [displayName] for the toast.
+typedef SpeakerTagGive = void Function(SpeakerTagAnswer answer, {String? personId, String? name, String? displayName});
+
+/// "No…" / "Someone Else…": the picker also holds That's Me and Not a Person, so the card keeps
+/// three answers. Shared by the Flutter card and the native review.
+Future<void> answerSpeakerTagWithPicker(
+  BuildContext context,
+  GeneratedSpeakerTagPrompt prompt,
+  List<GeneratedSpeakerTagCandidate> candidates,
+  List<Person> people,
+  SpeakerTagGive give,
+) async {
+  final choice = await showSpeakerPicker(
+    context,
+    prompt: prompt,
+    candidates: candidates,
+    people: people,
+    excludePersonId: prompt.suggestedPersonId,
+    allowUnknown: prompt.kind != 'owner_check',
+    offerMeAndNotAPerson: prompt.kind != 'owner_check',
+  );
+  if (choice == null || !context.mounted) return;
+  if (choice.me) return give(SpeakerTagAnswer.me);
+  if (choice.notAPerson) return give(SpeakerTagAnswer.notAPerson);
+  if (choice.unknown) return give(SpeakerTagAnswer.someoneElse);
+  if (choice.personId != null) {
+    return give(SpeakerTagAnswer.person, personId: choice.personId, displayName: choice.displayName);
+  }
+  give(SpeakerTagAnswer.newPerson, name: choice.name, displayName: choice.name);
+}
+
 class _Question extends StatelessWidget {
   const _Question({super.key, required this.provider});
 
@@ -200,7 +253,7 @@ class _Question extends StatelessWidget {
     final l10n = context.l10n;
     final prompt = provider.current!;
     final people = context.watch<PeopleProvider?>()?.people ?? const <Person>[];
-    final candidates = _candidates(prompt, people);
+    final candidates = speakerTagCandidates(prompt, people);
     final enabled = !provider.submitting;
     final suggested = people.firstWhereOrNull((p) => p.id == prompt.suggestedPersonId);
     final suggestedName = prompt.suggestedPersonName ?? suggested?.name;
@@ -209,27 +262,7 @@ class _Question extends StatelessWidget {
       _giveAnswer(context, provider, answer, personId: personId, name: name, displayName: displayName);
     }
 
-    // "No…" / "Someone Else…": the picker also holds That's Me and Not a Person, so the card keeps
-    // three answers.
-    Future<void> someoneElse() async {
-      final choice = await showSpeakerPicker(
-        context,
-        prompt: prompt,
-        candidates: candidates,
-        people: people,
-        excludePersonId: prompt.suggestedPersonId,
-        allowUnknown: prompt.kind != 'owner_check',
-        offerMeAndNotAPerson: prompt.kind != 'owner_check',
-      );
-      if (choice == null || !context.mounted) return;
-      if (choice.me) return give(SpeakerTagAnswer.me);
-      if (choice.notAPerson) return give(SpeakerTagAnswer.notAPerson);
-      if (choice.unknown) return give(SpeakerTagAnswer.someoneElse);
-      if (choice.personId != null) {
-        return give(SpeakerTagAnswer.person, personId: choice.personId, displayName: choice.displayName);
-      }
-      give(SpeakerTagAnswer.newPerson, name: choice.name, displayName: choice.name);
-    }
+    Future<void> someoneElse() => answerSpeakerTagWithPicker(context, prompt, candidates, people, give);
 
     final question = switch (prompt.kind) {
       'confirm_person' when suggestedName != null && suggestedName.isNotEmpty => l10n.speakerTagPromptIsThisPerson(
@@ -359,7 +392,7 @@ class _Question extends StatelessWidget {
 
 /// Server-ranked candidates when present (voice match, pinned first within a level); otherwise the
 /// legacy recency list, looked up in the people list.
-List<GeneratedSpeakerTagCandidate> _candidates(GeneratedSpeakerTagPrompt prompt, List<Person> people) {
+List<GeneratedSpeakerTagCandidate> speakerTagCandidates(GeneratedSpeakerTagPrompt prompt, List<Person> people) {
   final ranked = prompt.candidates ?? const <GeneratedSpeakerTagCandidate>[];
   if (ranked.isNotEmpty) return ranked;
   final byId = {for (final person in people) person.id: person};
@@ -470,8 +503,8 @@ class _Waveform extends StatelessWidget {
   }
 }
 
-/// RMS of 16-bit mono PCM after a 44-byte WAV header, in [bars] buckets scaled to 0..1.
-@visibleForTesting
+/// RMS of 16-bit mono PCM after a 44-byte WAV header, in [bars] buckets scaled to 0..1. The native
+/// review projects these levels; the clip's audio never crosses the bridge.
 List<double> waveformLevels(Uint8List wav, {int bars = 40}) {
   const header = 44;
   if (wav.length <= header + 2 || bars <= 0) return const [];
@@ -749,16 +782,64 @@ Future<SpeakerPickerChoice?> showSpeakerPicker(
   bool allowUnknown = true,
   bool offerMeAndNotAPerson = false,
 }) {
+  final title = context.l10n.whoIsItTitle;
+  Widget picker() => _SpeakerPicker(
+        candidates: speakerPickerCandidates(candidates, excludePersonId),
+        people: speakerPickerPeople(people, excludePersonId),
+        allowUnknown: allowUnknown,
+        offerMeAndNotAPerson: offerMeAndNotAPerson,
+      );
   return showOmiSheet<SpeakerPickerChoice>(
     context: context,
-    title: context.l10n.whoIsItTitle,
-    builder: (sheetContext) => _SpeakerPicker(
-      candidates: candidates.where((c) => c.personId != excludePersonId).toList(),
-      people: people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList(),
+    title: title,
+    builder: (sheetContext) => picker(),
+    nativeBuilder: (_) => NativeSpeakerPicker(
+      candidates: candidates,
+      people: people,
+      excludePersonId: excludePersonId,
       allowUnknown: allowUnknown,
       offerMeAndNotAPerson: offerMeAndNotAPerson,
+      fallback: OmiSheetScaffold(title: title, child: picker()),
     ),
   );
+}
+
+/// The picker's closest voices: never the person just ruled out.
+List<GeneratedSpeakerTagCandidate> speakerPickerCandidates(
+        List<GeneratedSpeakerTagCandidate> candidates, String? excludePersonId) =>
+    candidates.where((c) => c.personId != excludePersonId).toList();
+
+/// The picker's people: never the person just ruled out, nor a person still being created.
+List<Person> speakerPickerPeople(List<Person> people, String? excludePersonId) =>
+    people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList();
+
+/// Asks for a new person's name (2 to 40 characters, trimmed): the native text sheet while the
+/// SwiftUI presentation is active, re-presented with the reason while the name is invalid, otherwise
+/// the Flutter dialog. Null when cancelled.
+Future<String?> showSpeakerTagNameDialog(BuildContext context) async {
+  var draft = '';
+  String? error;
+  while (true) {
+    if (!context.mounted) return null;
+    final l10n = context.l10n;
+    final native = await showIosNativeModal(context, title: l10n.speakerTagPromptWhoIsThis, guardEdits: true, actions: [
+      NativeRow('cancel', l10n.cancel, symbol: 'xmark'),
+      NativeRow('save', l10n.save)
+    ], sections: [
+      NativeSection('speaker_name', [
+        NativeRow('name', l10n.speakerTagPromptNameHint, kind: 'text', value: draft, maximumLength: 40),
+        if (error != null) NativeRow('validation', error, kind: 'label'),
+      ])
+    ]);
+    if (native == null) break;
+    if (native.action != 'save' || !context.mounted) return null;
+    draft = native.values['name'] as String;
+    final name = draft.trim();
+    if (name.length >= 2 && name.length <= 40) return name;
+    error = name.isEmpty ? l10n.pleaseEnterName : l10n.nameMustBeBetweenCharacters;
+  }
+  if (!context.mounted) return null;
+  return showDialog<String>(context: context, builder: (_) => const _NameDialog());
 }
 
 class _SpeakerPicker extends StatefulWidget {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as clips;
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -36,6 +38,13 @@ Future<void> showEarlierVoiceMatchesSheet(
       onAnswer: onAnswer,
       playClip: playClip,
     ),
+    nativeBuilder: (_) => EarlierVoiceMatchesList(
+      personName: personName,
+      matches: matches,
+      onAnswer: onAnswer,
+      playClip: playClip,
+      native: true,
+    ),
   );
 }
 
@@ -46,8 +55,11 @@ class EarlierVoiceMatchesList extends StatefulWidget {
     required this.matches,
     required this.onAnswer,
     this.playClip,
+    this.native = false,
   });
 
+  /// Presents the list as a native sheet whose fallback is this same list in the sheet shell.
+  final bool native;
   final String personName;
   final List<PersonVoiceMatch> matches;
   final VoiceMatchAnswer onAnswer;
@@ -86,13 +98,71 @@ class _EarlierVoiceMatchesListState extends State<EarlierVoiceMatchesList> {
     });
     if (!saved) {
       OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
-    } else if (_open.isEmpty) {
+    } else if (_open.isEmpty && ModalRoute.of(context)?.isCurrent != false) {
+      // Not while the sheet is already closing, which would pop the page beneath it.
       Navigator.of(context).pop();
     }
   }
 
+  /// Resolves a native command: [index] is the match's position in the sheet's original
+  /// [EarlierVoiceMatchesList.matches], so it never shifts when another match is answered. An
+  /// answered match makes the command a no-op.
+  PersonVoiceMatch? _nativeMatch(int index) {
+    if (index < 0 || index >= widget.matches.length) return null;
+    final match = widget.matches[index];
+    return _open.any((open) => identical(open, match)) ? match : null;
+  }
+
+  /// One section per open match, identified by its index in [_open], never by a server id.
+  Widget _native(BuildContext context, Widget fallback) {
+    final l10n = context.l10n;
+    final dates = OmiDateFormat.of(context);
+    final title = l10n.speakerLabelText('alsoTitle', widget.personName);
+    void run(int index, Future<void> Function(PersonVoiceMatch match) action) {
+      final current = _nativeMatch(index);
+      if (current != null) unawaited(action(current));
+    }
+
+    return IosNativeSurface(
+      title: title,
+      toolbar: [
+        NativeRow('voice_match_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        for (final (index, match) in widget.matches.indexed)
+          if (_open.any((open) => identical(open, match)))
+            NativeSection(
+                'voice_match:$index',
+                [
+                  NativeRow('voice_match_when:$index', match.title.isEmpty ? l10n.conversationTab : match.title,
+                      kind: 'label',
+                      subtitle: [
+                        dates.dayHeader(match.startedAt.toLocal()),
+                        l10n.speakerLabelTalkTime(OmiDuration.compact(match.talkSeconds.round(), l10n)),
+                      ].join(' · ')),
+                  NativeRow('voice_match_play:$index', l10n.speakerTagPromptPlayClip,
+                      symbol: 'play.fill', action: (_) => run(index, _play)),
+                  NativeRow('voice_match_yes:$index', l10n.yes,
+                      symbol: 'checkmark',
+                      subtitle: _saving.contains(match) ? l10n.saving : '',
+                      enabled: !_saving.contains(match),
+                      action: (_) => run(index, (match) => _answer(match, true))),
+                  NativeRow('voice_match_no:$index', l10n.no,
+                      enabled: !_saving.contains(match), action: (_) => run(index, (match) => _answer(match, false))),
+                ],
+                footer: identical(match, _open.first) ? l10n.speakerLabelText('alsoBody', '') : ''),
+      ],
+      fallback: OmiSheetScaffold(title: title, child: fallback),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final body = _flutter(context);
+    return widget.native ? _native(context, body) : body;
+  }
+
+  Widget _flutter(BuildContext context) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
     return SingleChildScrollView(
