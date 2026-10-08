@@ -180,10 +180,10 @@ def _manifest_span_load(audio_file: Any) -> int:
     return count
 
 
-def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     try:
-        owner = load_owner_embedding(uid, users=users_db)
+        owner = load_owner_embedding(uid, users=users_db, allow_audio_repair=allow_audio_repair)
         if owner is not None:
             prints[OWNER_IDENTITY] = owner.reshape(-1)
     except Exception as error:
@@ -320,6 +320,7 @@ def _embed_missing(
     session: Optional[AudioChunkReadSession] = None,
     diagnostics: Optional[EmbeddingDiagnostics] = None,
     evidence_seconds: Optional[Dict[str, float]] = None,
+    max_attempts: Optional[int] = None,
 ) -> Tuple[int, str]:
     """Embed ``pending`` segments from stored audio into ``cache``; returns (count, stop reason)."""
     diagnostics = diagnostics if diagnostics is not None else EmbeddingDiagnostics()
@@ -429,7 +430,7 @@ def _embed_missing(
             diagnostics.clips += 1
             if time.monotonic() > deadline:
                 return embedded, 'budget'
-            if embedded >= limit:
+            if embedded >= limit or (max_attempts is not None and diagnostics.attempted >= max_attempts):
                 return embedded, 'max_embeddings'
             diagnostics.attempted += 1
             try:
@@ -844,7 +845,14 @@ def _apply_receipt_overlay(conversation: Conversation, receipt: Mapping[str, Any
     return matched
 
 
-def resolve_speakers_for_processing(uid: str, conversation: Any, *, budget_seconds: Optional[float] = None) -> bool:
+def resolve_speakers_for_processing(
+    uid: str,
+    conversation: Any,
+    *,
+    budget_seconds: Optional[float] = None,
+    max_embedding_attempts: Optional[int] = None,
+    allow_owner_audio_repair: bool = True,
+) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     if not isinstance(conversation, Conversation) or not conversation.transcript_segments:
         return False
@@ -875,6 +883,8 @@ def resolve_speakers_for_processing(uid: str, conversation: Any, *, budget_secon
                 uid,
                 conversation,
                 receipt=receipt,
+                max_embedding_attempts=max_embedding_attempts,
+                allow_owner_audio_repair=allow_owner_audio_repair,
                 deadline=began
                 + (min(_budget_seconds(), budget_seconds) if budget_seconds is not None else _budget_seconds()),
             )
@@ -912,31 +922,36 @@ def resolve_speakers_for_processing(uid: str, conversation: Any, *, budget_secon
     return receipt_applied
 
 
-def refresh_completed_speaker_identity(uid: str, conversation_id: str) -> bool:
-    """One late-audio retry, bounded by the ordinary resolver budget and a row CAS.
+def completed_identity_retry_eligible(raw: Optional[Mapping[str, Any]]) -> bool:
+    return bool(
+        raw
+        and raw.get('status') == 'completed'
+        and not any(raw.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+        and raw.get('source') not in ('desktop', 'phone', 'phone_call')
+        and raw.get('private_cloud_sync_enabled')
+        and raw.get('updated_at') is not None
+        and not (
+            (raw.get('speaker_resolution') or {}).get('status') == 'resolved'
+            and any(s.get('is_user') for s in raw.get('transcript_segments') or [])
+        )
+    )
 
-    Desktop admission remains unchanged (item E); channel-authored identities
-    are not mixed down for this pendant/WAL repair. No LLM or processing replay.
+
+def refresh_completed_speaker_identity(uid: str, conversation_id: str, *, candidate: Optional[dict] = None) -> bool:
+    """Identity-only retry: advisory 5s budget, 24 model attempts, no profile repair.
+
+    Desktop/channel admission stays unchanged. The selected snapshot retains
+    its row CAS, so a concurrent manual write or deletion vetoes publication.
     """
     try:
-        raw = conversations_db.get_conversation(uid, conversation_id)
-        if (
-            not raw
-            or raw.get('status') != 'completed'
-            or raw.get('deleted')
-            or raw.get('discarded')
-            or raw.get('is_locked')
-            or raw.get('source') in ('desktop', 'phone', 'phone_call')
-            or not raw.get('private_cloud_sync_enabled')
-            or raw.get('updated_at') is None
-            or (
-                (raw.get('speaker_resolution') or {}).get('status') == 'resolved'
-                and any(s.get('is_user') for s in raw.get('transcript_segments') or [])
-            )
-        ):
+        raw = candidate if candidate is not None else conversations_db.get_conversation(uid, conversation_id)
+        if not completed_identity_retry_eligible(raw) or (raw or {}).get('id') != conversation_id:
             return False
+        assert raw is not None
         conversation = Conversation(**raw)
-        if not resolve_speakers_for_processing(uid, conversation, budget_seconds=5.0):
+        if not resolve_speakers_for_processing(
+            uid, conversation, budget_seconds=5.0, max_embedding_attempts=24, allow_owner_audio_repair=False
+        ):
             return False
         return identity_updates_db.persist_speaker_resolution_if_current(
             uid, conversation.model_dump(), expected_updated_at=raw['updated_at']
@@ -1032,7 +1047,15 @@ def _no_embeddings_diagnostics(
     return reason, fields
 
 
-def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any], deadline: float) -> None:
+def _resolve(
+    uid: str,
+    conversation: Conversation,
+    *,
+    receipt: Mapping[str, Any],
+    deadline: float,
+    max_embedding_attempts: Optional[int] = None,
+    allow_owner_audio_repair: bool = True,
+) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
@@ -1274,13 +1297,21 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             session=read_session,
             diagnostics=diagnostics,
             evidence_seconds=clip_seconds,
+            max_attempts=max_embedding_attempts,
         )
         if read_session is not None and read_session.limit_hit:
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
     else:
         new_embeddings, stop = _embed_missing(
-            uid, conversation, pending, cache, deadline, diagnostics=diagnostics, evidence_seconds=clip_seconds
+            uid,
+            conversation,
+            pending,
+            cache,
+            deadline,
+            diagnostics=diagnostics,
+            evidence_seconds=clip_seconds,
+            max_attempts=max_embedding_attempts,
         )
     if new_embeddings or stale:
         upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
@@ -1328,7 +1359,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         segments,
         vectors,
         manual_speakers=_manual_speakers(receipt),
-        voiceprints=load_voiceprints_for_resolution(uid),
+        voiceprints=load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair),
         embedding_seconds=score_durations,
         abstained_segment_ids=abstained,
     )

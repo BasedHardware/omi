@@ -11,7 +11,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
-from utils.conversations.speaker_resolution import refresh_completed_speaker_identity
+from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from utils.pusher_protocol import (
     BUFFERED_AUDIO_MAX_BYTES,
@@ -446,15 +446,10 @@ async def _websocket_util_trigger(
             for conv_id in conv_ids_to_flush:
                 await _flush_batch(conv_id)
 
-        # All chunks and manifests from this socket are now authoritative.
-        # A process-owned, sequential bounded task survives listen disconnect;
-        # it never replays processing or adds a queue/worker.
-        async def retry_completed_identities():
-            for conv_id in sorted(identity_refreshed)[:8]:
-                await run_blocking(storage_executor, refresh_completed_speaker_identity, uid, conv_id)
-
+        # Only authoritative uploaded manifests qualify. Admission is process-wide
+        # and eligibility precedes the eight-pass selection limit.
         if identity_refreshed:
-            start_background_task(retry_completed_identities(), name='speaker_identity_late_audio')
+            schedule_completed_identity_retries(uid, identity_refreshed)
 
     async def process_speaker_sample_queue() -> None:
         """Background task that processes speaker sample extraction requests."""
