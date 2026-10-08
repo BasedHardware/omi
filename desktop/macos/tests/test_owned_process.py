@@ -346,6 +346,74 @@ raise SystemExit(2)
         self.assertNotEqual(receipt.get("outcome"), "exited")
         self.assertTrue(alive(self.foreign.pid))
 
+    def test_trailing_env_field_newline_is_exact(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("owned_process_under_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        token = "ef" * 16
+        field = mod._exact_env_field(token)
+        self.assertTrue(mod._blob_has_exact_env(field + b"\n", token))
+        self.assertFalse(mod._blob_has_exact_env(field + b"0\n", token))
+        self.assertFalse(mod._blob_has_exact_env(b"prefix" + field + b"\n", token))
+        env = os.environ.copy()
+        env[mod.TOKEN_ENV] = token
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            env=env,
+            start_new_session=True,
+        )
+
+        def _stop(proc=child):
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+        self.addCleanup(_stop)
+        self.assertTrue(mod._exact_env(child.pid, token))
+        self.assertFalse(mod._exact_env(child.pid, "ab" * 16))
+
+    def test_expired_probe_does_not_report_success(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("owned_process_expired", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        token = "cd" * 16
+        env = os.environ.copy()
+        env[mod.TOKEN_ENV] = token
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            env=env,
+            start_new_session=True,
+        )
+
+        def _stop(proc=child):
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+        self.addCleanup(_stop)
+        receipt = {
+            "schema_version": 1,
+            "token": token,
+            "leader_pid": child.pid,
+            "leader_start": mod.process_start(child.pid),
+            "leader_pgid": os.getpgid(child.pid),
+            "supervisor_pid": os.getpid(),
+            "supervisor_start": mod.process_start(os.getpid()),
+        }
+
+        def slow_scan(_receipt, proc=child):
+            time.sleep(0.10)
+            return {proc.pid}
+
+        mod.owned_pids = slow_scan
+        cleared = mod.reap(receipt, signal.SIGTERM, 0.05)
+        self.assertFalse(cleared)
+        self.assertTrue(alive(child.pid))
+
     def test_parent_death_during_startup(self):
         marker = f"owned-early-{os.getpid()}-{time.time_ns()}"
         parent_code = r"""

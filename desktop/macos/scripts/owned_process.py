@@ -152,8 +152,15 @@ def _exact_env_field(token: str) -> bytes:
 
 
 def _blob_has_exact_env(blob: bytes, token: str) -> bool:
+    """True when the token is its own environment field.
+
+    ps records end in a newline, and the token is often the last field. A
+    newline or NUL is a field boundary, same as a space. A longer value that
+    merely contains the token is not a match.
+    """
     field = _exact_env_field(token)
-    padded = b" " + blob + b" "
+    normalized = blob.replace(b"\0", b" ").replace(b"\r", b" ").replace(b"\n", b" ")
+    padded = b" " + normalized + b" "
     return b" " + field + b" " in padded
 
 
