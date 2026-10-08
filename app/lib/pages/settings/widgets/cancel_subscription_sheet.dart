@@ -366,8 +366,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
         ]),
         NativeSection('cancel_actions', [
           NativeRow('cancel_keep', l10n.keepSubscription, enabled: !_isCancelling, action: (_) => keep()),
-          NativeRow('cancel_confirm', l10n.cancelSubscription, destructive: true, enabled: !_isCancelling,
-              action: (_) async {
+          NativeRow('cancel_confirm', l10n.cancelSubscription,
+              subtitle: _isCancelling ? l10n.cancelling : '',
+              destructive: true,
+              enabled: !_isCancelling, action: (_) async {
             if (!_isCancelling) await _confirmCancel();
           }),
         ]),

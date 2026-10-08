@@ -135,12 +135,15 @@ void main() {
 
     testWidgets('confirm cancels once with the reason and details; back is blocked meanwhile', (tester) async {
       final (host, usage, result) = await openConfirmStep(tester);
+      expect(_row(tester, 'cancel_confirm').subtitle, isEmpty);
       usage.reply = Completer<bool>();
       unawaited(_send(host, 'cancel_confirm'));
       await _settle(tester);
 
       expect(usage.calls, [('too_expensive', 'Too pricey')]);
       expect(_row(tester, 'cancel_confirm').projection['enabled'], false);
+      expect(_row(tester, 'cancel_confirm').subtitle, _l10n.cancelling,
+          reason: 'The native row shows progress even when the activity HUD is gone');
       expect(_row(tester, 'cancel_keep').projection['enabled'], false);
       expect(_row(tester, 'leave_back').projection['enabled'], false);
       await tester.binding.handlePopRoute();
@@ -210,6 +213,7 @@ void main() {
       await _send(host, 'delete_confirm_word', 'delete');
       await _settle(tester);
       expect(_row(tester, 'delete_account').projection['enabled'], true);
+      expect(_row(tester, 'delete_account').subtitle, isEmpty);
       unawaited(_send(host, 'delete_account'));
       await _settle(tester);
       expect(requests, [('taking_break', 'Back later')]);
@@ -217,6 +221,8 @@ void main() {
       expect(_row(tester, 'delete_keep').projection['enabled'], false);
       expect(_row(tester, 'leave_back').projection['enabled'], false);
       expect(_row(tester, 'delete_account').projection['enabled'], false);
+      expect(_row(tester, 'delete_account').subtitle, _l10n.deleting,
+          reason: 'The native row shows progress even when the activity HUD is gone');
       await expectLater(_send(host, 'delete_account'), throwsA(isA<PlatformException>()),
           reason: 'A second tap while deleting never reaches the request');
 
@@ -224,13 +230,14 @@ void main() {
       await _settle(tester);
       expect(requests, hasLength(1));
       expect(_row(tester, 'delete_account').projection['enabled'], true);
+      expect(_row(tester, 'delete_account').subtitle, isEmpty);
       await tester.pump(const Duration(seconds: 10));
     });
   });
 
   group('plan confirmations', () {
     Future<_FakeUsage> pumpSheet(WidgetTester tester, Subscription subscription, List<Map<String, dynamic>> plans,
-        {List<SubscriptionPlan> availablePlans = const []}) async {
+        {List<SubscriptionPlan> availablePlans = const [], bool animateHeroOnMount = false}) async {
       await tester.binding.setSurfaceSize(const Size(430, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final usage = _FakeUsage()
@@ -248,7 +255,8 @@ void main() {
         });
       addTearDown(usage.dispose);
       await _pumpHome(tester, usage);
-      unawaited(Navigator.of(_home(tester)).push(MaterialPageRoute<void>(builder: (_) => const _Sheet())));
+      unawaited(Navigator.of(_home(tester))
+          .push(MaterialPageRoute<void>(builder: (_) => _Sheet(animateHeroOnMount: animateHeroOnMount))));
       await _settle(tester);
       return usage;
     }
@@ -365,6 +373,32 @@ void main() {
       // The upgrade handler's own plan-change confirmation is the first thing it asks.
       expect(presented.map((snapshot) => snapshot['title']), [_l10n.upgradeToAnnualPlan, _l10n.confirmPlanChange]);
     });
+    group('hero animations', () {
+      final plans = [
+        price('unlimited_v2', 'Unlimited', 'month', 1900),
+        price('unlimited_v2', 'Unlimited', 'year', 19000),
+      ];
+
+      testWidgets('run only while the classic tree is mounted, then stop', (tester) async {
+        await pumpSheet(tester, Subscription(plan: PlanType.basic, status: SubscriptionStatus.active), plans,
+            animateHeroOnMount: true);
+        final sheet = tester.state<_SheetState>(find.byType(_Sheet));
+        expect(sheet._wave.isAnimating, true);
+        expect(sheet._arrow.isAnimating, true);
+
+        sheet.hideSheet();
+        await _settle(tester);
+        expect(sheet._wave.isAnimating, false, reason: 'Nothing ticks once the classic tree is gone');
+        expect(sheet._arrow.isAnimating, false);
+      });
+
+      testWidgets('leave caller-owned controllers alone by default', (tester) async {
+        await pumpSheet(tester, Subscription(plan: PlanType.basic, status: SubscriptionStatus.active), plans);
+        final sheet = tester.state<_SheetState>(find.byType(_Sheet));
+        expect(sheet._wave.isAnimating, false);
+        expect(sheet._arrow.isAnimating, false);
+      });
+    });
   });
 
   group('account name', () {
@@ -429,15 +463,20 @@ void main() {
 
 /// The plans sheet with its animation owners, pushed as a page.
 class _Sheet extends StatefulWidget {
-  const _Sheet();
+  const _Sheet({this.animateHeroOnMount = false});
+
+  final bool animateHeroOnMount;
 
   @override
   State<_Sheet> createState() => _SheetState();
 }
 
 class _SheetState extends State<_Sheet> with TickerProviderStateMixin {
-  late final _wave = AnimationController(vsync: this);
-  late final _arrow = AnimationController(vsync: this);
+  late final _wave = AnimationController(duration: const Duration(seconds: 18), vsync: this);
+  late final _arrow = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+  var _showSheet = true;
+
+  void hideSheet() => setState(() => _showSheet = false);
 
   @override
   void dispose() {
@@ -448,5 +487,12 @@ class _SheetState extends State<_Sheet> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      body: PlansSheet(waveController: _wave, notesController: _wave, arrowController: _arrow, arrowAnimation: _arrow));
+      body: _showSheet
+          ? PlansSheet(
+              waveController: _wave,
+              notesController: _wave,
+              arrowController: _arrow,
+              arrowAnimation: _arrow,
+              animateHeroOnMount: widget.animateHeroOnMount)
+          : const SizedBox.shrink());
 }

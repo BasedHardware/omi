@@ -417,7 +417,9 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
                     enabled: !_isDeleting,
                     action: (value) => setState(() => _flow.confirm.text = value as String)),
                 NativeRow('delete_account', l10n.deleteAccountTitle,
-                    destructive: true, enabled: !_isDeleting && _flow.confirmed(confirmWord), action: (_) async {
+                    subtitle: _isDeleting ? l10n.deleting : '',
+                    destructive: true,
+                    enabled: !_isDeleting && _flow.confirmed(confirmWord), action: (_) async {
                   if (!_isDeleting && _flow.confirmed(confirmWord)) await _confirmDelete();
                 }),
                 NativeRow('delete_keep', l10n.keepMyAccount, enabled: !_isDeleting, action: (_) => keep()),

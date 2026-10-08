@@ -101,10 +101,9 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
   @override
   void initState() {
     super.initState();
-    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
-
-    _arrowController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this)
-      ..repeat(reverse: true);
+    // PlansSheet starts these only when its classic tree mounts, so they stay idle under the native sheet.
+    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this);
+    _arrowController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
 
     _arrowAnimation = Tween<double>(
       begin: 0,
@@ -127,6 +126,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
       nativeSheet: widget.nativeSheet,
+      animateHeroOnMount: true,
     );
   }
 }

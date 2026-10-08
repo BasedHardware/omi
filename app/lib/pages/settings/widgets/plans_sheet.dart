@@ -175,6 +175,10 @@ class PlansSheet extends StatefulWidget {
   /// fallback brings its own [OmiSheetScaffold] (handle-less header with the close button).
   final bool nativeSheet;
 
+  /// The caller leaves the hero controllers idle: the classic tree repeats them while it is mounted and
+  /// stops them when it leaves, so nothing ticks under the native sheet.
+  final bool animateHeroOnMount;
+
   const PlansSheet({
     super.key,
     required this.waveController,
@@ -183,6 +187,7 @@ class PlansSheet extends StatefulWidget {
     required this.arrowAnimation,
     this.onCancelSubscription,
     this.nativeSheet = false,
+    this.animateHeroOnMount = false,
   });
 
   @override
@@ -762,7 +767,14 @@ class _PlansSheetState extends State<PlansSheet> {
         );
         // The existing handlers retain checkout, consent, downgrade and cancellation ownership.
         // Future additions to the opt-in program keep their full consent renderer until projected.
-        final fallback = widget.nativeSheet ? OmiSheetScaffold(padding: EdgeInsets.zero, child: classic) : classic;
+        final animated = widget.animateHeroOnMount
+            ? _ClassicHeroAnimations(
+                controllers: [widget.waveController, widget.notesController],
+                reversing: [widget.arrowController],
+                child: classic,
+              )
+            : classic;
+        final fallback = widget.nativeSheet ? OmiSheetScaffold(padding: EdgeInsets.zero, child: animated) : animated;
         if (!iosSwiftUiEnabled || _showTrainingDataOptIn) return fallback;
         final busy = _isUpgrading || _isSwitchingToFree;
         final statusOnly =
@@ -1131,4 +1143,41 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   String? _monthsFreeLabel(int? months) => months == null ? null : l10n.monthsFreeBadge(months);
+}
+
+/// Repeats the hero controllers while the classic plans tree is mounted and stops the ones it started on dispose.
+class _ClassicHeroAnimations extends StatefulWidget {
+  const _ClassicHeroAnimations({required this.controllers, required this.reversing, required this.child});
+
+  final List<AnimationController> controllers;
+  final List<AnimationController> reversing;
+  final Widget child;
+
+  @override
+  State<_ClassicHeroAnimations> createState() => _ClassicHeroAnimationsState();
+}
+
+class _ClassicHeroAnimationsState extends State<_ClassicHeroAnimations> {
+  final _started = <AnimationController>{};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in {...widget.controllers, ...widget.reversing}) {
+      if (controller.isAnimating) continue;
+      _started.add(controller);
+      controller.repeat(reverse: widget.reversing.contains(controller));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _started) {
+      controller.stop();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
