@@ -22,6 +22,7 @@ from database.webhook_health import (
     enqueue_dev_webhook_dlq,
     _DEV_FAILURE_THRESHOLD,
 )
+from database.webhook_signing import WebhookSigningSecrets, get_user_webhook_signing_db, note_unsigned_delivery
 from models.conversation import Conversation
 from models.transcript_segment import transcript_segment_for_client
 from models.users import WebhookType, webhook_url_from_setting
@@ -38,6 +39,7 @@ from utils.http_client import (
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.notifications import send_notification
+from utils.webhook_signing import prepare_signed_body, signature_headers
 import logging
 
 logger = logging.getLogger(__name__)
@@ -163,6 +165,20 @@ def _redact_webhook_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc.rsplit('@', 1)[-1], parts.path, '', ''))
 
 
+async def _load_user_signing(uid: str) -> Optional[WebhookSigningSecrets]:
+    """The user's signing record, or None to deliver unsigned.
+
+    A store error here must not stop a delivery the user configured; it is reported once per
+    user per window (error log + fallback metric) so unsigned deliveries never pass silently.
+    """
+    try:
+        return await run_blocking(db_executor, get_user_webhook_signing_db, uid)
+    except Exception:
+        # Logging and the metric are blocking work; keep them off the event loop like the lookup.
+        await run_blocking(db_executor, note_unsigned_delivery, 'other', uid)
+        return None
+
+
 async def _post_dev_webhook(
     webhook_name: str,
     webhook_url: str,
@@ -170,14 +186,34 @@ async def _post_dev_webhook(
     retry_delays: Optional[tuple[float, ...]] = None,
     idempotency_key: Optional[str] = None,
     dlq_uid: Optional[str] = None,
+    event: Optional[WebhookType] = None,
+    signing: Optional[WebhookSigningSecrets] = None,
+    signed_uid: str = '',
     **request_kwargs,
 ):
+    """POST one developer webhook with retries, DNS pinning, DLQ and, with a secret, a signature.
+
+    ``signed_uid`` must be the ``uid`` the caller appended to ``webhook_url``'s query string; the
+    signature binds it so a captured delivery cannot be replayed for another user.
+    """
     if retry_delays is None:
         retry_delays = _get_dev_webhook_retry_delays()
+
+    if signing is not None and not signed_uid:
+        # Signing an empty uid would verify for nobody and hide a caller bug behind rejected
+        # deliveries; every developer webhook appends uid to the query, so demand it here.
+        raise ValueError(f'{webhook_name}: a signed delivery needs the uid that is in its query string')
 
     headers = dict(request_kwargs.pop('headers', {}) or {})
     headers.setdefault('Idempotency-Key', idempotency_key or str(uuid.uuid4()))
     request_kwargs['headers'] = headers
+    dlq_payload = request_kwargs.get('json')
+
+    # Without a secret the request is exactly what it was before signing existed. With one, the
+    # body is fixed to bytes up front and each attempt gets a fresh timestamped signature, so a
+    # retry late in the schedule still lands inside the receiver's freshness window.
+    sign_deliveries = signing is not None and event is not None
+    signed_body = prepare_signed_body(request_kwargs, headers) if sign_deliveries else None
 
     client = get_pinned_delivery_client()
     attempts = len(retry_delays) + 1
@@ -203,6 +239,16 @@ async def _post_dev_webhook(
                 for pinned_url, pin_kwargs in pinned_targets:
                     attempt_kwargs = dict(request_kwargs)
                     attempt_kwargs['headers'] = {key: value for key, value in headers.items() if key.lower() != 'host'}
+                    if signed_body is not None and signing is not None and event is not None:
+                        attempt_kwargs['headers'].update(
+                            signature_headers(
+                                signed_body,
+                                signing.active(),
+                                uid=signed_uid,
+                                event=event.value,
+                                delivery_id=headers['Idempotency-Key'],
+                            )
+                        )
                     attempt_kwargs['headers'].update(pin_kwargs['headers'])
                     attempt_kwargs['extensions'] = {
                         **(request_kwargs.get('extensions') or {}),
@@ -268,7 +314,7 @@ async def _post_dev_webhook(
             error=f'HTTP {last_response.status_code}',
             idempotency_key=headers.get('Idempotency-Key'),
             uid=dlq_uid,
-            payload=request_kwargs.get('json'),
+            payload=dlq_payload,
         )
         return last_response
 
@@ -284,7 +330,7 @@ async def _post_dev_webhook(
         error=type(last_exception).__name__,
         idempotency_key=headers.get('Idempotency-Key'),
         uid=dlq_uid,
-        payload=request_kwargs.get('json'),
+        payload=dlq_payload,
     )
     raise last_exception
 
@@ -333,6 +379,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
             journey_attempt.fail('dependency_unavailable')
             logger.info(f'memory_created_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
+        signing = await _load_user_signing(uid)
         try:
             payload = await run_blocking(db_executor, _build_conversation_webhook_payload_sync, uid, memory)
             response = await _post_dev_webhook(
@@ -341,6 +388,9 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 json=payload,
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
+                event=WebhookType.memory_created,
+                signing=signing,
+                signed_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 journey_attempt.succeed()
@@ -388,6 +438,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         if not cb.allow_request():
             logger.info(f'day_summary_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
+        signing = await _load_user_signing(uid)
         try:
             response = await _post_dev_webhook(
                 'day_summary_webhook',
@@ -400,6 +451,9 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                 },
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
+                event=WebhookType.day_summary,
+                signing=signing,
+                signed_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -443,6 +497,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 f'realtime_transcript_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
             )
             return
+        signing = await _load_user_signing(uid)
         try:
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
@@ -450,6 +505,9 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 json={'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
+                event=WebhookType.realtime_transcript,
+                signing=signing,
+                signed_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 journey_attempt.succeed()
@@ -536,6 +594,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         )
         return
 
+    # One lookup per call, not per one-second chunk.
+    signing = await _load_user_signing(uid)
     lock = await _get_audio_bytes_send_lock(uid)
     async with lock:
         try:
@@ -546,6 +606,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                     content=chunk,
                     headers={'Content-Type': 'application/octet-stream'},
                     dlq_uid=uid,
+                    event=WebhookType.audio_bytes,
+                    signing=signing,
+                    signed_uid=uid,
                 )
                 if not (200 <= response.status_code < 300):
                     cb.record_failure()
@@ -620,6 +683,7 @@ async def _button_event_webhook_serialized(
         'timestamp': timestamp,
         'session_id': session_id,
     }
+    signing = await _load_user_signing(uid)
     try:
         response = await _post_dev_webhook(
             'button_event_webhook',
@@ -627,6 +691,9 @@ async def _button_event_webhook_serialized(
             json=payload,
             headers={'Content-Type': 'application/json'},
             idempotency_key=event_id,
+            event=WebhookType.button_event,
+            signing=signing,
+            signed_uid=uid,
         )
         if 200 <= response.status_code < 300:
             cb.record_success()
