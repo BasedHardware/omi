@@ -244,7 +244,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('routers/conversations.py', '_bind_late_client_projection'),
         ('routers/conversations.py', '_drop_display_projection'),
         # Transcript-edit genuine clear of the stored projection.
-        ('database/conversations.py', '_invalidate_client_processing'),
+        ('database/conversations.py', 'clear_client_processing'),
         # Live-capture write: opt-out still clears a projection that is actually present
         # (finalize overlap). A read of the stored field, then the same genuine clear.
         ('database/conversations.py', '_write_segments'),
@@ -623,7 +623,7 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family. Pydantic-excluded (`Field(exclude=True)`), never
         # serialized to any client, and written only at explicit persistence
         # seams behind `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Classifying it
-        # projection-family would make `_invalidate_client_processing` and
+        # projection-family would make `invalidate_client_processing` and
         # `strip_client_processing` strip/delete the dark write itself.
         'capture_evidence',
         # Server-computed capture badge, NOT client-authored projection-family.
@@ -709,7 +709,7 @@ PROJECTION_SINKS: tuple[ProjectionSink, ...] = (
         'strip',
     ),
     ProjectionSink(
-        'database.conversations._invalidate_client_processing',
+        'database.conversations.clear_client_processing',
         'delete_field',
         'invalidate',
     ),
@@ -825,7 +825,7 @@ def projection_sink_fns() -> dict[str, Any]:
 
     return {
         'strip': strip_client_processing,
-        'invalidate': getattr(conversations_db, '_invalidate_client_processing'),
+        'invalidate': getattr(conversations_db, 'clear_client_processing'),
         'drop': getattr(conversations_router, '_drop_display_projection'),
         'delete_field': google_firestore.DELETE_FIELD,
     }
