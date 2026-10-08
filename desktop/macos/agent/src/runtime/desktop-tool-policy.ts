@@ -74,6 +74,7 @@ export interface DesktopToolPolicyResult {
 
 const EXTERNAL_SEND_TOOLS = new Set(["fill_cloud_connector_form"]);
 const TASK_WRITE_TOOLS = new Set([
+  "create_canonical_goal",
   "complete_task",
   "delete_task",
   "create_action_item",
@@ -84,8 +85,14 @@ const TASK_WRITE_TOOLS = new Set([
   "complete_onboarding",
 ]);
 const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
-const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen"]);
-const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
+// `screenshot` is the realtime voice capture; it is offered only to realtime
+// voice runs, never to a chat relay.
+const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen", "screenshot"]);
+// show_rewind_evidence returns the model only the stored frame's title, app
+// and OCR excerpt (the same text a screen-history search already returned for
+// that screenshot_id); the pixels go to the person's own Chat turn as
+// evidence, behind the screenshot-sharing setting, and never to the model.
+const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context", "show_rewind_evidence"]);
 // A live screenshot holds whatever is on screen at that moment, including
 // windows the person keeps out of capture elsewhere, so each one is asked for
 // on its own: the card never offers a session grant and no grant covers one.
@@ -118,7 +125,23 @@ const LOCAL_READ_TOOLS = new Set([
   "get_email_insights",
   "get_local_status",
   "get_product_kb",
+  "read_conversation_evidence",
+  "search_conversation_evidence",
+  "search_chat_history",
+  "get_canonical_goals",
+  "scan_files",
 ]);
+/**
+ * Relay tools declared to need no capability bundle: they read or touch none
+ * of the person's local data. Declaring them keeps every relay-callable tool
+ * explicitly classified (a test enforces it); an undeclared tool no longer
+ * slides into `local_read` by default unnoticed.
+ */
+const UNBUNDLED_TOOLS: Readonly<Record<string, string>> = {
+  web_search: "a public web search; only the query leaves the Mac",
+  render_chat_blocks: "renders the model's own reply as blocks in the current turn",
+  ask_followup: "shows the person an onboarding question with quick replies",
+};
 
 function isSqlWrite(sql: string): boolean {
   const stripped = sql
@@ -168,6 +191,19 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   }
   if (bundles.size === 0 && tool.annotations.readOnlyHint) bundles.add("desktop.context.local_read");
   return [...bundles];
+}
+
+/// Whether a tool is classified on purpose: named in one of the sets above,
+/// a runtime-control tool with declared bundles, or declared unbundled. The
+/// read-only fallback in `bundlesForOmiTool` does not count.
+function isExplicitlyClassified(toolName: string): boolean {
+  if (Object.hasOwn(UNBUNDLED_TOOLS, toolName)) return true;
+  if ((controlDescriptor(toolName)?.bundles.length ?? 0) > 0) return true;
+  return [
+    LOCAL_READ_TOOLS, SCREEN_SUMMARY_TOOLS, SCREEN_IMAGE_TOOLS, TASK_WRITE_TOOLS, MEMORY_WRITE_TOOLS,
+    AUTOMATION_READ_TOOLS, CONTACTS_READ_TOOLS, MESSAGING_READ_TOOLS, MAIL_READ_TOOLS,
+    MESSAGING_SEND_TOOLS, AUTOMATION_ACT_TOOLS, PERMISSION_REQUEST_TOOLS, EXTERNAL_SEND_TOOLS,
+  ].some((set) => set.has(toolName));
 }
 
 /// Bundles whose data or effects are sensitive enough that the request is
@@ -323,6 +359,8 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
 export const desktopToolPolicyInternals = {
   isSqlWrite,
   descriptorFromToolName,
+  isSensitiveBundle,
+  isExplicitlyClassified,
 };
 
 // --- Per-invocation user approval -------------------------------------------
