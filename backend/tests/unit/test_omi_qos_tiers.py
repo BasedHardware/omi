@@ -89,6 +89,12 @@ class _ChatOpenAI(_BaseChatModel):
         self.model = self.model_name
         self.temperature = kwargs.get('temperature')
         self.openai_api_base = kwargs.get('base_url', '')
+        self.metadata = {}
+
+    def model_copy(self, update=None, deep=False):
+        clone = _ChatOpenAI(**self._constructor_kwargs)
+        clone.metadata = {**self.metadata, **(update or {}).get('metadata', {})}
+        return clone
 
 
 class _ChatGoogleGenerativeAI(_BaseChatModel):
@@ -430,13 +436,16 @@ class TestGetLlm:
     def test_caches_instances_same_feature(self):
         llm1 = get_llm('conv_action_items')
         llm2 = get_llm('conv_action_items')
-        assert llm1 is llm2
+        # Per-invocation metadata stamping wraps the shared cached client.
+        assert llm1.metadata['omi_resolved_model'] == llm2.metadata['omi_resolved_model']
+        assert llm1._constructor_kwargs == llm2._constructor_kwargs
 
     def test_different_features_same_model_share_instance(self):
         # Both use Luna in the two-tier premium profile.
         llm1 = get_llm('memories')
         llm2 = get_llm('goals')
-        assert llm1 is llm2
+        assert llm1.metadata['omi_resolved_model'] == llm2.metadata['omi_resolved_model']
+        assert llm1._constructor_kwargs == llm2._constructor_kwargs
 
     def test_different_models_return_different_instances(self):
         llm1 = get_llm('memories')
@@ -472,7 +481,7 @@ class TestGetLlm:
         # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
         llm_with_key = get_llm('followup', cache_key='omi-test-key')
         llm_without_key = get_llm('followup')
-        assert llm_with_key is llm_without_key
+        assert llm_with_key._constructor_kwargs == llm_without_key._constructor_kwargs
 
     def test_new_features_return_clients(self):
         """New features should return valid LLM clients."""

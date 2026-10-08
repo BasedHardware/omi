@@ -180,7 +180,8 @@ def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
 
     result = clients.get_llm('conv_discard')
 
-    assert result is legacy
+    assert result.name == legacy.name
+    assert result.metadata['omi_resolved_model'] == 'gpt-5-nano'
 
 
 def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
@@ -608,7 +609,8 @@ def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is gateway
+    assert result.name == gateway.name
+    assert result.metadata['omi_resolved_model'] == 'gpt-6-luna'
     assert captured == {
         'lane_id': feature_auto_lane_id('chat_agent'),
         'streaming': True,
@@ -636,7 +638,8 @@ def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is legacy
+    assert result.name == legacy.name
+    assert result.metadata['omi_resolved_model'] == 'gpt-6-luna'
     assert captured == {}
 
 
