@@ -5,17 +5,18 @@ import sys
 import tempfile
 import unittest
 
-# Add examples folder to sys.path
-examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
-if examples_dir not in sys.path:
-    sys.path.insert(0, examples_dir)
+import importlib.util
+from pathlib import Path
 
-from conversations_to_csv import (
-    FIELDS,
-    spreadsheet_text,
-    convert,
-    main,
-)
+recipe_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_csv.py"
+spec = importlib.util.spec_from_file_location("conversations_to_csv", recipe_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+FIELDS = module.FIELDS
+spreadsheet_text = module.spreadsheet_text
+convert = module.convert
+main = module.main
 
 
 class TestConversationsToCsv(unittest.TestCase):

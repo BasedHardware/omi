@@ -22,12 +22,6 @@ Run the converter:
 python sdks/python-cli/examples/conversations_to_csv.py conversations.json conversations.csv
 ```
 
-The alias `conversations_csv.py` is also available:
-
-```sh
-python sdks/python-cli/examples/conversations_csv.py conversations.json conversations.csv
-```
-
 Import the result as UTF-8, comma-delimited text in Excel or another
 spreadsheet application. The converter preserves complete IDs, accents, quoted
 text and embedded newlines. Missing fields become empty cells; an empty list
