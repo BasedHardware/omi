@@ -978,7 +978,7 @@ class SpeakerMatcher:
                 status = (
                     SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
                 )
-                if changed and segment_id:
+                if changed and segment_id != '':
                     self.host.emit_speaker_suggestion(voice, best_id, best_name, segment_id)
             else:
                 if result.owner_contended:
