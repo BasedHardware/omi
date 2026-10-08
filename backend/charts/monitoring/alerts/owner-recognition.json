@@ -1,0 +1,162 @@
+[
+  {
+    "uid": "omi-owner-identified-share-drop",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Owner recognition",
+    "title": "Owner identified on under half of its 7 day share",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 7200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 7200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[2h])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 604800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[7d])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[7d])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $C > 0 && $B < ($C * 0.5)",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The share of live and sync conversations that identified their owner is under half of that share over the last 7 days.",
+      "user_impact": "Owner voice labels may be missing on new conversations. This is a new counter, so confirm the series is populated before treating the page as a recognition outage.",
+      "scope": "omi_owner_recognition_conversations_total from process_conversation on pusher and Cloud Run (backend, backend-sync). surface is live or sync. too_little_speech is outside the share. The owner_identified numerator is zero-filled so a missing success series still reads as zero when other judged outcomes exist. Quiet traffic stays No Data.",
+      "verification": "Compare owner_identified against owner_not_identified, single_speaker_all_owner, and no_owner_profile for live and sync over 2h and 7d. A single account is on the owner_recognition_outcome log, which carries uid and conversation id. No production Prometheus evaluation was run for this new series.",
+      "safe_next_action": "If the 2h share is really down and volume is at least 100 judged conversations, inspect owner_recognition_outcome logs and the live decision counters before changing matcher thresholds.",
+      "runbook": "backend/docs/listen_pusher_pipeline.mdx",
+      "threshold": "$A >= 100 && $C > 0 && $B < ($C * 0.5) for 2h",
+      "evaluated_bad": "Synthetic: 200 judged live+sync conversations in 2h, owner_identified share 0.10, 7d share 0.40.",
+      "evaluated_good": "Synthetic: share unchanged from the 7d baseline, or fewer than 100 judged conversations in 2h, or no series yet."
+    },
+    "labels": {
+      "alert_identity": "omi-owner-identified-share-drop",
+      "component": "speaker-recognition",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  }
+]
