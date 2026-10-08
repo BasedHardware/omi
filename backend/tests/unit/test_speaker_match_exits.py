@@ -85,6 +85,7 @@ async def test_exit_reasons_are_enumerated():
             'already_mapped',
             'rejected',
             'manual_decision',
+            'voice_capacity',
         }
     )
 

@@ -52,6 +52,7 @@ from utils.observability.owner_recognition import (
 logger = logging.getLogger(__name__)
 
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
+MAX_SPEAKER_VOICES = 128
 
 # The enumerated early-exit reasons for live speaker-ID matching. Every return
 # before a match decision bumps exactly one of these (Prometheus counter label
@@ -81,6 +82,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'already_mapped',
         'rejected',
         'manual_decision',
+        'voice_capacity',
     }
 )
 
@@ -486,6 +488,9 @@ class SpeakerMatcher:
             self._record_exit('stale_generation', speaker_id)
             return
         generation = self._generation
+        if speaker_id not in self._speaker_locks and len(self._speaker_locks) >= MAX_SPEAKER_VOICES:
+            self._record_exit('voice_capacity', speaker_id)
+            return
         lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
         async with lock:
             drop_reason = self._drop_reason(generation, conversation_id, speaker_id)
@@ -610,8 +615,6 @@ class SpeakerMatcher:
                 self._record_exit('no_fresh_audio', speaker_id)
                 return
             # A metadata cap also bounds pathological alternating tiny turns.
-            if speaker_id not in self._pending_audio and len(self._pending_audio) >= 128:
-                self._pending_audio.pop(next(iter(self._pending_audio)))
             self._pending_audio[speaker_id] = fresh[-128:]
             fresh = self._pending_audio[speaker_id]
             # Appending evicts the oldest clip. Gate against only the evidence
@@ -697,6 +700,9 @@ class SpeakerMatcher:
                     distances[person_id] = compare_embeddings(centroid, vector)
             self._voice_distances[speaker_id] = distances
             self._voice_decisions[speaker_id] = select_speaker_match(distances)
+            previous_segment = self._voice_segments.get(speaker_id)
+            if previous_segment and previous_segment not in self.segment_assignments:
+                self.segment_identity_status.pop(previous_segment, None)
             self._voice_segments[speaker_id] = segment['id']
             self._voice_centroids[speaker_id] = centroid
             self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
@@ -937,6 +943,9 @@ class SpeakerMatcher:
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self._profile_conversation_id = None
         self._named_speakers_allowed = None
+        # Tasks retain their old lock locally. Generation checks after every
+        # await prevent them from publishing into the new lock inventory.
+        self._speaker_locks.clear()
         self._covered_audio.clear()
         self._pending_audio.clear()
         self.person_embeddings.clear()
