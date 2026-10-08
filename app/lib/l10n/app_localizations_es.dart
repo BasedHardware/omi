@@ -2671,6 +2671,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get tasksNoDeadline => 'Sin plazo';
 
   @override
+  String get tasksNextPageFailed => 'No se pudieron cargar más tareas. Desliza hacia abajo para volver a intentarlo.';
+
+  @override
   String get tasksLater => 'Más tarde';
 
   @override
@@ -9147,6 +9150,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Seleccionar todo';
+
+  @override
+  String get selectAllTasksPartial => 'No se pudieron cargar todas las tareas. Solo se seleccionaron las ya cargadas.';
 
   @override
   String get connectTaskAppToExport => 'Conecta una app de tareas en Ajustes para exportar';

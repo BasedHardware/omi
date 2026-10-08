@@ -1,35 +1,27 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
 
-/// The completion mark of a task row (Tasks page, Home's Today card): a quiet dashed ring while
-/// open, a filled amber disc with a check once done. Decorative — the tappable wrapper around it
-/// carries the semantics.
+/// The completion mark of a task row (Tasks page, the shared-tasks sheet): a thin solid ring while
+/// open, a filled disc with a check once done, both in the accent (black in light, white in dark).
+/// Decorative — the tappable wrapper around it carries the semantics.
 class TaskCompletionMark extends StatelessWidget {
   const TaskCompletionMark({super.key, required this.completed, this.size = 22});
 
   final bool completed;
   final double size;
 
-  /// Done tasks and reached goals share this colour.
-  static const Color doneColor = Colors.amber;
-
   @override
   Widget build(BuildContext context) {
-    if (completed) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: doneColor),
-        child: Icon(Icons.check, size: size * 0.64, color: OmiColors.onAccent),
-      );
-    }
-    // Dashed outline: quieter than a solid ring so the task title carries the visual weight.
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _DashedCirclePainter(color: OmiColors.textTertiary, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: completed ? OmiColors.accent : Colors.transparent,
+        border: completed ? null : Border.all(color: OmiColors.accent, width: 1.5),
+      ),
+      child: completed ? Icon(Icons.check, size: size * 0.64, color: OmiColors.onAccent) : null,
     );
   }
 }
@@ -55,46 +47,4 @@ class TaskSelectionSquare extends StatelessWidget {
       child: selected ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
     );
   }
-}
-
-class _DashedCirclePainter extends CustomPainter {
-  _DashedCirclePainter({
-    required this.color,
-    required this.strokeWidth,
-    required this.dashLength,
-    required this.gapLength,
-  });
-
-  final Color color;
-  final double strokeWidth;
-  final double dashLength;
-  final double gapLength;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - (strokeWidth / 2);
-    final circumference = 2 * math.pi * radius;
-    final segments = (circumference / (dashLength + gapLength)).floor();
-    final adjustedSegment = circumference / segments;
-    final dashAngle = (dashLength / adjustedSegment) * (2 * math.pi / segments);
-    final stepAngle = 2 * math.pi / segments;
-
-    for (var i = 0; i < segments; i++) {
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), i * stepAngle, dashAngle, false, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedCirclePainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth ||
-      oldDelegate.dashLength != dashLength ||
-      oldDelegate.gapLength != gapLength;
 }

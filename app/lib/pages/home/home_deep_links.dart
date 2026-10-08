@@ -13,10 +13,10 @@ import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
@@ -149,7 +149,7 @@ Future<bool> openHomeDeepLink(
       } else if (onTaskOpened != null) {
         onTaskOpened(task);
       } else {
-        unawaited(showActionItemFormSheet(context, actionItem: task));
+        unawaited(openTaskEditor(context, task));
       }
     case 'search':
       final query = link.query['q']?.trim() ?? '';

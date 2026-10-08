@@ -790,7 +790,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               title: task.description,
               onTap: () {
                 _remember(_query.text);
-                showActionItemFormSheet(context, actionItem: task);
+                openTaskEditor(context, task);
               },
             ),
         ],

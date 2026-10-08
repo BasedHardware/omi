@@ -2697,6 +2697,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tasksNoDeadline => 'Sense termini';
 
   @override
+  String get tasksNextPageFailed => 'No s\'han pogut carregar més tasques. Arrossega cap avall per tornar-ho a provar.';
+
+  @override
   String get tasksLater => 'Més tard';
 
   @override
@@ -9177,6 +9180,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Selecciona tot';
+
+  @override
+  String get selectAllTasksPartial =>
+      'No s\'han pogut carregar totes les tasques. Només s\'han seleccionat les ja carregades.';
 
   @override
   String get connectTaskAppToExport => 'Connecta una aplicació de tasques a Configuració per exportar';

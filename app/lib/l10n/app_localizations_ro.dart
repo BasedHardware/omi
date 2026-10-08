@@ -2695,6 +2695,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tasksNoDeadline => 'Fără termen limită';
 
   @override
+  String get tasksNextPageFailed => 'Nu s-au putut încărca mai multe sarcini. Trage în jos pentru a încerca din nou.';
+
+  @override
   String get tasksLater => 'Mai târziu';
 
   @override
@@ -9164,6 +9167,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Selectați tot';
+
+  @override
+  String get selectAllTasksPartial =>
+      'Nu s-au putut încărca toate sarcinile. Sunt selectate doar sarcinile deja încărcate.';
 
   @override
   String get connectTaskAppToExport => 'Conectați o aplicație de sarcini în Setări pentru a exporta';

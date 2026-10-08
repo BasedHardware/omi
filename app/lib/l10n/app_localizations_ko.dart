@@ -2641,6 +2641,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksNoDeadline => '마감일 없음';
 
   @override
+  String get tasksNextPageFailed => '작업을 더 불러오지 못했습니다. 아래로 당겨 다시 시도하세요.';
+
+  @override
   String get tasksLater => '나중에';
 
   @override
@@ -8986,6 +8989,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => '모두 선택';
+
+  @override
+  String get selectAllTasksPartial => '모든 작업을 불러오지 못했습니다. 이미 불러온 작업만 선택되었습니다.';
 
   @override
   String get connectTaskAppToExport => '내보내려면 설정에서 작업 앱을 연결하세요';

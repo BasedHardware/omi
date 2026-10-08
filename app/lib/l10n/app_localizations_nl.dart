@@ -2689,6 +2689,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tasksNoDeadline => 'Geen deadline';
 
   @override
+  String get tasksNextPageFailed => 'Kon geen taken meer laden. Trek omlaag om het opnieuw te proberen.';
+
+  @override
   String get tasksLater => 'Later';
 
   @override
@@ -9146,6 +9149,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Alles selecteren';
+
+  @override
+  String get selectAllTasksPartial => 'Kon niet alle taken laden. Alleen de al geladen taken zijn geselecteerd.';
 
   @override
   String get connectTaskAppToExport => 'Verbind een taken-app in Instellingen om te exporteren';

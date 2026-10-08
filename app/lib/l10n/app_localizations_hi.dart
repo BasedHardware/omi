@@ -2659,6 +2659,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tasksNoDeadline => 'कोई समय सीमा नहीं';
 
   @override
+  String get tasksNextPageFailed => 'और कार्य लोड नहीं हो सके। फिर से कोशिश करने के लिए नीचे खींचें।';
+
+  @override
   String get tasksLater => 'बाद में';
 
   @override
@@ -9104,6 +9107,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'सभी चुनें';
+
+  @override
+  String get selectAllTasksPartial => 'सभी कार्य लोड नहीं हो सके। केवल पहले से लोड किए गए कार्य चुने गए हैं।';
 
   @override
   String get connectTaskAppToExport => 'निर्यात करने के लिए सेटिंग्स में एक टास्क ऐप कनेक्ट करें';

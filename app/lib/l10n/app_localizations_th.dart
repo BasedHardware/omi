@@ -2666,6 +2666,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get tasksNoDeadline => 'ไม่มีกำหนดเวลา';
 
   @override
+  String get tasksNextPageFailed => 'โหลดงานเพิ่มเติมไม่ได้ ดึงลงเพื่อลองอีกครั้ง';
+
+  @override
   String get tasksLater => 'ภายหลัง';
 
   @override
@@ -9076,6 +9079,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'เลือกทั้งหมด';
+
+  @override
+  String get selectAllTasksPartial => 'โหลดงานทั้งหมดไม่ได้ เลือกเฉพาะงานที่โหลดแล้วเท่านั้น';
 
   @override
   String get connectTaskAppToExport => 'เชื่อมต่อแอปงานในการตั้งค่าเพื่อส่งออก';

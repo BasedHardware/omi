@@ -2684,6 +2684,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tasksNoDeadline => 'Bez termínu';
 
   @override
+  String get tasksNextPageFailed => 'Další úkoly se nepodařilo načíst. Přetažením dolů to zkuste znovu.';
+
+  @override
   String get tasksLater => 'Později';
 
   @override
@@ -9122,6 +9125,9 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Vybrat vše';
+
+  @override
+  String get selectAllTasksPartial => 'Nepodařilo se načíst všechny úkoly. Vybrány jsou jen ty už načtené.';
 
   @override
   String get connectTaskAppToExport => 'Pro export připojte aplikaci úkolů v Nastavení';

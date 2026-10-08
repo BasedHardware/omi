@@ -5199,6 +5199,12 @@ abstract class AppLocalizations {
   /// **'No Deadline'**
   String get tasksNoDeadline;
 
+  /// Toast on the Tasks list when the next page of tasks fails to load; pull-to-refresh retries.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load more tasks. Pull down to try again.'**
+  String get tasksNextPageFailed;
+
   /// Category label for tasks due later
   ///
   /// In en, this message translates to:
@@ -17024,6 +17030,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select All'**
   String get selectAllTasksMenu;
+
+  /// Toast after Select All on the Tasks list when some pages of tasks could not be loaded, so the selection is partial.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load every task. Only the tasks already loaded are selected.'**
+  String get selectAllTasksPartial;
 
   /// Snackbar shown when the user taps Export but no third-party task integration is connected
   ///

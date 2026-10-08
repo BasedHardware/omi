@@ -2983,6 +2983,7 @@
     "@tasksNoDeadline": {
         "description": "Category label for tasks without a deadline"
     },
+    "tasksNextPageFailed": "Nije moguće učitati više zadataka. Povucite prema dolje da pokušate ponovo.",
     "tasksLater": "Kasnije",
     "@tasksLater": {
         "description": "Category label for tasks due later"
@@ -10493,6 +10494,7 @@
     "searchActionItems": "Pretraži zadatke",
     "selectActionItems": "Odaberi više",
     "selectAllTasksMenu": "Odaberi sve",
+    "selectAllTasksPartial": "Nije moguće učitati sve zadatke. Odabrani su samo već učitani zadaci.",
     "showCompletedTasks": "Prikaži završene",
     "startCallRecording": "Pokreni snimanje poziva",
     "startVoiceRecording": "Pokreni glasovno snimanje",

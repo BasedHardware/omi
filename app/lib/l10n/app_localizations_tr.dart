@@ -2688,6 +2688,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tasksNoDeadline => 'Son tarih yok';
 
   @override
+  String get tasksNextPageFailed => 'Daha fazla görev yüklenemedi. Yeniden denemek için aşağı çekin.';
+
+  @override
   String get tasksLater => 'Daha sonra';
 
   @override
@@ -9135,6 +9138,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'Tümünü seç';
+
+  @override
+  String get selectAllTasksPartial => 'Tüm görevler yüklenemedi. Yalnızca zaten yüklenmiş görevler seçildi.';
 
   @override
   String get connectTaskAppToExport => 'Dışa aktarmak için Ayarlar\'da bir görev uygulaması bağlayın';

@@ -2687,6 +2687,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get tasksNoDeadline => 'بدون سررسید';
 
   @override
+  String get tasksNextPageFailed => 'بارگیری وظایف بیشتر ممکن نشد. برای تلاش دوباره به پایین بکشید.';
+
+  @override
   String get tasksLater => 'بعدتر';
 
   @override
@@ -9122,6 +9125,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get selectAllTasksMenu => 'انتخاب همه';
+
+  @override
+  String get selectAllTasksPartial => 'بارگیری همه وظایف ممکن نشد. فقط وظایف بارگیری‌شده انتخاب شدند.';
 
   @override
   String get connectTaskAppToExport => 'برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید';
