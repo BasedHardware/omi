@@ -12,8 +12,11 @@ final class LiveActivityManager {
     private var latest: (String, OmiCaptureAttributes.ContentState, Bool)?
     private var activity: Activity<OmiCaptureAttributes>?
     private var suppressedRecordingId: String?
-    /// A card swiped away stays away for that recording and that kind of card.
-    private var dismissedCard: String?
+    /// Cards swiped away stay away for that recording and that kind of card.
+    private var dismissedCards: Set<String> = []
+    /// Actions whose intent is still waiting for Flutter's reply. The card that owns the tapped
+    /// button stays until the reply, even when the action makes capture healthy again.
+    private var actionsInFlight = 0
     /// When the latest recording entered its current status; connecting and unverified
     /// count as one, since both mean the pendant has not been heard yet.
     private var statusClock: (id: String, status: String, since: Date)?
@@ -139,7 +142,7 @@ final class LiveActivityManager {
         // Whether this process records is known only from the owner's snapshot; wait for it.
         guard ready, let (id, published, active) = latest else { return }
         if let current = activity, current.activityState == .dismissed {
-            dismissedCard = Self.cardKey(current.attributes.recordingId, current.contentState.notice)
+            dismissedCards.insert(Self.cardKey(current.attributes.recordingId, current.contentState.notice))
             activity = nil
         }
         guard enabled, active, !id.isEmpty, ActivityAuthorizationInfo().areActivitiesEnabled else {
@@ -147,7 +150,7 @@ final class LiveActivityManager {
             return
         }
         if let suppressedRecordingId, suppressedRecordingId != id { self.suppressedRecordingId = nil }
-        if let dismissedCard, !dismissedCard.hasPrefix(id + "|") { self.dismissedCard = nil }
+        dismissedCards = dismissedCards.filter { $0.hasPrefix(id + "|") }
         // Healthy pendant capture is the default and shows nothing; see CapturePresentationPolicy.
         let since = statusSince(id: id, status: published.status)
         let battery = Self.pendantBattery()
@@ -155,7 +158,8 @@ final class LiveActivityManager {
         switch CapturePresentationPolicy.decide(status: state.status, source: state.source,
                                                 statusAge: Date().timeIntervalSince(since), battery: battery) {
         case .hidden:
-            await endAll(immediate: true)
+            // perform() reconciles again once the tapped intent has its reply.
+            if actionsInFlight == 0 { await endAll(immediate: true) }
             return
         case .recording:
             state.notice = nil
@@ -187,7 +191,7 @@ final class LiveActivityManager {
         }
         if let activity {
             await update(activity, state: state)
-        } else if suppressedRecordingId != id && dismissedCard != card
+        } else if suppressedRecordingId != id && !dismissedCards.contains(card)
                     && UIApplication.shared.applicationState == .active {
             do {
                 if #available(iOS 16.2, *) {
@@ -214,9 +218,11 @@ final class LiveActivityManager {
     private static func cardKey(_ id: String, _ notice: String?) -> String { "\(id)|\(notice ?? "recording")" }
 
     /// The pendant battery the Home Screen widget shows (AppDelegate's battery channel), when the
-    /// pendant is connected and not charging. Unknown readings are -1.
+    /// pendant is connected and not charging. Only Omi pendants report charging, so other
+    /// wearables never show this card. Unknown readings are -1.
     private static func pendantBattery() -> Int? {
         guard let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12"),
+              defaults.string(forKey: "widget_device_type") == "omi",
               defaults.bool(forKey: "widget_is_connected"), !defaults.bool(forKey: "widget_is_charging"),
               let level = defaults.object(forKey: "widget_battery_level") as? Int, level >= 0 else { return nil }
         return level
@@ -226,8 +232,7 @@ final class LiveActivityManager {
     /// Omi while the mic is off, and Start must stay on the card. If Omi is killed meanwhile, its
     /// next launch, including one from a tap on this card, closes the card.
     private static func staleDate(for state: OmiCaptureAttributes.ContentState) -> Date? {
-        state.status == "paused" || state.notice == CaptureNotice.battery.rawValue
-            ? nil : Date().addingTimeInterval(90)
+        state.status == "paused" ? nil : Date().addingTimeInterval(90)
     }
 
     private func update(_ activity: Activity<OmiCaptureAttributes>, state: OmiCaptureAttributes.ContentState) async {
@@ -276,7 +281,10 @@ final class LiveActivityManager {
             return
         }
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Omi recording action")
+        actionsInFlight += 1
         defer {
+            actionsInFlight -= 1
+            enqueue { [weak self] in await self?.reconcile() }
             if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
         }
         do {

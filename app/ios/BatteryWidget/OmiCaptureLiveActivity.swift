@@ -173,16 +173,18 @@ private func noticeIsland(snapshot: CaptureSnapshot, notice: CaptureNotice, id: 
             }
         }
     } compactLeading: {
-        CaptureNoticeSymbol(notice: notice).font(.system(size: 15, weight: .semibold))
-            .padding(.leading, 4)
+        // The pendant says this is Omi; the symbol says what is wrong. Values wait for the
+        // expanded island, so nothing here can clip when the island turns sideways.
+        CapturePendant(active: snapshot.isReceivingAudio, size: 20)
     } compactTrailing: {
-        ViewThatFits(in: .horizontal) {
-            CaptureNoticeValue(snapshot: snapshot, notice: notice, size: 15)
-            Circle().fill(notice.tint).frame(width: 8, height: 8)
-        }
-        .padding(.trailing, 4)
+        CaptureNoticeSymbol(notice: notice).font(.system(size: 15, weight: .semibold))
+            .padding(.trailing, 4)
     } minimal: {
-        CaptureNoticeSymbol(notice: notice).font(.system(size: 14, weight: .semibold))
+        CapturePendant(active: snapshot.isReceivingAudio, size: 20)
+            .overlay(alignment: .bottomTrailing) {
+                Circle().fill(notice.tint).frame(width: 8, height: 8)
+                    .overlay(Circle().stroke(.black, lineWidth: 1.5))
+            }
     }
     .widgetURL(captureURL(id))
     .keylineTint(notice.tint)
@@ -784,7 +786,7 @@ private struct CaptureNoticeValue: View {
             } else {
                 // A live count from when it began, in a slot sized for an hour or more.
                 let since = Date(timeIntervalSince1970: snapshot.state.noticeSince ?? Date().timeIntervalSince1970)
-                Text(timerInterval: since...since.addingTimeInterval(24 * 3600), countsDown: false)
+                Text(timerInterval: since...since.addingTimeInterval(7 * 24 * 3600), countsDown: false)
                     .frame(width: size * 4.3, alignment: .trailing)
             }
         }
