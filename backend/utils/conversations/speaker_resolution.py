@@ -1040,6 +1040,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
     embeddable = [s for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL and _duration(s) >= MIN_EMBED_SECONDS]
     placements: Dict[str, AudioPlacement] = {}
     inventory_files: List[Any] = []
+    index = PreparedAudioCoverage(validated=False)
     advisory_began = time.monotonic()
     if embeddable:
         raw_files = conversation.audio_files or []
@@ -1299,11 +1300,12 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             continue
         key = keys.get(sid, sid) if keys is not None else sid
         seconds = clip_seconds.get(key, 0.0)
-        if not isinstance(seconds, (float, int)) or not math.isfinite(seconds) or seconds < 0:
+        if not math.isfinite(seconds) or seconds < 0:
             seconds = 0.0
         seconds = min(seconds, _duration(segment), MAX_CLIP_SECONDS)
-        if spans_on and sid in placements and placements[sid].window is not None:
-            low, high = placements[sid].window
+        window = placements[sid].window if sid in placements else None
+        if spans_on and window is not None:
+            low, high = window
             if high - low > MAX_CLIP_SECONDS:
                 center = (low + high) / 2
                 low, high = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2

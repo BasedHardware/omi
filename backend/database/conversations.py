@@ -40,6 +40,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .account_deletion_marker import account_deletion_document
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -2331,9 +2332,11 @@ def persist_speaker_resolution_if_current(uid: str, conversation_data: dict, *, 
     @firestore.transactional
     def persist(transaction):
         snapshot = ref.get(transaction=transaction)
+        deleting = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
         current = snapshot.to_dict() or {}
         if (
             not snapshot.exists
+            or deleting.exists
             or is_soft_deleted(current)
             or current.get('discarded')
             or current.get('is_locked')

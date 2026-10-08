@@ -1,6 +1,8 @@
 """Finalized transcript identity survives a missing source-frame receipt."""
 
 import numpy as np
+from datetime import datetime, timezone, timedelta
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 from tests.unit.test_conversation_speaker_resolution_stage import (
     env,
@@ -69,9 +71,6 @@ def test_late_audio_retry_persists_identity_without_processing(env, monkeypatch)
 
 
 def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch):
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
-    from datetime import datetime, timezone, timedelta
-
     store = StrictFirestore()
     at = datetime(2026, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -112,3 +111,5 @@ def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch
         'u1', store.rows[path]['transcript_segments'], bool(store.rows[path].get('transcript_segments_compressed'))
     )
     assert decoded[0]['is_user'] is True
+    store.rows[('account_deletions', 'u1')] = {'wipe_status': 'pending'}
+    assert not stage.conversations_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)

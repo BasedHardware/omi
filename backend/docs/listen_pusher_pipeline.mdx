@@ -3648,3 +3648,7 @@ desktop captures and budget-skipped custom-STT captures remain a residual.
 Rollover rechecks the donor after profile loading and reevaluates the retained centroid
 against the current eligible prints. Late manual rejection, deletion, lock, or a new
 competing print defeats automatic carry; distinct covered audio remains reserved.
+
+The late-audio identity transaction also reads the account deletion marker before
+writing. Its placement coverage index is initialized even when no segment is long
+enough to embed, so short-only conversations abstain without an unbound index.
