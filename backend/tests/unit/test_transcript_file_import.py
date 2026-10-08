@@ -17,6 +17,7 @@ import threading
 import time
 import zipfile
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -1589,6 +1590,70 @@ def test_a_shutdown_during_the_final_write_never_overwrites_it(tmp_path, job, mo
     assert [write['status'] for write in job.final_status_writes()] == [final_status]
     assert job.final()['status'] == final_status
     assert all(tf.INTERRUPTED_ERROR not in str(n) for n in job.notifications)
+
+
+@pytest.mark.parametrize(
+    'files',
+    [
+        pytest.param({'a.srt': SRT}, id='completed-write'),
+        pytest.param({'a.srt': b'\x00binary'}, id='nothing-imported-write'),
+    ],
+)
+def test_a_shutdown_while_the_final_write_is_still_queued_fails_the_job(tmp_path, job, monkeypatch, files):
+    """A saturated db pool holds the final write in its queue; cancelling the task cancels it there.
+
+    That write never runs, so the interruption must still be recorded rather than leave
+    the job processing with no worker behind it.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    monkeypatch.setattr(tf, 'db_executor', pool)
+    occupied, release = threading.Event(), threading.Event()
+    update_unless_cancelled = tf.import_jobs_db.update_import_job_unless_cancelled
+
+    def last_progress_write(job_id, fields):
+        if fields.get('processed_files') == len(files):
+            # Another request takes the pool's only thread right after this write.
+            pool.submit(lambda: (occupied.set(), release.wait(5)))
+        return update_unless_cancelled(job_id, fields)
+
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', last_progress_write)
+    path = tmp_path / 'export.zip'
+    path.write_bytes(_zip(files))
+
+    async def main():
+        task = asyncio.create_task(
+            tf.process_transcript_import('job-1', UID, str(path), original_filename='export.zip')
+        )
+        # The final write is queued behind the occupied thread.
+        while not (occupied.is_set() and pool._work_queue.qsize() == 1):
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.05)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    try:
+        asyncio.run(main())
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+
+    assert job.final_status_writes() == [job.final()], 'one final status, never the queued one as well'
+    assert job.final()['status'] == ImportJobStatus.failed.value
+    assert job.final()['error'] == tf.INTERRUPTED_ERROR
+    assert not path.exists(), 'the staged upload is removed once the job has its final status'
+
+
+def test_the_final_write_and_the_interruption_claim_the_settlement_once():
+    """Whichever begins first in its pool thread writes; the other does nothing."""
+    settlement = tf._Settlement()
+    calls = []
+
+    assert settlement.run(calls.append, 'final') is None
+    assert settlement.run(calls.append, 'interrupted') is None
+
+    assert calls == ['final']
 
 
 class _FakeTransaction:

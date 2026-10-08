@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import struct
+import threading
 import uuid
 import zlib
 from dataclasses import dataclass
@@ -1085,6 +1086,29 @@ def _fail(uid: str, job_id: str, message: str) -> None:
     _notify(uid, job_id, 'Transcript Import Failed', message, {'type': 'import_failed', 'job_id': job_id})
 
 
+class _Settlement:
+    """Which final status write an import makes: its own outcome, or a shutdown's interruption.
+
+    The final write is queued on the db pool, and a shutdown cancel can cancel it there
+    before it starts, when nothing else would ever record the job's end. So each side
+    claims the settlement inside its pool thread, as its write begins, and only the first
+    claim writes: a final write that began is never overwritten by "interrupted", and one
+    cancelled while still queued leaves the claim to the interruption.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._claimed = False
+
+    def run(self, write: Callable[..., Any], *args: Any) -> Any:
+        """``write(*args)`` when this is the first claim, else nothing (None)."""
+        with self._lock:
+            if self._claimed:
+                return None
+            self._claimed = True
+        return write(*args)
+
+
 def _compressed_transcript_bytes(uid: str, segments: List[Any]) -> int:
     """Size of the transcript blob the conversation write path stores, before any encryption."""
     encoded = conversations_db.encode_conversation_for_write(uid, {'transcript_segments': segments})
@@ -1147,9 +1171,9 @@ async def process_transcript_import(
     slot is held for the whole import (backend/AGENTS.md, lane 2).
     """
     upload: Optional[_Upload] = None
-    # Set before the final status write is awaited: a shutdown cancel during that write
-    # leaves its thread running, and must not race it with an "interrupted" failure.
-    settling = False
+    # The final status write and a shutdown's "interrupted" failure each claim this as
+    # they begin in a pool thread; only the first writes (_Settlement).
+    settlement = _Settlement()
     try:
         started = {'status': ImportJobStatus.processing.value, 'started_at': datetime.now(timezone.utc).isoformat()}
         if not await run_blocking(db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, started):
@@ -1168,9 +1192,13 @@ async def process_transcript_import(
             logger.info('transcript import job %s was cancelled before its first file', job_id)
             return
         if total == 0:
-            settling = True
             await run_blocking(
-                db_executor, _fail, uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.'
+                db_executor,
+                settlement.run,
+                _fail,
+                uid,
+                job_id,
+                'No transcript files (.srt, .vtt or .txt) were found in the upload.',
             )
             return
         for entry in upload.entries:
@@ -1213,12 +1241,15 @@ async def process_transcript_import(
                     logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                     return
         if errors and created == 0 and skipped == 0:
-            settling = True
             await run_blocking(
-                db_executor, _fail, uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).'
+                db_executor,
+                settlement.run,
+                _fail,
+                uid,
+                job_id,
+                f'None of the {total} file(s) could be imported ({errors[0]}).',
             )
             return
-        settling = True
         completed = {
             'status': ImportJobStatus.completed.value,
             'completed_at': datetime.now(timezone.utc).isoformat(),
@@ -1226,7 +1257,9 @@ async def process_transcript_import(
             'conversations_created': created,
             'conversations_skipped': skipped,
         }
-        if not await run_blocking(db_executor, import_jobs_db.update_import_job_unless_cancelled, job_id, completed):
+        if not await run_blocking(
+            db_executor, settlement.run, import_jobs_db.update_import_job_unless_cancelled, job_id, completed
+        ):
             logger.info('transcript import job %s was cancelled; not recording its completion', job_id)
             return
         body = f'Imported {created} conversation(s) from your transcripts.'
@@ -1250,9 +1283,10 @@ async def process_transcript_import(
         )
     except asyncio.CancelledError:
         # Shutdown cancels tracked background tasks (drain_background_tasks): record the
-        # interruption rather than leave the job processing with no worker behind it.
-        if not settling:
-            await run_blocking(db_executor, _fail, uid, job_id, INTERRUPTED_ERROR)
+        # interruption rather than leave the job processing with no worker behind it. A
+        # final write that already began owns the settlement, so this then writes nothing;
+        # one the cancel removed from the pool's queue never claimed it, so this does.
+        await run_blocking(db_executor, settlement.run, _fail, uid, job_id, INTERRUPTED_ERROR)
         raise
     except TranscriptImportError as exc:
         await run_blocking(db_executor, _fail, uid, job_id, str(exc))
