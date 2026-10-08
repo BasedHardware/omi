@@ -170,7 +170,7 @@ def apply_edit(uid, edit, records):
                             structured, segment_id
                         )[path]
                 invalidated = {}
-                conversations.invalidate_client_processing(invalidated)
+                conversations.clear_client_processing(invalidated)
                 patch.update({name: None for name in invalidated})
         else:
             raise ValueError('dream_unsupported_spelling_target')

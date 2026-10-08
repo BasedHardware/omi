@@ -16,7 +16,7 @@ async def keyterms(uid, existing):
         return [term for term in result if isinstance(term, str) and len(term) <= 50][:100]
     except Exception:
         record_fallback(
-            component='dream_vocabulary',
+            component='stt_live_session',
             from_mode='vocabulary',
             to_mode='existing_terms',
             reason='dependency_unavailable',

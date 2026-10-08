@@ -1837,7 +1837,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         # one server-side revision. Consumers can use this as the freshness
         # boundary without pretending that the old evidence still applies.
         prepared_payload['updated_at'] = datetime.now(timezone.utc)
-        invalidate_client_processing(prepared_payload)
+        clear_client_processing(prepared_payload)
         _guard_match_score_size(prepared_payload, raw_data, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
@@ -2558,7 +2558,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def invalidate_client_processing(payload: Dict[str, Any]) -> None:
+def clear_client_processing(payload: Dict[str, Any]) -> None:
     """Stamp an explicit projection clear onto an already-prepared write.
 
     Distinct from omitting the key (generic persist: leave a stored projection)
@@ -2884,7 +2884,7 @@ def assign_conversation_speaker(
         extract_learning_receipt_markers(receipt, current)
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
-        invalidate_client_processing(payload)
+        clear_client_processing(payload)
         _guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
@@ -3097,12 +3097,12 @@ def update_conversation_segments(
         # origin was pinned with the marker and must not move.
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         if invalidate_client_processing:
-            invalidate_client_processing(prepared_payload)
+            clear_client_processing(prepared_payload)
         elif any(current.get(field) is not None for field in PROJECTION_FAMILY_FIELDS):
             # Opt-out skips the sentinel so the ~0.6s live loop stays cheap when
             # no projection exists. A projection that is really there (overlap
             # with finalize) must still be cleared in this same write.
-            invalidate_client_processing(prepared_payload)
+            clear_client_processing(prepared_payload)
         _guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
@@ -3633,7 +3633,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             target_id=target_id,
             decode=decode,
             encode=encode,
-            invalidate=invalidate_client_processing,
+            invalidate=clear_client_processing,
             full_ids=full_ids,
         )
         # The commit runs after this returns; remember which row it would grow.

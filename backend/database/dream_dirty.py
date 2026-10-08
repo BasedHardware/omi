@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from config.dream_agent import mode
 from database.dream_store import mark_dirty
 from models.candidate import CandidateRecord
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 dream_writing = ContextVar('dream_writing', default=False)
@@ -50,4 +51,12 @@ def notify(uid: str, refs: list[tuple[str, str]]) -> None:
     try:
         mark_dirty(uid, refs)
     except Exception as exc:
+        record_fallback(
+            component='agent_tools',
+            from_mode='dream_dirty_signal',
+            to_mode='none',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
         logger.warning('Dream dirty signal failed error_type=%s', type(exc).__name__)
