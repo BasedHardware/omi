@@ -1,0 +1,3 @@
+{
+  "change": "Added an approval card in Chat and the agent pill: before Omi sends a message, reads a Messages or Mail thread, takes a screenshot of your screen, or runs an AppleScript on your Mac, it shows exactly what it will do and waits for Allow Once, Allow for This Chat (1 h), or Deny; a screenshot is only ever allowed once. While a card waits for you the chat says so instead of calling the tool stalled, and it no longer cancels the turn after 90 seconds"
+}

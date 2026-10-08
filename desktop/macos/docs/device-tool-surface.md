@@ -123,9 +123,53 @@ dispatch the model creates itself through `create_desktop_dispatch` has its
 
 Interim gate: parking is on only after a connected client declares the
 `desktop_tool_approval_cards` capability through the `client_capabilities`
-message. Until the Swift card ships, no client does, and the relay keeps
-today's immediate `approval_required` rather than holding a call nobody can
-answer. The card PR turns parking on by default and deletes the gate.
+message. The Mac shell sends that message right after a successful handshake
+(`AgentRuntimeProcess.clientCapabilitiesWireMessage`), so parking is on
+whenever the app is connected. A daemon with no card-bearing client keeps the
+immediate `approval_required` rather than holding a call nobody can answer.
+Removing the gate so parking is unconditional is a follow-up once the card has
+shipped in a beta.
+
+### The card on the Mac
+
+`DesktopToolApprovalStore` (`Desktop/Sources/Chat/DesktopToolApprovalStore.swift`)
+turns each `approval_requested` frame into a card and closes it on
+`approval_resolved`, whoever ended it. `DesktopToolApprovalCardList` renders
+the cards of one thread, matched by the surface's session id, so a card never
+shows under another conversation: main chat (`QueryAnswerThread`), a
+workstream (`TaskChatPanel`), and the agent pill (`AIResponseView`). Each
+`DesktopToolApprovalCard` shows the tool's title and question, the exact
+target (`resourceRef`), the content preview, the expiry time, and the answers:
+Allow Once, Allow for This Chat (1 h) only when the request offers
+`allow_session` (with its `covers` text), and Deny. A tool whose resource is
+only a stable key (`messages:chats`, `mail:inbox`, `screen`) shows no target
+row, so the screenshot card is just "Take a screenshot", "Let Omi take a
+screenshot of your whole screen?", Allow Once and Deny. An answer goes through
+signed direct control (`DesktopCoordinatorService.resolveDispatchJSON`, which
+calls `resolve_desktop_dispatch`): allow once sends no grant; allow for this
+chat sends a grant with `runId: null`, the dispatch's capability, operation and
+`resourceRef`, and a 1 h expiry. A refused or undelivered answer returns the
+card to pending with the reason, and the kernel's `approval_resolved` always
+wins over a local answer in flight. The card never runs anything itself; the
+only path to the tool is the kernel's resolution.
+
+A card waiting on the person is not a stall. The chat turn's `StallDetector`
+pauses while a card for its session is pending (`setWaitingOnUser`): the tool
+row reads "Waiting for your approval", the "taking longer than usual" banner
+stays down, and the 90 s no-progress abort that interrupts the bridge cannot
+fire; when the card closes, the clocks restart from that moment. The composer's
+stop button still cancels the run, and the card then reads "Cancelled, not
+run". On the daemon side the hermes and openclaw adapters' 150 s no-progress
+cancel treats a run in `waiting_approval` as progress for the same reason.
+
+Cards belong to one daemon process and one owner: the store is cleared on every
+runtime handshake, when the daemon exits, and when the owner is revoked. A card
+whose deadline passes without a frame closes locally as expired, and an answer
+the kernel refuses because the dispatch is no longer pending closes the card
+the way the kernel did instead of offering buttons that can only fail. The
+shell declares `desktop_tool_approval_cards` only to a runtime whose `init`
+advertises `desktop_tool_approval_requests`; an older daemon still runs the
+chat and keeps its immediate `approval_required`.
 
 ### Live screenshots ask too
 

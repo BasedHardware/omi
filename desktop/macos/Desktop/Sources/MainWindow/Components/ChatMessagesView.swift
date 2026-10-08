@@ -447,6 +447,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var timelineTrailingInset: CGFloat = 0
   /// Narrow sidebars (task chat) keep the rail off so it cannot sit on the text.
   var enablesPromptTimeline: Bool = true
+  /// The kernel surface whose parked device tool calls ask here; nil hosts show no cards.
+  var approvalSurface: AgentSurfaceReference? = nil
   /// Renders the daily summary as an in-history day-boundary row. On for the main chat in both
   /// shells — the recap is part of the thread's history there. Task chat opts out: that thread is
   /// about one task, not about the day.
@@ -1273,6 +1275,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         await dailySummaryCoordinator.activate()
         ChatSwitchPerfLog.span("dailySummaryActivate", startedAt: startedAt)
       }
+      DesktopToolApprovalCardList(surface: approvalSurface)
+        .padding(.top, OmiSpacing.sm)
     }
   }
 
