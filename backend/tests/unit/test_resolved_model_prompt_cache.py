@@ -49,7 +49,6 @@ def test_get_llm_filters_options_after_full_byok_resolution(
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', lambda *a, **k: sdk_models['gateway'])
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', lambda *a, **k: sdk_models['gateway'])
     monkeypatch.setattr(clients, '_create_byok_client', lambda model, provider, *a, **k: sdk_models[provider])
-    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **k: k['legacy_model'])
     token = byok._byok_ctx.set(keys)
     try:
         model = clients.get_llm(feature, prompt_cache_options=EXPLICIT_CACHE_OPTIONS)
