@@ -1,10 +1,19 @@
 # Flashing Instructions for Omi Firmware v3.0.8
 
+> ⚠️ **Stale bundle (added 2026-10):** the `.hex` files shipped in this folder are
+> firmware **3.0.8**, many releases behind the current `Omi_CV1_v3.0.x` releases.
+> Always download the current `merged.hex` / `merged_CPUNET.hex` (renamed
+> `Omi_CV1_v<ver>.hex` / `Omi_CV1_v<ver>_CPUNET.hex`) from
+> [GitHub Releases](https://github.com/BasedHardware/omi/releases?q=release_firmware+OMI+CV1)
+> and replace the files below before flashing — the scripts expect the exact
+> names `merged.hex` and `merged_CPUNET.hex`. For OTA updates, prefer the app
+> (Settings → Device Settings → Update Firmware) with `Omi_CV1_OTA_v<ver>.zip`.
+
 This guide provides step-by-step instructions for flashing the Omi firmware using J-Link on both macOS and Windows systems.
 
 ## Prerequisites
 
-- Omi device connected via USB
+- Omi CV1 device with a SWD programming connection (J-Link + the Omi flash cable; the pendant has no USB port — the magnetic charger carries power only, not data)
 - J-Link software installed (see installation instructions below)
 - Appropriate USB drivers for your device
 - Latest firmware files downloaded from GitHub releases

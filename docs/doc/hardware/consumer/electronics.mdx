@@ -1,7 +1,7 @@
 ---
 title: "Electronics"
 icon: "bolt"
-description: "PCB design files for the Omi mainboard, charger board, and flexible PCB — Altium source, Gerber files, and schematics."
+description: "PCB design files for the Omi mainboard, charger board, and flexible PCB — KiCad source, Gerber files, and schematics."
 ---
 
 ## Board Overview
@@ -11,7 +11,7 @@ The Omi uses three interconnected PCBs:
 | Board | Function | Latest Version |
 |-------|----------|---------------|
 | **Mainboard** | nRF5340 SoC, nRF7002 Wi-Fi, microphones, IMU, flash, battery management | v1.2 |
-| **Charger Board** | Magnetic dock with pogo pins, USB-C power, ESD protection | v1.0 |
+| **Charger Board** | Magnetic dock with pogo pins, 5V input (test points TP1–TP4), ESD protection | v1.0 |
 | **FPC** | Flexible cable connecting mainboard to charging contacts | v1.0 |
 
 ---
@@ -26,7 +26,7 @@ The Omi uses three interconnected PCBs:
     |----|----------|
     | nRF5340-CLAA | Dual-core Bluetooth LE SoC (application + network cores) |
     | nRF7002-CEAA-R7 | Wi-Fi 6 companion IC |
-    | CSNP4GCR01-DPW | 8GB NAND Flash |
+    | CSNP4GCR01-DPW | 4Gbit (512MB) SD NAND Flash |
     | LSM6DS3TR-C | 6-axis IMU |
     | BQ25101YFPR | Li-Ion/Li-Poly battery charger |
     | TPS628438YKAR | DC-DC buck converter |
@@ -38,14 +38,14 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/mainboard/schematic.pdf) | Full schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/gerbers) | Gerber + drill files for PCB fabrication |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) | Altium Designer source project |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/mainboard/altium) | KiCad 9 source project (folder name is historical) |
 
     <Warning>
     The nRF5340 (WLCSP-95, 4.4x4.0mm) and nRF7002 (WLCSP-81, 3.75x3.4mm) are fine-pitch wafer-level packages. Requires stencil + solder paste + reflow. Do not hand solder.
     </Warning>
   </Tab>
   <Tab title="Charger Board" icon="plug">
-    Magnetic charging dock with USB-C input.
+    Magnetic charging dock. Note: the released charger schematic (v1.0) has no USB-C receptacle — its 5V input arrives on test points TP1/TP3 (+) and TP2/TP4 (GND). The USB-C connector lives on whatever cable/plug feeds the dock, not on this board.
 
     **Key ICs:**
 
@@ -60,7 +60,7 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/charger-board/schematic.pdf) | Schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/gerbers) | Gerber files |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | Altium source |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/charger-board/altium) | KiCad 9 source |
 
     <Tip>The charger board is the simplest of the 3 — a good starting point if you're new to PCB assembly.</Tip>
   </Tab>
@@ -80,7 +80,7 @@ The Omi uses three interconnected PCBs:
     |------|-------------|
     | [`schematic.pdf`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/electrical/fpc-board/schematic.pdf) | Schematic |
     | [`gerbers/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/gerbers) | Gerber files |
-    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | Altium source |
+    | [`altium/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/electrical/fpc-board/altium) | KiCad 9 source |
 
     <Warning>FPC is delicate — handle with care during assembly. The board-to-board connector has a limited insertion cycle count.</Warning>
   </Tab>
@@ -154,6 +154,6 @@ Use **ENIG** surface finish for all boards. HASL causes bridging on the nRF5340 
     T5838 microphones are top-port — verify sound inlet faces the enclosure acoustic holes. Check PDM clock (1-3.25MHz) and data lines. Both mics must be in the correct PDM channel (L/R).
   </Accordion>
   <Accordion title="Charging doesn't work" icon="battery-half">
-    Check pogo pin contact resistance (less than 0.5 ohm). Verify FPC connection. Measure charger board USB-C VBUS (5V). Check TPS25200 eFuse output. Verify magnet polarity alignment.
+    Check pogo pin contact resistance (less than 0.5 ohm). Verify FPC connection. Measure charger board 5V input at TP1 (5V) / TP2 (GND). Check TPS25200 eFuse output. Verify magnet polarity alignment.
   </Accordion>
 </AccordionGroup>
