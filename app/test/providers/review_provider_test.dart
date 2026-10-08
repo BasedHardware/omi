@@ -116,11 +116,13 @@ void main() {
 
   group('ReviewProvider', () {
     test('a 404 turns the surface off; success turns it on', () async {
-      final off = ReviewProvider(loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+      final off = ReviewProvider(
+          isEligible: () => true, loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
       await off.load();
       expect(off.availability, ReviewAvailability.off);
 
       final on = ReviewProvider(
+        isEligible: () => true,
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 2)),
       );
       await on.load();
@@ -129,8 +131,23 @@ void main() {
       expect(on.remainingToday, 2);
     });
 
+    test('a store build never asks the server and stays off', () async {
+      var calls = 0;
+      final provider = ReviewProvider(
+        isEligible: () => false,
+        loadItems: () async {
+          calls++;
+          return ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1));
+        },
+      );
+      await provider.load();
+      expect(calls, 0);
+      expect(provider.availability, ReviewAvailability.off);
+    });
+
     test('a transient failure keeps the surface state and reports it', () async {
-      final provider = ReviewProvider(loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
+      final provider = ReviewProvider(
+          isEligible: () => true, loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.server)));
       await provider.load();
       expect(provider.availability, ReviewAvailability.unknown);
       expect(provider.loadFailed, isTrue);
@@ -141,6 +158,7 @@ void main() {
       final a = _item(_speakerJson('a'));
       final b = _item(_speakerJson('b'));
       final provider = ReviewProvider(
+        isEligible: () => true,
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [a, b], remainingToday: 2)),
         sendAnswer: (_, __) async =>
             succeed ? const ApiSuccess(1) : const ApiFailure(ApiProblem(ApiProblemKind.server)),
@@ -161,6 +179,7 @@ void main() {
 
     test('finds the question about an entity and the speaker question in a conversation', () async {
       final provider = ReviewProvider(
+        isEligible: () => true,
         loadItems: () async => ApiSuccess(ReviewItemsResponse(
           items: [_item(_speakerJson('a', conversationId: 'conv-9')), _item(_samePersonJson())],
           remainingToday: 2,
@@ -175,6 +194,7 @@ void main() {
     test('playing a clip marks it playing until playback ends', () async {
       final played = <String>[];
       final provider = ReviewProvider(
+        isEligible: () => true,
         loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1)),
         loadClip: (speaker) async => ApiSuccess(Uint8List.fromList([1, 2, 3])),
         playClip: (id, _) async {
@@ -191,6 +211,7 @@ void main() {
     test('conversation entities and projects stay empty while the surface is off', () async {
       var calls = 0;
       final provider = ReviewProvider(
+        isEligible: () => true,
         loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
         loadProjects: () async {
           calls++;

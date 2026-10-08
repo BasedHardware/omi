@@ -123,6 +123,7 @@ const _spellingItem = ReviewItem(
 Uint8List _clip() => Uint8List.fromList(List<int>.filled(44 + 3200, 0));
 
 ReviewProvider _review({List<ReviewItem>? items}) => ReviewProvider(
+      isEligible: () => true,
       loadItems: () async => ApiSuccess(ReviewItemsResponse(
         items: items ?? [_speakerItem, _taskItem, _samePersonItem],
         remainingToday: items?.length ?? 3,

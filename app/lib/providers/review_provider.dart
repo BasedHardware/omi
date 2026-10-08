@@ -9,6 +9,8 @@ import 'package:omi/backend/http/api/review.dart' as api;
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as speaker_api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ReviewItemsLoader = Future<ApiResult<ReviewItemsResponse>> Function();
@@ -36,13 +38,16 @@ class ReviewProvider extends ChangeNotifier {
     ReviewClipPlayer? playClip,
     ReviewProjectsLoader? loadProjects,
     ConversationEntitiesLoader? loadConversationEntities,
-  })  : _loadItems = loadItems ?? api.getReviewItems,
+    bool Function()? isEligible,
+  })  : _isEligible = isEligible ?? _defaultEligible,
+        _loadItems = loadItems ?? api.getReviewItems,
         _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
         _loadProjects = loadProjects ?? api.getProjectEntities,
         _sendAnswer = sendAnswer ?? api.answerReviewItem,
         _loadClip = loadClip ?? _defaultLoadClip,
         _playClipOverride = playClip;
 
+  final bool Function() _isEligible;
   final ReviewItemsLoader _loadItems;
   final ReviewAnswerSender _sendAnswer;
   final ReviewClipLoader _loadClip;
@@ -105,6 +110,12 @@ class ReviewProvider extends ChangeNotifier {
   }
 
   Future<void> _load() async {
+    // First release: TestFlight and dev builds only. Store builds never ask, whatever the server says.
+    if (!_isEligible()) {
+      availability = ReviewAvailability.off;
+      _notify();
+      return;
+    }
     loading = true;
     _notify();
     switch (await _loadItems()) {
@@ -220,6 +231,8 @@ class ReviewProvider extends ChangeNotifier {
       }
     }
   }
+
+  static bool _defaultEligible() => Env.isTestFlight || F.env == Environment.dev;
 
   static Future<ApiResult<Uint8List>> _defaultLoadClip(SpeakerItem speaker) => speaker_api.getSpeakerTagPromptClip(
         conversationId: speaker.conversationId,
