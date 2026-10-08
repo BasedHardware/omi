@@ -170,6 +170,7 @@ PHOTO_PROFILES = (
         start_date=[FROZEN_NOW],
         end_date=[FROZEN_NOW],
     ),
+    _profile('entity-pages', photo=True),
     _profile('persona-create', photo=True),
     _profile('persona-update', photo=True),
     _profile('goal-context', photo=True, statuses=[['completed']]),

@@ -1,5 +1,4 @@
 """Repository-owned Firestore query and index requirements.
-
 The Firebase manifest is generated from this registry.  Query specs are added
 incrementally: a registered query spec both builds its production query and
 declares the exact composite index that query needs.  Existing index-only

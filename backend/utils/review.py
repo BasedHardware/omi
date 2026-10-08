@@ -21,6 +21,7 @@ from models.review import (
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptAnswer, SpeakerTagPromptAnswerRequest
 from utils.speaker_tag_prompts import service as speakers
 from utils.task_intelligence import candidate_service
+from utils.task_intelligence.task_links import TaskLinkValidationError
 
 
 def one_line(text: str | None, limit: int = 180) -> str | None:
@@ -258,7 +259,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
                 change,
                 left['entity_id'],
                 right['entity_id'],
-                edit_key=f'merge:{left["entity_id"]}:{right["entity_id"]}',
+                edit_key='merge:' + ':'.join(sorted([left['entity_id'], right['entity_id']])),
             )
             applied = True
         elif item.spelling:
@@ -275,7 +276,16 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
                 slot='vocabulary',
             )
             applied = True
-    except (store.ReviewConflict, store.ReviewNotFound, speakers.TagPromptInvalid, candidates.CandidateStoreError):
+    except (
+        store.ReviewConflict,
+        store.ReviewNotFound,
+        speakers.TagPromptInvalid,
+        candidates.CandidateStoreError,
+        TaskLinkValidationError,
+    ):
         store.release_failed_answer(uid, item_id)
         raise
+    except LookupError as exc:
+        store.release_failed_answer(uid, item_id)
+        raise store.ReviewNotFound('Person not found') from exc
     return store.finish_answer(uid, item_id, applied=applied, uncertain=uncertain)

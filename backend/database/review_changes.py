@@ -18,6 +18,12 @@ from database import entities, memory_ledger, review_queries, review_store as st
 from models.review import ReviewChange, ReviewChangesResponse
 
 WINDOW = timedelta(days=30)
+
+
+class _Unchanged(Exception):
+    pass
+
+
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
     'people': {'name', 'aliases', 'organization', 'subtitle'},
@@ -106,7 +112,7 @@ def record_agent_change(
             if existing['edit_key'] != edit_key:
                 raise store.ReviewConflict('Change identity conflict')
             result.update(existing)
-            return {'mutations': []}
+            raise _Unchanged
         if blocked:
             raise store.ReviewConflict('Agent edit was undone by the user')
         records = []
@@ -144,7 +150,12 @@ def record_agent_change(
 
         return {'mutations': mutations, 'projection_writer': write}
 
-    memory_ledger.append_commit_with_builder(uid, None, build, use_current_head=True, firestore_client=store.client())
+    try:
+        memory_ledger.append_commit_with_builder(
+            uid, None, build, use_current_head=True, firestore_client=store.client()
+        )
+    except _Unchanged:
+        pass
     return _wire(result)
 
 
@@ -154,6 +165,45 @@ def merge_review_entities(uid: str, change: ReviewChange, left: str, right: str,
     People ids remain stable; the derived page folds facts/edges of both nodes.
     Undo restores each node's owned fields through a ledger split mutation.
     """
+    store.require_enabled()
+
+    # Older people records need no graph backfill to participate. Materialize
+    # only their canonical identity, preserving stable person ids on undo.
+    @firestore.transactional
+    def ensure_nodes(tx):
+        rows = []
+        for entity_id in (left, right):
+            ref = store.user(uid).collection('knowledge_nodes').document(entity_id)
+            node = ref.get(transaction=tx).to_dict()
+            if node is None and entity_id.startswith('person:'):
+                person = (
+                    store.user(uid)
+                    .collection('people')
+                    .document(entity_id.removeprefix('person:'))
+                    .get(transaction=tx)
+                    .to_dict()
+                )
+                if not person or person.get('is_dismissed'):
+                    raise store.ReviewNotFound('Person not found')
+                name = person.get('name') or entity_id
+                rows.append(
+                    (
+                        ref,
+                        {
+                            'id': entity_id,
+                            'label': name,
+                            'label_lower': name.lower(),
+                            'node_type': 'person',
+                            'aliases': [],
+                            'aliases_lower': [],
+                            'memory_ids': [],
+                        },
+                    )
+                )
+        for ref, node in rows:
+            tx.set(ref, node)
+
+    ensure_nodes(store.client().transaction())
     a = store.user(uid).collection('knowledge_nodes').document(left).get().to_dict()
     b = store.user(uid).collection('knowledge_nodes').document(right).get().to_dict()
     if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
@@ -201,7 +251,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if data.get('memory_edit'):
             raise store.ReviewConflict('Canonical memory edit requires its own apply path')
         if data['change']['undone'] == undone:
-            return {'mutations': []}
+            raise _Unchanged
         expected, destination = ('after', 'before') if undone else ('before', 'after')
         rows = []
         for edit in data['edits']:
@@ -241,7 +291,12 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
 
         return {'mutations': mutations, 'projection_writer': write}
 
-    memory_ledger.append_commit_with_builder(uid, None, build, use_current_head=True, firestore_client=store.client())
+    try:
+        memory_ledger.append_commit_with_builder(
+            uid, None, build, use_current_head=True, firestore_client=store.client()
+        )
+    except _Unchanged:
+        pass
     return _wire(result)
 
 

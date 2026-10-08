@@ -337,7 +337,7 @@ def test_canonical_memory_journal_reverses_real_fact(harness, monkeypatch):
         uid,
         'Partner name is Pairform',
         provenance=LedgerProvenance(source_id='agent-test', source_type='agent_conclusion', action_id='seed'),
-        write_reason=LedgerWriteReason.agent_conclusion,
+        write_reason=LedgerWriteReason.agent_reusable_conclusion,
         subject_scope=MemorySubjectScope.third_party,
         subject_entity_id='org',
         db_client=db,
@@ -396,7 +396,16 @@ def test_task_answer_uses_real_candidate_resolution_with_edits(harness, monkeypa
     item = review._task_item(uid, record)
     store.offer_item(uid, item, record.model_dump(mode='python'), 'v1')
     user.collection('workstreams').document('project').set(
-        {'title': 'Launch', 'account_generation': 3, 'goal_id': None}
+        {
+            'workstream_id': 'project',
+            'title': 'Launch',
+            'objective': 'Ship launch',
+            'status': 'open',
+            'account_generation': 3,
+            'goal_id': None,
+            'created_at': NOW,
+            'updated_at': NOW,
+        }
     )
     body = {
         'task': (
@@ -420,7 +429,7 @@ def test_task_answer_uses_real_candidate_resolution_with_edits(harness, monkeypa
         assert len(tasks) == 1
         assert tasks[0].to_dict()['description'] == 'Send launch deck'
         assert tasks[0].to_dict()['workstream_id'] == 'project'
-        assert tasks[0].to_dict()['due_at'] is None
+        assert tasks[0].to_dict().get('due_at') is None
     else:
         assert tasks == []
         assert final.resolution_reason == 'not_mine'
@@ -463,3 +472,16 @@ def test_speaker_answer_delegates_existing_teaching(harness, monkeypatch):
     assert callable(teaching.call_args.kwargs['schedule'])
     assert client.post('/v1/review/items/speaker:prompt/answer', json={'speaker': {'is_me': True}}).status_code == 200
     teaching.assert_called_once()
+
+
+def test_real_spelling_fact_has_authority_600(harness):
+    client, uid, user, db = harness
+    _canonical_control(user, uid)
+    enqueue(uid)
+    client.get('/v1/review/items')
+    response = client.post('/v1/review/items/spelling:1/answer', json={'spelling': {'value': 'Paraform'}})
+    assert response.status_code == 200, response.text
+    item = list(user.collection('memory_items').stream())[0].to_dict()
+    assert item['subject_entity_id'] == 'vocabulary:1' and item['content'] == 'Paraform'
+    assert item['write_reason'] == 'direct_user_statement'
+    assert item['slot'] == 'vocabulary'

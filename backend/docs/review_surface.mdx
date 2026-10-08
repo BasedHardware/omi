@@ -1,0 +1,84 @@
+# Review and entity pages (phase 1)
+
+`REVIEW_SURFACE_MODE=off` is the default. `on` enables the authenticated routes
+and internal writers; rollout is a separate operation. No scheduler or dream
+producer runs in this change. Organization is already a valid string in
+`knowledge_nodes.node_type`, so this surface requires no node schema migration.
+A person keeps `person:{people id}` and a project keeps its workstream id.
+
+## Producer contract
+
+- `database.review_store.enqueue_review_proposal(uid, ReviewItem(...), evidence_version=...)`
+  owns only `same_person` and `spelling`. Use `<kind>:<stable source id>` as the
+  item id. Replays of the same evidence version do nothing. An uncertain answer
+  becomes eligible again only after the producer supplies a new evidence
+  version; a resolved proposal stays terminal.
+- `database.review_changes.record_agent_change(uid, ReviewChange(...), edits,
+  edit_key=...)` applies supported field edits and journals their before/after
+  values atomically with a ledger commit. `edits` is a list of `AgentEdit` from
+  that module. Supported storage targets are graph node labels/aliases, person
+  name/profile fields, conversation titles or authorized speaker projections,
+  and task completion. Supply storage-encoded transcript and assignment values
+  produced by the speaker teaching owner. Wire clients never author `AgentEdit`.
+- Canonical fact replacements use the same writer with
+  `memory_edit=database.review_memory_changes.MemoryEdit(memory_id=..., content=...)`.
+  This creates a durable intent then delegates to canonical knowledge-ledger
+  append/supersede. Undo and redo use the existing explicit-user fact-history
+  revert path, appending a fresh authority-600 tail. Historical memory documents
+  remain read-only. A source revision conflict refuses the operation.
+- `database.review_changes.agent_change_allowed(uid, edit_key)` tells the agent
+  whether the user has undone a semantic operation. Use a stable operation key
+  derived from identifiers, independently of the run and change id. The writer
+  enforces this too. Explicit user redo does not remove the suppression marker.
+- `utils.entity_pages.write_entity_summary(uid, entity_id, summary, updated_at=...)`
+  owns the derived `entity_pages` cache. The existing facts remain authoritative.
+
+Identity answers use the existing ledger entity merge/split mutation builders.
+The secondary node remains a redirect so legacy subject ids and graph citations
+continue resolving. The page combines facts, edges and speaker-tagged recent
+conversations from merged ids. Undo restores each node's owned fields. Existing
+people without graph nodes acquire their canonical graph identity on first merge.
+
+## Attention, reads, and undo
+
+The budget is three answers per UTC day, including Not sure and declined proposals.
+GETs cost nothing. A Firestore transaction reserves each slot before source
+resolution; identical terminal retries return the receipt without charging again.
+Concurrent answers cannot exceed three. The first ranking heuristic scores speaker
+questions at four times their affected conversation count, identity questions at
+three times combined conversation reach, spelling at two, and tasks at one.
+Ties use creation time then stable item id. Existing speaker prompts currently
+prove one affected conversation; no unmeasured voice-cluster reach is invented.
+
+Speaker resolution delegates to `utils.speaker_tag_prompts.service.apply_answer`.
+Task resolution delegates to `utils.task_intelligence.candidate_service`; optional
+user description/due/project edits occur inside its existing accept transaction,
+including account generation and task-link checks.
+
+A known pre-application error releases its reserved attention slot. An interrupted
+source application remains fenced rather than applying it twice; another answer
+returns 409 until its outcome is reconciled. Canonical memory journal intents can
+be retried using the same change id and provenance. No worker is introduced here.
+
+Recent changes use stable document cursors and a 30-day creation-time window.
+Undo/redo refuse if an owned field has changed since the journal snapshot. Missing
+or deleted targets cannot be resurrected. Content-bearing proposals, offers,
+journal snapshots and summary cache payloads use the existing per-user AES-GCM
+codec. The permanent do-not-redo markers contain operation identifiers only.
+
+Pages use bounded windows: 30 facts, 30 related people/projects/tasks, ten recent
+conversations, graph caps of the existing graph API and a 100-conversation recent
+speaker scan. They are recent projections, not complete account exports. Facts
+reuse canonical default-visibility filtering and the read-only historical adapter;
+user corrections and vocabulary answers use the canonical direct-user ledger
+boundary (authority 600). The page summary is null until its cache is written.
+
+## Verification
+
+`backend/tests/unit/test_review_contract.py` covers wire validation and ranking.
+`backend/tests/integration/test_review_surface_emulator.py` runs the real routes
+and Firestore transactions against a loopback emulator, including budget races,
+retry/suppression, source delegation, canonical corrections, memory-history
+revert, field undo/redo, graph redirects, project identity and encrypted storage.
+Run both through `backend/test.sh`; the integration file requires a loopback
+`FIRESTORE_EMULATOR_HOST` and `BACKEND_PYTEST_MARK_EXPR=integration`.

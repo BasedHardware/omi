@@ -67,7 +67,7 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
         provenance=LedgerProvenance(
             source_id=edit.memory_id, source_type='agent_conclusion', action_id=f'review:{change.change_id}'
         ),
-        write_reason=LedgerWriteReason.agent_conclusion,
+        write_reason=LedgerWriteReason.agent_reusable_conclusion,
         slot=source.slot,
         subject_scope=source.subject_scope or MemorySubjectScope.primary_user,
         subject_entity_id=source.subject_entity_id,
