@@ -726,72 +726,82 @@ class ProcessingConversationWidget extends StatefulWidget {
   State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
 }
 
-class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
+/// The processing timeout and its retry, shared by the processing card and the processing page so
+/// both offer the same "Try again" once processing looks stuck (#5481).
+class ProcessingRetryController extends ChangeNotifier {
+  ProcessingRetryController({required ServerConversation conversation, this.now, this.reprocess})
+      : _conversation = conversation {
+    _processingStartedAt = _resolveProcessingStartedAt();
+    _refreshTimeout();
+    _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) => _refreshTimeout());
+  }
+
+  /// Optional clock override for tests.
+  final DateTime Function()? now;
+
+  /// Optional reprocess override for tests.
+  final Future<ServerConversation?> Function(String conversationId)? reprocess;
+
+  ServerConversation _conversation;
   Timer? _timeoutTicker;
   bool _timedOut = false;
   bool _retrying = false;
+  bool _disposed = false;
+
+  bool get timedOut => _timedOut;
+  bool get retrying => _retrying;
 
   /// Wall-clock when processing is treated as having started for the timeout.
   /// Prefer [ServerConversation.finishedAt] (capture end ≈ processing start);
   /// fall back to first paint / retry so long recordings are not instantly flagged.
   late DateTime _processingStartedAt;
 
-  DateTime get _now => widget.now?.call() ?? DateTime.now();
+  DateTime get _now => now?.call() ?? DateTime.now();
 
   DateTime _resolveProcessingStartedAt() {
-    return widget.conversation.finishedAt ?? _now;
+    return _conversation.finishedAt ?? _now;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _processingStartedAt = _resolveProcessingStartedAt();
-    _refreshTimeout();
-    _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      _refreshTimeout();
-    });
-  }
-
-  @override
-  void didUpdateWidget(ProcessingConversationWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversation.id != widget.conversation.id) {
+  /// The owner's widget now shows [next].
+  void updateConversation(ServerConversation next) {
+    final previous = _conversation;
+    _conversation = next;
+    if (previous.id != next.id) {
       _processingStartedAt = _resolveProcessingStartedAt();
       _refreshTimeout();
       return;
     }
-    final nextFinishedAt = widget.conversation.finishedAt;
-    if (nextFinishedAt != null && nextFinishedAt != oldWidget.conversation.finishedAt) {
+    final nextFinishedAt = next.finishedAt;
+    if (nextFinishedAt != null && nextFinishedAt != previous.finishedAt) {
       _processingStartedAt = nextFinishedAt;
       _refreshTimeout();
     }
   }
 
-  @override
-  void dispose() {
-    _timeoutTicker?.cancel();
-    super.dispose();
-  }
-
   void _refreshTimeout() {
+    if (_disposed) return;
     final timedOut = isConversationProcessingTimedOut(
-      conversationId: widget.conversation.id,
+      conversationId: _conversation.id,
       processingStartedAt: _processingStartedAt,
       now: _now,
     );
     if (timedOut != _timedOut) {
-      setState(() => _timedOut = timedOut);
+      _timedOut = timedOut;
+      notifyListeners();
     }
   }
 
-  Future<void> _onRetry() async {
-    if (_retrying || widget.conversation.id == '0') return;
-    setState(() => _retrying = true);
+  /// Reprocesses the conversation through [ConversationProvider], read from [context] once the
+  /// request answers. Nothing changes after [context] unmounts.
+  Future<void> retry(BuildContext context) async {
+    if (_retrying || _disposed || _conversation.id == '0') return;
+    final conversationId = _conversation.id;
+    _retrying = true;
+    notifyListeners();
     try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
-      final updated = await reprocess(widget.conversation.id);
-      if (!mounted) return;
+      final reprocess = this.reprocess ?? reProcessConversationServer;
+      final updated = await reprocess(conversationId);
+      if (!context.mounted || _disposed) return;
       final provider = context.read<ConversationProvider>();
       if (updated == null) {
         AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
@@ -803,16 +813,60 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         _timedOut = false;
         provider.addProcessingConversation(updated);
       } else {
-        provider.removeProcessingConversation(widget.conversation.id);
+        // Processed: nothing is stuck any more, so the retry is withdrawn.
+        _timedOut = false;
+        provider.removeProcessingConversation(conversationId);
         provider.upsertConversation(updated);
       }
     } catch (_) {
-      if (!mounted) return;
+      if (!context.mounted || _disposed) return;
       AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     } finally {
-      if (mounted) setState(() => _retrying = false);
+      if (context.mounted && !_disposed) {
+        _retrying = false;
+        notifyListeners();
+      }
     }
   }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _timeoutTicker?.cancel();
+    super.dispose();
+  }
+}
+
+class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
+  late final ProcessingRetryController _retry;
+
+  bool get _timedOut => _retry.timedOut;
+  bool get _retrying => _retry.retrying;
+
+  void _onRetryChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _retry = ProcessingRetryController(conversation: widget.conversation, now: widget.now, reprocess: widget.reprocess)
+      ..addListener(_onRetryChanged);
+  }
+
+  @override
+  void didUpdateWidget(ProcessingConversationWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _retry.updateConversation(widget.conversation);
+  }
+
+  @override
+  void dispose() {
+    _retry.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onRetry() => _retry.retry(context);
 
   @override
   Widget build(BuildContext context) {

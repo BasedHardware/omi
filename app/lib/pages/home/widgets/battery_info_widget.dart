@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/device.dart';
@@ -240,20 +241,24 @@ class HomeRecordButtonState extends State<HomeRecordButton> {
   void _showRecordOptions(BuildContext context) {
     OmiHaptics.light();
     SharedPreferencesUtil().saveBool(_optionsTipKey, true);
+    RecordOptionsSheet sheet(BuildContext sheetContext, {String? nativeTitle}) => RecordOptionsSheet(
+          nativeTitle: nativeTitle,
+          onPickPhoneMic: () {
+            Navigator.pop(sheetContext);
+            _startRecording(context);
+          },
+          onPickPhoneCall: () {
+            Navigator.pop(sheetContext);
+            if (!context.mounted) return;
+            routeToPage(context, const PhoneCallsPage());
+          },
+        );
+    final title = context.l10n.recordWith;
     showOmiSheet<void>(
       context: context,
-      title: context.l10n.recordWith,
-      builder: (sheetContext) => RecordOptionsSheet(
-        onPickPhoneMic: () {
-          Navigator.pop(sheetContext);
-          _startRecording(context);
-        },
-        onPickPhoneCall: () {
-          Navigator.pop(sheetContext);
-          if (!context.mounted) return;
-          routeToPage(context, const PhoneCallsPage());
-        },
-      ),
+      title: title,
+      builder: (sheetContext) => sheet(sheetContext),
+      nativeBuilder: (sheetContext) => sheet(sheetContext, nativeTitle: title),
     );
   }
 
@@ -283,22 +288,26 @@ class HomeRecordButtonState extends State<HomeRecordButton> {
 
   void _showPendantListening(BuildContext context) {
     OmiHaptics.light();
+    PendantListeningSheet sheet(BuildContext sheetContext, {String? nativeTitle}) => PendantListeningSheet(
+          nativeTitle: nativeTitle,
+          onRecordWithPhone: () {
+            Navigator.pop(sheetContext);
+            _startPhoneRecording(context);
+          },
+          onPhoneCall: () {
+            Navigator.pop(sheetContext);
+            if (context.mounted) routeToPage(context, const PhoneCallsPage());
+          },
+          onKeepPendant: () => Navigator.pop(sheetContext),
+        );
+    final title = context.read<CaptureProvider>().pendantCaptureVerified
+        ? context.l10n.pendantIsListeningTitle
+        : CaptureSources.label(context, 'omi');
     showOmiSheet<void>(
       context: context,
-      title: context.read<CaptureProvider>().pendantCaptureVerified
-          ? context.l10n.pendantIsListeningTitle
-          : CaptureSources.label(context, 'omi'),
-      builder: (sheetContext) => PendantListeningSheet(
-        onRecordWithPhone: () {
-          Navigator.pop(sheetContext);
-          _startPhoneRecording(context);
-        },
-        onPhoneCall: () {
-          Navigator.pop(sheetContext);
-          if (context.mounted) routeToPage(context, const PhoneCallsPage());
-        },
-        onKeepPendant: () => Navigator.pop(sheetContext),
-      ),
+      title: title,
+      builder: (sheetContext) => sheet(sheetContext),
+      nativeBuilder: (sheetContext) => sheet(sheetContext, nativeTitle: title),
     );
   }
 
@@ -491,10 +500,33 @@ class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
 
-  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall});
+  /// Set when the sheet is presented natively: the same choices as native rows, under this title,
+  /// with the complete classic sheet as the fallback.
+  final String? nativeTitle;
+
+  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall, this.nativeTitle});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    if (nativeTitle != null) {
+      return IosNativeSurface(
+        title: nativeTitle!,
+        fallback: OmiSheetScaffold(
+          title: nativeTitle,
+          child: RecordOptionsSheet(onPickPhoneMic: onPickPhoneMic, onPickPhoneCall: onPickPhoneCall),
+        ),
+        toolbar: [_nativeSheetClose(context, 'record_options_close')],
+        sections: [
+          NativeSection('record_options', [
+            NativeRow('record_phone_mic', l10n.captureSourcePhoneMic,
+                subtitle: l10n.recordWithPhoneMicSubtitle, symbol: 'iphone', action: (_) => _picked(onPickPhoneMic)),
+            NativeRow('record_phone_call', l10n.phoneCall,
+                subtitle: l10n.phoneCallSubtitle, symbol: 'phone', action: (_) => _picked(onPickPhoneCall)),
+          ]),
+        ],
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(
@@ -503,15 +535,15 @@ class RecordOptionsSheet extends StatelessWidget {
         children: [
           _RecordOption(
             icon: CaptureSources.icon('phone'),
-            title: context.l10n.captureSourcePhoneMic,
-            subtitle: context.l10n.recordWithPhoneMicSubtitle,
+            title: l10n.captureSourcePhoneMic,
+            subtitle: l10n.recordWithPhoneMicSubtitle,
             onTap: onPickPhoneMic,
           ),
           const SizedBox(height: 10),
           _RecordOption(
             icon: Icons.call_rounded,
-            title: context.l10n.phoneCall,
-            subtitle: context.l10n.phoneCallSubtitle,
+            title: l10n.phoneCall,
+            subtitle: l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
           ),
         ],
@@ -519,6 +551,15 @@ class RecordOptionsSheet extends StatelessWidget {
     );
   }
 }
+
+/// A native choice runs the classic option's handler, which pops the sheet first.
+void _picked(VoidCallback onTap) {
+  OmiHaptics.selection();
+  onTap();
+}
+
+NativeRow _nativeSheetClose(BuildContext context, String id) =>
+    NativeRow(id, context.l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop());
 
 class _RecordOption extends StatelessWidget {
   final IconData icon;
@@ -632,15 +673,42 @@ class PendantListeningSheet extends StatelessWidget {
     required this.onRecordWithPhone,
     required this.onPhoneCall,
     required this.onKeepPendant,
+    this.nativeTitle,
   });
 
   final VoidCallback onRecordWithPhone;
   final VoidCallback onPhoneCall;
   final VoidCallback onKeepPendant;
 
+  /// Set when the sheet is presented natively, as for [RecordOptionsSheet.nativeTitle].
+  final String? nativeTitle;
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    if (nativeTitle != null) {
+      return IosNativeSurface(
+        title: nativeTitle!,
+        fallback: OmiSheetScaffold(
+          title: nativeTitle,
+          child: PendantListeningSheet(
+              onRecordWithPhone: onRecordWithPhone, onPhoneCall: onPhoneCall, onKeepPendant: onKeepPendant),
+        ),
+        toolbar: [_nativeSheetClose(context, 'pendant_listening_close')],
+        sections: [
+          NativeSection('pendant_listening', [
+            NativeRow('pendant_one_source', l10n.oneSourceAtATime, kind: 'label'),
+            NativeRow('pendant_record_phone', l10n.recordWithPhoneInstead,
+                subtitle: l10n.pendantPausesUntilYouFinish,
+                symbol: 'iphone',
+                action: (_) => _picked(onRecordWithPhone)),
+            NativeRow('pendant_phone_call', l10n.phoneCall,
+                subtitle: l10n.pendantPausesDuringCall, symbol: 'phone', action: (_) => _picked(onPhoneCall)),
+            NativeRow('pendant_keep', l10n.keepUsingPendant, action: (_) => onKeepPendant()),
+          ]),
+        ],
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(

@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
@@ -22,6 +23,8 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -42,6 +45,38 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'widgets/carried_speaker_banner.dart';
 import 'widgets/speaker_suggestion_chip.dart';
+
+part 'conversation_capturing_native.dart';
+
+/// Photos in capture order, grouped with the photo before them when taken within 30 seconds of it.
+List<List<ConversationPhoto>> groupCapturePhotos(List<ConversationPhoto> photos) {
+  final sorted = List<ConversationPhoto>.from(photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  final List<List<ConversationPhoto>> groups = [];
+  if (sorted.isNotEmpty) {
+    List<ConversationPhoto> current = [sorted.first];
+    for (int i = 1; i < sorted.length; i++) {
+      if (sorted[i].createdAt.difference(sorted[i - 1].createdAt).inSeconds <= 30) {
+        current.add(sorted[i]);
+      } else {
+        groups.add(current);
+        current = [sorted[i]];
+      }
+    }
+    groups.add(current);
+  }
+  return groups;
+}
+
+/// The unsynced-audio indicator's state for the current session, or null when it is hidden.
+typedef UnsyncedWalStatus = ({
+  String text,
+  Color dotColor,
+  bool failed,
+  bool retrying,
+  bool uploading,
+  bool retryable,
+  String? backlog,
+});
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
 /// route so the user lands there with no flash of the previous page.
@@ -67,6 +102,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   bool _mutePending = false;
   bool _rejectingSuggestion = false;
   final Set<String> _closedCarriedSpeakers = {};
+
+  /// The native reader keeps the newest line in view until the person drags it away, and again
+  /// once they return to it or ask for the latest line. A drag suspends following for the capture
+  /// session it happened in only, so a new session starts by following its newest line again.
+  ({String? sessionId})? _readerSuspension;
+  int _readerJumps = 0;
+  bool _nativeFinishing = false;
 
   @override
   void initState() {
@@ -151,18 +193,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
-        return Scaffold(
+        final showStatus = effectivelyMuted || provider.pendantCaptureVerified;
+        final displayState = _displayState(provider, capturingPhotos: provider.photos.isNotEmpty);
+        final sourceLabel = switch (provider.liveCaptureSource) {
+          null => null,
+          'phone' => context.l10n.captureSourcePhoneMic,
+          final source => CaptureSources.label(context, source),
+        };
+        final classic = Scaffold(
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
           appBar: ConversationStateAppBar(
-            showStatus: effectivelyMuted || provider.pendantCaptureVerified,
-            state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
+            showStatus: showStatus,
+            state: displayState,
             bufferingFor: provider.customSttBufferingDuration,
-            sourceLabel: switch (provider.liveCaptureSource) {
-              null => null,
-              'phone' => context.l10n.captureSourcePhoneMic,
-              final source => CaptureSources.label(context, source),
-            },
+            sourceLabel: sourceLabel,
           ),
           body: Column(
             children: [
@@ -241,9 +286,31 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     )
                   : null,
         );
+        if (!nativePresentationEnabled) return classic;
+        final stateTitle = conversationStateTitle(context.l10n, displayState,
+            bufferingFor: provider.customSttBufferingDuration, sourceLabel: sourceLabel, showStatus: showStatus);
+        // The native title stays on one line, so a sentence status moves into the status section in
+        // full and the title keeps a short name, as the classic header wraps it instead.
+        final sentenceStatus = showStatus && ConversationStateAppBar.isSentenceStatus(displayState);
+        return _buildNativeCapture(
+          provider,
+          fallback: classic,
+          title: sentenceStatus ? sourceLabel ?? context.l10n.transcriptionUnavailable : stateTitle,
+          statusText: sentenceStatus ? stateTitle : null,
+          emptyText: _liveCaptureEmptyStateText(
+            provider,
+            connectivity: connectivity,
+            usage: usage,
+            photoChannelActive: photoChannelActive,
+            transcriptionInterrupted: transcriptionInterrupted,
+          ),
+        );
       },
     );
   }
+
+  /// A rebuild requested by the native projection's handlers.
+  void _nativeRebuild(VoidCallback change) => setState(change);
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
   Widget _buildChronologicalTimeline(
@@ -258,19 +325,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     final names = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n);
 
     // Group consecutive photos taken within 30 seconds of each other
-    final List<List<ConversationPhoto>> photoGroups = [];
-    if (photos.isNotEmpty) {
-      List<ConversationPhoto> currentGroup = [photos.first];
-      for (int i = 1; i < photos.length; i++) {
-        if (photos[i].createdAt.difference(photos[i - 1].createdAt).inSeconds <= 30) {
-          currentGroup.add(photos[i]);
-        } else {
-          photoGroups.add(currentGroup);
-          currentGroup = [photos[i]];
-        }
-      }
-      photoGroups.add(currentGroup);
-    }
+    final photoGroups = groupCapturePhotos(photos);
 
     final leadingItems = [
       for (var index = 0; index < photoGroups.length; index++)
@@ -491,20 +546,27 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// The first label Omi carried into this conversation from the user's answer earlier in the
   /// same recording, until the user changes it or closes the note.
   List<Widget> _buildCarriedSpeakerBanner(CaptureProvider provider) {
+    final carried = _carriedSpeaker(provider);
+    if (carried == null) return const [];
+    return [
+      CarriedSpeakerBanner(
+        name: carried.person.name,
+        onChange: () => _editSegmentSpeaker(carried.segment, provider),
+        onClose: () => setState(() => _closedCarriedSpeakers.add(carried.key)),
+      ),
+    ];
+  }
+
+  /// The carried label the banner notes: the first one the user has not closed.
+  ({TranscriptSegment segment, Person person, String key})? _carriedSpeaker(CaptureProvider provider) {
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     for (final segment in carriedSpeakerSegments(provider.segments)) {
       final key = '${segment.speakerId}:${segment.personId}';
       final person = personById(people, segment.personId);
       if (person == null || _closedCarriedSpeakers.contains(key)) continue;
-      return [
-        CarriedSpeakerBanner(
-          name: person.name,
-          onChange: () => _editSegmentSpeaker(segment, provider),
-          onClose: () => setState(() => _closedCarriedSpeakers.add(key)),
-        ),
-      ];
+      return (segment: segment, person: person, key: key);
     }
-    return const [];
+    return null;
   }
 
   /// "Someone Else…" on a suggestion is an answer too: tell Omi this voice is not that person,
@@ -669,11 +731,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     return context.l10n.waitingForTranscriptOrPhotos;
   }
 
-  Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
+  /// What the unsynced-audio indicator says for this session; null hides it.
+  UnsyncedWalStatus? _unsyncedWalStatus(CaptureProvider provider) {
     final unsyncedWals = provider.unsyncedSessionWals;
     final inFlightSeconds = provider.inFlightAudioSeconds;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
-    if (totalSeconds <= 5) return const SizedBox.shrink();
+    if (totalSeconds <= 5) return null;
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
@@ -708,6 +771,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       dotColor = OmiColors.success;
       text = context.l10n.audioSavedLocally(label);
     }
+    return (
+      text: text,
+      dotColor: dotColor,
+      failed: failed,
+      retrying: retrying,
+      uploading: uploading,
+      retryable: retryable,
+      backlog: showBacklogCount ? context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total) : null,
+    );
+  }
+
+  Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
+    final status = _unsyncedWalStatus(provider);
+    if (status == null) return const SizedBox.shrink();
+    final (:text, :dotColor, :failed, :retrying, :uploading, :retryable, :backlog) = status;
 
     final indicator = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -741,10 +819,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           ),
           // How many queued recordings are still waiting for transcription out
           // of the session's total, so a drain after an outage reads as progress.
-          if (showBacklogCount) ...[
+          if (backlog != null) ...[
             const SizedBox(height: 4),
             Text(
-              context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total),
+              backlog,
               style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
             ),
           ],
