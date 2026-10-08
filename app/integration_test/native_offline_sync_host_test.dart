@@ -106,10 +106,13 @@ void main() {
       await nativeProjectedRow(tester, 'sync_manage').action!(null);
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(UiKitView), findsNWidgets(2),
+          reason: 'The Manage Storage sheet renders natively over the page');
       expect(nativeProjectedRow(tester, 'storage_clear_all').destructive, true);
       expect(await captureNativeHostScreenshot('native-offline-sync-manage-storage-dark'), isNotEmpty);
       await nativeProjectedRow(tester, 'storage_close').action!(null);
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(UiKitView), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       expect(tester.takeException(), isNull);
@@ -134,10 +137,13 @@ void main() {
       await nativeProjectedRow(tester, 'offline_manage').action!(null);
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(UiKitView), findsNWidgets(2),
+          reason: 'The Manage Storage sheet renders natively over the page');
       expect(nativeProjectedRow(tester, 'storage_auto_remove').kind, 'toggle');
       expect(await captureNativeHostScreenshot('native-offline-sync-auto-sync-storage-dark'), isNotEmpty);
       await nativeProjectedRow(tester, 'storage_close').action!(null);
       await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(UiKitView), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       expect(tester.takeException(), isNull);

@@ -360,6 +360,7 @@ void main() {
       final sync = _Sync()..wals = [_wal(0), _wal(1, storage: WalStorage.sdcard)];
       addTearDown(sync.dispose);
       await _pump(tester, const SyncPage(), sync);
+      expect(find.byType(UiKitView), findsOneWidget);
 
       final grouped = _sections(tester).where((section) => section.id.startsWith('sync_source:')).toList();
       expect(grouped.map((section) => section.id), ['sync_source:phone', 'sync_source:sd_card']);
@@ -370,6 +371,7 @@ void main() {
         ..wals = [_wal(0), _wal(1)]
         ..notifyListeners();
       await NativeTestHost.settle(tester);
+      expect(find.byType(UiKitView), findsOneWidget);
       expect(_sections(tester).where((section) => section.id.startsWith('sync_source:')), isEmpty);
       expect(_sections(tester).where((section) => section.id.startsWith('sync_hour:')), hasLength(2));
     });
