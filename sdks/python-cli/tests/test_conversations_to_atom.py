@@ -3,23 +3,23 @@ import os
 import sys
 import tempfile
 import unittest
+import importlib.util
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
-# Add examples folder to sys.path
-examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
-if examples_dir not in sys.path:
-    sys.path.insert(0, examples_dir)
+recipe_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_atom.py"
+spec = importlib.util.spec_from_file_location("conversations_to_atom", recipe_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
 
-from conversations_to_atom import (
-    text,
-    parse_time,
-    rfc3339,
-    load,
-    entries,
-    feed,
-    convert,
-    main,
-)
+text = module.text
+parse_time = module.parse_time
+rfc3339 = module.rfc3339
+load = module.load
+entries = module.entries
+feed = module.feed
+convert = module.convert
+main = module.main
 
 
 class TestConversationsToAtom(unittest.TestCase):
