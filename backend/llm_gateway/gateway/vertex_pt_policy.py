@@ -1,7 +1,8 @@
 """Provisioned-Throughput policy for the gateway Vertex adapter.
 
 Every decision delegates to utils.llm.vertex_pt_routing - the single
-policy module the desktop BFF mirrors on its kill-switch path. Reservation evidence is shared across services; reachability remains process-local.
+policy module for managed generation. The desktop BFF routes paid requests
+through this adapter. Reservation evidence is shared across services.
 Only declared, synthetic probes may confirm that the exclusive order moved.
 """
 
@@ -30,7 +31,7 @@ VERTEX_API_VERSION = 'v1'
 
 
 class VertexPTPolicyMixin:
-    """Apply the shared state snapshot; keep only reachability local."""
+    """Apply the shared state snapshot to dedicated-only generation."""
 
     _pt_model_override_env: str
     _overflow_model_override_env: str

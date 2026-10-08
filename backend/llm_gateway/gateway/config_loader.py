@@ -522,7 +522,7 @@ def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
 
 def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
     """Keep pilot caps explicit and disabled until an operator enables the experiment."""
-    if feature == 'session_titles' and provider == 'gemini':
+    if feature == 'session_titles':
         return {
             'experiment': 'session_titles',
             'max_completion_tokens': 128,

@@ -145,7 +145,6 @@ flags:
   - {"key":"OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED","aliases":[],"kind":"env","lifecycle":"ops_kill","surfaces":["backend"],"summary":"Enable gateway observability logs","fail":"closed","owner":"unowned","created":"2026-06-30","decision":"keep"}
   - {"key":"OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS","aliases":[],"kind":"env","lifecycle":"experiment","surfaces":["llm-gateway"],"summary":"Select gateway output-budget experiments","fail":"closed","owner":"dazheng","created":"2026-07-17","review_by":"2026-10-15","decision":"kill","notes":"K4 partial: dev/prod charts disarmed; gateway route policy and support await full removal"}
   - {"key":"OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend"],"summary":"Enable explicit GPT-5.6 cache hints","fail":"closed","owner":"unowned","created":"2026-09-11","review_by":"2026-10-15","decision":"pending"}
-  - {"key":"OMI_MODEL_TIER","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"Select proxy budget tier","fail":"closed","owner":"unowned","created":"2026-07-28","decision":"keep"}
   - {"key":"PARAKEET_ATTENTION_MODE","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"Choose full versus local attention on Parakeet GPU","fail":"closed","owner":"unowned","created":"2026-06-28","decision":"keep"}
   - {"key":"PARAKEET_INFERENCE_MODE","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"Choose Parakeet transcription inference backend","fail":"closed","owner":"unowned","created":"2026-06-08","decision":"keep"}
   - {"key":"PARAKEET_DIARIZATION","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"Enable prerecorded Parakeet diarization","fail":"closed","owner":"unowned","created":"2026-06-05","decision":"keep"}
@@ -273,6 +272,7 @@ ignore:
   - {"key":"OMI_YOLO_MODE","reason":"Local agent override restricted to non-production builds; not remote rollout authority"}
   - {"key":"PROVIDER_MODE","reason":"Local offline provider harness, not a product flag"}
 retired:
+  - {"key":"OMI_MODEL_TIER","kind":"env","retired":"2026-10-08","reason":"Managed utility features use Luna gateway auto lanes; proxy budget tier removed"}
   - {"key":"autoCreateSpeakersEnabled","kind":"hardcoded","retired":"2026-09-26","reason":"Shipped developer preference removed; create_speakers always true"}
   - {"key":"context_buckets","kind":"posthog","retired":"2026-09-24","reason":"Unused nominal enable row; bundle identity owns the active gate","posthog":{"row":"delete"}}
   - {"key":"daily-memory-sweep-v1","kind":"posthog","retired":"2026-09-24","reason":"Decoy name never authorizes JIT or sweep admission","posthog":{"row":"delete"}}

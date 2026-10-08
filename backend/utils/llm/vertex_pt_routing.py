@@ -1,8 +1,9 @@
 """Vertex Provisioned Throughput routing policy for company-paid Gemini text.
 
-Pure decision logic: which model serves company-paid text, which endpoint a
-model is addressed at, which models may absorb its traffic when it cannot serve
-it, and when a pending PT order has become live. No I/O, no clock, no Redis —
+Pure decision logic: reserved_generation_model selects the sole active order
+model for paid generation. Inactive or ambiguous orders use Luna at the gateway.
+Endpoint and legacy direct-routing helpers are retained for the BYOK boundary;
+the shared Gemini ladders below cannot serve company-paid generation. No I/O, no clock, no Redis —
 the proxy injects observations and owns every side effect, so every rule here
 is unit-testable without a network.
 
@@ -15,8 +16,8 @@ Prices per 1M tokens (Vertex list, captured 2026-08-18):
 
 `gemini-3.1-flash-lite` is NOT the same price class as `gemini-2.5-flash-lite`
 (2.5x in / 3.75x out). It is cheaper than `gemini-2.5-flash` and far cheaper
-than `gemini-2.5-pro`, which is why it absorbs overflow and Pro but must never
-absorb the lanes that clients already pin to `gemini-2.5-flash-lite`.
+than `gemini-2.5-pro`. These historical prices explain the legacy shared
+ladder; they do not authorize company-paid generation on shared capacity.
 """
 
 from __future__ import annotations
