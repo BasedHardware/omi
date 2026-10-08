@@ -107,9 +107,9 @@ def offer_item(uid: str, item: ReviewItem, source: dict, version: str) -> bool:
     @firestore.transactional
     def offer(tx):
         data = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
-        if data.get('state') in {'applying', 'answered'}:
+        if data.get('state') == 'applying':
             return False
-        if data.get('state') == 'uncertain' and data.get('version') == version:
+        if data.get('state') in {'answered', 'uncertain'} and data.get('version') == version:
             return False
         tx.set(
             ref,
@@ -155,11 +155,32 @@ def begin_answer(uid: str, item_id: str, answer_hash: str, now: datetime | None 
     return begin(client().transaction())
 
 
-def finish_answer(uid: str, item_id: str, *, applied: bool, uncertain: bool) -> ReviewAnswerReceipt:
+def finish_answer(
+    uid: str, item_id: str, *, applied: bool, uncertain: bool, offered_version: str
+) -> ReviewAnswerReceipt:
     ref = user(uid).collection('review_answers').document(safe_id(item_id))
-    ref.update({'state': 'uncertain' if uncertain else 'answered', 'applied': applied})
-    if item_id.startswith(('same_person:', 'spelling:')) and not uncertain:
-        user(uid).collection('review_proposals').document(safe_id(item_id)).update({'status': 'resolved'})
+
+    @firestore.transactional
+    def finish(tx):
+        answer = decode_doc(uid, ref.get(transaction=tx).to_dict())
+        if answer is None:
+            raise ReviewNotFound('Review answer reservation not found')
+        if answer.get('state') != 'applying' or answer.get('version') != offered_version:
+            raise ReviewConflict('Review answer reservation changed')
+
+        proposal_ref = None
+        proposal = None
+        if item_id.startswith(('same_person:', 'spelling:')) and not uncertain:
+            proposal_ref = user(uid).collection('review_proposals').document(safe_id(item_id))
+            proposal = decode_doc(uid, proposal_ref.get(transaction=tx).to_dict())
+
+        tx.update(ref, {'state': 'uncertain' if uncertain else 'answered', 'applied': applied})
+        # A producer may refresh the stable item id while this answer is
+        # applying. Resolve only the exact evidence version the user saw.
+        if proposal_ref is not None and proposal and proposal.get('evidence_version') == offered_version:
+            tx.update(proposal_ref, {'status': 'resolved'})
+
+    finish(client().transaction())
     return ReviewAnswerReceipt(item_id=item_id, applied=applied, remaining_today=remaining_today(uid))
 
 

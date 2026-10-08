@@ -16,6 +16,11 @@ from models.entity_pages import ConversationRef, EntityPage, Fact, FactSource, T
 from models.review import EntityRef, ReviewItem
 
 MAX_RELATED = 30
+# Each page considers at most 20 fact IDs and runs at most 20 fact source
+# queries. The query cap also bounds empty-query minimum reads for entities
+# with many identities and no matching facts.
+MAX_FACT_LOOKUP_IDS = 20
+MAX_FACT_LOOKUP_QUERIES = 20
 
 
 def _id(value: str) -> str:
@@ -82,28 +87,38 @@ def project_refs(uid: str) -> list[EntityRef]:
     return result
 
 
-def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set[str]]:
-    from utils.memory.memory_service import MemoryService
-
-    service = MemoryService(db_client=store.client())
+def _facts(
+    uid: str, entity_ids: list[str], conversation_cache: dict[str, dict]
+) -> tuple[list[Fact], list[Fact], set[str]]:
     ids = set()
+    remaining = MAX_FACT_LOOKUP_IDS
+    queries_remaining = MAX_FACT_LOOKUP_QUERIES
     for entity_id in entity_ids:
+        if remaining <= 0 or queries_remaining <= 0:
+            break
         for spec, date in [
             (review_queries.ENTITY_FACTS, 'created_at'),
             (review_queries.CANONICAL_FACTS, 'captured_at'),
         ]:
+            if remaining <= 0 or queries_remaining <= 0:
+                break
             query = spec.build(
                 store.user(uid).collection(spec.collection_group),
                 {'entity_id': entity_id},
                 field_filter_factory=FieldFilter,
             )
-            ids.update(s.id for s in query.order_by(date, direction='DESCENDING').limit(MAX_RELATED).stream())
+            rows = list(query.order_by(date, direction='DESCENDING').limit(min(MAX_RELATED, remaining)).stream())
+            ids.update(s.id for s in rows)
+            remaining -= len(rows)
+            queries_remaining -= 1
+    bounded_ids = sorted(ids)[:MAX_FACT_LOOKUP_IDS]
     from models.product_memory import MemoryAccessPolicy
     from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
     from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_by_ids
     from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
+    from utils.memory.memory_service import MemoryService
 
-    canonical = fetch_authoritative_product_memory_items_by_ids(uid, sorted(ids)[:100], db_client=store.client())
+    canonical = fetch_authoritative_product_memory_items_by_ids(uid, bounded_ids, db_client=store.client())
     visible = {
         item.memory_id: item
         for item in filter_canonical_default_visible_items(
@@ -111,15 +126,28 @@ def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set
         )
     }
     canonical_ids = {item.memory_id for item in canonical}
-    facts, decisions, conversation_ids = [], [], set()
-    for memory_id in sorted(ids)[:100]:
-        if memory_id in canonical_ids and memory_id not in visible:
+    service = MemoryService(db_client=store.client())
+    rows = {memory_id: memory_item_to_memorydb(item) for memory_id, item in visible.items()}
+    for memory_id in bounded_ids:
+        if memory_id in canonical_ids:
             continue
         try:
-            row = memory_item_to_memorydb(visible[memory_id]) if memory_id in visible else service.fetch(uid, memory_id)
+            rows[memory_id] = service.fetch(uid, memory_id)
         except HTTPException as exc:
             if exc.status_code not in {402, 404}:
                 raise
+    conversation_ids = {row.conversation_id for row in rows.values() if isinstance(row.conversation_id, str)}
+    missing_conversations = sorted(conversation_ids - conversation_cache.keys())[:MAX_FACT_LOOKUP_IDS]
+    if missing_conversations:
+        for conversation in conversations.get_mcp_conversations_by_id(
+            uid, missing_conversations, include_transcript=False, firestore_client=store.client()
+        ):
+            conversation_cache[conversation['id']] = conversation
+
+    facts, decisions, visible_conversation_ids = [], [], set()
+    for memory_id in bounded_ids:
+        row = rows.get(memory_id)
+        if row is None:
             continue
         if row.user_review is False or row.is_locked:
             continue
@@ -129,10 +157,10 @@ def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set
         source_id = data.get('conversation_id')
         evidence = data.get('evidence') or []
         if source_id:
-            conversation = conversations.get_conversation(uid, source_id)
+            conversation = conversation_cache.get(source_id)
             if not conversation or not conversations.is_visible_conversation(conversation):
                 continue
-            conversation_ids.add(source_id)
+            visible_conversation_ids.add(source_id)
             source = FactSource(
                 kind='conversation',
                 label=_title(conversation),
@@ -153,11 +181,47 @@ def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set
         facts.append(fact)
         if data.get('predicate') == 'decision' or data.get('category') == 'decision':
             decisions.append(fact)
-    return facts[:MAX_RELATED], decisions[:MAX_RELATED], conversation_ids
+    return facts[:MAX_RELATED], decisions[:MAX_RELATED], visible_conversation_ids
 
 
 def _title(conversation: dict) -> str:
     return conversation.get('user_title') or (conversation.get('structured') or {}).get('title') or ''
+
+
+def _entity_page_conversation_page(uid: str) -> dict[str, dict]:
+    """Read one bounded, lean conversation page without photo or transcript hydration."""
+    fields = [
+        'created_at',
+        'started_at',
+        'finished_at',
+        'status',
+        'discarded',
+        'deleted',
+        'relevance_decision',
+        'sync_relevance_user_kept',
+        'has_photos',
+        'user_title',
+        'starred',
+        'folder_user_set',
+        'data_protection_level',
+        'structured.title',
+        'entity_ids',
+        'workstream_id',
+        'transcript_segments',
+        'transcript_segments_compressed',
+    ]
+    query = store.user(uid).collection('conversations').where(filter=FieldFilter('discarded', '==', False))
+    query = query.order_by('created_at', direction='DESCENDING').select(fields).limit(100)
+    result = {}
+    for snapshot in query.stream():
+        conversation = conversations.document_data_with_revision(snapshot)
+        if conversation is None:
+            continue
+        conversation['id'] = snapshot.id
+        conversation = conversations.prepare_conversation_for_read(conversation, uid)
+        if conversations.is_visible_conversation(conversation):
+            result[snapshot.id] = conversation
+    return result
 
 
 def _entity_ids_for_conversation(uid: str, conversation: dict, *, graph_citations: bool = True) -> list[str]:
@@ -225,7 +289,8 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
                 pass
         if organization is None:
             organization = next((r for r in related.values() if r.type == 'organization'), None)
-    facts, decisions, conversation_ids = _facts(uid, identities)
+    conversation_cache = _entity_page_conversation_page(uid)
+    facts, decisions, conversation_ids = _facts(uid, identities, conversation_cache)
     conversation_ids.update(node.get('conversation_ids', [])[:MAX_RELATED])
     open_tasks = []
     if node['type'] == 'project':
@@ -236,7 +301,8 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
 
         generation = get_task_workflow_control(uid).account_generation
         for snapshot in query.order_by('created_at', direction='DESCENDING').limit(100).stream():
-            task = action_items.get_action_item(uid, snapshot.id)
+            task_data = snapshot.to_dict()
+            task = action_items.prepare_action_item_for_read(task_data | {'id': snapshot.id}) if task_data else None
             if not task or task.get('status', 'active') != 'active' or task.get('account_generation', 0) != generation:
                 continue
             open_tasks.append(
@@ -251,12 +317,18 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
             if task.get('conversation_id'):
                 conversation_ids.add(task['conversation_id'])
     # Existing speaker-tagged conversations need no graph node backfill.
-    for conversation in conversations.get_conversations(uid, limit=100):
+    for conversation in conversation_cache.values():
         if set(_entity_ids_for_conversation(uid, conversation, graph_citations=False)).intersection(identities):
             conversation_ids.add(conversation['id'])
+    missing_conversations = sorted(conversation_ids - conversation_cache.keys())[:100]
+    if missing_conversations:
+        for conversation in conversations.get_mcp_conversations_by_id(
+            uid, missing_conversations, include_transcript=False, firestore_client=store.client()
+        ):
+            conversation_cache[conversation['id']] = conversation
     recent = []
     for cid in sorted(conversation_ids)[:100]:
-        conversation = conversations.get_conversation(uid, cid)
+        conversation = conversation_cache.get(cid)
         if not conversation or not conversations.is_visible_conversation(conversation):
             continue
         start = conversation.get('started_at') or conversation.get('created_at')
