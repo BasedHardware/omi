@@ -695,6 +695,49 @@ final class PreviewHarness: ObservableObject {
             raw["hasMore"] = false
             raw["failed"] = ProcessInfo.processInfo.arguments.contains("error")
         }
+        if ProcessInfo.processInfo.arguments.contains("chat-rich") {
+            func block(_ kind: String, _ text: String, prefix: String = "", indent: Int = 0) -> [String: Any] {
+                ["kind": kind, "text": text, "indent": indent, "prefix": prefix]
+            }
+            var heading = block("heading", "Launch plan"); heading["level"] = 2
+            var table = block("table", ""); table["cells"] = [["Owner", "Status"], ["Dart", "Opens links"]]
+            let blocks: [[String: Any]] = [heading,
+                block("text", "Read the [allowed guide](https://omi.me/allowed) or [another site](https://example.com/blocked)."),
+                block("text", "Ship the **native** body", prefix: "1."), block("text", "Keep the owner", prefix: "•", indent: 1),
+                block("quote", "Links stay with Dart"), block("code", "let owner = \"Dart\""), table]
+            // Like the chat page, each reply has an action and an "Open" subtitle; only a symbol adds a button.
+            func message(_ id: String, _ blocks: [[String: Any]], subtitle: String, symbol: String? = nil) -> [String: Any] {
+                var row: [String: Any] = ["id": id, "title": "Launch plan", "kind": "message_ai", "subtitle": subtitle, "blocks": blocks,
+                    "options": [["id": "https://omi.me/allowed", "title": "https://omi.me/allowed"]], "enabled": true, "destructive": false]
+                if let symbol { row["symbol"] = symbol }
+                return row
+            }
+            surfaceRaw["sections"] = [["id": "messages", "title": "", "footer": "", "rows": [
+                ["id": "chat_rich_user", "title": "Plan the **launch**", "kind": "message_user", "plainText": true, "subtitle": "", "options": [], "enabled": false, "destructive": false],
+                message("chat_rich_ai", blocks, subtitle: "Open"),
+                message("chat_rich_retry", [block("text", "The reply could not finish.")], subtitle: "Try again", symbol: "arrow.clockwise"),
+                // A reader row without a whitelist: its link is discarded rather than opened by the system.
+                ["id": "chat_rich_note", "title": "Note", "kind": "rich_text", "subtitle": "", "options": [], "enabled": false, "destructive": false,
+                 "blocks": [block("text", "See the [unlisted note](https://example.com/note).")]]]]]
+        }
+        for style in ["bar", "line"] where ProcessInfo.processInfo.arguments.contains("chart-\(style)") {
+            // Labels at the 64-character limit, a single category and the unchanged quantitative chart.
+            let long = "Planning review with the native migration team, morning slots"
+            func chart(_ id: String, _ title: String, _ count: Int, style: String?, subtitle: String = "Day") -> [String: Any] {
+                let points: [[String: Any]] = (0..<count).map { index in
+                    ["x": Double(index), "y": Double((index * 7) % 11 + 1), "label": "\(long) \(String(format: "%02d", index))"]
+                }
+                var row: [String: Any] = ["id": id, "title": title, "kind": "chart", "subtitle": subtitle, "options": [], "enabled": false, "destructive": false,
+                    "points": points]
+                if let style { row["chartStyle"] = style }
+                return row
+            }
+            surfaceRaw["title"] = "Charts"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "charts", "title": "", "footer": "", "rows": [
+                chart("chart_many", "Messages per day", 14, style: style), chart("chart_single", "Single day", 1, style: style),
+                chart("chart_legacy", "Signal strength", 1, style: nil, subtitle: "Collecting data")]]]
+        }
     }
 
     /// Selection with a bottom bar, reorder, collapsible sections, swipes and indent.

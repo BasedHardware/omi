@@ -51,6 +51,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
     let indent: Int?
     let swipeLeading: [String]?
     let swipeTrailing: [String]?
+    /// "line" or "bar": a categorical chart whose point x is its index and whose label names it.
+    let chartStyle: String?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -60,7 +62,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
              visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
-             indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing)
+             indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing,
+             chartStyle: chartStyle)
     }
 
 
@@ -229,7 +232,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
-                      && ((row.blocks ?? []).isEmpty || (row.kind == "rich_text" && row.blocks?.allSatisfy(\.valid) == true))
+                      && row.hasValidRichBody && row.hasValidChartStyle
                       && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
@@ -324,6 +327,25 @@ private extension NativeSurfaceRow {
               url.user == nil, url.password == nil else { return false }
         return (url.scheme == "https" && !(url.host ?? "").isEmpty)
             || (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/"))
+    }
+}
+
+private extension NativeSurfaceRow {
+    /// Reader and AI reply bodies share the block rules; a rich body is never literal text too, and
+    /// one AI reply carries at most 2,000 blocks.
+    var hasValidRichBody: Bool {
+        let blocks = blocks ?? []
+        if blocks.isEmpty { return true }
+        guard kind == "rich_text" || kind == "message_ai", plainText != true else { return false }
+        return blocks.allSatisfy(\.valid) && (kind != "message_ai" || blocks.count <= 2000)
+    }
+
+    /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
+    var hasValidChartStyle: Bool {
+        guard let chartStyle else { return true }
+        let points = points ?? []
+        guard kind == "chart", chartStyle == "line" || chartStyle == "bar", (1...10000).contains(points.count) else { return false }
+        return points.indices.allSatisfy { points[$0].x == Double($0) && points[$0].y.isFinite && points[$0].label.count <= 64 }
     }
 }
 

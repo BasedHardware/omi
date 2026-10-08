@@ -195,6 +195,7 @@ struct NativeSurfaceTests {
         try toastRequests()
         try secrets()
         try listInteractions()
+        try richMessagesAndCategoricalCharts(input)
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
 
@@ -464,6 +465,114 @@ struct NativeSurfaceTests {
         label["swipeTrailing"] = ["delete"]
         rejects(surface([label]))
     }
+
+    /// Rich AI bodies share the reader's block rules; categorical charts are index-ordered and labelled.
+    static func richMessagesAndCategoricalCharts(_ base: [String: Any]) throws {
+        var input = base
+        input.removeValue(forKey: "chat")
+        func section(_ row: [String: Any]) -> [[String: Any]] { [["id": "rows", "title": "", "footer": "", "rows": [row]]] }
+        func block(_ kind: String, _ text: String) -> [String: Any] { ["kind": kind, "text": text, "indent": 0, "prefix": ""] }
+        var heading = block("heading", "Plan"); heading["level"] = 2
+        var table = block("table", ""); table["cells"] = [["Owner", "State"], ["Dart", "Opens links"]]
+        var message: [String: Any] = ["id": "reply", "title": "Plan", "kind": "message_ai", "subtitle": "",
+            "options": [["id": "https://omi.me/docs", "title": "https://omi.me/docs"]], "enabled": true, "destructive": false,
+            "blocks": [heading, block("text", "Read [docs](https://omi.me/docs)"), block("quote", "Quote"), block("code", "let x = 1"), table]]
+        input["sections"] = section(message)
+        let reply = try NativeSurfaceSnapshot.decode(input)
+        precondition(reply.sections[0].rows[0].blocks?.count == 5 && reply.sections[0].rows[0].options.count == 1)
+        message["plainText"] = true
+        input["sections"] = section(message)
+        rejects(input)
+        message.removeValue(forKey: "plainText")
+        message["blocks"] = Array(repeating: block("text", "Line"), count: 2000)
+        input["sections"] = section(message)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        message["blocks"] = Array(repeating: block("text", "Line"), count: 2001)
+        input["sections"] = section(message)
+        rejects(input)
+        var reader = message
+        reader["kind"] = "rich_text"
+        input["sections"] = section(reader)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        for kind in ["message_user", "label"] {
+            message["kind"] = kind
+            message["blocks"] = [block("text", "Line")]
+            input["sections"] = section(message)
+            rejects(input)
+        }
+        message["kind"] = "message_ai"
+        message["blocks"] = [block("script", "alert(1)")]
+        input["sections"] = section(message)
+        rejects(input)
+
+        func categories(_ count: Int, label: String = "Day") -> [[String: Any]] {
+            (0..<count).map { ["x": $0, "y": Double($0) * 2, "label": "\(label) \($0)"] as [String: Any] }
+        }
+        var chart: [String: Any] = ["id": "chart", "title": "Messages", "kind": "chart", "subtitle": "Day",
+            "options": [], "enabled": false, "destructive": false]
+        for style in ["line", "bar"] {
+            for count in [1, 12] {
+                chart["chartStyle"] = style
+                chart["points"] = categories(count)
+                input["sections"] = section(chart)
+                let decoded = try NativeSurfaceSnapshot.decode(input)
+                precondition(decoded.sections[0].rows[0].chartStyle == style)
+                precondition(decoded.replacingValue(id: "other", value: .text("")).sections[0].rows[0].chartStyle == style)
+            }
+        }
+        chart["points"] = [["x": 0, "y": 1, "label": String(repeating: "👩‍👩‍👧", count: 64)]]
+        input["sections"] = section(chart)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        let invalidPoints: [[[String: Any]]] = [
+            [],
+            [["x": 1, "y": 1, "label": "Day 1"]],
+            [["x": 1, "y": 1, "label": "Day 1"], ["x": 0, "y": 1, "label": "Day 0"]],
+            [["x": 0, "y": 1, "label": "Day 0"], ["x": 2, "y": 1, "label": "Day 2"]],
+            [["x": 0.5, "y": 1, "label": "Half"]],
+            // SafeJSON already refuses a non-finite y before the chart rule sees it.
+            [["x": 0, "y": Double.nan, "label": "Day 0"]],
+            [["x": 0, "y": 1]],
+            [["x": 0, "y": 1, "label": String(repeating: "a", count: 65)]],
+            categories(10001),
+        ]
+        for points in invalidPoints {
+            chart["points"] = points
+            input["sections"] = section(chart)
+            rejects(input)
+        }
+        chart["points"] = categories(10000)
+        chart["chartStyle"] = "bar"
+        input["sections"] = section(chart)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        chart["points"] = categories(3)
+        for style in ["pie", ""] {
+            chart["chartStyle"] = style
+            input["sections"] = section(chart)
+            rejects(input)
+        }
+        for kind in ["waveform", "message_ai"] {
+            var other = chart
+            other["kind"] = kind
+            other["chartStyle"] = "bar"
+            other["points"] = [["x": 0, "y": 0.5, "label": "Day 0"]]
+            input["sections"] = section(other)
+            rejects(input)
+        }
+        var label: [String: Any] = ["id": "label", "title": "Label", "kind": "label", "subtitle": "", "options": [],
+            "enabled": false, "destructive": false, "chartStyle": "bar", "points": categories(3)]
+        input["sections"] = section(label)
+        rejects(input)
+        label.removeValue(forKey: "chartStyle")
+        input["sections"] = section(label)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        // Without a style the existing quantitative chart keeps its rules: gaps and long labels stay valid.
+        chart.removeValue(forKey: "chartStyle")
+        chart["points"] = [["x": 0, "y": 1, "label": "Mon"], ["x": 3, "y": 2, "label": String(repeating: "a", count: 65)]]
+        input["sections"] = section(chart)
+        let usage = try NativeSurfaceSnapshot.decode(input)
+        precondition(usage.sections[0].rows[0].chartStyle == nil)
+    }
+
     static func rejects(_ input: Any) {
         do { _ = try NativeSurfaceSnapshot.decode(input) }
         catch { return }

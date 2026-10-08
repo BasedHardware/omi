@@ -23,6 +23,7 @@ import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import 'conversation_screenshots_section.dart';

@@ -961,4 +961,64 @@ final class PreviewUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 5), .completed)
         XCTAssertFalse(app.staticTexts[key].exists)
     }
+
+    func testRichAIMessageRendersBlocksAndOpensOnlyWhitelistedLinks() {
+        let app = start(["chat", "chat-rich"])
+        // A heading, ordered and nested list items, a quote, code and a table all render in the AI bubble.
+        for text in ["Launch plan", "1.", "Ship the native body", "Keep the owner", "Links stay with Dart",
+                     "let owner = \"Dart\"", "Opens links"] {
+            XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 10), text)
+        }
+        // A link whitelist never adds a trailing button; only the retry row's explicit symbol does.
+        XCTAssertTrue(app.staticTexts["Open"].exists)
+        XCTAssertFalse(app.buttons["Open"].exists)
+        XCTAssertTrue(app.buttons["Try again"].exists)
+        capture(app, "native-chat-rich-ai-message")
+        // Neither an unlisted link in a reply nor one in a reader row without options leaves the app.
+        for link in ["another site", "unlisted note"] {
+            XCTAssertTrue(app.links[link].waitForExistence(timeout: 5), link)
+            app.links[link].tap()
+            Thread.sleep(forTimeInterval: 2)
+            XCTAssertEqual(app.state, .runningForeground, "\(link) must not open the system browser")
+            XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture", link)
+        }
+        app.links["allowed guide"].tap()
+        XCTAssertTrue(app.staticTexts["chat_rich_ai:https://omi.me/allowed"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.state, .runningForeground)
+        app.buttons["Try again"].tap()
+        XCTAssertTrue(app.staticTexts["chat_rich_retry:"].waitForExistence(timeout: 5))
+    }
+
+    func testCategoricalBarChartsKeepLongLabelsSinglePointAndLargeText() {
+        assertCategoricalCharts("chart-bar")
+    }
+
+    func testCategoricalLineChartsKeepLongLabelsSinglePointAndLargeText() {
+        assertCategoricalCharts("chart-line")
+    }
+
+    /// Both categorical charts render at their fixed height from one point on, while the unstyled
+    /// quantitative chart keeps its one-point subtitle; large text keeps every chart reachable.
+    private func assertCategoricalCharts(_ fixture: String) {
+        for large in [false, true] {
+            let app = start(large ? ["surface", fixture, "large"] : ["surface", fixture])
+            XCTAssertTrue(app.staticTexts["Messages per day"].waitForExistence(timeout: 10))
+            assertChart(app, "Messages per day")
+            capture(app, "native-\(fixture)\(large ? "-large-text" : "")")
+            let single = app.staticTexts["Single day"]
+            for _ in 0..<6 where !(single.exists && single.isHittable) { app.swipeUp() }
+            XCTAssertTrue(single.exists)
+            assertChart(app, "Single day")
+            let legacy = app.staticTexts["Collecting data"]
+            for _ in 0..<6 where !(legacy.exists && legacy.isHittable) { app.swipeUp() }
+            XCTAssertTrue(legacy.exists, "The unstyled chart keeps its one-point subtitle")
+            capture(app, "native-\(fixture)-single\(large ? "-large-text" : "")")
+        }
+    }
+
+    /// The chart itself carries its title as accessibility label at the fixed 200 pt height.
+    private func assertChart(_ app: XCUIApplication, _ title: String) {
+        let labelled = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title))
+        XCTAssertTrue(labelled.allElementsBoundByIndex.contains { abs($0.frame.height - 200) <= 1 }, title)
+    }
 }

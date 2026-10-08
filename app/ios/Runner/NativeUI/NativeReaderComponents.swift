@@ -20,8 +20,9 @@ struct NativeRichTextView: View {
             }
         }.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             .environment(\.openURL, OpenURLAction { url in
-                guard !row.options.isEmpty else { return .systemAction }
-                guard row.options.contains(where: { $0.id == url.absoluteString }) else { return .discarded }
+                // Native code never opens a URL itself: only a link from this row's whitelist reaches
+                // its Dart owner, and without options every link is discarded.
+                guard row.enabled, row.options.contains(where: { $0.id == url.absoluteString }) else { return .discarded }
                 Task { await state.send(row.id, value: url.absoluteString) }
                 return .handled
             })
@@ -196,5 +197,51 @@ struct NativePlaybackSlider: View {
             Text(row.subtitle).font(.caption).monospacedDigit().foregroundStyle(.secondary)
         }.onAppear { position = row.value?.number ?? 0 }
             .onChange(of: row.value) { value in if !dragging && !state.pending.contains(row.id) { position = value?.number ?? 0 } }
+    }
+}
+
+/// A categorical bar or line chart. Point x is the category's index; the axis names the first, the
+/// last and every ceil(n/6)th category by its label, so long or many labels stay legible.
+@available(iOS 16.0, *)
+struct NativeCategoricalChart: View {
+    let row: NativeSurfaceRow
+    let points: [NativeSurfaceRow.Point]
+
+    private var axisValues: [Double] {
+        let step = max(1, (points.count + 5) / 6)
+        return points.indices.filter { $0 == 0 || $0 == points.count - 1 || $0 % step == 0 }.map { Double($0) }
+    }
+
+    private func label(_ value: AxisValue) -> String {
+        guard let x = value.as(Double.self), let index = Int(exactly: x), points.indices.contains(index) else { return "" }
+        return points[index].label
+    }
+
+    var body: some View {
+        Chart(points) { point in
+            if row.chartStyle == "bar" {
+                BarMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .accessibilityLabel(point.label)
+            } else {
+                LineMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .interpolationMethod(.catmullRom)
+                PointMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .accessibilityLabel(point.label)
+            }
+        }
+        // Half a category of margin keeps a single point, and the first and last bars, inside the plot.
+        .chartXScale(domain: -0.5...(Double(points.count) - 0.5))
+        .chartXAxis {
+            AxisMarks(values: axisValues) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    Text(label(value)).lineLimit(1).truncationMode(.tail).frame(maxWidth: 96)
+                }
+            }
+        }
+        .frame(height: 200)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.title)
     }
 }

@@ -494,7 +494,9 @@ struct NativeSurfaceView: View {
             case "chart":
                 VStack(alignment: .leading, spacing: 12) {
                     Text(row.title).font(.headline)
-                    if let points = row.points, points.count > 1 {
+                    if row.chartStyle != nil, let points = row.points, !points.isEmpty {
+                        NativeCategoricalChart(row: row, points: points)
+                    } else if let points = row.points, points.count > 1 {
                         Chart(points) { point in
                             LineMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
                         }.frame(height: 150)
@@ -728,12 +730,16 @@ struct NativeSurfaceView: View {
         HStack {
             if row.kind == "message_user" { Spacer(minLength: 30) }
             VStack(alignment: .leading, spacing: 8) {
-                Group {
-                    if row.plainText == true { Text(verbatim: row.title) }
-                    else { Text(.init(row.title)) }
-                }.textSelection(.enabled)
+                // A rich body shares the reader's blocks and whitelisted links; its link options never
+                // add a trailing button, which only an explicit symbol requests.
+                if !(row.blocks ?? []).isEmpty { NativeRichTextView(row: row, state: state, query: "") } else {
+                    Group {
+                        if row.plainText == true { Text(verbatim: row.title) }
+                        else { Text(.init(row.title)) }
+                    }.textSelection(.enabled)
+                }
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
-                if row.enabled {
+                if row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil) {
                     Button { Task { await state.send(row.id) } } label: {
                         Image(systemName: row.symbol ?? "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.subtitle)

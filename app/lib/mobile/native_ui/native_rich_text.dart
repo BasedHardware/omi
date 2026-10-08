@@ -15,6 +15,8 @@ Map<String, String> nativeRichTextLinks(String source) {
     if (node is! md.Element) return;
     final href = node.attributes['href'];
     if (node.tag == 'a' && href != null && href.isNotEmpty) {
+      // Native code reports the URL as written; the normalized spelling stays accepted as well.
+      links[href] = href;
       links[Uri.tryParse(href)?.toString() ?? href] = href;
     }
     for (final child in node.children ?? <md.Node>[]) {
