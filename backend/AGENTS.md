@@ -1,6 +1,6 @@
 # Backend (Python) — Developer Guide
 
-Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific development guidance.
+Inherits `../AGENTS.md`; adds backend guidance.
 
 ## Setup
 
@@ -121,6 +121,8 @@ backend-sync (main.py, Cloud Run)
 
 Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
+
+Dream agent: `docs/runbooks/dream-agent.md`.
 
 Helm charts: `backend/charts/`.
 

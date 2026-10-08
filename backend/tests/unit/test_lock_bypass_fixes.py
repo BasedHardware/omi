@@ -12,6 +12,15 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace
 from zoneinfo import ZoneInfo
 
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -142,7 +151,6 @@ _stubs = [
     'langchain_core.prompts',
     'langchain_core.runnables',
     'langchain_core.tools',
-    'langchain_core.exceptions',
     'langchain_google_genai',
     'langchain_openai',
     'openai',
@@ -183,9 +191,6 @@ _stubs = [
     'utils.llm.memories',
     'utils.llm.chat',
     'utils.llm.usage_tracker',
-    'utils.llm.conversation_processing',
-    'utils.llm.shaped_agent',
-    'utils.llm.shaped_notes_transport',
     'websockets',
 ]
 for mod_name in _stubs:

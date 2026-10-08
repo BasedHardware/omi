@@ -221,8 +221,6 @@ env:
     value: "gateway"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -273,18 +271,6 @@ env:
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
-    value: "1.0"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
-    value: "1.0"
-  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
-    value: "false"
-  - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
-    value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:

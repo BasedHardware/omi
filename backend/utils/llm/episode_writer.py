@@ -75,6 +75,37 @@ def episode_budget_exceeded(messages, settings, run) -> bool:
     )
 
 
+def baseline_budget_fallback(notes_fn, run, prefix, inputs):
+    """Reuse the same receipt and original rich inputs; never buy a timed-out writer first."""
+    from utils.observability.fallback import record_fallback
+
+    if run is not None:
+        run.arm = 'baseline_budget'
+        run.effort = 'default'
+        run.claims_enabled = False
+        run.violations.add('thinking_input_baseline')
+    record_fallback(
+        component='conversation_notes',
+        from_mode='episode_notes',
+        to_mode='baseline_budget',
+        reason='local_heal',
+        outcome='degraded',
+    )
+    names = (
+        'started_at',
+        'language_code',
+        'output_language_code',
+        'tz',
+        'task_intelligence_capture',
+        'existing_action_items',
+        'trusted_wake_word_markers',
+        'meeting_context',
+        'rich_context_enabled',
+        'roster',
+    )
+    return notes_fn(prefix, **{name: inputs[name] for name in names}, screen_frames=inputs['original_screen_frames'])
+
+
 def prepare_episode_evidence(items, settings: EpisodeWriterSettings, *, started_at, finished_at, run, model_factory):
     items = compact_episode_items(items)
     if settings.selection == 'compact':
@@ -210,3 +241,16 @@ def invoke_episode_writer(model, messages, settings, run, *, fallback_factory, d
             run.writer_deadline = fallback_deadline
         model = fallback_factory(fallback_deadline)
         return (run.invoke(model, messages) if run else model.invoke(messages)), fallback
+
+
+def episode_retry_model(get_llm, cache_key, cache_options, timeout, effort='default'):
+    return bind_episode_effort(
+        get_llm(
+            'conv_structure',
+            cache_key=cache_key,
+            prompt_cache_options=cache_options,
+            request_timeout=timeout,
+            max_retries=0,
+        ),
+        effort,
+    )

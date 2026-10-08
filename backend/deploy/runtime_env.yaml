@@ -264,9 +264,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
@@ -423,24 +420,6 @@ environments:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
@@ -562,9 +541,6 @@ environments:
             value: 'on'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
-            category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
@@ -1049,9 +1025,6 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
             LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
@@ -1201,24 +1174,6 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
               category: rollout
@@ -1438,9 +1393,6 @@ environments:
             MEMORY_BELIEF_AUTOMATION_PAUSED:
               value: 'false'
               category: rollout
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
               value: 'true'
@@ -1518,24 +1470,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
               category: rollout
@@ -1799,24 +1733,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
@@ -2037,24 +1953,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -2736,9 +2634,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
@@ -3076,9 +2971,6 @@ environments:
             value: 'on'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
-            category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
@@ -3481,9 +3373,6 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
             LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
@@ -3892,9 +3781,6 @@ environments:
               value: 'false'
             MEMORY_BELIEF_AUTOMATION_PAUSED:
               value: 'false'
-              category: rollout
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout

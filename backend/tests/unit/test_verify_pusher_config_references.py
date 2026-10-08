@@ -193,7 +193,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
-        "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",

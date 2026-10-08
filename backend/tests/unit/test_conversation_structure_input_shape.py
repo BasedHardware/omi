@@ -1,3 +1,5 @@
+import os
+
 """Source provenance must not determine the input model used for summarization."""
 
 import importlib
@@ -9,6 +11,14 @@ from unittest.mock import Mock
 import pytest
 
 from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
 
 
 @pytest.fixture(scope='module')
@@ -32,9 +42,7 @@ def processing(stack, monkeypatch):
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *_, **__: [])
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
-    monkeypatch.setattr(pc, '_primary_user_name', lambda *_: None)
     monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **_: None)
     monkeypatch.setattr(pc, 'decide_relevance', lambda **_: SimpleNamespace(discard=False, reason='kept'))
     return pc
@@ -42,9 +50,8 @@ def processing(stack, monkeypatch):
 
 @pytest.mark.parametrize('source', ['workflow', 'external_integration'])
 @pytest.mark.parametrize('model_name', ['Conversation', 'CreateConversation'])
-@pytest.mark.parametrize('notes_v2', [False, True])
 def test_segment_models_use_transcript_even_with_integration_provenance(
-    stack, processing, monkeypatch, source, model_name, notes_v2
+    stack, processing, monkeypatch, source, model_name
 ):
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     segment = stack.segments.TranscriptSegment(
@@ -57,16 +64,11 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
     assert not hasattr(conversation, 'text_source')
     transcript = Mock(return_value=('Synthetic transcript', '[segment-1] Synthetic transcript', {}))
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', transcript)
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: notes_v2)
     structured = stack.structured.Structured(title='Segment summary')
-    legacy = Mock(return_value=structured)
     notes = Mock(return_value=structured)
-    actions = Mock(return_value=[])
     prefix = Mock(return_value='Synthetic prefix')
-    monkeypatch.setattr(processing, 'get_transcript_structure', legacy)
     monkeypatch.setattr(processing, 'get_conversation_notes', notes)
     monkeypatch.setattr(processing, 'build_conversation_prompt_prefix', prefix)
-    monkeypatch.setattr(processing, 'extract_action_items', actions)
     message = Mock(side_effect=AssertionError('Segment input reached message summarization'))
     monkeypatch.setattr(processing, 'get_message_structure', message)
 
@@ -76,22 +78,13 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
     assert discarded is False
     transcript.assert_called_once_with('synthetic-uid', conversation, None)
     message.assert_not_called()
-    if notes_v2:
-        notes.assert_called_once()
-        assert prefix.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
-        legacy.assert_not_called()
-        actions.assert_not_called()
-    else:
-        legacy.assert_called_once()
-        assert legacy.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
-        actions.assert_called_once()
-        notes.assert_not_called()
+    notes.assert_called_once()
+    assert prefix.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
 
 
 @pytest.mark.parametrize('source', ['workflow', 'external_integration'])
 @pytest.mark.parametrize('text_source', ['audio', 'message', 'other'])
-@pytest.mark.parametrize('notes_v2', [False, True])
-def test_external_create_models_keep_text_summarization(stack, processing, monkeypatch, source, text_source, notes_v2):
+def test_external_create_models_keep_text_summarization(stack, processing, monkeypatch, source, text_source):
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
     conversation = stack.models.ExternalIntegrationCreateConversation(
         started_at=now,
@@ -100,13 +93,11 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
         text_source=getattr(stack.enums.ExternalIntegrationConversationSource, text_source),
         text_source_spec='synthetic',
     )
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: notes_v2)
     transcript = Mock(side_effect=AssertionError('External create input reached segment summarization'))
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', transcript)
     structured = stack.structured.Structured(title='External summary')
     providers = {}
     for name in (
-        'get_transcript_structure',
         'get_conversation_notes',
         'get_message_structure',
         'summarize_experience_text',
@@ -115,7 +106,6 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
         monkeypatch.setattr(processing, name, providers[name])
     prefix = Mock(return_value='Synthetic prefix')
     monkeypatch.setattr(processing, 'build_conversation_prompt_prefix', prefix)
-    monkeypatch.setattr(processing, 'extract_action_items', Mock(return_value=[]))
 
     result, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
 
@@ -123,7 +113,7 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
     assert discarded is False
     transcript.assert_not_called()
     expected = {
-        'audio': 'get_conversation_notes' if notes_v2 else 'get_transcript_structure',
+        'audio': 'get_conversation_notes',
         'message': 'get_message_structure',
         'other': 'summarize_experience_text',
     }[text_source]
@@ -131,7 +121,7 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
     for name, provider in providers.items():
         if name != expected:
             provider.assert_not_called()
-    if text_source == 'audio' and notes_v2:
+    if text_source == 'audio':
         assert prefix.call_args.kwargs['transcript'] == conversation.text
     else:
         assert providers[expected].call_args.args[0] == conversation.text
@@ -178,7 +168,6 @@ def test_empty_capture_is_rule_discarded_before_the_notes_model(stack, processin
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
     monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
     monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
     notes = Mock(side_effect=AssertionError('empty capture reached the notes model'))
     monkeypatch.setattr(processing, 'get_conversation_notes', notes)
     decisions = []
@@ -201,13 +190,11 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     from utils.conversations.relevance import decide_relevance
     from utils.llm import conversation_processing as notes_module
 
-    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
     conversation = _blank_capture(stack)
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
     monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
     monkeypatch.setattr(processing, 'relevance_arm', lambda *_args: 'nano')
     monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
     get_llm = Mock(side_effect=AssertionError('content-free capture reached the notes model'))
     monkeypatch.setattr(notes_module, 'get_llm', get_llm)
 
@@ -230,70 +217,3 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     )
     assert restored.discarded is False
     assert restored.structured.title.startswith('Recording · ')
-
-
-@pytest.mark.parametrize('recovery', [False, True])
-def test_discard_unchanged_and_rich_inputs_not_gathered(stack, processing, monkeypatch, recovery):
-
-    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
-    conversation = stack.models.CreateConversation(
-        started_at=now, finished_at=now, source='desktop', transcript_segments=[], photos=[]
-    )
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_rich_context_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
-    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
-    monkeypatch.setattr(processing, 'recovery_minimum_terminal_enabled', lambda: True)
-    relevance = Mock(return_value=SimpleNamespace(discard=True, reason='empty', decided_by='rule'))
-    monkeypatch.setattr(processing, 'decide_relevance', relevance)
-    gathered = []
-
-    def inputs(*args, **kwargs):
-        gathered.append(kwargs)
-        return None, None, True, ()
-
-    monkeypatch.setattr(processing, 'rich_notes_inputs', inputs)
-    notes = Mock(return_value=stack.structured.Structured(title='Observed empty call'))
-    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
-    result, discarded = processing._get_structured(
-        'synthetic-uid',
-        'en',
-        conversation,
-        trigger=processing.ProcessingTrigger.SERVER_RECOVERY if recovery else processing.ProcessingTrigger.CAPTURE_END,
-    )
-    relevance.assert_called_once()
-    assert relevance.call_args.kwargs['texts'] == []
-    assert relevance.call_args.kwargs['has_photos'] is False
-    assert relevance.call_args.kwargs['trusted_wake_word'] is False
-    assert discarded is True
-    assert not gathered
-    notes.assert_not_called()
-
-
-def test_rich_inputs_gathered_once_after_keep_decision(stack, processing, monkeypatch):
-
-    conversation = _blank_capture(stack)
-    events = []
-    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_rich_context_enabled', lambda: True)
-    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
-    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
-
-    def keep(**kwargs):
-        events.append('keep')
-        return SimpleNamespace(discard=False, reason='kept')
-
-    def inputs(*args, **kwargs):
-        events.append('gather')
-        return None, None, True, ()
-
-    def notes(*args, **kwargs):
-        events.append('notes')
-        assert 'episode_evidence' not in kwargs and 'episode_finished_at' not in kwargs
-        return stack.structured.Structured(title='Observed screen')
-
-    monkeypatch.setattr(processing, 'decide_relevance', keep)
-    monkeypatch.setattr(processing, 'rich_notes_inputs', inputs)
-    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
-    _, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
-    assert not discarded and events == ['keep', 'gather', 'notes']

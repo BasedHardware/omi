@@ -139,16 +139,6 @@ except ImportError:
         raise RuntimeError('Omi gateway Anthropic client is unavailable')
 
 
-try:
-    from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
-except ImportError as exc:
-    if exc.name != 'utils.llm.gateway_shadow':
-        raise
-
-    def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
-        return legacy_model
-
-
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -828,15 +818,6 @@ def get_llm(
         if max_retries is not None:
             route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
-
-    if not route_through_gateway and not byok_key:
-        result = maybe_wrap_dev_gateway_shadow(
-            feature=feature,
-            model=model,
-            provider=provider,
-            streaming=streaming,
-            legacy_model=result,
-        )
 
     # Preserve the final route identity per invocation without mutating a cached
     # SDK client. Gateway model_name is only an auto-lane ID; prompt callers need

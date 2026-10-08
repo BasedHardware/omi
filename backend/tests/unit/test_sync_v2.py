@@ -1416,6 +1416,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -1423,6 +1424,10 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
 
         # The speaker entitlement must be a visible, fixed contract, not a truthy
         # MagicMock: sync identification consults it when building the person
@@ -3426,6 +3431,7 @@ class TestV2EndpointExecution:
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -3433,6 +3439,10 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
 
         # The speaker entitlement must be a visible, fixed contract, not a truthy
         # MagicMock: sync identification consults it when building the person

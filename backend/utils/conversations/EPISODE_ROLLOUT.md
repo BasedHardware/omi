@@ -2,8 +2,6 @@
 
 # Episode notes rollout
 
-> Retired from serving on 2026-10-08: episode evidence capture and its ENABLED/PERCENT flags were removed after the legacy writer was deleted. The material below is historical evaluation context, not a production rollout procedure. Shaped serving is controlled by `OMI_SHAPED_AGENT_MODE`; restoring legacy serving requires the previous image.
-
 Owner: David. No production enablement in this PR. David completed v3 held-out
 acceptance on 35 conversations, two judge samples, at b89a11c1be with production
 gateway effort parity (2026-10-06). Do not rerun or tune against that split.

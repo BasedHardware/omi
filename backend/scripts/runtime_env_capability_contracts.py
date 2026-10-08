@@ -49,13 +49,9 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
 
-# Declared on every finalization host with the same literal, or live capture
-# (backend-listen / pusher / backend-sync) and regenerate (cloud_run/backend)
-# silently run different pipelines. An omitted flag must fail admission, not
-# fall through to the process-local False default.
+# Remaining summary context flags must agree on every finalization host; an
+# omitted declaration must fail admission rather than use the code default.
 SUMMARY_PIPELINE_FLAGS = (
-    'OMI_SHAPED_AGENT_MODE',
-    'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
@@ -215,10 +211,6 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                             f'(its reader accepts nothing else), got {literal_env[flag]!r}',
                         )
                     )
-                continue
-            if flag == 'OMI_SHAPED_AGENT_MODE':
-                if literal_env[flag].strip().casefold() not in {'on', 'cohort', 'off'}:
-                    errors.append(ValidationError(scope, f'{flag} must be on/cohort/off, got {literal_env[flag]!r}'))
                 continue
             if literal_env[flag].strip().casefold() not in _SUMMARY_FLAG_LITERALS:
                 errors.append(

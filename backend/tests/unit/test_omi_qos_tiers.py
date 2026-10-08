@@ -331,8 +331,8 @@ class TestModelQosProfiles:
 
     def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
         luna_features = {
-            'conv_action_items',
             'wake_word_adjudication',
+            'conv_action_items',
             'conv_structure',
             'conv_app_result',
             'daily_summary',
@@ -473,7 +473,6 @@ class TestGetLlm:
     def test_caches_instances_same_feature(self):
         llm1 = get_llm('conv_action_items')
         llm2 = get_llm('conv_action_items')
-        # Per-invocation metadata stamping wraps the shared cached client.
         assert llm1.metadata['omi_resolved_model'] == llm2.metadata['omi_resolved_model']
         assert llm1._constructor_kwargs == llm2._constructor_kwargs
 
@@ -597,7 +596,7 @@ class TestGetOrCreateLlmBehavioral:
         options = {'mode': 'explicit', 'ttl': '30m'}
         with _patch.object(clients_mod, 'should_route_features_through_gateway', return_value=True), _patch.object(
             clients_mod, 'get_or_create_omi_gateway_llm', return_value=_Recorder()
-        ), _patch.object(clients_mod, 'maybe_wrap_dev_gateway_shadow', return_value=_Recorder()):
+        ):
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
         assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
@@ -856,14 +855,14 @@ class TestExpandedCallsiteCoverage:
         for key in [
             'conv_folder',
             'conv_discard',
-            'conv_action_items',
             'conv_structure',
             'conv_app_result',
             'conv_app_select',
             'daily_summary',
         ]:
             assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
-        assert calls.count('conv_structure') >= 2, "conv_structure should appear at least twice"
+        # The shaped writer replaces the legacy writer's duplicate feature callsite.
+        assert calls.count('conv_structure') == 1
         assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
 
     def test_memories_all_keys(self):
