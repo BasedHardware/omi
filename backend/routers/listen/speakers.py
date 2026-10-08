@@ -614,7 +614,12 @@ class SpeakerMatcher:
                 self._pending_audio.pop(next(iter(self._pending_audio)))
             self._pending_audio[speaker_id] = fresh[-128:]
             fresh = self._pending_audio[speaker_id]
-            have_seconds = sum(seconds for _, seconds in self.speaker_evidence.get(speaker_id, ()))
+            # Appending evicts the oldest clip. Gate against only the evidence
+            # that will survive, or rejection can leave this voice pending forever.
+            retained = list(self.speaker_evidence.get(speaker_id, ()))
+            if len(retained) >= SPEAKER_MATCH_MAX_CLIPS:
+                retained = retained[-(SPEAKER_MATCH_MAX_CLIPS - 1) :]
+            have_seconds = sum(seconds for _, seconds in retained)
             needed = max(
                 0.5, min(self.host.limits.speaker_id_min_audio, SPEAKER_MATCH_MIN_EVIDENCE_SECONDS - have_seconds)
             )
