@@ -14,6 +14,9 @@ import {
   uploadAppThumbnail,
   generateAppDescription,
   deleteApp,
+  getAppWebhookSigningSecretStatus,
+  issueAppWebhookSigningSecret,
+  deleteAppWebhookSigningSecret,
 } from '@/lib/api';
 import type {
   App,
@@ -26,6 +29,11 @@ import type {
 } from '@/types/apps';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LayoutGrid } from 'lucide-react';
+import { WebhookSigningSecretControl } from '@/components/settings/WebhookSigningSecretControl';
+import type {
+  WebhookSigningSecretIssuedResponse,
+  WebhookSigningSecretStatusResponse,
+} from '@/lib/omiApi.generated';
 
 // Icons
 function ImageIcon({ className }: { className?: string }) {
@@ -193,6 +201,10 @@ export function AppForm({ mode, app }: AppFormProps) {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [setupCompletedUrl, setSetupCompletedUrl] = useState('');
   const [appHomeUrl, setAppHomeUrl] = useState('');
+  // Webhook signing secret: lives on the server, acts immediately, not part of Save.
+  const [signingSecret, setSigningSecret] =
+    useState<WebhookSigningSecretStatusResponse | null>(null);
+  const [signingSecretError, setSigningSecretError] = useState(false);
 
   // Notification scopes
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
@@ -273,6 +285,48 @@ export function AppForm({ mode, app }: AppFormProps) {
   const hasPersona = hasCapability('persona');
   const hasExternalIntegration = hasCapability('external_integration');
   const hasProactiveNotification = hasCapability('proactive_notification');
+
+  const signingAppId = mode === 'edit' && hasExternalIntegration ? app?.id : undefined;
+  const loadSigningSecretStatus = useCallback(async () => {
+    if (!signingAppId) return;
+    try {
+      setSigningSecret(await getAppWebhookSigningSecretStatus(signingAppId));
+      setSigningSecretError(false);
+    } catch {
+      setSigningSecretError(true);
+    }
+  }, [signingAppId]);
+  useEffect(() => {
+    void loadSigningSecretStatus();
+  }, [loadSigningSecretStatus]);
+
+  const handleIssueSigningSecret =
+    async (): Promise<WebhookSigningSecretIssuedResponse | null> => {
+      if (!signingAppId) return null;
+      try {
+        const issued = await issueAppWebhookSigningSecret(signingAppId);
+        setSigningSecret({
+          configured: true,
+          created_at: issued.created_at,
+          previous_valid_until: issued.previous_valid_until ?? null,
+        });
+        return issued;
+      } catch (error) {
+        console.error('Failed to issue app webhook signing secret:', error);
+        return null;
+      }
+    };
+  const handleDeleteSigningSecret = async (): Promise<boolean> => {
+    if (!signingAppId) return false;
+    try {
+      await deleteAppWebhookSigningSecret(signingAppId);
+      setSigningSecret({ configured: false });
+      return true;
+    } catch (error) {
+      console.error('Failed to delete app webhook signing secret:', error);
+      return false;
+    }
+  };
 
   const toggleCapability = (capId: string) => {
     setSelectedCapabilities((prev) => {
@@ -925,6 +979,29 @@ export function AppForm({ mode, app }: AppFormProps) {
                   placeholder="https://your-api.com/webhook"
                   className={inputClass}
                 />
+              </div>
+
+              {/* Webhook signing secret (X-Omi-Signature); acts immediately, not part of Save */}
+              <div>
+                <label className="mb-2 block text-sm text-text-secondary">
+                  Webhook signing
+                </label>
+                {signingAppId ? (
+                  <div className="rounded-xl border border-bg-quaternary bg-bg-tertiary px-4 py-1">
+                    <WebhookSigningSecretControl
+                      status={signingSecret}
+                      loadError={signingSecretError}
+                      onRetry={loadSigningSecretStatus}
+                      onIssue={handleIssueSigningSecret}
+                      onDelete={handleDeleteSigningSecret}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-text-tertiary">
+                    Available after the app is created. Omi signs deliveries with a
+                    per-app secret you can create here.
+                  </p>
+                )}
               </div>
 
               {/* Setup Completed URL */}

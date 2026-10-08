@@ -61,6 +61,9 @@ import {
   setDeveloperWebhook,
   enableDeveloperWebhook,
   disableDeveloperWebhook,
+  getDeveloperWebhookSigningSecretStatus,
+  issueDeveloperWebhookSigningSecret,
+  deleteDeveloperWebhookSigningSecret,
   getDeveloperApiKeys,
   createDeveloperApiKey,
   deleteDeveloperApiKey,
@@ -75,6 +78,10 @@ import {
   cancelSubscription,
   getCustomerPortal,
 } from '@/lib/api';
+import type {
+  WebhookSigningSecretIssuedResponse,
+  WebhookSigningSecretStatusResponse,
+} from '@/lib/omiApi.generated';
 import { SUPPORTED_LANGUAGES } from '@/types/user';
 import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import type {
@@ -1759,6 +1766,9 @@ export function SettingsPage() {
   const [apiKeysError, setApiKeysError] = useState(false);
   const [mcpKeysError, setMcpKeysError] = useState(false);
   const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
+  const [signingSecret, setSigningSecret] =
+    useState<WebhookSigningSecretStatusResponse | null>(null);
+  const [signingSecretError, setSigningSecretError] = useState(false);
 
   // Dialog states
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
@@ -1785,6 +1795,14 @@ export function SettingsPage() {
       setMcpKeysError(false);
     } catch {
       setMcpKeysError(true);
+    }
+  };
+  const loadSigningSecretStatus = async () => {
+    try {
+      setSigningSecret(await getDeveloperWebhookSigningSecretStatus());
+      setSigningSecretError(false);
+    } catch {
+      setSigningSecretError(true);
     }
   };
 
@@ -1844,6 +1862,7 @@ export function SettingsPage() {
               getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
               getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
               getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
+              loadSigningSecretStatus(),
             ]);
             // Full MCP key is only returned at creation time; keep secrets in memory for this session only.
             if (typeof window !== 'undefined') {
@@ -2008,6 +2027,43 @@ export function SettingsPage() {
     } catch (error) {
       console.error('Failed to delete API key:', error);
       showToast('Failed to delete API key. Please try again.', 'error');
+    }
+  };
+
+  const handleIssueSigningSecret =
+    async (): Promise<WebhookSigningSecretIssuedResponse | null> => {
+      try {
+        const issued = await issueDeveloperWebhookSigningSecret();
+        // The secret itself is shown once by the control and never kept here.
+        setSigningSecret({
+          configured: true,
+          created_at: issued.created_at,
+          previous_valid_until: issued.previous_valid_until ?? null,
+        });
+        setSigningSecretError(false);
+        return issued;
+      } catch (error) {
+        console.error('Failed to issue webhook signing secret:', error);
+        showToast(
+          'Failed to update the webhook signing secret. Please try again.',
+          'error',
+        );
+        return null;
+      }
+    };
+
+  const handleDeleteSigningSecret = async (): Promise<boolean> => {
+    try {
+      await deleteDeveloperWebhookSigningSecret();
+      setSigningSecret({ configured: false });
+      return true;
+    } catch (error) {
+      console.error('Failed to delete webhook signing secret:', error);
+      showToast(
+        'Failed to delete the webhook signing secret. Please try again.',
+        'error',
+      );
+      return false;
     }
   };
 
@@ -2185,6 +2241,11 @@ export function SettingsPage() {
             onCreateMcpKey={handleCreateMcpKey}
             onDeleteMcpKey={handleDeleteMcpKey}
             onWebhookChange={handleWebhookChange}
+            signingSecret={signingSecret}
+            signingSecretError={signingSecretError}
+            onRetrySigningSecret={loadSigningSecretStatus}
+            onIssueSigningSecret={handleIssueSigningSecret}
+            onDeleteSigningSecret={handleDeleteSigningSecret}
             onExportData={handleExportData}
             isExporting={isExporting}
             onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}

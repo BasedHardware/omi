@@ -133,8 +133,17 @@ async function handleRequest(request: Request) {
     if (responseContentType?.includes('application/json')) {
       const data = await response.json();
 
-      // Add Cache-Control headers for static/rarely-changing endpoints
+      // Keep a restrictive upstream cache policy (a one-time secret arrives with no-store).
+      // Only restrictive values pass: a permissive header on an authenticated route must
+      // not become cacheable through the proxy. Static endpoints below still override.
       const cacheHeaders: HeadersInit = {};
+      const upstreamCacheControl = response.headers.get('cache-control');
+      if (
+        upstreamCacheControl &&
+        /\b(no-store|no-cache|private)\b/i.test(upstreamCacheControl)
+      ) {
+        cacheHeaders['Cache-Control'] = upstreamCacheControl;
+      }
       if (
         path.includes('app-categories') ||
         path.includes('app-capabilities') ||

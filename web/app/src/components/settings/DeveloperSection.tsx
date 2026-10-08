@@ -23,6 +23,11 @@ import type { DeveloperApiKey, McpApiKey, DeveloperWebhooks } from '@/types/user
 import { Toggle } from './SettingsToggle';
 import { Card } from './SettingsCard';
 import { McpSection } from './McpSection';
+import { WebhookSigningSecretControl } from './WebhookSigningSecretControl';
+import type {
+  WebhookSigningSecretIssuedResponse,
+  WebhookSigningSecretStatusResponse,
+} from '@/lib/omiApi.generated';
 
 const SCOPE_RESOURCES = ['Conversations', 'Memories', 'Action Items', 'Goals'];
 const scopeSelection = (mode: 'none' | 'read' | 'full') =>
@@ -284,6 +289,11 @@ export function DeveloperSection({
   onCreateMcpKey,
   onDeleteMcpKey,
   onWebhookChange,
+  signingSecret,
+  signingSecretError,
+  onRetrySigningSecret,
+  onIssueSigningSecret,
+  onDeleteSigningSecret,
   onExportData,
   isExporting,
   onDeleteKnowledgeGraph,
@@ -300,6 +310,11 @@ export function DeveloperSection({
   onCreateMcpKey: (name: string) => Promise<McpApiKey | null>;
   onDeleteMcpKey: (keyId: string) => void;
   onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
+  signingSecret: WebhookSigningSecretStatusResponse | null;
+  signingSecretError: boolean;
+  onRetrySigningSecret: () => void;
+  onIssueSigningSecret: () => Promise<WebhookSigningSecretIssuedResponse | null>;
+  onDeleteSigningSecret: () => Promise<boolean>;
   onExportData: () => void;
   isExporting?: boolean;
   onDeleteKnowledgeGraph: () => void;
@@ -551,6 +566,15 @@ export function DeveloperSection({
                 </div>
               );
             })}
+            {/* One secret signs every webhook above (X-Omi-Signature). */}
+            <div className="my-4 border-t border-white/[0.06]" />
+            <WebhookSigningSecretControl
+              status={signingSecret}
+              loadError={signingSecretError}
+              onRetry={onRetrySigningSecret}
+              onIssue={onIssueSigningSecret}
+              onDelete={onDeleteSigningSecret}
+            />
           </div>
         </Card>
       </div>
