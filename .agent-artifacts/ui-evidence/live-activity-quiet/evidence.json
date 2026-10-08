@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-live-activity-paused.png",
+      "platform": "mobile-ios",
+      "description": "Paused pendant capture: compact, minimal, expanded, landscape compact and Lock Screen, rendered from the production widget views on the iOS 27 simulator",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-activity-pendant-unheard.png",
+      "platform": "mobile-ios",
+      "description": "Pendant unheard for over two minutes",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-activity-pendant-battery-low.png",
+      "platform": "mobile-ios",
+      "description": "Pendant battery at or below 15 percent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-live-activity-phone-recording.png",
+      "platform": "mobile-ios",
+      "description": "User-started phone recording keeps the recording card; landscape compact clock falls back to a dot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
