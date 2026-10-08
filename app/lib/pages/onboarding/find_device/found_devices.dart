@@ -1,27 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
-import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
-import 'package:omi/utils/error_message.dart';
-import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
-import 'package:omi/services/services.dart';
+import 'package:omi/pages/onboarding/find_device/device_discovery_controller.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 
 @visibleForTesting
 Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
@@ -50,9 +38,17 @@ class FoundDevices extends StatefulWidget {
 }
 
 class _FoundDevicesState extends State<FoundDevices> {
+  late final DeviceDiscoveryController _discovery;
+
   @override
   void initState() {
     super.initState();
+    _discovery = DeviceDiscoveryController(
+      context: context,
+      isFromOnboarding: widget.isFromOnboarding,
+      goNext: widget.goNext,
+      onRescan: widget.onRescan,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
@@ -60,224 +56,13 @@ class _FoundDevicesState extends State<FoundDevices> {
     });
   }
 
-  Future<void> _handleRayBanMetaOnboarding(BtDevice device, OnboardingProvider provider) async {
-    try {
-      final host = RayBanMetaHostAPI();
-      final mode = await host.getAvailabilityMode();
-
-      var needsSetup = device.id == RayBanMetaDiscoverer.setupPlaceholderId;
-      if (mode == 'full' && !needsSetup) {
-        final registration = await host.getRegistrationState();
-        final camera = await host.getCameraPermissionStatus();
-        needsSetup = registration != 'registered' || camera != 'granted';
-      } else if (mode != 'full') {
-        // Audio-only fallback: always explain the limitation before connecting.
-        needsSetup = true;
-      }
-
-      if (needsSetup) {
-        if (!mounted) return;
-        final ready = await RayBanMetaSetupSheet.show(context);
-        if (!ready || !mounted) return;
-      }
-
-      var target = device;
-      if (device.id == RayBanMetaDiscoverer.setupPlaceholderId) {
-        // Registration just completed — rescan so the real glasses replace the
-        // setup placeholder, then connect to them.
-        await ServiceManager.instance().device.discover(timeout: 5);
-        final real = provider.deviceList.firstWhereOrNull(
-          (d) => d.type == DeviceType.raybanMeta && d.id != RayBanMetaDiscoverer.setupPlaceholderId,
-        );
-        if (real == null) return;
-        target = real;
-      }
-
-      await provider.handleTap(device: target, isFromOnboarding: widget.isFromOnboarding, goNext: widget.goNext);
-    } catch (e) {
-      Logger.debug('Error handling Ray-Ban Meta onboarding: $e');
-      if (!mounted) return;
-      OmiFeedback.error(context, context.l10n.errorConnectingRayBanMeta(readableError(e)));
-    }
-  }
-
-  Future<void> _handleAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
-    try {
-      // First check if the watch is reachable
-      final hostAPI = WatchRecorderHostAPI();
-      final bool isReachable = await hostAPI.isWatchReachable();
-
-      if (!isReachable) {
-        // Watch is not reachable - show bottom sheet to install/open app
-        await _showWatchNotReachableBottomSheet(device.id);
-        return;
-      }
-
-      // Watch is reachable - connect and check permissions
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
-
-      if (connection is! AppleWatchDeviceConnection) {
-        Logger.debug('Device is not an Apple Watch connection');
-        return;
-      }
-
-      // Check permission and try to start recording immediately
-      final bool recordingStarted = await connection.checkPermissionAndStartRecording();
-
-      if (!recordingStarted) {
-        await _showMicrophonePermissionPage(connection);
-        if (!mounted) return;
-      } else {
-        await _completeAppleWatchOnboarding(device, provider);
-        if (!mounted) return;
-      }
-    } catch (e) {
-      Logger.debug('Error handling Apple Watch onboarding: $e');
-      if (!mounted) return;
-      OmiFeedback.error(context, context.l10n.errorConnectingAppleWatch(readableError(e)));
-    }
-  }
-
-  /// Show bottom sheet when Apple Watch is not reachable
-  Future<void> _showWatchNotReachableBottomSheet(String deviceId) async {
-    final provider = Provider.of<OnboardingProvider>(context, listen: false);
-    final device = provider.deviceList.firstWhereOrNull((d) => d.id == deviceId);
-    if (device == null) {
-      Logger.debug('Device with id $deviceId not found in provider list.');
-      return;
-    }
-
-    await AppleWatchSetupBottomSheet.show(
-      context,
-      sheet: AppleWatchSetupBottomSheet(
-        deviceId: deviceId,
-        onConnected: () async {
-          await _handleAppleWatchOnboarding(device, provider);
-        },
-      ),
-    );
-  }
-
-  Future<void> _showMicrophonePermissionPage(AppleWatchDeviceConnection connection) async {
-    final provider = Provider.of<OnboardingProvider>(context, listen: false);
-    final device = provider.deviceList.firstWhereOrNull((d) => d.id == connection.device.id);
-    if (device == null) {
-      Logger.debug('Device with id ${connection.device.id} not found in provider list.');
-      return;
-    }
-
-    await Navigator.of(context).push(
-      omiPageRoute(
-        builder: (context) => AppleWatchPermissionPage(
-          connection: connection,
-          onPermissionGranted: () async {
-            await _completeAppleWatchOnboarding(device, provider);
-          },
-        ),
-      ),
-    );
-    if (!mounted) return;
-  }
-
-  Future<void> _completeAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
-    try {
-      provider.deviceId = device.id;
-      provider.deviceName = device.name;
-      provider.isConnected = true;
-      provider.isClicked = false;
-      provider.connectingToDeviceId = null;
-
-      await provider.deviceProvider?.scanAndConnectToDevice();
-
-      if (!mounted) return;
-
-      // Show firmware warning if needed
-      await _showFirmwareWarningIfNeeded(device);
-
-      if (!mounted) return;
-
-      if (widget.isFromOnboarding) {
-        widget.goNext();
-      } else {
-        if (mounted) Navigator.pop(context);
-      }
-    } catch (e) {
-      Logger.debug('Error completing Apple Watch onboarding: $e');
-    }
-  }
-
-  Future<void> _showFirmwareWarningIfNeeded(BtDevice device) async {
-    final warningMessage = device.getFirmwareWarningMessage();
-    if (warningMessage.isEmpty) {
-      return; // No warning needed for this device type
-    }
-
-    // Critical firmware warnings (e.g. unsupported encrypted firmware) always show,
-    // regardless of prior acknowledgment. Only skip for non-critical compatibility notes.
-    final isCritical = device.type == DeviceType.bee && device.isBeeFirmwareUnsupported;
-
-    if (!isCritical) {
-      final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-      final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey);
-      if (alreadyAcknowledged) {
-        return; // User already acknowledged this warning
-      }
-    }
-
-    if (!mounted) return;
-
-    // Acknowledge-only: one "I Understand". A critical warning cannot be silenced; a compatibility
-    // note offers "Don't show again".
-    if (isCritical) {
-      await showOmiAlert(
-        context,
-        title: device.getFirmwareWarningTitle(),
-        message: warningMessage,
-        okLabel: context.l10n.iUnderstand,
-        barrierDismissible: false,
-      );
-      return;
-    }
-
-    var dontShowAgain = false;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => OmiDialogCard(
-          title: device.getFirmwareWarningTitle(),
-          message: warningMessage,
-          content: OmiCheckboxRow(
-            label: dialogContext.l10n.dontShowAgain,
-            value: dontShowAgain,
-            onChanged: (value) => setDialogState(() => dontShowAgain = value),
-          ),
-          actions: [
-            OmiDialogAction(
-              label: dialogContext.l10n.iUnderstand,
-              isDefault: true,
-              onPressed: () {
-                if (dontShowAgain) {
-                  final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-                  SharedPreferencesUtil().saveBool(prefKey, true);
-                }
-                Navigator.pop(dialogContext);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showOffline(BtDevice device) {
-    OmiFeedback.error(
-      context,
-      context.l10n.deviceOfflineWakeHint(device.name),
-      actionLabel: context.l10n.tryAgain,
-      onAction: widget.onRescan == null ? null : () => unawaited(widget.onRescan!()),
-    );
+  @override
+  void didUpdateWidget(FoundDevices oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _discovery
+      ..isFromOnboarding = widget.isFromOnboarding
+      ..goNext = widget.goNext
+      ..onRescan = widget.onRescan;
   }
 
   @override
@@ -319,12 +104,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               if (!provider.isConnected) ..._devicesList(provider),
               if (provider.isConnected)
                 Text(
-                  () {
-                    final sameNameCount = provider.visibleDeviceList.where((d) => d.name == provider.deviceName).length;
-                    return sameNameCount > 1
-                        ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
-                        : provider.deviceName;
-                  }(),
+                  discoveryDeviceLabel(provider, provider.deviceName, provider.deviceId),
                   textAlign: TextAlign.center,
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
@@ -363,39 +143,8 @@ class _FoundDevicesState extends State<FoundDevices> {
       bool isConnecting = provider.connectingToDeviceId == device.id;
       final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
-      final label = () {
-        final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
-        return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
-      }();
-      final onTap = !provider.isClicked
-          ? () async {
-              OmiHaptics.selection();
-              if (isOfflineSavedDevice) {
-                _showOffline(device);
-                return;
-              }
-              if (device.type == DeviceType.appleWatch) {
-                await _handleAppleWatchOnboarding(device, provider);
-              } else if (device.type == DeviceType.raybanMeta) {
-                await _handleRayBanMetaOnboarding(device, provider);
-              } else {
-                // Handle other devices
-                await provider.handleTap(
-                  device: device,
-                  isFromOnboarding: widget.isFromOnboarding,
-                  goNext: widget.goNext,
-                );
-
-                if (!mounted) return;
-
-                // Show firmware warning after successful connection
-                if (provider.isConnected) {
-                  final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
-                  await _showFirmwareWarningIfNeeded(connectedDevice);
-                }
-              }
-            }
-          : null;
+      final label = discoveryDeviceLabel(provider, device.name, device.id);
+      final onTap = !provider.isClicked ? () => _discovery.tap(device) : null;
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.xs),
         child: Semantics(

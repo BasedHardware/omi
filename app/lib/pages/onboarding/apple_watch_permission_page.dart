@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
@@ -18,8 +19,55 @@ class AppleWatchPermissionPage extends StatefulWidget {
 class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
   bool _permissionRequested = false;
 
+  /// A native row's request is running; like the classic button's spinner, it blocks a second tap.
+  bool _working = false;
+
+  Future<void> _once(Future<void> Function() request) async {
+    if (_working) return;
+    setState(() => _working = true);
+    try {
+      await request();
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.appleWatchSetup,
+      fallback: _classic(context),
+      toolbar: [
+        NativeRow('watch_permission_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('watch_permission', [
+          NativeRow(
+            'watch_permission_status',
+            _permissionRequested ? l10n.permissionRequestedExclaim : l10n.microphonePermission,
+            subtitle: _permissionRequested ? l10n.permissionGrantedNow : l10n.needMicrophonePermission,
+            kind: 'label',
+            symbol: 'mic',
+          ),
+        ]),
+        NativeSection('watch_permission_actions', [
+          if (!_permissionRequested)
+            NativeRow('watch_permission_grant', l10n.grantPermissionButton,
+                enabled: !_working, action: (_) => _once(_requestPermission))
+          else ...[
+            NativeRow('watch_permission_continue', l10n.continueButton,
+                enabled: !_working, action: (_) => _once(_continueAndStartRecording)),
+            NativeRow('watch_permission_help', l10n.needHelp,
+                symbol: 'questionmark.circle', action: (_) => _showHelpDialog()),
+          ],
+        ]),
+      ],
+    );
+  }
+
+  Widget _classic(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(

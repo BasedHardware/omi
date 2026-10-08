@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
@@ -15,11 +16,22 @@ import 'package:omi/ui/ui.dart';
 /// builds without the Meta toolkit — an honest explanation of audio-only
 /// mode. Pops with `true` when the glasses are ready to connect.
 class RayBanMetaSetupSheet extends StatefulWidget {
-  const RayBanMetaSetupSheet({super.key});
+  const RayBanMetaSetupSheet({super.key, this.native = false, @visibleForTesting this.host});
+
+  /// Draws the native presentation, with the classic steps in the shared shell as its fallback. The
+  /// same State owns the host checks, the registration poll and the pop result either way.
+  final bool native;
+
+  /// The Meta toolkit bridge; null uses the app's [RayBanMetaHostAPI].
+  final RayBanMetaHostAPI? host;
 
   /// Returns true when setup finished and the device is ready to connect.
   static Future<bool> show(BuildContext context) async {
-    final ready = await showOmiSheet<bool>(context: context, builder: (_) => const RayBanMetaSetupSheet());
+    final ready = await showOmiSheet<bool>(
+      context: context,
+      builder: (_) => const RayBanMetaSetupSheet(),
+      nativeBuilder: (_) => const RayBanMetaSetupSheet(native: true),
+    );
     return ready == true;
   }
 
@@ -30,11 +42,14 @@ class RayBanMetaSetupSheet extends StatefulWidget {
 enum _SetupStep { loading, audioOnly, register, waitingForMetaAi, cameraPermission, ready }
 
 class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
-  final RayBanMetaHostAPI _host = RayBanMetaHostAPI();
+  late final RayBanMetaHostAPI _host = widget.host ?? RayBanMetaHostAPI();
   _SetupStep _step = _SetupStep.loading;
   Timer? _registrationPoll;
   bool _refreshing = false;
   bool _completed = false;
+
+  /// A native step button's request is running; a second tap waits for it, as the classic button does.
+  bool _working = false;
 
   @override
   void initState() {
@@ -110,6 +125,68 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.native) return _classic(context);
+    final l10n = context.l10n;
+    final busy = [_SetupStep.loading, _SetupStep.ready, _SetupStep.waitingForMetaAi].contains(_step);
+    return IosNativeSurface(
+      title: l10n.connectRayBanMeta,
+      loading: busy,
+      fallback: OmiSheetScaffold(child: _classic(context)),
+      toolbar: [
+        NativeRow('rayban_setup_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [_nativeStep(context)],
+    );
+  }
+
+  /// The current step as one section: its copy as label rows, then its buttons, which call the same
+  /// handlers and pop the same results as the classic step.
+  NativeSection _nativeStep(BuildContext context) {
+    final l10n = context.l10n;
+    NativeRow text(String id, String title) => NativeRow(id, title, kind: 'label');
+    NativeRow button(String id, String title, FutureOr<void> Function() onPressed) =>
+        NativeRow(id, title, enabled: !_working, action: (_) async {
+          if (_working) return;
+          setState(() => _working = true);
+          try {
+            await onPressed();
+          } finally {
+            if (mounted) setState(() => _working = false);
+          }
+        });
+    void close(bool ready) => Navigator.of(context).pop(ready);
+    return switch (_step) {
+      _SetupStep.loading || _SetupStep.ready => NativeSection('rayban_setup_loading', [
+          text('rayban_setup_title', l10n.connectRayBanMeta),
+        ]),
+      _SetupStep.audioOnly => NativeSection('rayban_setup_audio_only', [
+          text('rayban_setup_title', l10n.raybanMetaAudioOnlyTitle),
+          text('rayban_setup_explanation', l10n.raybanMetaAudioOnlyExplanation),
+          text('rayban_setup_note', l10n.raybanMetaMusicPauseNote),
+          button('rayban_setup_continue', l10n.raybanMetaContinue, () => close(true)),
+          button('rayban_setup_cancel', l10n.cancel, () => close(false)),
+        ]),
+      _SetupStep.register => NativeSection('rayban_setup_register', [
+          text('rayban_setup_title', l10n.connectRayBanMeta),
+          text('rayban_setup_explanation', l10n.raybanMetaSetupDescription),
+          button('rayban_setup_open_meta_ai', l10n.raybanMetaOpenMetaAI, _startRegistration),
+          button('rayban_setup_cancel', l10n.cancel, () => close(false)),
+        ]),
+      _SetupStep.waitingForMetaAi => NativeSection('rayban_setup_waiting', [
+          text('rayban_setup_title', l10n.connectRayBanMeta),
+          text('rayban_setup_explanation', l10n.raybanMetaWaitingForMetaAI),
+          button('rayban_setup_check_again', l10n.raybanMetaCheckAgain, _refreshStep),
+        ]),
+      _SetupStep.cameraPermission => NativeSection('rayban_setup_camera', [
+          text('rayban_setup_title', l10n.raybanMetaAllowCamera),
+          text('rayban_setup_explanation', l10n.raybanMetaCameraExplanation),
+          button('rayban_setup_allow_camera', l10n.raybanMetaAllowCamera, _requestCameraPermission),
+          button('rayban_setup_not_now', l10n.notNow, () => close(true)),
+        ]),
+    };
+  }
+
+  Widget _classic(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xl),
       child: Column(

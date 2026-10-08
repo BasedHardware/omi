@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/device_guide.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/onboarding/find_device/device_discovery_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/device_pairing_sheet.dart';
@@ -20,10 +22,13 @@ class ConnectionGuideSheet extends StatelessWidget {
       context: context,
       title: context.l10n.connectionGuide,
       builder: (_) => const ConnectionGuideSheet(),
+      nativeBuilder: (_) => const _NativeConnectionGuide(),
     );
   }
 
-  List<DeviceGuideProduct> _buildDevices(BuildContext context) {
+  /// The guide's devices, in the order both presentations show them.
+  @visibleForTesting
+  static List<DeviceGuideProduct> products(BuildContext context) {
     final l10n = context.l10n;
     return [
       DeviceGuideProduct(
@@ -103,37 +108,43 @@ class ConnectionGuideSheet extends StatelessWidget {
     ];
   }
 
-  void _onDeviceTapped(BuildContext context, DeviceGuideProduct product) {
+  static void _onDeviceTapped(BuildContext context, DeviceGuideProduct product) {
     PlatformManager.instance.analytics.connectionGuideDeviceTapped(product.id);
     if (product.id == 'rayban_meta') {
+      Widget picker(BuildContext sheetContext, {bool native = false}) => RayBanMetaInputPickerSheet(
+            native: native,
+            onConnected: () {
+              Navigator.of(sheetContext).pop();
+              Navigator.of(context).pop();
+            },
+          );
       showOmiSheet<void>(
         context: context,
         title: context.l10n.rayBanMetaMicPickerTitle,
-        builder: (sheetContext) => RayBanMetaInputPickerSheet(
-          onConnected: () {
-            Navigator.of(sheetContext).pop();
-            Navigator.of(context).pop();
-          },
-        ),
+        builder: (sheetContext) => picker(sheetContext),
+        nativeBuilder: (sheetContext) => picker(sheetContext, native: true),
       );
       return;
     }
+    Widget pairing(BuildContext sheetContext, {bool native = false}) => DevicePairingSheet(
+          product: product,
+          native: native,
+          onDismissAll: () {
+            PlatformManager.instance.analytics.connectionGuideDismissed(product.id);
+            Navigator.of(sheetContext).pop();
+            Navigator.of(context).pop();
+          },
+        );
     showOmiSheet<void>(
       context: context,
-      builder: (sheetContext) => DevicePairingSheet(
-        product: product,
-        onDismissAll: () {
-          PlatformManager.instance.analytics.connectionGuideDismissed(product.id);
-          Navigator.of(sheetContext).pop();
-          Navigator.of(context).pop();
-        },
-      ),
+      builder: (sheetContext) => pairing(sheetContext),
+      nativeBuilder: (sheetContext) => pairing(sheetContext, native: true),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final devices = _buildDevices(context);
+    final devices = products(context);
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
       child: SingleChildScrollView(
@@ -198,6 +209,54 @@ class ConnectionGuideSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The guide as a native list: one navigation row per product, with its bundled art as the
+/// thumbnail, opening the same pairing sheet (or, for Ray-Ban Meta, the microphone picker).
+class _NativeConnectionGuide extends StatefulWidget {
+  const _NativeConnectionGuide();
+
+  @override
+  State<_NativeConnectionGuide> createState() => _NativeConnectionGuideState();
+}
+
+class _NativeConnectionGuideState extends State<_NativeConnectionGuide> {
+  late final NativeAssetUris _images = NativeAssetUris(() {
+    if (mounted) setState(() {});
+  });
+
+  @override
+  void dispose() {
+    _images.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.connectionGuide,
+      fallback: OmiSheetScaffold(title: l10n.connectionGuide, child: const ConnectionGuideSheet()),
+      toolbar: [
+        NativeRow('guide_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('guide_products', [
+          for (final product in ConnectionGuideSheet.products(context))
+            NativeRow(
+              'guide_product:${product.id}',
+              product.name,
+              kind: 'navigation',
+              imageUri: nativeImageUri(_images[product.localImagePath]),
+              action: (_) {
+                OmiHaptics.selection();
+                ConnectionGuideSheet._onDeviceTapped(context, product);
+              },
+            ),
+        ]),
+      ],
     );
   }
 }

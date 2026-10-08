@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -12,11 +13,20 @@ class AppleWatchSetupBottomSheet extends StatefulWidget {
   final String deviceId;
   final VoidCallback? onConnected;
 
-  const AppleWatchSetupBottomSheet({super.key, required this.deviceId, this.onConnected});
+  const AppleWatchSetupBottomSheet({super.key, required this.deviceId, this.onConnected, this.native = false});
+
+  /// Draws the native presentation, with this sheet's classic content in the shared shell as its
+  /// fallback. The same State owns the host checks either way.
+  final bool native;
 
   /// Presents [sheet] in the shared sheet shell (docs/ux-contract.md §2).
   static Future<void> show(BuildContext context, {required AppleWatchSetupBottomSheet sheet}) {
-    return showOmiSheet<void>(context: context, builder: (_) => sheet);
+    return showOmiSheet<void>(
+      context: context,
+      builder: (_) => sheet,
+      nativeBuilder: (_) => AppleWatchSetupBottomSheet(
+          key: sheet.key, deviceId: sheet.deviceId, onConnected: sheet.onConnected, native: true),
+    );
   }
 
   @override
@@ -57,6 +67,40 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.native) return _classic(context);
+    final l10n = context.l10n;
+    final installed = _isAppInstalled != false;
+    return IosNativeSurface(
+      title: l10n.appleWatchSetup,
+      loading: _isLoading,
+      loadingLabel: l10n.checkingAppleWatch,
+      fallback: OmiSheetScaffold(child: _classic(context)),
+      toolbar: [
+        NativeRow('watch_setup_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('watch_setup', [
+          if (_isLoading)
+            NativeRow('watch_setup_checking', l10n.checkingAppleWatch, kind: 'label', symbol: 'applewatch')
+          else
+            NativeRow(
+              'watch_setup_status',
+              installed ? l10n.openOmiOnAppleWatch : l10n.installOmiOnAppleWatch,
+              subtitle: installed ? l10n.openOmiOnAppleWatchDescription : l10n.installOmiOnAppleWatchDescription,
+              kind: 'label',
+              symbol: 'applewatch',
+            ),
+        ]),
+        NativeSection('watch_setup_actions', [
+          NativeRow('watch_setup_primary', _getPrimaryButtonText(context),
+              enabled: !_isLoading && !_isChecking, action: (_) => _handlePrimaryAction()),
+          NativeRow('watch_setup_cancel', l10n.cancel, action: (_) => Navigator.of(context).pop()),
+        ]),
+      ],
+    );
+  }
+
+  Widget _classic(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xl),
       child: Column(
