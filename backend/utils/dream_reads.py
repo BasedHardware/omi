@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from database import review_store
 from database import conversations, action_items, users, candidates, screen_activity, dream_store
-from utils.entity_pages import _facts, resolve_entity
+from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from models.product_memory import MemoryAccessPolicy
