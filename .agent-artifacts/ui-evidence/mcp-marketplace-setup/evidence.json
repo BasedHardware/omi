@@ -35,6 +35,13 @@
       "description": "Native accessibility Scroll Down reaches the remaining 200% setup content and Remove action. Escape closes the sheet without removing its configuration. The QA-only text preference was restored afterward.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "006-desktop-macos-marketplace-clean-connected.png",
+      "platform": "desktop-macos",
+      "description": "After unlocking, clean named-app source revision 7bac42d1b6 replays actual Install to mcp-setup-qa-5, explicit loopback OAuth and one responding tool. Escape returns to Apps with the installed entry retained; production loader/client also complete qa_read. No real provider account or credential is involved.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
