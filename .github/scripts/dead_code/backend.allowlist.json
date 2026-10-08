@@ -43,6 +43,10 @@
     {
       "path": "backend/utils/llm/episode_writer.py",
       "reason": "The legacy writer and exclusive retry/baseline factories are removed. backend/testing/episode_notes/selection.py still calls episode_budget_exceeded for the synthetic selection experiment and deterministic baseline admission."
+    },
+    {
+      "path": "backend/utils/conversations/episode_evidence.py",
+      "reason": "Production capture and claim validation were removed with the legacy writer. backend/testing/episode_notes/prompts.py still imports EvidenceItem and render_episode_evidence for synthetic evaluation; runner.py imports restore_episode_claim_ids. Retain these evaluation adapters without restoring production capture."
     }
   ]
 }
