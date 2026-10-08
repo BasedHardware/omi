@@ -3662,3 +3662,6 @@ PCM semantics; a missing duration cannot support a new positive or negative.
 Missing owner-vector publication is isolated in `database/owner_profile_updates.py`.
 Both new identity persistence helpers pin the customer data plane and read its
 account-deletion marker in the same transaction; no compute-plane fallback is used.
+
+The late-audio retry excludes both `phone` and `phone_call`, as well as desktop,
+to preserve channel-authored identity and the free-desktop processing boundary.

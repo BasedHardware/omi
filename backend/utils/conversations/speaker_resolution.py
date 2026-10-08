@@ -926,7 +926,7 @@ def refresh_completed_speaker_identity(uid: str, conversation_id: str) -> bool:
             or raw.get('deleted')
             or raw.get('discarded')
             or raw.get('is_locked')
-            or raw.get('source') in ('desktop', 'phone')
+            or raw.get('source') in ('desktop', 'phone', 'phone_call')
             or not raw.get('private_cloud_sync_enabled')
             or raw.get('updated_at') is None
             or (raw.get('speaker_resolution') or {}).get('status') == 'resolved'

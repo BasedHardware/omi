@@ -1,6 +1,7 @@
 """Finalized transcript identity survives a missing source-frame receipt."""
 
 import numpy as np
+import pytest
 from datetime import datetime, timezone, timedelta
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
@@ -68,6 +69,22 @@ def test_late_audio_retry_persists_identity_without_processing(env, monkeypatch)
     assert stage.refresh_completed_speaker_identity('u1', 'c1')
     assert writes[0][0]['transcript_segments'][0]['is_user'] is True
     assert writes[0][1]['expected_updated_at'] == raw['updated_at']
+
+
+@pytest.mark.parametrize('source', ['desktop', 'phone', 'phone_call'])
+def test_late_audio_retry_preserves_channel_authored_identity(env, monkeypatch, source):
+    conversation = _capture_shifted_conversation([0, 0])
+    raw = conversation.model_dump()
+    raw.update(status='completed', source=source, updated_at=conversation.created_at)
+    raw['transcript_segments'][0]['is_user'] = True
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', lambda *a: raw)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('channel-authored identity must not enter the late acoustic pass')
+
+    monkeypatch.setattr(stage, 'resolve_speakers_for_processing', forbidden)
+    assert not stage.refresh_completed_speaker_identity('u1', 'c1')
+    assert raw['transcript_segments'][0]['is_user'] is True
 
 
 def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch):
