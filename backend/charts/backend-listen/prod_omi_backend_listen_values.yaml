@@ -200,6 +200,10 @@ env:
     value: "cohort"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
+  - name: DREAM_AGENT_MODE
+    value: 'shadow'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED

@@ -236,10 +236,21 @@ async def run_pass(uid, *, caps=None, turn=None):
     return report
 
 
+DRAIN_TIMEOUT_SECONDS = 120
+
+
 async def drain(*, limit=100):
     if mode() == 'off':
         return []
     results = []
-    for uid in await run_blocking(db_executor, dream_store.candidates, limit=limit):
-        results.append(await run_pass(uid))
+    try:
+        async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
+            for uid in await run_blocking(db_executor, dream_store.candidates, limit=max(0, min(limit, 100))):
+                if mode() == 'off':
+                    break
+                results.append(await run_pass(uid))
+    except TimeoutError:
+        # Cancellation leaves any in-flight lease/reservation intact. Offloaded
+        # storage may still settle; never admit another pass for that user.
+        results.append({'status': 'deadline'})
     return results
