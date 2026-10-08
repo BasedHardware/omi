@@ -1133,6 +1133,36 @@ void main() {
     expect(resumed.effects.whereType<BleStreamStart>(), isEmpty);
   });
 
+  test('closing the tutorial keeps a live pendant live when Transcribe Later was off (#20776)', () {
+    final idle = CaptureCoordinatorState.idle();
+    var state = transitionCapture(idle, DeviceStartRequested(device: pendant), environment(idle)).state;
+    expect(state.phase, CapturePhase.pendantLive);
+    state = transitionCapture(state, const OnboardingBatchChanged(suspended: true), environment(state)).state;
+
+    final closed = transitionCapture(state, const OnboardingBatchChanged(suspended: false), environment(state));
+
+    expect(closed.state.phase, CapturePhase.pendantLive);
+    expect(closed.state.active?.mode, CaptureTransport.live);
+  });
+
+  test('closing the tutorial turns a suspended Transcribe Later back on', () {
+    final idle = CaptureCoordinatorState.idle();
+    var state = transitionCapture(idle, DeviceStartRequested(device: pendant), environment(idle, batch: true)).state;
+    expect(state.phase, CapturePhase.pendantBatchLive);
+    state =
+        transitionCapture(state, const OnboardingBatchChanged(suspended: true), environment(state, batch: true)).state;
+    expect(state.phase, CapturePhase.pendantLive);
+
+    final closed = transitionCapture(
+      state,
+      const OnboardingBatchChanged(suspended: false),
+      environment(state, batchSuspended: true),
+    );
+
+    expect(closed.state.phase, CapturePhase.pendantBatchLive);
+    expect(closed.state.active?.mode, CaptureTransport.batch);
+  });
+
   test('interrupted phone user pause emits mute and mic stop and survives interruption end', () {
     final model = SequenceModel();
     model.step(const ScriptStep(2));

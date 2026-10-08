@@ -1745,7 +1745,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       BatchModeSetRequested() => _reduceBatchMode(state, event, env),
       TranscriptionSettingsChanged() => CaptureTransition(state, const [RunStage(TranscriptionSettingsStage())]),
       RecordProfileChanged() => CaptureTransition(state, const [RunStage(RecordProfileStage())]),
-      OnboardingBatchChanged() => _reduceOnboardingBatch(state, event),
+      OnboardingBatchChanged() => _reduceOnboardingBatch(state, event, env),
       LaunchRecovery() => _reduceLaunchRecovery(state, event, env),
     };
 
@@ -2851,8 +2851,16 @@ CaptureTransition _reduceBatchMode(CaptureCoordinatorState state, BatchModeSetRe
   return CaptureTransition(state.copyWith(phase: phase, active: () => active, sessionSeq: seq), effects);
 }
 
-CaptureTransition _reduceOnboardingBatch(CaptureCoordinatorState state, OnboardingBatchChanged event) {
+CaptureTransition _reduceOnboardingBatch(
+  CaptureCoordinatorState state,
+  OnboardingBatchChanged event,
+  CaptureEnvironment env,
+) {
   // Suspending flips batchMode off (pendant -> live), restoring flips it on.
+  // Restore only what the tutorial suspended, as the stage body does (#20776).
+  if (!event.suspended && !env.batchModeSuspendedForOnboarding) {
+    return CaptureTransition(state, [RunStage(OnboardingBatchStage(suspended: event.suspended))]);
+  }
   var phase = state.phase;
   var active = state.active;
   final toBatch = !event.suspended;
