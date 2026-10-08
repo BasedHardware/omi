@@ -19,6 +19,7 @@ from models.review import ReviewChange
 class MemoryEdit(BaseModel):
     memory_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     content: str = Field(min_length=1, max_length=2000)
+    duplicate_memory_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[^/]+$')
 
 
 def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_key: str) -> ReviewChange:
@@ -36,7 +37,7 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
         blocked = marker.get(transaction=tx).exists
         if raw:
             data = store.require_doc(uid, raw)
-            if data['edit_key'] != edit_key or data['memory_edit'] != edit.model_dump():
+            if data['edit_key'] != edit_key or data['memory_edit'] != edit.model_dump(exclude_none=True):
                 raise store.ReviewConflict('Change identity conflict')
             return data
         if blocked or current is None:
@@ -47,7 +48,7 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
             'change': change.model_dump(mode='python'),
             'created_at': change.created_at,
             'edit_key': edit_key,
-            'memory_edit': edit.model_dump(),
+            'memory_edit': edit.model_dump(exclude_none=True),
             'before': current.model_dump(mode='python'),
             'phase': 'applying',
         }

@@ -12,6 +12,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true`
+combines encrypted per-user vocabulary spellings with existing live keyterms;
+Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses the
+existing terms with fallback telemetry. All defaults remain off. See
+[the dream runbook](runbooks/dream-agent.md).
+
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
 when its scheduled window makes continuity hydration unnecessary.
@@ -3590,3 +3596,15 @@ level migrations. Standard protection stores compressed JSON. Both segment and
 conversation fields are excluded from OpenAPI, JSON responses, list/detail dict
 views and integration/webhook payloads; backend Python
 models retain the evidence before relevance and for offline reads. No backfill runs.
+
+
+### Relevance decision analytics
+
+After successful processing persistence, the final relevance decision is enqueued
+through the shared backend PostHog helper as `Relevance Decision Recorded`.
+Properties are only `conversation_id`, enum-like `reason`, optional `arm`, and
+boolean `discarded`; no transcript or user content is emitted. Deferred desktop,
+deterministic minimum, and enriched processing each emit once per stored decision,
+after the persistence fence. Capture failures never fail processing. This bridge
+supports per-conversation joins to opens going forward (EXP-004 closure); it does
+not backfill the stopped keep-all sample or change intake, promotion, or relevance.

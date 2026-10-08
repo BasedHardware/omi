@@ -190,9 +190,6 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: CONVERSATION_SUMMARIZED_APP_IDS
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
@@ -351,9 +348,6 @@ environment_shared:
           value: 'on'
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
-          category: rollout
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
           category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
@@ -553,9 +547,6 @@ environment_shared:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
@@ -792,9 +783,6 @@ environment_shared:
             category: rollout
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
-            category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout

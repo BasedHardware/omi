@@ -260,6 +260,11 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
     monkeypatch.setattr(processor, 'trigger_conversation_apps', MagicMock())
     monkeypatch.setattr(processor, 'submit_with_context', MagicMock())
 
+    def update_conversation(uid, conversation_id, updates):
+        harness.rows[path(conversation_id, uid)].update(updates)
+
+    monkeypatch.setattr(processor.conversations_db, 'update_conversation', update_conversation)
+
     def persist(uid, payload):
         if persisted:
             harness.rows[path(payload['id'], uid)].update(payload)

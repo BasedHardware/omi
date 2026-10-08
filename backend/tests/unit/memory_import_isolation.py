@@ -265,7 +265,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     _set("pinecone", pinecone_mod)
 
     auth_mod = AutoMockModule("database.auth")
-    auth_mod.get_user_name = lambda uid: "Test User"
+    auth_mod.get_user_name = lambda uid, use_default=True: "Test User"
     auth_mod.get_current_user_uid = MagicMock()
     auth_mod.with_rate_limit = lambda fn, *args, **kwargs: fn
     _set("database.auth", auth_mod)

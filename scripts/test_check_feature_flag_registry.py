@@ -100,6 +100,20 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(kind="posthog")]))
         self.assertIn("posthog requires row expected|absent", "\n".join(self.errors()))
 
+    def test_ship_decision_is_accepted_and_rendered(self) -> None:
+        self.write("backend/docs/experiments/EXP-fixture.md", "# Closure\n")
+        self.write("config/feature-flags.yaml", self.yaml([flag(
+            lifecycle="experiment", decision="ship", review_by="2020-01-01", prereg="backend/docs/experiments/EXP-fixture.md",
+        )]))
+        self.assertEqual(self.errors(), [])
+        registry = load_registry(self.root / "config/feature-flags.yaml")
+        output = render(self.root, registry, date(2026, 10, 8))
+        self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
+
+    def test_unknown_decision_is_rejected(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(decision="unknown")]))
+        self.assertIn("invalid decision", "\n".join(self.errors()))
+
     def test_duplicates_across_flag_alias_ignore_and_retired_are_rejected(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(aliases=["OLD_ENABLED"])], ignore=[{"key": "OLD_ENABLED", "reason": "Test"}], retired=[{"key": "EXAMPLE_ENABLED", "kind": "posthog", "retired": "2026-09-24", "reason": "Test", "posthog": {"row": "delete"}}]))
         errors = "\n".join(self.errors())
