@@ -46,8 +46,6 @@ def test_same_integer_id_in_two_scopes_cannot_label_other_short_reply():
     resolution = resolve_conversation_speakers(
         segments, {'owner': np.array([1.0, 0.0]), 'other': np.array([0.0, 1.0])}, voiceprints={'user': [1.0, 0.0]}
     )
-    assert resolution.speaker_ids['short'] == resolution.speaker_ids['other']
-    assert resolution.speaker_ids['short'] != resolution.speaker_ids['owner']
     conversation = Conversation(
         id='merged',
         started_at=None,
@@ -60,6 +58,8 @@ def test_same_integer_id_in_two_scopes_cannot_label_other_short_reply():
         conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
     )
     assert [s['is_user'] for s in conversation.model_dump()['transcript_segments']] == [True, False, False]
+    assert resolution.speaker_ids['short'] == resolution.speaker_ids['other']
+    assert resolution.speaker_ids['short'] != resolution.speaker_ids['owner']
 
 
 @pytest.mark.parametrize('speaker_id', [0, '0'])
