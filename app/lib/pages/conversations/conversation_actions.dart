@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
@@ -232,6 +233,49 @@ Future<void> moveConversationToFolder(BuildContext context, ServerConversation c
 /// The actions a conversation row's long-press offers.
 enum ConversationRowAction { open, star, move, share, recordings, separate, select, delete }
 
+/// The single source of the row menu's actions, shared by the Flutter sheet and the native row menu:
+/// Open, Star or Unstar, Move to Folder, Share, Recordings and Separate… for an event several devices
+/// recorded, Select when [canSelect], and Delete always.
+List<ConversationRowAction> conversationRowActionsFor(ServerConversation conversation, {required bool canSelect}) => [
+      ConversationRowAction.open,
+      ConversationRowAction.star,
+      ConversationRowAction.move,
+      ConversationRowAction.share,
+      if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
+        ConversationRowAction.recordings,
+        ConversationRowAction.separate,
+      ],
+      if (canSelect) ConversationRowAction.select,
+      ConversationRowAction.delete,
+    ];
+
+/// The label the row menu shows for [action].
+String conversationRowActionLabel(
+        AppLocalizations l10n, ServerConversation conversation, ConversationRowAction action) =>
+    switch (action) {
+      ConversationRowAction.open => l10n.open,
+      ConversationRowAction.star => conversation.starred ? l10n.unstarConversation : l10n.starConversation,
+      ConversationRowAction.move => l10n.moveToFolder,
+      ConversationRowAction.share => l10n.share,
+      ConversationRowAction.recordings => l10n.recordings,
+      ConversationRowAction.separate => l10n.captureRecordingSeparate,
+      ConversationRowAction.select => l10n.selectOption,
+      ConversationRowAction.delete => l10n.delete,
+    };
+
+// FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.
+FaIconData _conversationRowActionIcon(ServerConversation conversation, ConversationRowAction action) =>
+    switch (action) {
+      ConversationRowAction.open => FontAwesomeIcons.upRightAndDownLeftFromCenter,
+      ConversationRowAction.star => conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+      ConversationRowAction.move => FontAwesomeIcons.folder,
+      ConversationRowAction.share => FontAwesomeIcons.arrowUpFromBracket,
+      ConversationRowAction.recordings => FontAwesomeIcons.layerGroup,
+      ConversationRowAction.separate => FontAwesomeIcons.codeBranch,
+      ConversationRowAction.select => FontAwesomeIcons.circleCheck,
+      ConversationRowAction.delete => FontAwesomeIcons.trashCan,
+    };
+
 /// Long-press menu of a conversation row: Open, Star / Unstar, Move to Folder, Share, Select
 /// (enters multi-select) and Delete. A row that stands for an event several devices recorded also
 /// offers Recordings and Separate… (design ruling 2026-09-24). Resolves the chosen action, or null
@@ -252,36 +296,20 @@ Future<ConversationRowAction?> showConversationActionsSheet(
     ),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
-      // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.
-      Widget row(ConversationRowAction action, FaIconData icon, String label, {bool destructive = false}) {
+      Widget row(ConversationRowAction action) {
         return OmiSettingsRow(
           key: ValueKey('conversation_action_${action.name}'),
-          leading: FaIcon(icon, size: 18),
-          title: label,
+          leading: FaIcon(_conversationRowActionIcon(conversation, action), size: 18),
+          title: conversationRowActionLabel(l10n, conversation, action),
           showChevron: false,
-          isDestructive: destructive,
+          isDestructive: action == ConversationRowAction.delete,
           onTap: () => Navigator.of(sheetContext).pop(action),
         );
       }
 
       return SingleChildScrollView(
         child: OmiSettingsGroup(
-          children: [
-            row(ConversationRowAction.open, FontAwesomeIcons.upRightAndDownLeftFromCenter, l10n.open),
-            row(
-              ConversationRowAction.star,
-              conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-              conversation.starred ? l10n.unstarConversation : l10n.starConversation,
-            ),
-            row(ConversationRowAction.move, FontAwesomeIcons.folder, l10n.moveToFolder),
-            row(ConversationRowAction.share, FontAwesomeIcons.arrowUpFromBracket, l10n.share),
-            if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
-              row(ConversationRowAction.recordings, FontAwesomeIcons.layerGroup, l10n.recordings),
-              row(ConversationRowAction.separate, FontAwesomeIcons.codeBranch, l10n.captureRecordingSeparate),
-            ],
-            if (canSelect) row(ConversationRowAction.select, FontAwesomeIcons.circleCheck, l10n.selectOption),
-            row(ConversationRowAction.delete, FontAwesomeIcons.trashCan, l10n.delete, destructive: true),
-          ],
+          children: [for (final action in conversationRowActionsFor(conversation, canSelect: canSelect)) row(action)],
         ),
       );
     },

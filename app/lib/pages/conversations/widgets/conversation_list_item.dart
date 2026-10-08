@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -150,37 +149,12 @@ ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool 
       ConversationRowAction.delete => ConversationActionAction.delete,
     };
 
-/// The actions a conversation row offers, with exactly the conditions of [showConversationActionsSheet]:
-/// Star or Unstar, Recordings and Separate… for an event several devices recorded, Select when
-/// [allowSelection] and the row can join a merge, and Delete always.
+/// The actions a conversation row offers: [conversationRowActionsFor], the list the Flutter sheet
+/// shows, with Select when [allowSelection] and the row can join a merge.
 List<ConversationRowAction> conversationRowActions(ConversationProvider provider, ServerConversation conversation,
         {bool allowSelection = true}) =>
-    [
-      ConversationRowAction.open,
-      ConversationRowAction.star,
-      ConversationRowAction.move,
-      ConversationRowAction.share,
-      if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
-        ConversationRowAction.recordings,
-        ConversationRowAction.separate,
-      ],
-      if (allowSelection && provider.isConversationEligibleForMerge(conversation.id)) ConversationRowAction.select,
-      ConversationRowAction.delete,
-    ];
-
-/// The label the row menu shows for [action].
-String conversationRowActionLabel(
-        AppLocalizations l10n, ServerConversation conversation, ConversationRowAction action) =>
-    switch (action) {
-      ConversationRowAction.open => l10n.open,
-      ConversationRowAction.star => conversation.starred ? l10n.unstarConversation : l10n.starConversation,
-      ConversationRowAction.move => l10n.moveToFolder,
-      ConversationRowAction.share => l10n.share,
-      ConversationRowAction.recordings => l10n.recordings,
-      ConversationRowAction.separate => l10n.captureRecordingSeparate,
-      ConversationRowAction.select => l10n.selectOption,
-      ConversationRowAction.delete => l10n.delete,
-    };
+    conversationRowActionsFor(conversation,
+        canSelect: allowSelection && provider.isConversationEligibleForMerge(conversation.id));
 
 /// Runs a chosen row action, with its analytics, from the Flutter sheet or a native row menu.
 Future<void> performConversationRowAction(

@@ -246,6 +246,9 @@ void main() {
     expect(mergingRow.subtitle, _l10n.mergingStatus);
     expect(mergingRow.options, isEmpty);
     expect(mergingRow.projection['enabled'], isFalse);
+    // The mixed-state library must stay on the native view, not just project rows a fallback ignores.
+    expect(find.byType(UiKitView), findsOneWidget);
+    expect(host.created, isNotEmpty);
 
     final presented = _answerPresentations((_) => {'action': 'cancel', 'values': <String, Object?>{}});
     await host.sendFromNative(

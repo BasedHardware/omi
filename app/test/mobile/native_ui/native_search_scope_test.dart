@@ -94,6 +94,7 @@ List<Map> _answerPresentations(Map<String, Object?>? Function(Map snapshot) repl
 void main() {
   late PeopleProvider people;
   late MemoriesProvider memories;
+  late NativeTestHost host;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -102,7 +103,7 @@ void main() {
   });
 
   Future<void> pumpSearch(WidgetTester tester, _Source source, {String? initialQuery}) async {
-    NativeTestHost.install();
+    host = NativeTestHost.install();
     people = PeopleProvider(
         loadPeople: () async => PeopleListResponse(people: [
               _person('p-maya', 'Maya Chen', pinned: true),
@@ -130,6 +131,12 @@ void main() {
       IosNativeSurface.debugDispatchRows(tester.state<State<IosNativeSurface>>(find.byType(IosNativeSurface).last));
 
   NativeRow row(WidgetTester tester, String id) => rows(tester).singleWhere((row) => row.id == id);
+
+  // debugDispatchRows projects even after a fallback, so each state also proves the native view is shown.
+  void expectNative() {
+    expect(find.byType(UiKitView), findsOneWidget);
+    expect(host.created, isNotEmpty);
+  }
 
   Future<void> pickDates(WidgetTester tester) async {
     unawaited(Future.sync(() => row(tester, 'search_date').action!(null)));
@@ -161,6 +168,7 @@ void main() {
     expect(source.searches.last.start, DateTime(2026, 9, 5));
     expect(source.searches.last.end, DateTime(2026, 9, 6, 23, 59, 59, 999, 999));
     expect(row(tester, 'search_date_filter_label').title, contains('–'));
+    expectNative();
 
     // A reversed reply is swapped before it filters.
     _answerPresentations((snapshot) => {
@@ -187,6 +195,7 @@ void main() {
         });
     await pickDates(tester);
     expect(row(tester, 'search_date_filter_label'), isNotNull);
+    expectNative();
 
     final cancelled = _answerPresentations((snapshot) => {'action': 'cancel', 'values': <String, Object?>{}});
     final searches = source.searches.length;
@@ -256,6 +265,7 @@ void main() {
     expect(row(tester, 'search_task_0').symbol, 'checkmark.circle');
     expect(row(tester, 'search_task_1').symbol, 'circle');
     expect(row(tester, 'search_date_filter_label').title, isNotEmpty);
+    expectNative();
 
     unawaited(Future.sync(() => row(tester, 'search_memory_0').action!(null)));
     // Memories open filtered by the searched words, without the date phrase.
@@ -268,6 +278,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(surface(tester).title, _l10n.people);
     expect(surface(tester).searchPlaceholder, _l10n.peopleSearchPlaceholder);
+    expectNative();
     final ids = rows(tester).map((row) => row.id).toList();
     expect(ids, containsAll(['person_p-maya', 'person_p-cs', 'people_filter']));
     expect(ids, isNot(contains('people_select')));
@@ -283,6 +294,7 @@ void main() {
     await surface(tester).search!('cs');
     await tester.pump();
     expect(rows(tester).where((row) => row.id.startsWith('person_')).map((row) => row.id), ['person_p-cs']);
+    expectNative();
 
     await row(tester, 'search_close').action!(null);
     await tester.pump();
