@@ -20,7 +20,8 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.executor import ProviderRegistry
-from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderResponse
+from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderResponse, ProviderFailure
+from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.main import app as gateway_app
 from llm_gateway.routers import dependencies, embeddings, openai_compatible
 from utils.llm import desktop_gemini_gateway as dgg, desktop_gemini_telemetry as telemetry_module
@@ -100,7 +101,16 @@ def test_telemetry_platform_does_not_activate_auth_platform_io(monkeypatch):
 
 
 class AttributionProvider(FakeChatCompletionProvider):
+    capacity_unavailable = False
+
+    async def create_chat_completion(self, request, **kwargs):
+        if self.capacity_unavailable:
+            raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
+        return await super().create_chat_completion(request, **kwargs)
+
     async def stream_chat_completion(self, request, **kwargs):
+        if self.capacity_unavailable:
+            raise ProviderFailure(FailureClass.RESERVED_CAPACITY_UNAVAILABLE)
         yield b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
         yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":2,"total_tokens":14}}\n\n'
         yield b'data: [DONE]\n\n'
@@ -112,8 +122,8 @@ class AttributionProvider(FakeChatCompletionProvider):
         )
 
 
-@pytest.fixture
-def gateway_transport(monkeypatch):
+@pytest.fixture(params=['reserved', 'luna'])
+def gateway_transport(monkeypatch, request):
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-service-token')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.test')
     provider = AttributionProvider(
@@ -124,12 +134,20 @@ def gateway_transport(monkeypatch):
             }
         ]
     )
+    gemini_provider = AttributionProvider(
+        [
+            {
+                'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}],
+                'usage': {'prompt_tokens': 12, 'completion_tokens': 2, 'total_tokens': 14},
+            }
+        ]
+    )
+    gemini_provider.capacity_unavailable = request.param == 'luna'
     monkeypatch.setitem(
         gateway_app.dependency_overrides,
         dependencies.get_provider_registry,
-        # Desktop text now routes to Luna through OpenAI. Embeddings retain
-        # their Gemini provider/model contract, so the fake serves both lanes.
-        lambda: ProviderRegistry({'openai': provider, 'gemini': provider}),
+        # Exercise attribution on both reserved success and Luna fallback.
+        lambda: ProviderRegistry({'openai': provider, 'gemini': gemini_provider}),
     )
     rows = []
 
@@ -139,7 +157,7 @@ def gateway_transport(monkeypatch):
     monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture)
     monkeypatch.setattr(embeddings, 'schedule_attempt_trace', capture)
     monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
-    return rows
+    return rows, request.param
 
 
 @pytest.mark.asyncio
@@ -177,8 +195,13 @@ async def test_gateway_attempts_keep_lane_platform_and_proxy_request_id(monkeypa
                 **attribution
             )
             assert result.gemini_payload['candidates'][0]['content']['parts'][0]['text'] == 'ok'
-    assert len(gateway_transport) == 1
-    row = gateway_transport[0]
+    rows, route = gateway_transport
+    assert len(rows) == (2 if surface != 'embed' and route == 'luna' else 1)
+    for attempt in rows:
+        assert attempt['request_id'] == state.request_id
+        assert attempt['product_lane'] == 'focus'
+        assert attempt['client_platform'] == 'windows'
+    row = rows[-1]
     assert row['request_id'] == state.request_id
     assert row['feature'] == 'desktop_proactivity'
     assert row['app_platform'] == 'desktop'
@@ -191,8 +214,8 @@ async def test_gateway_attempts_keep_lane_platform_and_proxy_request_id(monkeypa
         # unpriced status while retaining usage and attribution.
         assert row['cost_status'] == 'unpriced'
     else:
-        assert row['provider'] == 'openai'
-        assert row['configured_model'] == 'gpt-6-luna'
+        assert row['provider'] == ('openai' if route == 'luna' else 'gemini')
+        assert row['configured_model'] == ('gpt-6-luna' if route == 'luna' else 'gemini-2.5-flash')
         assert row['estimated_cost_micro_usd'] is not None
 
 
