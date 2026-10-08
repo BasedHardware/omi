@@ -65,7 +65,7 @@ import 'app_localizations_zh.dart';
 /// `supportedLocales` list. For example:
 ///
 /// ```dart
-/// import 'l10n/app_localizations.dart';
+/// import 'gen_l10n/app_localizations.dart';
 ///
 /// return MaterialApp(
 ///   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -109,8 +109,7 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -118,8 +117,7 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate =
-      _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -131,8 +129,7 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
-      <LocalizationsDelegate<dynamic>>[
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
     delegate,
     GlobalMaterialLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
@@ -8890,8 +8887,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(
-      String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -18463,12 +18459,6 @@ abstract class AppLocalizations {
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
 
-  /// Header for the calendar capture-gap group in the conversations list
-  ///
-  /// In en, this message translates to:
-  /// **'Not captured ({count})'**
-  String conversationsNotCapturedCount(int count);
-
   /// Title shown on the speech profile page when the user already has a speech profile set up
   ///
   /// In en, this message translates to:
@@ -20651,15 +20641,13 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'You can change this anytime in {settings} › {voiceResponse}'**
-  String deviceOnboardingVoiceReplySettingsHint(
-      String settings, String voiceResponse);
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
 
   /// Footer explaining the complete Settings menu path for replaying the device tutorial
   ///
   /// In en, this message translates to:
   /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
-  String deviceOnboardingAllSetReplayHint(
-      String settings, String deviceSettings, String deviceTutorial);
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
 
   /// Generic fallback name for connected headphones when the system does not provide a device name
   ///
@@ -22233,6 +22221,114 @@ abstract class AppLocalizations {
   /// **'Show on Lock Screen'**
   String get showOnLockScreen;
 
+  /// Shown on the sign-in screen after the backend refused every request because the account's deletion is still in progress
+  ///
+  /// In en, this message translates to:
+  /// **'This account is being deleted. Sign in with another account, or wait a few minutes and try again.'**
+  String get accountDeletionInProgressSignInAgain;
+
+  /// Onboarding setup page title
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up your Omi'**
+  String get onboardingSetupTitle;
+
+  /// Onboarding setup page subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Give Omi a moment to personalize'**
+  String get onboardingSetupSubtitle;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing your workspace'**
+  String get onboardingSetupStepWorkspace;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Tuning transcription to your language'**
+  String get onboardingSetupStepLanguage;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up your memory'**
+  String get onboardingSetupStepMemory;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting your devices'**
+  String get onboardingSetupStepDevices;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Personalizing your experience'**
+  String get onboardingSetupStepPersonalize;
+
+  /// Store rating pre-prompt title shown on the onboarding setup page
+  ///
+  /// In en, this message translates to:
+  /// **'While you wait, has Omi been nice to use?'**
+  String get onboardingRatingPromptTitle;
+
+  /// Store rating pre-prompt body
+  ///
+  /// In en, this message translates to:
+  /// **'Rating us 5 stars really helps us out ❤️'**
+  String get onboardingRatingPromptBody;
+
+  /// Store rating pre-prompt: open the store review sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, I want to support you!'**
+  String get onboardingRatingPromptYes;
+
+  /// Store rating pre-prompt: decline
+  ///
+  /// In en, this message translates to:
+  /// **'Not really'**
+  String get onboardingRatingPromptNo;
+
+  /// Conversation detail badge shown when capture evidence says the recording is incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial recording'**
+  String get partialRecording;
+
+  /// Import source card title for SRT, VTT or TXT transcripts exported from other apps
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript files'**
+  String get importTranscriptFiles;
+
+  /// Subtitle on the transcript-files import card
+  ///
+  /// In en, this message translates to:
+  /// **'Select SRT, VTT or TXT transcripts, or a ZIP of them'**
+  String get importTranscriptFilesDescription;
+
+  /// Error when an import is refused because the user started too many imports in a short time (HTTP 429)
+  ///
+  /// In en, this message translates to:
+  /// **'Too many imports right now. Try again later.'**
+  String get importTooManyAttempts;
+
+  /// Error when the selected import file is over the upload size limit
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large to import.'**
+  String get importFileTooLarge;
+
+  /// Error when the file picked for an import has an extension the importer does not accept
+  ///
+  /// In en, this message translates to:
+  /// **'This file type can\'t be imported.'**
+  String get importUnsupportedFileType;
+
   /// Label for single press button gesture
   ///
   /// In en, this message translates to:
@@ -22282,8 +22378,7 @@ abstract class AppLocalizations {
   String get buttonActionNone;
 }
 
-class _AppLocalizationsDelegate
-    extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -22451,8 +22546,7 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
       'an issue with the localizations generation tool. Please file an issue '
       'on GitHub with a reproducible sample app and the gen-l10n configuration '
       'that was used.');

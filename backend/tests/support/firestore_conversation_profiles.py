@@ -172,7 +172,6 @@ PHOTO_PROFILES = (
     ),
     _profile('persona-create', photo=True),
     _profile('persona-update', photo=True),
-    _profile('mentor-notification', photo=True),
     _profile('goal-context', photo=True, statuses=[['completed']]),
     _profile('fair-use-classification', photo=True, start_date=[FROZEN_NOW]),
     _profile('speaker-prompts', photo=True, start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),

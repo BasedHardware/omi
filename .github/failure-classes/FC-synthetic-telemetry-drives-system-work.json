@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-synthetic-telemetry-drives-system-work",
+  "status": "open",
+  "violated_contract": "A synthetic or placeholder telemetry value (a device that does not expose a signal, e.g. a hardcoded battery level) must not drive system-level work as if it were a real reading. Each synthetic emission triggered a real side effect with OS cost: every 30s fake-battery tick reloaded the iOS widget timeline (2880 identical reloads/day) and refreshed UI state for a value that cannot change.",
+  "canonical_prevention": "Emit synthetic values once per connection for initial state, and gate every side-effecting write (widget timeline reload, notification, persistence) on an actual value change or a real device signal. When a device lacks the signal, the emit-once path is the only path.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/devices/connectors/*.dart",
+    "app/lib/providers/device_provider.dart",
+    "app/lib/services/battery_widget_service.dart"
+  ]
+}

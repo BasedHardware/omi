@@ -230,3 +230,79 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     )
     assert restored.discarded is False
     assert restored.structured.title.startswith('Recording · ')
+
+
+@pytest.mark.parametrize('episode_enabled', [False, True])
+@pytest.mark.parametrize('recovery', [False, True])
+def test_discard_unchanged_and_episode_inputs_not_gathered(stack, processing, monkeypatch, episode_enabled, recovery):
+    from utils.conversations.episode_evidence import EvidenceItem
+
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    conversation = stack.models.CreateConversation(
+        started_at=now, finished_at=now, source='desktop', transcript_segments=[], photos=[]
+    )
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
+    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: episode_enabled)
+    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
+    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
+    monkeypatch.setattr(processing, 'recovery_minimum_terminal_enabled', lambda: True)
+    relevance = Mock(return_value=SimpleNamespace(discard=True, reason='empty', decided_by='rule'))
+    monkeypatch.setattr(processing, 'decide_relevance', relevance)
+    gathered = []
+
+    def inputs(*args, **kwargs):
+        gathered.append(kwargs)
+        kwargs['evidence_items'].append(
+            EvidenceItem(id='screen_frame:f1', source_kind='screen_frame', content='Empty call screen')
+        )
+        return None, None, True, ()
+
+    monkeypatch.setattr(processing, 'rich_notes_inputs', inputs)
+    notes = Mock(return_value=stack.structured.Structured(title='Observed empty call'))
+    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
+    result, discarded = processing._get_structured(
+        'synthetic-uid',
+        'en',
+        conversation,
+        trigger=processing.ProcessingTrigger.SERVER_RECOVERY if recovery else processing.ProcessingTrigger.CAPTURE_END,
+    )
+    relevance.assert_called_once()
+    assert relevance.call_args.kwargs['texts'] == []
+    assert relevance.call_args.kwargs['has_photos'] is False
+    assert relevance.call_args.kwargs['trusted_wake_word'] is False
+    assert discarded is True
+    assert not gathered
+    notes.assert_not_called()
+
+
+def test_episode_inputs_gathered_once_after_keep_decision(stack, processing, monkeypatch):
+    from utils.conversations.episode_evidence import EvidenceItem
+
+    conversation = _blank_capture(stack)
+    events = []
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: True)
+    monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: True)
+    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
+    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
+
+    def keep(**kwargs):
+        events.append('keep')
+        return SimpleNamespace(discard=False, reason='kept')
+
+    def inputs(*args, **kwargs):
+        events.append('gather')
+        kwargs['evidence_items'].append(
+            EvidenceItem(id='screen_frame:f1', source_kind='screen_frame', content='Synthetic screen')
+        )
+        return None, None, True, ()
+
+    def notes(*args, **kwargs):
+        events.append('notes')
+        assert {'speech', 'device_state', 'screen_frame'} == {item.source_kind for item in kwargs['episode_evidence']}
+        return stack.structured.Structured(title='Observed screen')
+
+    monkeypatch.setattr(processing, 'decide_relevance', keep)
+    monkeypatch.setattr(processing, 'rich_notes_inputs', inputs)
+    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
+    _, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
+    assert not discarded and events == ['keep', 'gather', 'notes']

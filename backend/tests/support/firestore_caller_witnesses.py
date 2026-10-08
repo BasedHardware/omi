@@ -34,7 +34,6 @@ import routers.integration as integration_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
-import utils.app_integrations as app_integrations
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
@@ -347,27 +346,6 @@ def _run_daily_summary_test_route(monkeypatch: pytest.MonkeyPatch, capture: Help
     trial(capture, users_router.test_daily_summary, request=None, uid='u1', x_app_platform=None)
 
 
-def _run_mentor_notification(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    # This witness isolates the conversation query, with an entitled recipient.
-    _stub(monkeypatch, app_integrations, 'mentor_plan_allows_evaluation', lambda uid: True)
-    frequency = next(key for key, value in app_integrations.FREQUENCY_TO_BASE_THRESHOLD.items() if value is not None)
-    _stub(monkeypatch, app_integrations, 'get_mentor_notification_frequency', lambda uid: frequency)
-    _stub(monkeypatch, app_integrations.mem_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
-    _stub(monkeypatch, app_integrations.redis_db, 'get_proactive_noti_sent_at', lambda uid, kind: None)
-    _stub(monkeypatch, app_integrations, '_proactive_daily_cap_reached', lambda uid: False)
-    _stub(monkeypatch, app_integrations, '_mentor_gate_debounce_enabled', lambda: False)
-    _stub(monkeypatch, app_integrations, 'get_prompt_memories', lambda uid: ('User', []))
-    _stub(monkeypatch, app_integrations, 'get_user_goals', lambda uid, limit=3: [])
-    _stub(monkeypatch, app_integrations, 'current_date_for_uid', lambda uid: '2026-01-15')
-    _stub(monkeypatch, app_integrations, 'get_app_messages', lambda uid, kind, limit=20: [])
-    _stub(monkeypatch, app_integrations, 'track_usage', lambda *a, **k: contextlib.nullcontext())
-    relevance = SimpleNamespace(is_relevant=True, relevance_score=999.0, context_summary='', reasoning='')
-    _stub(monkeypatch, app_integrations, 'evaluate_relevance', lambda **kwargs: relevance)
-    _stub(monkeypatch, app_integrations, 'generate_embedding', lambda text: [])
-    _stub(monkeypatch, app_integrations, 'query_vectors_by_metadata', lambda *a, **k: [])
-    trial(capture, app_integrations._process_mentor_proactive_notification, 'u1', [{'text': 'hi'}])
-
-
 def _stub_persona(monkeypatch: pytest.MonkeyPatch) -> None:
     _stub(monkeypatch, apps_utils, 'run_blocking', _inline_run_blocking)
     _stub(
@@ -636,14 +614,6 @@ WITNESSES: dict[str, CallerWitness] = {
             ('daily-summary-test',),
             1,
             _run_daily_summary_test_route,
-        ),
-        CallerWitness(
-            'utils/app_integrations.py:_process_mentor_proactive_notification:database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            ('mentor-notification',),
-            1,
-            _run_mentor_notification,
         ),
         CallerWitness(
             'utils/apps.py:generate_persona_prompt:database.conversations.get_conversations',

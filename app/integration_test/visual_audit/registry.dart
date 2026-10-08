@@ -5,12 +5,14 @@ import 'package:omi/ui/ui.dart';
 import 'fakes.dart';
 import 'harness.dart';
 import 'scenarios/apps.dart';
+import 'scenarios/auth.dart';
 import 'scenarios/capture.dart';
 import 'scenarios/chat.dart';
 import 'scenarios/conversation_detail.dart';
 import 'scenarios/conversations.dart';
 import 'scenarios/device.dart';
 import 'scenarios/home.dart';
+import 'scenarios/imports.dart';
 import 'scenarios/memories.dart';
 import 'scenarios/onboarding.dart';
 import 'scenarios/search.dart';
@@ -27,6 +29,7 @@ final auditSuite = AuditSuite(
   scenarios: [
     ...settingsScenarios,
     ...settingsPagesScenarios,
+    ...importsScenarios,
     ...homeScenarios,
     ...captureScenarios,
     ...deviceScenarios,
@@ -40,5 +43,6 @@ final auditSuite = AuditSuite(
     ...searchScenarios,
     ...appsScenarios,
     ...onboardingScenarios,
+    ...authScenarios,
   ],
 );

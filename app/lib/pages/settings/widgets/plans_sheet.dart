@@ -143,6 +143,7 @@ class _PlansSheetState extends State<PlansSheet> {
         final config = freemiumService.getFreemiumConfig();
         if (config != null) {
           await SharedPreferencesUtil().saveCustomSttConfig(config);
+          SharedPreferencesUtil().paywallOnDeviceSttConfigId = config.sttConfigId;
           if (!mounted) return;
 
           final captureProvider = Provider.of<CaptureProvider>(context, listen: false);

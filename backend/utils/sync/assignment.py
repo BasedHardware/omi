@@ -22,7 +22,8 @@ from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry
-from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+import config.speaker_match_scores as match_scores
+from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -389,6 +390,13 @@ def assign_in_transaction(
         created = current is None
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        try:
+            contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
+            if contributions:
+                result[match_scores.FIELD] = match_scores.merge(None, contributions)
+        except Exception:
+            # Preserve the canonical's existing blob; skip only the donor merge.
+            match_scores.record_failure(logger, reason='malformed_doc')
         result['id'] = canonical
         smart_live_target = bool(plan_target and (plan_target.get('smart_merge') or {}).get('role') == 'survivor')
         result['sync_live_target'] = bool(
@@ -531,16 +539,22 @@ def assign_in_transaction(
                 result['capture_evidence'] = incoming['capture_evidence']
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
+        verdict, rule = fragment_rule(segments)
+        curated = is_user_curated(result)
         result['sync_relevance'] = (
-            'review'
-            if not result.get('sync_relevance_user_kept') and (not segments or needs_fragment_review(segments))
-            else 'keep'
+            'review' if not curated and (not segments or needs_fragment_review(segments)) else 'keep'
         )
         # Discard is a recoverable list filter, never a deletion of captured speech.
         # Meaningful later intake automatically promotes the complete recording.
-        result['discarded'] = is_low_signal_sync_fragment(result)
+        result['discarded'] = bool(
+            verdict == 'discard'
+            and getattr(result.get('status'), 'value', result.get('status')) == 'completed'
+            and not curated
+        )
         if result['discarded']:
-            result['relevance_decision'] = sync_intake_decision(fragment_rule(segments)[1])
+            result['relevance_decision'] = sync_intake_decision(rule)
+        elif is_rule_discard_decision(result.get('relevance_decision')):
+            result['relevance_decision'] = None
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
             row.get('private_cloud_sync_enabled') for row in [incoming, *records]

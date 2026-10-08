@@ -19,6 +19,12 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+OMI_MCP_OAUTH_TOKEN_TOTAL = Counter(
+    'omi_mcp_oauth_token_total',
+    'MCP OAuth token requests by bounded grant type and terminal outcome',
+    ['grant_type', 'outcome'],
+)
+
 SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
     'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
 )
@@ -293,12 +299,25 @@ for _mode in ('legacy', 'v2'):
 # bounded reason (enumerated in routers/listen/speakers.py). The reason is the
 # only label — never uid, session, or conversation identifiers; those travel on
 # the paired log line instead, which is how a single user report is attributed.
+OMI_LIVE_SPEAKER_COLLAPSE_TOTAL = Counter(
+    'omi_live_speaker_collapse_total',
+    'Single-voice live segment runs with repeated rejected voice matches (observational)',
+)
+
 OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
     'omi_speaker_id_match_exits_total',
     'Live speaker-ID detections that returned before a match decision, by bounded reason',
     ['reason'],
 )
-for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
+for _reason in (
+    'window_outside_buffer',
+    'segment_shorter_than_minimum',
+    'no_fresh_audio',
+    'window_shorter_than_minimum',
+    'no_pcm',
+    'stale_generation',
+    'already_mapped',
+):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
 OMI_SPEAKER_CLIP_COVERAGE_TOTAL = Counter(
@@ -520,6 +539,7 @@ JEV_DECISION_LABELS = {
             'conversation_relevance',
             'memory_owner',
             'screen_task',
+            'episode_evidence',
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
@@ -649,11 +669,14 @@ from utils.metrics_smart_merge import (  # noqa: E402
     CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
     CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
     CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL,
+    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS,
     OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
     record_conversation_smart_merge as record_conversation_smart_merge,
     record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
     record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
+    record_conversation_smart_merge_wallclock_shadow as record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten as record_smart_merge_flatten,
 )
 
@@ -1119,8 +1142,8 @@ OMI_SYNC_INTAKE_TOTAL = Counter(
 OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     'omi_sync_lineage_resolve_total',
     (
-        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
-        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+        'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
+        'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
     ['outcome'],
 )

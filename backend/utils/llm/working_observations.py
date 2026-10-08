@@ -27,7 +27,7 @@ from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
 from utils.memory.belief_model import belief_model_enabled
 
 if TYPE_CHECKING:
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
 GetLlm = Callable[[str], object]
 ChatMessage = tuple[str, str]

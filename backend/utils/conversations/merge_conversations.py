@@ -8,6 +8,8 @@ This module provides functions for merging multiple conversations into one.
 
 """
 
+import config.speaker_match_scores as match_scores
+
 import copy
 import uuid
 from contextlib import nullcontext
@@ -319,6 +321,7 @@ def perform_merge_async(
             language=language,
             source=source,
             transcript_segments=merged_segments,
+            speaker_match_scores=match_scores.aggregate(sorted_convs),
             photos=merged_photos,
             audio_files=merged_audio_files,
             geolocation=geolocation,

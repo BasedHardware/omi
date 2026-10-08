@@ -1,19 +1,18 @@
 # Mentor and commitment producers
 
-`MENTOR_PIPELINE=legacy` remains the default. `cohort` selects one pipeline per
-user through the same server-side `proactivity_v2` resolver and cached PostHog client
-as v2 admission: true selects v2; false, unknown or flag errors select unchanged
-legacy. Mentor hosts and gateway admission use the same selector. Set cohort on
-both sides for a per-user rollout; host-wide `v2` otherwise suppresses unflagged
-mentor users. Selection is exclusive per evaluation; v2 failure never invokes legacy.
-`v2` exclusively dispatches the
-conversation mentor through the v2 ledger and reserved gateway calls; invalid
-values invoke neither path, and a v2 failure never invokes legacy. Existing
-buffering, rate checks and debounce have a shared admission helper. Legacy code
-remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
-paid-only admission helper and default-on debounce; its former EXP-005 transcript
-shadow was removed before merge. V2 additionally enforces strict spine admission,
-with draft usefulness measured only by its own budgeted shadow judge.
+`MENTOR_PIPELINE=cohort` is the only valid mode: the legacy mentor pipeline was
+deleted once v2 reached 100% of eligible users. `cohort` selects per user
+through the same server-side `proactivity_v2` resolver and cached PostHog client
+as v2 admission: true selects v2; false, unknown or flag errors dispatch
+nothing (fail closed) — there is no legacy lane to fall back to. Mentor hosts
+and gateway admission use the same selector. Any other env value invokes
+neither path and fails the runtime env validator. Selection is exclusive per
+evaluation; a v2 failure never invokes a second lane. Existing buffering, rate
+checks and debounce have a shared admission helper that v2 rides unchanged.
+Merged PR #20434 supplies the shared paid-only admission helper and
+default-on debounce; its former EXP-005 transcript shadow was removed before
+merge. V2 additionally enforces strict spine admission, with draft usefulness
+measured only by its own budgeted shadow judge.
 
 All v2 model steps bound the serialized provider request to the producer registry's
 byte ceiling before sending it. Gate, draft and critic retain the prompt template

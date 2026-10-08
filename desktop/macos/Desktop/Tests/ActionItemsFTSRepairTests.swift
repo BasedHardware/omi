@@ -94,7 +94,8 @@ final class ActionItemsFTSRepairTests: XCTestCase {
       try db.execute(sql: "DROP TABLE action_items_fts")
     }
 
-    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "direct repair test")
+    let repository = RewindRepository(owner: "ActionItemsFTSRepairTests")
+    try await repository.repairFTS(.actionItems, in: dbQueue, reason: "direct repair test")
 
     let matches = try await dbQueue.read { db in
       try String.fetchAll(

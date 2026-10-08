@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -213,6 +215,7 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   String? query,
   int maxResults = 20,
 }) async {
+  final cacheOwner = GoogleCalendarService.meetingCacheOwner;
   String url = '${Env.apiBaseUrl}v1/calendar/google/events?max_results=$maxResults';
 
   if (timeMin != null) {
@@ -229,41 +232,23 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
+    final events = (jsonDecode(body) as List<dynamic>)
         .map(
           (event) =>
               CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink.fromJson(event as Map<String, dynamic>)),
         )
         .toList();
+    if (cacheOwner == GoogleCalendarService.meetingCacheOwner) {
+      GoogleCalendarService.rememberMeetings(
+        cacheOwner,
+        events.map((e) => CalendarCaptureWindow(e.eventId, e.startTime, e.endTime)),
+        now: DateTime.now(),
+      );
+    }
+    return events;
   }
   debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
   return [];
-}
-
-/// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations) and whether the read
-/// answered, so a failed read is not read as "nothing to show".
-Future<({List<CalendarCaptureGap> items, bool ok})> getCalendarCaptureGaps({
-  required DateTime start,
-  required DateTime end,
-}) async {
-  final url =
-      '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return (items: const <CalendarCaptureGap>[], ok: false);
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    final gaps = (jsonDecode(body) as List<dynamic>)
-        .map(
-          (row) =>
-              CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>)),
-        )
-        .toList();
-    return (items: gaps, ok: true);
-  }
-  debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
-  return (items: const <CalendarCaptureGap>[], ok: response.statusCode == 400);
 }
 
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {

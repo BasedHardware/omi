@@ -95,6 +95,7 @@ import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/app_session_telemetry.dart';
+import 'package:omi/utils/analytics/phone_battery_sample_telemetry.dart';
 import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -519,6 +520,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry();
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
     identityEpoch: () => AnalyticsManager.identityEpoch,
@@ -532,6 +534,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (!PhysicalQualification.enabled) {
       _appSessionTelemetry.recordColdStart();
       _performanceTelemetry.attach();
+      unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
@@ -545,6 +548,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (!PhysicalQualification.enabled) _performanceTelemetry.dispose();
+    _phoneBatteryTelemetry.dispose();
     super.dispose();
   }
 

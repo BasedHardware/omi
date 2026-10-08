@@ -242,10 +242,16 @@ def conversations_db():
         "utils.manual_speaker_assignments",
         os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
     )
+    fakes["models.note_claims"] = load_module_fresh("models.note_claims", str(_BACKEND / "models" / "note_claims.py"))
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
     fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
     fakes["utils.manual_speaker_assignments"] = manual_assignments_real
+    # The write-only score size guard is pure; keep its real module available
+    # when the fixture replaces the utils package with an empty import path.
+    fakes["utils.firestore_document_size"] = load_module_fresh(
+        "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(

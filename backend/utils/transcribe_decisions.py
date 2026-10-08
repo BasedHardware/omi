@@ -5,7 +5,7 @@ from typing import Any, Mapping, Optional, Sequence
 from models.conversation_enums import ConversationSource
 from utils import conversation_continuity
 
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
+MAX_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.MAX_CONVERSATION_TIMEOUT_SECONDS
 MIN_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.DEFAULT_GAP_SECONDS
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
@@ -180,7 +180,7 @@ def should_enable_speaker_identification(
 
 
 def decide_existing_conversation_action(
-    *, seconds_since_last_segment: float, conversation_creation_timeout: int
+    *, seconds_since_last_segment: float, conversation_creation_timeout: float
 ) -> ConversationLifecycleAction:
     if conversation_continuity.gap_splits(seconds_since_last_segment, conversation_creation_timeout):
         return ConversationLifecycleAction.process_and_create_new
@@ -218,7 +218,7 @@ def decide_lifecycle_action(
     status: Any,
     in_progress_status: Any,
     seconds_since_last_update: Optional[float],
-    conversation_creation_timeout: int,
+    conversation_creation_timeout: float,
 ) -> ConversationLifecycleAction:
     if not conversation_exists:
         return ConversationLifecycleAction.create_new
