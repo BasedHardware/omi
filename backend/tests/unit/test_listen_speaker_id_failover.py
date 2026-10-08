@@ -148,10 +148,14 @@ def _fake_extract_embedding(wav_bytes: bytes, name: str):
     with wave.open(io.BytesIO(wav_bytes), 'rb') as handle:
         pcm = handle.readframes(handle.getnframes())
     samples = np.frombuffer(pcm, dtype='<i2').astype(np.float64)
-    index = np.arange(len(samples))
-    mags = np.abs(
-        np.asarray([np.dot(samples, np.exp(-2j * np.pi * freq * index / RATE)) for freq in _FAKE_FREQS])
-    ).astype(np.float32)
+    if not len(samples):
+        return np.zeros((1, len(_FAKE_FREQS)), dtype=np.float32)
+    # These fixture tones occupy exact FFT bins at the captured durations.
+    # A single transform keeps the deterministic spectral match without four
+    # large complex exponentials in every recognition attempt.
+    spectrum = np.fft.rfft(samples)
+    bins = np.rint(np.asarray(_FAKE_FREQS) * len(samples) / RATE).astype(int)
+    mags = np.abs(spectrum[bins]).astype(np.float32)
     norm = float(np.linalg.norm(mags))
     vector = mags / norm if norm else mags
     return vector.reshape(1, -1)
@@ -548,8 +552,15 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
 
         # ---- Phase 1: one minute of silence ages the ring buffer, then the
         # owner speaks once (provider time 60-63) and the provider dies.
-        pre_audio = _silence(60.0) + _owner(3.0) + _silence(7.0)
-        websocket1 = await stack.run_receive(_frames_for(pre_audio))
+        # The minute of silence ages the real capture ring, but batching only
+        # that silent stretch avoids repeated per-packet work in this test.
+        # Keep the owner's speech on the original one-second frame cadence.
+        pre_frames = (
+            _frames_for(_silence(60.0), seconds_per_frame=10.0)
+            + _frames_for(_owner(3.0))
+            + _frames_for(_silence(7.0), seconds_per_frame=7.0)
+        )
+        websocket1 = await stack.run_receive(pre_frames)
         stack.provider(0)['callback']([_provider_segment('seg-pre', 60.0, 63.0, 'owner line before the failover')])
         # The owner's first clip accumulates evidence but cannot decide alone.
         await _wait_for(
