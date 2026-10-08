@@ -837,6 +837,9 @@ def sync_action_item_reminder(
     if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
+    # The shared admission predicate requires a due date; retain that narrowing
+    # for the datetime/string transport below without duplicating its policy.
+    assert due_at is not None
     if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
         from utils.commitment_followup_tasks import schedule_followup
 
