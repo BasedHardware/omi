@@ -172,7 +172,7 @@ describe("omi tool manifest", () => {
     expect(workContext?.promptGuidelines?.join("\n")).toContain("historical unless this turn separately attached a live image");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("capture a live image");
     expect(captureScreen?.promptGuidelines?.join("\n")).not.toContain("get_work_context first");
-    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("asks the person to approve each screenshot in the app");
     expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
   });
 
