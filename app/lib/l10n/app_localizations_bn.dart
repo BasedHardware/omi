@@ -12437,16 +12437,13 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'আপনার অভিজ্ঞতা ব্যক্তিগতকরণ করা হচ্ছে';
 
   @override
-  String get onboardingRatingPromptTitle => 'অপেক্ষা করার সময় বলুন, Omi ব্যবহার করতে কেমন লাগছে?';
+  String get onboardingRatingPromptTitle => 'আপনি কি Omi উপভোগ করছেন?';
 
   @override
-  String get onboardingRatingPromptBody => '৫ স্টার রেটিং দিলে আমরা সত্যিই অনেক সাহায্য পাই ❤️';
+  String get onboardingRatingPromptYes => 'হ্যাঁ';
 
   @override
-  String get onboardingRatingPromptYes => 'হ্যাঁ, আমি আপনাদের সমর্থন করতে চাই!';
-
-  @override
-  String get onboardingRatingPromptNo => 'তেমন না';
+  String get onboardingRatingPromptNo => 'না';
 
   @override
   String get partialRecording => 'আংশিক রেকর্ডিং';

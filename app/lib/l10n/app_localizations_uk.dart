@@ -12465,16 +12465,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персоналізуємо ваш досвід';
 
   @override
-  String get onboardingRatingPromptTitle => 'Поки чекаєте, вам приємно користуватися Omi?';
+  String get onboardingRatingPromptTitle => 'Вам подобається Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оцінка в 5 зірок дуже нам допоможе ❤️';
+  String get onboardingRatingPromptYes => 'Так';
 
   @override
-  String get onboardingRatingPromptYes => 'Так, хочу вас підтримати!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не дуже';
+  String get onboardingRatingPromptNo => 'Ні';
 
   @override
   String get partialRecording => 'Частковий запис';

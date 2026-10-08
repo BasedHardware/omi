@@ -12435,16 +12435,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'شخصی‌سازی تجربه شما';
 
   @override
-  String get onboardingRatingPromptTitle => 'تا آماده شدن، استفاده از Omi برایتان خوشایند بوده؟';
+  String get onboardingRatingPromptTitle => 'آیا از Omi لذت می‌برید؟';
 
   @override
-  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+  String get onboardingRatingPromptYes => 'بله';
 
   @override
-  String get onboardingRatingPromptYes => 'بله، می‌خواهم از شما حمایت کنم!';
-
-  @override
-  String get onboardingRatingPromptNo => 'نه چندان';
+  String get onboardingRatingPromptNo => 'خیر';
 
   @override
   String get partialRecording => 'ضبط ناقص';

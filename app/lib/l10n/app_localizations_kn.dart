@@ -12474,16 +12474,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'ನಿಮ್ಮ ಅನುಭವವನ್ನು ವೈಯಕ್ತೀಕರಿಸಲಾಗುತ್ತಿದೆ';
 
   @override
-  String get onboardingRatingPromptTitle => 'ಕಾಯುತ್ತಿರುವಾಗ, Omi ಬಳಸುವುದು ಚೆನ್ನಾಗಿದೆಯೇ?';
+  String get onboardingRatingPromptTitle => 'ನೀವು Omi ಅನ್ನು ಆನಂದಿಸುತ್ತಿದ್ದೀರಾ?';
 
   @override
-  String get onboardingRatingPromptBody => '5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ ❤️';
+  String get onboardingRatingPromptYes => 'ಹೌದು';
 
   @override
-  String get onboardingRatingPromptYes => 'ಹೌದು, ನಾನು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಬಯಸುತ್ತೇನೆ!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ಅಷ್ಟಾಗಿ ಇಲ್ಲ';
+  String get onboardingRatingPromptNo => 'ಇಲ್ಲ';
 
   @override
   String get partialRecording => 'ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ';
