@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+import pytest
 
 from models.transcript_segment import TranscriptSegment
 from models.conversation import Conversation
@@ -61,7 +62,8 @@ def test_same_integer_id_in_two_scopes_cannot_label_other_short_reply():
     assert [s['is_user'] for s in conversation.model_dump()['transcript_segments']] == [True, False, False]
 
 
-def test_manual_merge_reallocates_automatic_donor_voice_ids_and_preserves_capture_clock():
+@pytest.mark.parametrize('speaker_id', [0, '0'])
+def test_manual_merge_reallocates_automatic_donor_voice_ids_and_preserves_capture_clock(speaker_id):
     at = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     def row(cid, offset, owner):
@@ -74,7 +76,7 @@ def test_manual_merge_reallocates_automatic_donor_voice_ids_and_preserves_captur
                     'id': cid,
                     'text': cid,
                     'speaker': 'SPEAKER_0',
-                    'speaker_id': 0,
+                    'speaker_id': speaker_id,
                     'is_user': owner,
                     'start': 0.0,
                     'end': 6.0,
