@@ -962,6 +962,658 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  describe("per-invocation device tool approvals", () => {
+    const sendInput = { to: "+15551234567", text: "Running late" };
+
+    /** A live acp-lane run whose adapter is mid-turn, exactly when the model would call send_message. */
+    async function liveSendMessageRun(invocationId = "send-1", screenAdmitted = false) {
+      const harness = createKernelHarness(newDatabasePath(), "acp");
+      const { store, adapter, kernel } = harness;
+      const resolved = kernel.resolveSurfaceSession({
+        ownerId: "owner",
+        surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "approvals" },
+        defaultAdapterId: "acp",
+      });
+      adapter.deferResult();
+      const runPromise = kernel.executeRun({
+        ownerId: "owner",
+        sessionId: resolved.agentSessionId,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: "approvals",
+        defaultAdapterId: "acp",
+        adapterId: "acp",
+        clientId: "approval-client",
+        requestId: `approval-request-${invocationId}`,
+        prompt: "Tell Alice I'm running late",
+        cwd: "/tmp/approvals",
+        admittedContextSnapshot: screenAdmitted
+          ? {
+            ...kernel.contextSnapshot(resolved.agentSessionId, "owner", "main_chat"),
+            sourceOutcomes: [{ source: "screen", outcome: "available" }],
+          }
+          : kernel.contextSnapshot(resolved.agentSessionId, "owner", "main_chat"),
+      });
+      await waitUntil(() => adapter.executed.length === 1);
+      const capabilityRef = adapter.executed[0]!.toolCapabilityRef;
+      const finish = async () => {
+        adapter.resolveDeferred({ terminalStatus: "completed", text: "done" });
+        await runPromise;
+      };
+      return { ...harness, sessionId: resolved.agentSessionId, capabilityRef, finish };
+    }
+
+    async function parkedSendMessage(invocationId = "send-1") {
+      const live = await liveSendMessageRun(invocationId);
+      // The interim gate is off by default; a card-capable client turns it on.
+      live.kernel.setDesktopToolApprovalsEnabled(true);
+      const outcome = live.kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef: live.capabilityRef,
+        invocationId,
+        toolName: "send_message",
+        toolInput: sendInput,
+        activeOwnerId: "owner",
+      });
+      if (outcome.kind !== "approval_required") throw new Error("expected send_message to park");
+      return { ...live, outcome, runId: outcome.invocation.runId };
+    }
+
+    it("keeps today's immediate approval_required while no client can render the card", async () => {
+      const { store, kernel, capabilityRef, finish } = await liveSendMessageRun();
+
+      expect(() => kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef,
+        invocationId: "gate-off",
+        toolName: "send_message",
+        toolInput: sendInput,
+        activeOwnerId: "owner",
+      })).toThrow(expect.objectContaining({ code: "approval_required" }));
+      expect(store.getRow("SELECT COUNT(*) AS count FROM desktop_dispatches").count).toBe(0);
+      expect(store.getRow("SELECT COUNT(*) AS count FROM tool_invocation_ledger").count).toBe(0);
+      expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = 'run.waiting_approval'").count).toBe(0);
+      await finish();
+      store.close();
+    });
+
+    it("a model-created approval dispatch can never pose as a parked tool invocation", async () => {
+      const { store, kernel } = createKernelHarness(newDatabasePath());
+      const session = store.insertSession({ ownerId: "owner", surfaceKind: "main_chat", defaultAdapterId: "fake" });
+
+      const created = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "create_desktop_dispatch", {
+          kind: "approval",
+          priority: 100,
+          title: "Looks like a send",
+          decisionPrompt: "Allow?",
+          sourceSessionId: session.sessionId,
+          capability: "desktop.messaging.send",
+          operation: "send_message",
+          resourceRef: "+15551234567",
+          payload: {
+            invocation: {
+              invocationId: "forged",
+              toolName: "send_message",
+              inputHash: "sha256:forged",
+              daemonBootEpoch: "boot",
+              executionGeneration: 1,
+              adapterId: "acp",
+              surfaceKind: "main_chat",
+            },
+            note: "kept",
+          },
+        }),
+      );
+      const dispatchId = created.dispatch.dispatchId as string;
+
+      expect(JSON.parse(String(store.getRow("SELECT payload_json FROM desktop_dispatches WHERE dispatch_id = ?", [dispatchId]).payload_json)))
+        .toEqual({ note: "kept" });
+      // Without a binding it is an ordinary decision item the user can still dismiss.
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId,
+          status: "cancelled",
+          resolution: {},
+        }),
+      );
+      expect(resolved).toMatchObject({ ok: true, dispatch: { status: "cancelled" } });
+      store.close();
+    });
+
+    it("an owner change closes the open card with an audited resolution and frees the run", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      kernel.revokeRunToolCapabilitiesForOwner("owner", "owner_changed");
+
+      expect(store.getRow("SELECT status, resolved_by FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]))
+        .toEqual({ status: "cancelled", resolved_by: "system" });
+      expect(readToolInvocation(store, "send-1")).toMatchObject({ status: "failed", errorCode: "run_tool_owner_changed" });
+      expect(eventTypes(store, runId).slice(-2)).toEqual(["approval.resolved", "run.running"]);
+      const resolution = store.allRows("SELECT payload_json FROM events WHERE type = 'approval.resolved' AND run_id = ?", [runId]);
+      expect(resolution).toHaveLength(1);
+      expect(JSON.parse(String(resolution[0]!.payload_json))).toMatchObject({
+        approvalId: outcome.dispatch.dispatchId,
+        invocationId: "send-1",
+        decision: "cancelled",
+        automatic: true,
+        resolution: { reason: "run_tool_owner_changed" },
+      });
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      await finish();
+      store.close();
+    });
+
+    it("a resolution refused for stale authority still closes the card durably", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      // The resolving owner is not the owner the card was parked for. The
+      // refusal revokes the capability; that revocation must commit even
+      // though the resolution itself is rolled back.
+      expect(() => kernel.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+        ownerId: "owner-2",
+        status: "resolved",
+        resolutionJson: JSON.stringify({ decision: "allow" }),
+      })).toThrow(expect.objectContaining({ code: "owner_mismatch" }));
+
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("cancelled");
+      expect(readToolInvocation(store, "send-1").status).toBe("failed");
+      expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = 'approval.resolved' AND run_id = ?", [runId]).count).toBe(1);
+      expect(runStatus(store, runId).run).toBe("running");
+      await finish();
+      store.close();
+    });
+
+    it("refuses to mint a session grant for a live screenshot and keeps the card answerable", async () => {
+      const live = await liveSendMessageRun("screen-1", true);
+      live.kernel.setDesktopToolApprovalsEnabled(true);
+      const outcome = live.kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef: live.capabilityRef,
+        invocationId: "screen-1",
+        toolName: "capture_screen",
+        toolInput: {},
+        activeOwnerId: "owner",
+      });
+      if (outcome.kind !== "approval_required") throw new Error("expected capture_screen to park");
+      const { store, kernel, finish } = live;
+
+      const refused = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+          grant: {
+            runId: null,
+            capability: "desktop.context.screenshot_image",
+            operation: "capture_screen",
+            resourcePattern: "screen",
+            effect: "allow",
+            source: "user",
+            expiresAtMs: Date.now() + 60 * 60_000,
+          },
+        }),
+      );
+      expect(refused.ok).toBe(false);
+      expect(String(refused.error.message)).toContain("allowed once");
+      expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+      expect(readToolInvocation(store, "screen-1").status).toBe("prepared");
+
+      const allowedOnce = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+        }),
+      );
+      expect(allowedOnce).toMatchObject({ ok: true, dispatch: { status: "resolved" }, grant: null });
+      expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+      await finish();
+      store.close();
+    });
+
+    it("caps a session grant at 24 hours", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+          grant: {
+            runId: null,
+            capability: "desktop.messaging.send",
+            operation: "send_message",
+            resourcePattern: "+15551234567",
+            effect: "allow",
+            source: "user",
+            expiresAtMs: Date.now() + 25 * 60 * 60_000,
+          },
+        }),
+      );
+
+      expect(resolved.ok).toBe(false);
+      expect(String(resolved.error.message)).toContain("24 hours");
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(runStatus(store, runId).run).toBe("waiting_approval");
+      expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+      // The card is still answerable after the refused attempt.
+      const denied = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "deny" },
+        }),
+      );
+      expect(denied.ok).toBe(true);
+      await finish();
+      store.close();
+    });
+
+    it("a decision whose transaction fails leaves the card parked in memory as well as in the store", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+      // Fail the store write that records the decision, once per arming. The
+      // kernel appends through this same store instance, so the throw lands
+      // inside the resolving transaction after the broker has already taken
+      // the invocation out of its parked set.
+      const realAppendEvent = store.appendEvent.bind(store);
+      let failNext = false;
+      store.appendEvent = (input) => {
+        if (failNext && input.type === "approval.resolved") {
+          failNext = false;
+          throw new Error("injected approval.resolved failure");
+        }
+        return realAppendEvent(input);
+      };
+
+      // An allow whose transaction rolls back: the rows are back to pending /
+      // prepared, and the broker must still treat the invocation as parked.
+      failNext = true;
+      expect(() => kernel.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+        ownerId: "owner",
+        status: "resolved",
+        resolutionJson: JSON.stringify({ decision: "allow" }),
+      })).toThrow("injected");
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(runStatus(store, runId).run).toBe("waiting_approval");
+      expect(() => kernel.markRunToolInvocationDispatched(outcome.invocation)).toThrow(expect.objectContaining({ code: "approval_required" }));
+
+      // The same for a system termination, whose rolled-back deny had already
+      // moved the invocation out of the active set in memory.
+      failNext = true;
+      expect(() => kernel.terminateDesktopToolApproval({
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "expired",
+        reason: "approval_wait_expired",
+      })).toThrow("injected");
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(() => kernel.markRunToolInvocationDispatched(outcome.invocation)).toThrow(expect.objectContaining({ code: "approval_required" }));
+
+      // Once the store cooperates, the card resolves normally and the
+      // invocation is admitted exactly once.
+      const resolved = kernel.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+        ownerId: "owner",
+        status: "resolved",
+        resolutionJson: JSON.stringify({ decision: "allow" }),
+      });
+      expect(resolved.dispatch.status).toBe("resolved");
+      kernel.markRunToolInvocationDispatched(outcome.invocation);
+      expect(readToolInvocation(store, "send-1").status).toBe("dispatched");
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      await finish();
+      store.close();
+    });
+
+    function runStatus(store: SqliteAgentStore, runId: string) {
+      return {
+        run: store.getRow("SELECT status FROM runs WHERE run_id = ?", [runId]).status,
+        attempt: store.getRow("SELECT status FROM run_attempts WHERE run_id = ? ORDER BY attempt_no DESC LIMIT 1", [runId]).status,
+      };
+    }
+
+    function eventTypes(store: SqliteAgentStore, runId: string): string[] {
+      return store.allRows("SELECT type FROM events WHERE run_id = ? ORDER BY event_seq", [runId]).map((row) => String(row.type));
+    }
+
+    it("parks the run in waiting_approval and records approval.requested in the UX-doc shape", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      expect(runStatus(store, runId)).toEqual({ run: "waiting_approval", attempt: "waiting_approval" });
+      expect(eventTypes(store, runId).slice(-2)).toEqual(["run.waiting_approval", "approval.requested"]);
+      expect(outcome.event?.type).toBe("approval.requested");
+      expect(JSON.parse(outcome.event!.payloadJson)).toMatchObject({
+        approvalId: outcome.dispatch.dispatchId,
+        policy: "default_user_approval",
+        adapterId: "acp",
+        invocationId: "send-1",
+        toolName: "send_message",
+        capability: "desktop.messaging.send",
+        operation: "send_message",
+        resourcePattern: "+15551234567",
+        inputHash: outcome.invocation.inputHash,
+        preview: sendInput,
+        options: [
+          { id: "allow_once", effect: "allow", scope: "run" },
+          { id: "allow_session", effect: "allow", scope: "session" },
+          { id: "deny", effect: "deny", scope: "request" },
+        ],
+        defaultOptionId: "deny",
+      });
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      // The parked run still accepts ordinary tool calls while it waits.
+      const unrelated = kernel.authorizeRelayedRunToolInvocation({
+        capabilityRef: outcome.invocation.capabilityRef,
+        invocationId: "send-1-unrelated",
+        toolName: "get_memories",
+        toolInput: {},
+        activeOwnerId: "owner",
+      });
+      expect(unrelated.canonicalToolName).toBe("get_memories");
+
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "cancelled",
+        resolution: {},
+      });
+      await finish();
+      store.close();
+    });
+
+    it("allow once admits exactly this invocation, mints no grant, and resumes the run", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+        }),
+      );
+
+      expect(resolved).toMatchObject({ ok: true, dispatch: { status: "resolved" }, grant: null });
+      expect(resolved.event.payload).toMatchObject({
+        approvalId: outcome.dispatch.dispatchId,
+        invocationId: "send-1",
+        decision: "allow",
+        selectedOptionId: "allow_once",
+        grantId: null,
+        automatic: false,
+        resolvedBy: "user",
+      });
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      expect(eventTypes(store, runId).slice(-2)).toEqual(["approval.resolved", "run.running"]);
+      expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+
+      kernel.markRunToolInvocationDispatched(outcome.invocation);
+      expect(readToolInvocation(store, "send-1").status).toBe("dispatched");
+
+      // The resolved dispatch is spent; a second answer admits nothing.
+      const replay = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+        }),
+      );
+      expect(replay.ok).toBe(false);
+
+      // The same message to the same recipient is a new invocation and asks again.
+      const again = kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef: outcome.invocation.capabilityRef,
+        invocationId: "send-2",
+        toolName: "send_message",
+        toolInput: sendInput,
+        activeOwnerId: "owner",
+      });
+      expect(again.kind).toBe("approval_required");
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: again.kind === "approval_required" ? again.dispatch.dispatchId : "",
+        status: "resolved",
+        resolution: { decision: "deny" },
+      });
+      await finish();
+      store.close();
+    });
+
+    it("allow for this chat mints a session-scoped grant for exactly that recipient", async () => {
+      const { store, kernel, sessionId, outcome, runId, finish } = await parkedSendMessage();
+      const expiresAtMs = Date.now() + 60 * 60_000;
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+          grant: {
+            runId: null,
+            capability: "desktop.messaging.send",
+            operation: "send_message",
+            resourcePattern: "+15551234567",
+            effect: "allow",
+            source: "user",
+            expiresAtMs,
+          },
+        }),
+      );
+
+      expect(resolved).toMatchObject({
+        ok: true,
+        grant: {
+          sessionId,
+          runId: null,
+          capability: "desktop.messaging.send",
+          operation: "send_message",
+          resourcePattern: "+15551234567",
+          source: "user",
+          expiresAtMs,
+        },
+      });
+      expect(resolved.event.payload).toMatchObject({
+        decision: "allow",
+        selectedOptionId: "allow_session",
+        grantId: resolved.grant.grantId,
+      });
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      kernel.markRunToolInvocationDispatched(outcome.invocation);
+
+      const covered = kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef: outcome.invocation.capabilityRef,
+        invocationId: "send-covered",
+        toolName: "send_message",
+        toolInput: { ...sendInput, text: "Make that 15" },
+        activeOwnerId: "owner",
+      });
+      const otherRecipient = kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+        capabilityRef: outcome.invocation.capabilityRef,
+        invocationId: "send-other",
+        toolName: "send_message",
+        toolInput: { ...sendInput, to: "+15550000000" },
+        activeOwnerId: "owner",
+      });
+      expect(covered.kind).toBe("authorized");
+      expect(otherRecipient.kind).toBe("approval_required");
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: otherRecipient.kind === "approval_required" ? otherRecipient.dispatch.dispatchId : "",
+        status: "resolved",
+        resolution: { decision: "deny" },
+      });
+      await finish();
+      store.close();
+    });
+
+    it("deny fails the invocation closed and lets the run continue", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "deny" },
+        }),
+      );
+
+      expect(resolved).toMatchObject({ ok: true, dispatch: { status: "resolved" }, grant: null });
+      expect(resolved.event.payload).toMatchObject({ decision: "deny", selectedOptionId: "deny" });
+      expect(readToolInvocation(store, "send-1")).toMatchObject({
+        status: "failed",
+        errorCode: "approval_denied",
+        dispatchedAtMs: null,
+      });
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      expect(() => kernel.markRunToolInvocationDispatched(outcome.invocation)).toThrow();
+      await finish();
+      store.close();
+    });
+
+    it("a resolution without a decision cannot leave a parked invocation undecided", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { note: "looks fine" },
+        }),
+      );
+
+      expect(resolved.ok).toBe(false);
+      expect(String(resolved.error.message)).toContain("allow or deny");
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(runStatus(store, runId).run).toBe("waiting_approval");
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "cancelled",
+        resolution: {},
+      });
+      await finish();
+      store.close();
+    });
+
+    it("the model cannot approve its own invocation through the control relay", async () => {
+      const { store, kernel, sessionId, outcome, runId, finish } = await parkedSendMessage();
+
+      const fromAdapter = parseToolResult(
+        await handleAgentControlToolCall(
+          { kernel, getOwnerId: () => "owner", callerSessionId: sessionId, executionRole: "coordinator" },
+          "resolve_desktop_dispatch",
+          {
+            dispatchId: outcome.dispatch.dispatchId,
+            status: "resolved",
+            resolution: { decision: "allow" },
+          },
+        ),
+      );
+
+      expect(fromAdapter).toMatchObject({ ok: false, error: { code: "policy_denied" } });
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(runStatus(store, runId).run).toBe("waiting_approval");
+      expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = 'approval.resolved'").count).toBe(0);
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "cancelled",
+        resolution: {},
+      });
+      await finish();
+      store.close();
+    });
+
+    it("a tampered dispatch payload admits nothing", async () => {
+      const { store, kernel, outcome, finish } = await parkedSendMessage();
+      const payload = JSON.parse(outcome.dispatch.payloadJson);
+      payload.invocation.inputHash = "sha256:somebody-elses-message";
+      store.execute("UPDATE desktop_dispatches SET payload_json = ? WHERE dispatch_id = ?", [
+        JSON.stringify(payload),
+        outcome.dispatch.dispatchId,
+      ]);
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+        }),
+      );
+
+      expect(resolved.ok).toBe(false);
+      expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]).status).toBe("pending");
+      expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+      expect(() => kernel.markRunToolInvocationDispatched(outcome.invocation)).toThrow();
+      store.execute("UPDATE desktop_dispatches SET payload_json = ? WHERE dispatch_id = ?", [
+        outcome.dispatch.payloadJson,
+        outcome.dispatch.dispatchId,
+      ]);
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "resolved",
+        resolution: { decision: "deny" },
+      });
+      await finish();
+      store.close();
+    });
+
+    it("expiry fails the invocation closed as a system decision and resumes the run", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      const result = kernel.terminateDesktopToolApproval({
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "expired",
+        reason: "approval_wait_expired",
+      });
+
+      expect(result.dispatch).toMatchObject({ status: "expired", resolvedBy: "system" });
+      expect(JSON.parse(result.event!.payloadJson)).toMatchObject({
+        approvalId: outcome.dispatch.dispatchId,
+        invocationId: "send-1",
+        decision: "expired",
+        automatic: true,
+        resolvedBy: "system",
+      });
+      expect(readToolInvocation(store, "send-1")).toMatchObject({ status: "failed", errorCode: "approval_expired" });
+      expect(runStatus(store, runId)).toEqual({ run: "running", attempt: "running" });
+      expect(() => kernel.terminateDesktopToolApproval({
+        dispatchId: outcome.dispatch.dispatchId,
+        status: "expired",
+        reason: "approval_wait_expired",
+      })).toThrow("not pending");
+      // A late user answer after expiry has nothing left to admit.
+      const late = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: outcome.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+        }),
+      );
+      expect(late.ok).toBe(false);
+      await finish();
+      store.close();
+    });
+
+    it("cancelling the run closes the pending approval with an audited resolution", async () => {
+      const { store, kernel, outcome, runId, finish } = await parkedSendMessage();
+
+      await kernel.cancelRun(runId, { ownerId: "owner" });
+      await finish();
+
+      expect(store.getRow("SELECT status, resolved_by FROM desktop_dispatches WHERE dispatch_id = ?", [outcome.dispatch.dispatchId]))
+        .toEqual({ status: "cancelled", resolved_by: "system" });
+      expect(readToolInvocation(store, "send-1").status).toBe("failed");
+      const resolution = store.allRows(
+        "SELECT payload_json FROM events WHERE type = 'approval.resolved' AND run_id = ?",
+        [runId],
+      );
+      expect(resolution).toHaveLength(1);
+      expect(JSON.parse(String(resolution[0]!.payload_json))).toMatchObject({
+        approvalId: outcome.dispatch.dispatchId,
+        invocationId: "send-1",
+        decision: "cancelled",
+        automatic: true,
+      });
+      store.close();
+    });
+  });
+
   it("requires verified approved dispatches for sensitive context packet snippets", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const dispatch = kernel.createDesktopDispatch({

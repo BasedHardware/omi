@@ -1312,6 +1312,76 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
+  it("expires invocation-bound approval dispatches on startup regardless of their TTL", () => {
+    const databasePath = newDatabasePath();
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 1_000 });
+    const session = store.insertSession({ ownerId: "owner", surfaceKind: "main_chat", defaultAdapterId: "acp" });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "waiting_approval",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "waiting_approval",
+      adapterId: "acp",
+      adapterInstanceId: "worker",
+    });
+    const bound = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 100,
+      title: "Send a message",
+      decisionPrompt: "Send this message?",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      sourceAttemptId: attempt.attemptId,
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourceRef: "+15551234567",
+      payloadJson: JSON.stringify({ invocation: { invocationId: "inv-1", toolName: "send_message", inputHash: "sha256:x" } }),
+      expiresAtMs: 1_000 + 180_000,
+    });
+    // An ordinary approval dispatch with no parked invocation keeps its own TTL.
+    const unbound = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 1,
+      title: "Prepare artifact",
+      decisionPrompt: "Allow this prepared artifact?",
+      sourceSessionId: session.sessionId,
+      expiresAtMs: 1_000 + 180_000,
+    });
+    store.close();
+
+    const reopened = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 2_000 });
+    const result = reopened.reconcileStartup();
+
+    expect(result.expiredToolApprovalDispatchIds).toEqual([bound.dispatchId]);
+    expect(result.orphanedAttemptIds).toEqual([attempt.attemptId]);
+    expect(reopened.getRow("SELECT status, resolved_by FROM desktop_dispatches WHERE dispatch_id = ?", [bound.dispatchId]))
+      .toEqual({ status: "expired", resolved_by: "daemon_startup_reconciliation" });
+    expect(reopened.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [unbound.dispatchId]).status).toBe("pending");
+    const event = reopened.getRow(
+      "SELECT run_id, attempt_id, payload_json FROM events WHERE type = 'approval.resolved'",
+    );
+    expect(event).toMatchObject({ run_id: run.runId, attempt_id: attempt.attemptId });
+    expect(JSON.parse(String(event.payload_json))).toMatchObject({
+      approvalId: bound.dispatchId,
+      invocationId: "inv-1",
+      toolName: "send_message",
+      decision: "expired",
+      resolvedBy: "daemon_startup_reconciliation",
+    });
+
+    expect(reopened.reconcileStartup().expiredToolApprovalDispatchIds).toEqual([]);
+    expect(reopened.getRow("SELECT COUNT(*) AS count FROM events WHERE type = 'approval.resolved'").count).toBe(1);
+    reopened.close();
+  });
+
   it("does not fail artifact lifecycle migration when columns already exist but the migration row is missing", () => {
     const store = newStore({ reconcileOnOpen: false });
     store.execute("DELETE FROM schema_migrations WHERE version = ?", [2]);
