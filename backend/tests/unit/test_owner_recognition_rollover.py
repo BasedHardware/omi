@@ -1,14 +1,18 @@
 """Automatic owner continuity must reach the transcript without manual authority."""
 
 from collections import deque
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+from database import conversations as conversations_db
 from routers.listen.speakers import SpeakerMatcher
 from tests.unit.test_live_speaker_carry import _CarryHarness, _segment, _stamped_epoch, SCOPE
+from tests.unit.test_listen_speaker_id_failover import FailoverStack, CONV, UID
+from tests.unit.test_speaker_match import _live_matcher, _segment as audio_segment
 from utils.observability.owner_recognition import LIVE_SPEAKER_ROLLOVER
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.stt.speaker_match import select_speaker_match
@@ -183,3 +187,67 @@ async def test_carry_revalidates_current_prints_and_corrects_emitted_owner(monke
     processor._apply_speaker_identity_statuses(incoming)
     assert [s.model_dump()['is_user'] for s in incoming] == [True, False]
     assert incoming[1].person_id == 'peer'
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('remove_map_before_flush', [False, True])
+async def test_completed_roster_margin_rejection_withdraws_delivered_and_persisted_owner(
+    monkeypatch, remove_map_before_flush
+):
+    """An owner-only accept must disappear when the paid roster later abstains."""
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    old = np.array([[0.47, -np.sqrt(1 - 0.47**2)]], dtype=np.float32)
+    query = np.array([[0.8, 0.6]], dtype=np.float32)
+    peer = np.array([[np.cos(np.deg2rad(70)), np.sin(np.deg2rad(70))]], dtype=np.float32)
+    stack = FailoverStack(monkeypatch, v2=False)
+    try:
+        matcher, host, emitted = _live_matcher(monkeypatch, [query])
+        stack.state.audio_ring_buffer = host.state.audio_ring_buffer
+        matcher.host = stack.host
+        stack.host.speakers = matcher
+        stack.host.emit_speaker_suggestion = lambda *args, **kw: emitted.append(args)
+        stack.host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))
+        matcher.person_embeddings = {'user': {'embedding': owner, 'name': 'Owner'}}
+        matcher._profile_conversation_id = 'old'
+        matcher.speaker_to_person[0] = ('user', 'Owner')
+        matcher._mapping_origin[0] = 'automatic'
+        matcher._voice_distances[0] = {'user': 0.53}
+        matcher._voice_decisions[0] = select_speaker_match({'user': 0.53})
+        matcher._voice_centroids[0] = old
+        matcher._voice_scopes[0] = SCOPE
+        matcher.speaker_evidence[0] = deque([(old, 5.0)], maxlen=3)
+        stack.store.rows[('users', UID, 'conversations', 'old')] = {'id': 'old'}
+        segment = TranscriptSegment(**_segment('early-peer', speaker_id=1, start=6, end=11))
+        conversations_db.update_conversation_segments(
+            UID, CONV, [segment.model_dump()], invalidate_client_processing=False
+        )
+
+        async def load():
+            matcher.person_embeddings['user'] = {'embedding': owner, 'name': 'Owner'}
+            await matcher.match(1, dict(audio_segment(segment.id, 6, 5), speaker_id_scope=SCOPE))
+            await stack.processor.flush_speaker_assignments(CONV)
+            assert stack.decode_segments()[0]['is_user'] is True
+            assert stack.websocket.sent_json[-1][0]['is_user'] is True
+            matcher.person_embeddings['peer'] = {'embedding': peer, 'name': 'Peer'}
+
+        matcher._load_profiles = AsyncMock(side_effect=load)
+        await matcher.refresh_for_conversation(CONV, owner_carry_scope=SCOPE, owner_carry_donor={'id': 'old'})
+        decision = matcher._voice_decisions[1]
+        assert decision.person_id is None and not decision.owner_contended
+        assert matcher._voice_distances[1]['user'] == pytest.approx(0.2)
+        assert matcher._voice_distances[1]['peer'] == pytest.approx(0.162568, abs=1e-6)
+        map_removed = 1 not in matcher.speaker_to_person and 1 not in matcher._mapping_origin
+        if remove_map_before_flush:
+            # Independently reproduce the reviewer's map-removal-alone probe.
+            matcher.speaker_to_person.pop(1, None)
+            matcher._mapping_origin.pop(1, None)
+        await stack.processor.flush_speaker_assignments(CONV)
+        saved = stack.decode_segments()[0]
+        rendered = stack.websocket.sent_json[-1][0]
+        assert (saved['is_user'], rendered['is_user']) == (False, False)
+        assert saved.get('person_id') is None and rendered.get('person_id') is None
+        assert saved['speaker_identity_status'] == 'no_match'
+        assert map_removed, 'ordinary margin rejection must withdraw the automatic map'
+        assert any(args[0] == 1 and not args[1] for args in emitted), 'withdraw early suggestion'
+    finally:
+        stack.restore()

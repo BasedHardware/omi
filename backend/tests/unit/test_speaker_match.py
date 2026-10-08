@@ -492,6 +492,48 @@ def test_cold_start_arbitrates_voices_without_retuning_recall(scores, owner):
         assert all(d.owner_contended for d in decisions.values())
 
 
+@pytest.mark.parametrize('status', [SpeakerIdentityStatus.no_match, SpeakerIdentityStatus.ambiguous])
+@pytest.mark.parametrize(
+    'source,match_source,clear',
+    [
+        ('auto', 'live_embedding', True),
+        (None, 'live_embedding', True),
+        ('manual', 'live_embedding', False),
+        ('carried', 'live_embedding', False),
+        (None, None, False),
+        ('auto', 'channel', False),
+    ],
+)
+@pytest.mark.parametrize('was_owner', [False, True])
+def test_rejected_identity_projection_preserves_manual_and_channel_authority(
+    status, source, match_source, clear, was_owner
+):
+    segment = TranscriptSegment(
+        id='s',
+        text='synthetic',
+        speaker_id=0,
+        start=0,
+        end=5,
+        is_user=was_owner,
+        person_id=None if was_owner else 'peer',
+        speaker_label_source=source,
+        speaker_match_source=match_source,
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={},
+            voice_identity_status={0: status},
+            segment_identity_status={},
+        )
+    )
+    processor._apply_speaker_identity_statuses([segment])
+    rendered = segment.model_dump()
+    assert rendered['is_user'] is (False if clear else was_owner)
+    assert rendered['person_id'] == (None if clear or was_owner else 'peer')
+
+
 def _cold_start_vector(distance, sign=1):
     # Unit vectors at measured cosine distances; opposite residual directions
     # keep the two voices distinct under in-session clustering.

@@ -632,12 +632,14 @@ class TranscriptProcessor:
             if candidates is not None and not segment.is_user and not segment.person_id:
                 segment.voice_candidates = candidates
             if status is not None:
-                if status == SpeakerIdentityStatus.ambiguous:
+                if status in (SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.no_match):
                     # Clear an earlier automatic accept on *every* segment of
-                    # this voice. Manual receipts are re-applied by the writer.
-                    if segment.speaker_match_source == 'live_embedding' or (
-                        not segment.is_user and not segment.person_id
-                    ):
+                    # this voice, retaining manual/carried and channel labels.
+                    automatic_live = segment.speaker_label_source in (None, 'auto') and (
+                        segment.speaker_match_source == 'live_embedding'
+                    )
+                    unlabeled = not segment.is_user and not segment.person_id
+                    if segment.speaker_label_source not in ('manual', 'carried') and (automatic_live or unlabeled):
                         segment.is_user = False
                         segment.person_id = None
                         segment.speaker_match_source = 'live_embedding'

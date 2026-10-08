@@ -981,11 +981,14 @@ class SpeakerMatcher:
                 if changed and segment_id != '':
                     self.host.emit_speaker_suggestion(voice, best_id, best_name, segment_id)
             else:
+                # Completed-roster revalidation can abstain on an ordinary
+                # margin rejection as well as owner contention. Neither may
+                # leave an earlier automatic accept in the assignment map.
+                was_mapped = self.speaker_to_person.pop(voice, None)
+                self._mapping_origin.pop(voice, None)
+                if was_mapped and segment_id != '':
+                    self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
                 if result.owner_contended:
-                    was_mapped = self.speaker_to_person.pop(voice, None)
-                    if was_mapped:
-                        self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
-                    self._mapping_origin.pop(voice, None)
                     if self.voice_identity_status.get(voice) != SpeakerIdentityStatus.ambiguous:
                         logger.info(
                             'speaker_id_owner_contention surface=live speaker=%s session=%s',
