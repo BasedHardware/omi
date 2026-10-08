@@ -405,14 +405,14 @@ def _get_structured(
                     else []
                 )
                 roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
-                        uid,
-                        conversation,
-                        calendar_context,
-                        tz_str,
-                        include_background=True,
-                        include_screen_text=True,
-                        **({'evidence_items': episode_items} if episode_enabled else {}),
-                    )
+                    uid,
+                    conversation,
+                    calendar_context,
+                    tz_str,
+                    include_background=True,
+                    include_screen_text=True,
+                    **({'evidence_items': episode_items} if episode_enabled else {}),
+                )
                 prefix = build_conversation_prompt_prefix(
                     uid=uid,
                     conversation_id=prompt_conversation_id,
@@ -594,14 +594,14 @@ def _get_structured(
         meeting_context_block: Optional[str] = None
         desktop_capture, screen_frames = False, ()
         roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
-                uid,
-                main_conv,
-                calendar_context,
-                tz_str,
-                include_background=True,
-                include_screen_text=True,
-                **({'evidence_items': episode_items} if episode_enabled else {}),
-            )
+            uid,
+            main_conv,
+            calendar_context,
+            tz_str,
+            include_background=True,
+            include_screen_text=True,
+            **({'evidence_items': episode_items} if episode_enabled else {}),
+        )
         if episode_enabled:
             episode_items[:0] = import_module('utils.conversations.episode_evidence').capture_evidence(
                 main_conv,
