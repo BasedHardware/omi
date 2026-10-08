@@ -5500,11 +5500,7 @@
     "runtimePreconditions": [
       "Realtime voice only; requires Screen Recording permission."
     ],
-    "adapters": {
-      "pi-mono": {
-        "advertised": true
-      }
-    },
+    "adapters": {},
     "surfaces": [
       "realtime_voice"
     ],
