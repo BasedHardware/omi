@@ -62,6 +62,7 @@ def reserve_import_quota(uid: str, kind: str, amount: int) -> Optional[str]:
 
     Redis errors propagate: imports must not store unmetered transcripts.
     Byte reservations are released unless conversation creation succeeds.
+    Upload reservations are released when the request does not start an import.
     """
     reservation = uuid.uuid4().hex
     admitted = redis_db.r.eval(
@@ -77,5 +78,5 @@ def reserve_import_quota(uid: str, kind: str, amount: int) -> Optional[str]:
 
 
 def release_import_quota(uid: str, kind: str, reservation: str) -> None:
-    """Release bytes for a file that did not create a conversation; safe to repeat."""
+    """Drop a reservation that should not count; safe to repeat."""
     redis_db.r.eval(_RELEASE_IMPORT_QUOTA_LUA, 2, *_quota_keys(uid, kind), reservation)

@@ -1205,7 +1205,16 @@ def _import_file(
         raise TranscriptFileSkipped(NOT_SAVED) from exc
     finally:
         if not created:
-            import_quotas_db.release_import_quota(uid, 'byte', reservation)
+            # A release error must not replace a duplicate skip or a save failure:
+            # the conversation was not counted, and masking that turns the job failed.
+            try:
+                import_quotas_db.release_import_quota(uid, 'byte', reservation)
+            except Exception as release_exc:
+                logger.warning(
+                    'transcript import byte quota release failed job_id=%s error_class=%s',
+                    job_id,
+                    type(release_exc).__name__,
+                )
 
 
 async def process_transcript_import(

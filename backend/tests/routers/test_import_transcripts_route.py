@@ -72,7 +72,8 @@ class _Worker:
 @pytest.fixture
 def staged(tmp_path, monkeypatch):
     monkeypatch.setattr(imports_mod, 'TEMP_DIR', str(tmp_path))
-    monkeypatch.setattr(imports_mod.import_quotas_db, 'reserve_import_quota', lambda *_args: 'reservation')
+    monkeypatch.setattr(imports_mod.import_quotas_db, 'reserve_import_quota', MagicMock(return_value='reservation'))
+    monkeypatch.setattr(imports_mod.import_quotas_db, 'release_import_quota', MagicMock())
     job = ImportJob(id='job-9', uid=UID, status=ImportJobStatus.pending, source_type=ImportSourceType.transcript_files)
     create = MagicMock(return_value=job)
     worker = _Worker()
@@ -91,6 +92,7 @@ def test_unsupported_upload_is_rejected_before_a_job_exists(staged, name):
 
     assert error.value.status_code == 400
     assert '.zip, .srt, .vtt or .txt' in error.value.detail
+    imports_mod.import_quotas_db.reserve_import_quota.assert_not_called()
     create.assert_not_called()
     assert not worker.called.is_set()
 
@@ -102,6 +104,7 @@ def test_unknown_origin_is_rejected(staged):
         _call(_upload('call.srt'), origin='otterly')
 
     assert error.value.status_code == 400
+    imports_mod.import_quotas_db.reserve_import_quota.assert_not_called()
     create.assert_not_called()
 
 
@@ -114,6 +117,7 @@ def test_supported_upload_is_staged_and_queued(staged, name):
 
     assert (response.job_id, response.status) == ('job-9', ImportJobStatus.pending)
     assert response.source_type == ImportSourceType.transcript_files
+    imports_mod.import_quotas_db.release_import_quota.assert_not_called()
     create.assert_called_once_with(UID)
     queued = worker.wait()
     job_id, uid, staged_path = queued.args
@@ -180,6 +184,7 @@ def test_failed_staging_removes_the_partial_file_and_fails_the_job(staged):
         _call(_BrokenUpload())
 
     assert error.value.status_code == 500
+    imports_mod.import_quotas_db.release_import_quota.assert_called_once_with(UID, 'upload', 'reservation')
     assert update.call_args.args[0] == 'job-9'
     assert update.call_args.args[1]['status'] == ImportJobStatus.failed.value
     assert os.listdir(tmp_path) == [], 'the partial upload is removed'
@@ -223,7 +228,8 @@ def test_cancelled_staging_fails_the_job_removes_the_partial_file_and_reraises(s
     ):
         _call(_CancelledUpload())
 
-    assert cleanups == [imports_mod.db_executor]
+    assert cleanups == [imports_mod.db_executor, imports_mod.db_executor]
+    imports_mod.import_quotas_db.release_import_quota.assert_called_once_with(UID, 'upload', 'reservation')
     assert update.call_args.args[0] == 'job-9'
     assert update.call_args.args[1]['status'] == ImportJobStatus.failed.value
     assert os.listdir(tmp_path) == [], 'the partial upload is removed'
@@ -256,6 +262,7 @@ def test_job_is_failed_when_the_worker_cannot_be_queued(staged, monkeypatch):
         _call(_upload('call.srt'))
 
     assert error.value.status_code == 503
+    imports_mod.import_quotas_db.release_import_quota.assert_called_once_with(UID, 'upload', 'reservation')
     assert update.call_args.args[0] == 'job-9'
     assert update.call_args.args[1]['status'] == ImportJobStatus.failed.value
     assert os.listdir(tmp_path) == [], 'the staged upload is removed'

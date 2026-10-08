@@ -2504,6 +2504,17 @@ def test_failed_create_releases_the_byte_reservation(tmp_path, job, monkeypatch)
     assert not job.store.docs
 
 
+def test_duplicate_stays_skipped_when_releasing_its_byte_reservation_fails(tmp_path, job, monkeypatch):
+    monkeypatch.setattr(tf.import_quotas_db, 'release_import_quota', MagicMock(side_effect=RuntimeError('redis down')))
+
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+    _run(tmp_path, 'call.srt', SRT.encode('utf-8'))
+
+    assert job.final()['status'] == 'completed'
+    assert job.final()['conversations_skipped'] == 1
+    assert len(job.store.docs) == 1
+
+
 @pytest.mark.parametrize('allow_first', [True, False])
 def test_worker_finishes_with_monthly_limit_reason_and_skips_remaining_files(tmp_path, job, monkeypatch, allow_first):
     reserve = MagicMock(side_effect=['bytes-1', None] if allow_first else [None])

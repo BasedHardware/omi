@@ -145,6 +145,13 @@ async def import_transcript_files(
     language = language.strip()
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,16}', language):
         language = 'en'
+    # A file or origin we will not import must not spend a monthly upload slot.
+    filename = os.path.basename((file.filename or '').replace('\\', '/'))
+    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
+        raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
+    if origin not in TRANSCRIPT_ORIGINS:
+        raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
+
     try:
         admitted = await run_blocking(db_executor, import_quotas_db.reserve_import_quota, uid, 'upload', 1)
     except RedisError as exc:
@@ -152,13 +159,14 @@ async def import_transcript_files(
     if admitted is None:
         raise HTTPException(status_code=429, detail='Monthly transcript upload limit reached. Try again later.')
 
-    filename = os.path.basename((file.filename or '').replace('\\', '/'))
-    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
-        raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
-    if origin not in TRANSCRIPT_ORIGINS:
-        raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
-
-    job = await run_blocking(db_executor, create_transcript_import_job, uid)
+    try:
+        job = await run_blocking(db_executor, create_transcript_import_job, uid)
+    except asyncio.CancelledError:
+        submit_with_context(db_executor, _release_admitted_upload, uid, admitted)
+        raise
+    except Exception:
+        await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
+        raise
     os.makedirs(TEMP_DIR, exist_ok=True)
     # Staged under the job ID: a user's file name can exceed the file-system name limit.
     upload_path = os.path.join(TEMP_DIR, f"{job.id}{os.path.splitext(filename)[1].lower()}")
@@ -175,10 +183,16 @@ async def import_transcript_files(
         submit_with_context(
             db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file'
         )
+        submit_with_context(db_executor, _release_admitted_upload, uid, admitted)
         raise
     except Exception as e:
         logger.error('transcript import upload not staged job_id=%s error_class=%s', job.id, type(e).__name__)
-        await run_blocking(db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file')
+        try:
+            await run_blocking(
+                db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file'
+            )
+        finally:
+            await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
         raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     # An async coordinator, not a pool task: it borrows a thread per step (one file,
@@ -197,13 +211,16 @@ async def import_transcript_files(
     except Exception as e:
         worker.close()
         logger.error('transcript import could not be queued job_id=%s error_class=%s', job.id, type(e).__name__)
-        await run_blocking(
-            db_executor,
-            _abandon_transcript_import,
-            job.id,
-            upload_path,
-            'The import could not be started. Please try again.',
-        )
+        try:
+            await run_blocking(
+                db_executor,
+                _abandon_transcript_import,
+                job.id,
+                upload_path,
+                'The import could not be started. Please try again.',
+            )
+        finally:
+            await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
         raise HTTPException(status_code=503, detail="The import could not be started. Try again shortly.")
     return ImportJobResponse(job_id=job.id, status=ImportJobStatus.pending, source_type=job.source_type)
 
@@ -215,6 +232,18 @@ def _discard_staged_upload(upload_path: str) -> None:
         pass
     except OSError as e:
         logger.error('transcript import staged upload cleanup failed error_class=%s', type(e).__name__)
+
+
+def _release_admitted_upload(uid: str, reservation: str) -> None:
+    """Return a monthly upload slot when the request never starts an import.
+
+    Redis errors stay in the log and the slot remains spent: a lost release must
+    not let the handler look successful.
+    """
+    try:
+        import_quotas_db.release_import_quota(uid, 'upload', reservation)
+    except Exception as exc:
+        logger.error('transcript import upload quota release failed error_class=%s', type(exc).__name__)
 
 
 def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> None:
