@@ -70,6 +70,11 @@ Future<NativeModalResult?> showIosNativeModal(
   if (rows.any((row) => row.kind == 'secret')) return null;
   // An unrepresentable request keeps the caller's complete Flutter dialog.
   if (rows.any((row) => !row.valid) || rows.map((row) => row.id).toSet().length != rows.length) return null;
+  // List interactions belong to list surfaces; the Swift presenter refuses them as well.
+  if (sections.any((section) => section.reorder != null || section.collapsible) ||
+      rows.any((row) => row.indent != null || row.swipeLeading.isNotEmpty || row.swipeTrailing.isNotEmpty)) {
+    return null;
+  }
   final ticket = _PresentationTicket();
   final owner = AuthService.instance.captureSessionSnapshot();
   var sessionValid = true;

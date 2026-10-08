@@ -67,6 +67,11 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         guard snapshot.chat == nil, !snapshot.toolbar.isEmpty,
               snapshot.toolbar.allSatisfy({ $0.kind == "button" }),
               snapshot.toolbar.contains(where: { $0.id == cancelID && $0.enabled }) else { throw PresentationError.invalid }
+        // List interactions belong to list surfaces, never to a temporary presentation.
+        guard snapshot.selection == nil, (snapshot.bottomBar ?? []).isEmpty,
+              snapshot.sections.allSatisfy({ $0.reorderable != true && $0.collapsible != true }),
+              snapshot.allRows.allSatisfy({ $0.indent == nil && ($0.swipeLeading ?? []).isEmpty
+                  && ($0.swipeTrailing ?? []).isEmpty }) else { throw PresentationError.invalid }
         var parent = root
         while let presented = parent.presentedViewController { parent = presented }
         guard parent.viewIfLoaded?.window != nil, !parent.isBeingDismissed else {

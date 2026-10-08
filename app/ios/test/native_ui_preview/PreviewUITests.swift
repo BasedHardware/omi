@@ -266,6 +266,226 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["task_open:open"].waitForExistence(timeout: 5))
     }
 
+    func testSelectionTogglesOptimisticallyAndSendsTheSortedSet() {
+        let app = start(["surface", "selection", "slow-selection"])
+        let row = app.staticTexts["conv_3"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        let cell = listCell(app, "conv_3")
+        XCTAssertFalse(cell.isSelected)
+        XCTAssertTrue(listCell(app, "conv_1").isSelected)
+        row.tap()
+        // The circle fills at once, before the owner answers the slow command.
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: cell)
+        waitForExpectations(timeout: 2)
+        XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_3"].exists)
+        XCTAssertTrue(app.staticTexts["_selection:conv_1,conv_3"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5))
+        XCTAssertTrue(cell.isSelected)
+        capture(app, "native-list-selection")
+    }
+
+    func testBottomBarDeleteWaitsForThePendingSelection() {
+        let app = start(["surface", "selection", "slow-selection"])
+        XCTAssertTrue(app.staticTexts["conv_2"].waitForExistence(timeout: 10))
+        app.staticTexts["conv_2"].tap()
+        // Delete is tapped while the selection command is still pending; it acts on the new set.
+        XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_2"].exists)
+        app.buttons["bulk_delete"].tap()
+        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 15))
+    }
+
+    func testBottomBarDeleteStopsWhenThePendingSelectionFails() {
+        let app = start(["surface", "selection", "slow-selection", "failed-selection"])
+        XCTAssertTrue(app.staticTexts["conv_2"].waitForExistence(timeout: 10))
+        app.staticTexts["conv_2"].tap()
+        app.buttons["bulk_delete"].tap()
+        // The refused selection reverts, so Delete must not act on a set the user never saw.
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["bulk_delete:conv_1"].waitForExistence(timeout: 3))
+        XCTAssertFalse(listCell(app, "conv_2").isSelected)
+    }
+
+    func testSelectionKeepsOtherRowsUsableAndSuppressesSwipes() {
+        let app = start(["surface", "selection"])
+        let more = app.buttons["more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        XCTAssertFalse(listCell(app, "more").isSelected)
+        // iOS 16 has no selectionDisabled, so a non-selectable row is disabled while selecting there.
+        if #available(iOS 17.0, *) {
+            more.tap()
+            XCTAssertTrue(app.staticTexts["more:"].waitForExistence(timeout: 5))
+            XCTAssertFalse(listCell(app, "more").isSelected)
+        }
+        listCell(app, "conv_2").swipeLeft()
+        listCell(app, "conv_locked").swipeLeft()
+        // Only the bottom bar's Delete exists: no row offers its swipe action while selecting.
+        let deletes = app.buttons.matching(NSPredicate(format: "label == %@", "Delete"))
+        XCTAssertFalse(app.buttons["conv_locked_swipe_delete"].waitForExistence(timeout: 2), "No swipe action while selecting")
+        XCTAssertEqual(deletes.count, 1)
+        XCTAssertFalse(app.staticTexts["conv_locked:delete"].exists, "A full swipe sends nothing while selecting")
+        XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_2"].exists)
+    }
+
+    func testSelectionLargeTextKeepsTheBottomBarReachable() {
+        let app = start(["surface", "selection", "large"])
+        let delete = app.buttons["bulk_delete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 10))
+        XCTAssertTrue(delete.isHittable)
+        XCTAssertTrue(app.buttons["bulk_move"].isHittable)
+        XCTAssertTrue(app.staticTexts["1 selected"].exists)
+        capture(app, "native-list-selection-large-text")
+        delete.tap()
+        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1"].waitForExistence(timeout: 5))
+    }
+
+    func testQueuedSelectionSurvivesANewerSnapshot() {
+        let app = start(["surface", "selection"])
+        XCTAssertTrue(app.buttons["preview-burst-list"].waitForExistence(timeout: 10))
+        app.buttons["preview-burst-list"].tap()
+        XCTAssertTrue(app.staticTexts["list:conv_1,conv_2|conv_1,conv_2,conv_3|"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["3 selected"].waitForExistence(timeout: 5))
+    }
+
+    func testQueuedSelectionDropsRowsNoLongerSelectable() {
+        let app = start(["surface", "selection", "stale-selection"])
+        XCTAssertTrue(app.buttons["preview-burst-list"].waitForExistence(timeout: 10))
+        app.buttons["preview-burst-list"].tap()
+        // conv_3 stopped being selectable while the second selection was queued.
+        XCTAssertTrue(app.staticTexts["list:conv_1,conv_2|conv_1,conv_2|"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["native-surface-error"].exists)
+    }
+
+    func testReorderSendsTheFullPermutation() {
+        let app = start(["surface", "reorder"])
+        XCTAssertTrue(app.staticTexts["task_c"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons.matching(identifier: "task_a").firstMatch.exists, "Reordered rows are static")
+        drag(app, "task_c", to: "task_a")
+        XCTAssertTrue(app.staticTexts["_reorder:tasks:task_c,task_a,task_b"].waitForExistence(timeout: 10))
+        XCTAssertLessThan(app.staticTexts["task_c"].frame.minY, app.staticTexts["task_a"].frame.minY)
+        capture(app, "native-list-reorder")
+    }
+
+    func testFailedReorderRevertsToTheSnapshotOrder() {
+        let app = start(["surface", "reorder", "failed-reorder"])
+        XCTAssertTrue(app.staticTexts["task_c"].waitForExistence(timeout: 10))
+        drag(app, "task_c", to: "task_a")
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 10))
+        let reverted = NSPredicate { _, _ in
+            app.staticTexts["task_a"].frame.minY < app.staticTexts["task_c"].frame.minY
+        }
+        expectation(for: reverted, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        // The refused order is not a pending draft: leaving reorder mode still reaches the owner.
+        app.buttons["reorder_done"].tap()
+        XCTAssertTrue(app.staticTexts["reorder_done:"].waitForExistence(timeout: 5))
+    }
+
+    func testQueuedReorderSurvivesANewerSnapshot() {
+        let app = start(["surface", "reorder"])
+        XCTAssertTrue(app.buttons["preview-burst-list"].waitForExistence(timeout: 10))
+        app.buttons["preview-burst-list"].tap()
+        XCTAssertTrue(app.staticTexts["list:task_b,task_a,task_c|task_c,task_b,task_a|"].waitForExistence(timeout: 10))
+        let ordered = NSPredicate { _, _ in
+            app.staticTexts["task_c"].frame.minY < app.staticTexts["task_b"].frame.minY
+                && app.staticTexts["task_b"].frame.minY < app.staticTexts["task_a"].frame.minY
+        }
+        expectation(for: ordered, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+    }
+
+    func testCollapsibleSectionHidesRowsAndExplainsTheToggle() {
+        let app = start(["surface", "collapsible"])
+        // XCUITest cannot read accessibility hints; the Expand/Collapse hint needs a VoiceOver check.
+        let header = app.descendants(matching: .any)["overdue_header"]
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["late_1"].exists)
+        header.tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["late_1"])
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.staticTexts["late_2"].exists)
+        XCTAssertTrue(app.staticTexts["today_1"].exists)
+        capture(app, "native-list-collapsed")
+        header.tap()
+        XCTAssertTrue(app.staticTexts["late_1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture", "Collapsing sends nothing")
+    }
+
+    func testSwipeSendsTheOptionId() {
+        let app = start(["surface", "swipe"])
+        let task = listCell(app, "swipe_task")
+        XCTAssertTrue(task.waitForExistence(timeout: 10))
+        reveal(task, leading: false)
+        let delete = app.buttons["Delete"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        capture(app, "native-list-swipe")
+        delete.tap()
+        XCTAssertTrue(app.staticTexts["swipe_task:delete"].waitForExistence(timeout: 5))
+        reveal(task, leading: true)
+        XCTAssertTrue(app.buttons["Complete"].waitForExistence(timeout: 5))
+        app.buttons["Complete"].tap()
+        XCTAssertTrue(app.staticTexts["swipe_task:complete"].waitForExistence(timeout: 5))
+        reveal(listCell(app, "swipe_person"), leading: false)
+        XCTAssertTrue(app.buttons["Pin"].waitForExistence(timeout: 5))
+        app.buttons["Rename"].tap()
+        XCTAssertTrue(app.staticTexts["swipe_person:rename"].waitForExistence(timeout: 5))
+    }
+
+    func testIndentDrawsARuleWithoutChangingRowHeight() {
+        let app = start(["surface", "indent"])
+        let root = app.staticTexts["indent_0"]
+        XCTAssertTrue(root.waitForExistence(timeout: 10))
+        let child = app.staticTexts["indent_1"], grandchild = app.staticTexts["indent_2"]
+        XCTAssertEqual(child.frame.minX - root.frame.minX, 20, accuracy: 1)
+        XCTAssertEqual(grandchild.frame.minX - root.frame.minX, 40, accuracy: 1)
+        let rootCell = listCell(app, "indent_0"), grandchildCell = listCell(app, "indent_2")
+        XCTAssertEqual(rootCell.frame.height, grandchildCell.frame.height, accuracy: 0.5)
+        let screenshot = app.screenshot().image
+        func gutter(_ cell: XCUIElement, _ label: XCUIElement) -> CGRect {
+            CGRect(x: cell.frame.minX + 4, y: label.frame.midY - 4, width: label.frame.minX - cell.frame.minX - 8, height: 8)
+        }
+        XCTAssertFalse(varies(screenshot, in: gutter(rootCell, root)), "An unindented row draws no rule")
+        XCTAssertTrue(varies(screenshot, in: gutter(listCell(app, "indent_1"), child)), "The indent rule is visible")
+        XCTAssertTrue(varies(screenshot, in: gutter(grandchildCell, grandchild)))
+        capture(app, "native-list-indent")
+    }
+
+    /// The list cell that holds the element [id].
+    func listCell(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        app.cells.containing(NSPredicate(format: "identifier == %@", id)).firstMatch
+    }
+
+    /// Drags the system reorder control of [source]'s row onto [target]'s row.
+    func drag(_ app: XCUIApplication, _ source: String, to target: String) {
+        let from = listCell(app, source), to = listCell(app, target)
+        let handle = from.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'reorder'")).firstMatch
+        let start = handle.exists ? handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            : from.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        start.press(forDuration: 0.6, thenDragTo: to.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.2)))
+    }
+
+    /// Reveals a row's swipe actions with a slow partial drag; a fast full swipe would run the first action.
+    func reveal(_ cell: XCUIElement, leading: Bool) {
+        let start = cell.coordinate(withNormalizedOffset: CGVector(dx: leading ? 0.1 : 0.9, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+    }
+
+    /// Whether the brightness inside [frame] (screen points) varies, so something is drawn there.
+    func varies(_ image: UIImage, in frame: CGRect) -> Bool {
+        guard let cgImage = image.cgImage, frame.width > 0 else { return false }
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale,
+                            height: frame.height * scale).integral
+        guard let crop = cgImage.cropping(to: pixels) else { return false }
+        let width = crop.width, height = crop.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &data, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let brightness = stride(from: 0, to: data.count, by: 4).map { Int(data[$0]) + Int(data[$0 + 1]) + Int(data[$0 + 2]) }
+        return (brightness.max() ?? 0) - (brightness.min() ?? 0) > 45
+    }
+
     /// Whether any pixel inside [frame] (screen points) is a saturated red.
     func containsRed(_ image: UIImage, in frame: CGRect) -> Bool {
         guard let cgImage = image.cgImage else { return false }

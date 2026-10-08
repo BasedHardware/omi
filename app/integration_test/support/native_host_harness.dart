@@ -85,8 +85,8 @@ int? nativeViewId(WidgetTester tester, Finder finder) {
 }
 
 /// The row [id] as the mounted native surfaces dispatch it: [IosNativeSurface.debugDispatchRows] lists
-/// every row a surface's commands reach, including those its navigation chrome adds. When several
-/// surfaces project it, the last one in tree order (the topmost route) wins.
+/// every row a surface's commands reach, including those its navigation chrome adds and its bottom bar.
+/// When several surfaces project it, the last one in tree order (the topmost route) wins.
 NativeRow nativeProjectedRow(WidgetTester tester, String id) {
   NativeRow? match;
   for (final surface in tester.stateList<State<IosNativeSurface>>(find.byType(IosNativeSurface, skipOffstage: false))) {

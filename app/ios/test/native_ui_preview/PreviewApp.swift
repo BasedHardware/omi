@@ -53,6 +53,9 @@ struct PreviewApp: App {
                                 NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
                             }.accessibilityIdentifier("preview-become-active")
                         }
+                        if ProcessInfo.processInfo.arguments.contains("selection") || ProcessInfo.processInfo.arguments.contains("reorder") {
+                            Button("Burst list") { harness.burstListCommand() }.accessibilityIdentifier("preview-burst-list")
+                        }
                     }.font(.caption).padding()
                     }
                 }
@@ -318,6 +321,26 @@ final class PreviewHarness: ObservableObject {
     var raw: [String: Any]
     var lastDraft = ""
     var keysSent = ""
+    var listCommandsSent = ""
+    /// Sends a list command, queues a newer one while it is pending and delivers an unrelated newer
+    /// snapshot meanwhile: the queued desired state must still reach the owner.
+    func burstListCommand() {
+        let reorder = ProcessInfo.processInfo.arguments.contains("reorder")
+        let id = reorder ? "_reorder:tasks" : "_selection"
+        let first = reorder ? ["task_b", "task_a", "task_c"] : ["conv_1", "conv_2"]
+        let second = reorder ? ["task_c", "task_b", "task_a"] : ["conv_1", "conv_2", "conv_3"]
+        Task {
+            let sending = Task { await surface.send(id, value: first) }
+            while !surface.pending.contains(id) { await Task.yield() }
+            await surface.send(id, value: second)
+            surfaceRaw["revision"] = (surfaceRaw["revision"] as? Int ?? 0) + 1
+            if ProcessInfo.processInfo.arguments.contains("stale-selection") {
+                surfaceRaw["selection"] = ["selected": ["conv_1"], "selectable": ["conv_1", "conv_2"]]
+            }
+            surface.update(try! NativeSurfaceSnapshot.decode(surfaceRaw))
+            await sending.value
+        }
+    }
     func burstKeys() {
         Task {
             let first = Task { await surface.send("keypad", value: "1") }
@@ -357,8 +380,25 @@ final class PreviewHarness: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("failed-edit") && id == "draft" {
             throw NSError(domain: "Fixture", code: 1)
         }
+        if id == "_selection" && ProcessInfo.processInfo.arguments.contains("slow-selection") {
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+        }
+        if id == "_selection" && ProcessInfo.processInfo.arguments.contains("failed-selection") {
+            throw NSError(domain: "Fixture", code: 4)
+        }
+        if id == "_reorder:tasks" && ProcessInfo.processInfo.arguments.contains("failed-reorder") {
+            throw NSError(domain: "Fixture", code: 3)
+        }
         if id == "draft" || id == "chat_draft" { self.lastDraft = value as? String ?? "" }
         self.lastAction = "\(id):\(value ?? "")"
+        if let ids = value as? [String] {
+            self.lastAction = "\(id):\(ids.joined(separator: ","))"
+            self.listCommandsSent += ids.joined(separator: ",") + "|"
+            self.lastSaved = "list:\(self.listCommandsSent)"
+        }
+        if id == "bulk_delete", let selection = self.surfaceRaw["selection"] as? [String: Any] {
+            self.lastAction = "bulk_delete:\((selection["selected"] as? [String] ?? []).joined(separator: ","))"
+        }
         if id == "keypad", let key = value as? String { self.keysSent += key + "," }
         if id == "save" && ProcessInfo.processInfo.arguments.contains("keypad") {
             self.lastSaved = "keys:\(self.keysSent)"
@@ -406,6 +446,21 @@ final class PreviewHarness: ObservableObject {
             }
             reader["footer"] = footer
             next["reader"] = reader
+        }
+        if id == "_selection", let ids = value as? [String], var selection = next["selection"] as? [String: Any] {
+            selection["selected"] = ids
+            next["selection"] = selection
+            if var bar = next["bottomBar"] as? [[String: Any]] {
+                bar[0]["title"] = "\(ids.count) selected"
+                next["bottomBar"] = bar
+            }
+        }
+        if id.hasPrefix("_reorder:"), let ids = value as? [String], var sections = next["sections"] as? [[String: Any]] {
+            for index in sections.indices where "_reorder:\(sections[index]["id"] as? String ?? "")" == id {
+                let rows = sections[index]["rows"] as? [[String: Any]] ?? []
+                sections[index]["rows"] = ids.compactMap { rowID in rows.first { $0["id"] as? String == rowID } }
+            }
+            next["sections"] = sections
         }
         if id == "reset_key" {
             self.lastDraft = ""
@@ -572,6 +627,7 @@ final class PreviewHarness: ObservableObject {
                 ]],
             ]
         }
+        addListInteractionFixtures()
         if ProcessInfo.processInfo.arguments.contains("chat") {
             surfaceRaw["title"] = "Ask Omi"
             surfaceRaw["searchEnabled"] = false
@@ -638,6 +694,75 @@ final class PreviewHarness: ObservableObject {
             raw["localRecordingCount"] = 0
             raw["hasMore"] = false
             raw["failed"] = ProcessInfo.processInfo.arguments.contains("error")
+        }
+    }
+
+    /// Selection with a bottom bar, reorder, collapsible sections, swipes and indent.
+    private func addListInteractionFixtures() {
+        let arguments = ProcessInfo.processInfo.arguments
+        func row(_ id: String, _ title: String, _ kind: String, value: Any? = nil, options: [(String, String)] = [],
+                 symbol: String? = nil, destructive: Bool = false) -> [String: Any] {
+            var result: [String: Any] = ["id": id, "title": title, "kind": kind, "subtitle": "", "enabled": true,
+                "destructive": destructive, "options": options.map { ["id": $0.0, "title": $0.1] }]
+            if let value { result["value"] = value }
+            if let symbol { result["symbol"] = symbol }
+            return result
+        }
+        guard ["selection", "reorder", "collapsible", "swipe", "indent"].contains(where: arguments.contains) else { return }
+        surfaceRaw["searchEnabled"] = false
+        surfaceRaw["toolbar"] = []
+        surfaceRaw["expandLabel"] = "Expand"
+        surfaceRaw["collapseLabel"] = "Collapse"
+        if arguments.contains("selection") {
+            surfaceRaw["title"] = "Conversations"
+            surfaceRaw["toolbar"] = [row("selection_cancel", "Cancel", "button", symbol: "xmark")]
+            func conversation(_ id: String, _ title: String) -> [String: Any] {
+                var result = row(id, title, "navigation", options: [("open", "Open"), ("delete", "Delete")])
+                result["swipeTrailing"] = ["delete"]
+                return result
+            }
+            surfaceRaw["sections"] = [["id": "today", "title": "Today", "footer": "", "rows": [
+                conversation("conv_1", "Design review"), conversation("conv_2", "Product sync"),
+                conversation("conv_3", "Weekly planning"), conversation("conv_locked", "Merging call"),
+                row("more", "Show more", "button"),
+            ]]]
+            surfaceRaw["selection"] = ["selected": ["conv_1"], "selectable": ["conv_1", "conv_2", "conv_3"]]
+            surfaceRaw["bottomBar"] = [row("selection_count", "1 selected", "label"),
+                row("bulk_move", "Move to Folder", "button", symbol: "folder"),
+                row("bulk_delete", "Delete", "button", symbol: "trash", destructive: true)]
+        }
+        if arguments.contains("reorder") {
+            surfaceRaw["title"] = "Tasks"
+            surfaceRaw["toolbar"] = [row("reorder_done", "Done", "button", symbol: "checkmark")]
+            surfaceRaw["sections"] = [["id": "tasks", "title": "Today", "footer": "", "reorderable": true, "rows": [
+                row("task_a", "Buy oat milk", "task", value: false), row("task_b", "Call Avery", "task", value: false),
+                row("task_c", "Ship the release", "task", value: false),
+            ]]]
+        }
+        if arguments.contains("collapsible") {
+            surfaceRaw["title"] = "Tasks"
+            surfaceRaw["sections"] = [
+                ["id": "overdue", "title": "Overdue", "footer": "2 tasks", "collapsible": true, "rows": [
+                    row("late_1", "Renew passport", "label"), row("late_2", "Pay the invoice", "label")]],
+                ["id": "today", "title": "Today", "footer": "", "rows": [row("today_1", "Stand-up notes", "label")]],
+            ]
+        }
+        if arguments.contains("swipe") {
+            surfaceRaw["title"] = "Tasks"
+            var task = row("swipe_task", "Water the plants", "task", value: false,
+                           options: [("complete", "Complete"), ("open", "Open"), ("delete", "Delete")])
+            task["swipeLeading"] = ["complete"]
+            task["swipeTrailing"] = ["delete"]
+            var person = row("swipe_person", "Avery", "navigation", options: [("pin", "Pin"), ("rename", "Rename")])
+            person["swipeTrailing"] = ["pin", "rename"]
+            surfaceRaw["sections"] = [["id": "swipes", "title": "Today", "footer": "", "rows": [task, person]]]
+        }
+        if arguments.contains("indent") {
+            surfaceRaw["title"] = "Tasks"
+            var rows = [row("indent_0", "Plan the launch", "label"), row("indent_1", "Draft the post", "label"),
+                        row("indent_2", "Pick a title", "label")]
+            for index in rows.indices { rows[index]["indent"] = index }
+            surfaceRaw["sections"] = [["id": "outline", "title": "Outline", "footer": "", "rows": rows]]
         }
     }
 }

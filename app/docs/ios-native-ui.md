@@ -119,6 +119,12 @@ containment. Both Runner targets compile the same renderer.
 - Offline Sync uses the same extracted status-priority calculation for native and original cards.
   Retry/cancel/download/import/storage/retention commands continue through the existing owners;
   merely projecting status does not initiate sync or alter recordings.
+- List interactions (`NativeSelection`, `bottomBar`, `NativeSection.reorder`/`collapsible`, row `indent` and
+  `swipeLeading`/`swipeTrailing`) render in list mode only. `_selection` and `_reorder:<section>` carry the complete
+  desired id list, validated against the current projection; owners apply it idempotently, and Swift shows it
+  optimistically until a newer snapshot or a refusal. Swipes repeat context-menu options; collapsing is presentation
+  only. Owners exit their selection mode when their route pops or is disposed; native code only drops its
+  optimistic state on invalidation.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and

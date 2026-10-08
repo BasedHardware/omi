@@ -47,6 +47,10 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         }
     }
     let blocks: [RichBlock]?
+    /// List interactions: hierarchy depth and the option ids offered as swipe actions.
+    let indent: Int?
+    let swipeLeading: [String]?
+    let swipeTrailing: [String]?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -55,7 +59,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              optionSearch: optionSearch, optionClose: optionClose, keypadMode: keypadMode,
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
-             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks)
+             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
+             indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing)
     }
 
 
@@ -106,6 +111,13 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         let title: String
         let footer: String
         let rows: [NativeSurfaceRow]
+        let reorderable: Bool?
+        let collapsible: Bool?
+    }
+    /// Multi-selection over section rows; the owner receives the complete desired set.
+    struct Selection: Decodable, Equatable {
+        let selected: [String]
+        let selectable: [String]
     }
     struct Chat: Decodable, Equatable {
         let draft: String; let placeholder: String; let followup: String
@@ -144,15 +156,23 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let loadingLabel: String
     /// Holds a one-time secret; its single 'secret' row is redacted while the app is inactive.
     let sensitive: Bool?
+    let selection: Selection?
+    let bottomBar: [NativeSurfaceRow]?
+    let expandLabel: String?
+    let collapseLabel: String?
 
     var allRows: [NativeSurfaceRow] {
-        toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
+        let content: [NativeSurfaceRow] = toolbar + sections.flatMap(\.rows)
+        let actions: [NativeSurfaceRow] = (chat?.actions ?? []) + (reader?.actions ?? [])
+        let chrome: [NativeSurfaceRow] = (navigation.map { [$0] } ?? []) + (bottomBar ?? [])
+        return content + actions + chrome
     }
 
     func replacingValue(id: String, value: NativeSurfaceRow.Value) -> Self {
         let sections = sections.map { section in
             Section(id: section.id, title: section.title, footer: section.footer,
-                    rows: section.rows.map { $0.id == id ? $0.replacingValue(value) : $0 })
+                    rows: section.rows.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                    reorderable: section.reorderable, collapsible: section.collapsible)
         }
         let reader = reader.map { reader in
             Reader(currentId: reader.currentId, targetId: reader.targetId, request: reader.request,
@@ -166,14 +186,17 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                     loading: loading, failed: failed, empty: empty, sections: sections, toolbar: toolbar,
                     searchEnabled: searchEnabled, searchValue: searchValue, searchPlaceholder: searchPlaceholder,
                     refreshEnabled: refreshEnabled, error: error, retry: retry, loadingLabel: loadingLabel,
-                    sensitive: sensitive)
+                    sensitive: sensitive,
+                    selection: selection, bottomBar: bottomBar?.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                    expandLabel: expandLabel, collapseLabel: collapseLabel)
     }
 
     func withoutContent() -> Self {
         Self(reader: nil, navigation: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
-             error: error, retry: retry, loadingLabel: loadingLabel, sensitive: false)
+             error: error, retry: retry, loadingLabel: loadingLabel, sensitive: false,
+             selection: nil, bottomBar: nil, expandLabel: nil, collapseLabel: nil)
     }
 
     static func decode(_ input: Any) throws -> Self {
@@ -221,18 +244,59 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.points ?? []).allSatisfy { $0.x.isFinite && $0.y.isFinite }
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
-              }) else { throw ContractError.invalidSnapshot }
+              }),
+              rows.allSatisfy({ $0.hasValidListInteractions }),
+              snapshot.hasValidListInteractions else { throw ContractError.invalidSnapshot }
         // A one-time secret appears at most once, as a section row of a sensitive snapshot; a sensitive
-        // snapshot is never chat, reader or navigation. Dart applies the same rules before publishing.
+        // snapshot is never chat, reader, navigation or a selection. Dart applies the same rules before publishing.
         let secrets = snapshot.sections.flatMap(\.rows).filter { $0.kind == "secret" }
         let controls = snapshot.toolbar + (snapshot.chat?.actions ?? []) + (snapshot.reader?.actions ?? [])
-            + (snapshot.navigation.map { [$0] } ?? [])
+            + (snapshot.navigation.map { [$0] } ?? []) + (snapshot.bottomBar ?? [])
         guard !controls.contains(where: { $0.kind == "secret" }), secrets.count <= 1,
               secrets.isEmpty || snapshot.sensitive == true,
-              snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil),
+              snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil
+                  && snapshot.selection == nil),
               secrets.allSatisfy(\.hasOnlySecretFields) else { throw ContractError.invalidSnapshot }
         return snapshot
     }
+
+    /// Mirrors IosNativeSurface: a bottom bar, a selection and reorderable sections render in list
+    /// mode only, and a selection excludes reordering.
+    var hasValidListInteractions: Bool {
+        let bottomBar = bottomBar ?? []
+        let reorderable = sections.contains { $0.reorderable == true }
+        let listMode = chat == nil && reader == nil && navigation == nil
+        let sectionsValid = sections.allSatisfy { section in
+            (section.collapsible != true || !section.title.isEmpty)
+                && (section.reorderable != true || section.rows.allSatisfy { Self.listKinds.contains($0.kind) })
+        }
+        let selectionValid = selection.map { selection in
+            let rowIds = Set(sections.flatMap(\.rows).map(\.id))
+            let selectable = Set(selection.selectable)
+            return !reorderable && selection.selectable.count <= 10000
+                && selectable.count == selection.selectable.count && Set(selection.selected).count == selection.selected.count
+                && selectable.isSubset(of: rowIds) && Set(selection.selected).isSubset(of: selectable)
+        } != false
+        return sectionsValid && selectionValid && bottomBar.count <= 6
+            && bottomBar.allSatisfy { ["label", "button", "menu"].contains($0.kind) }
+            && bottomBar.filter { $0.kind == "label" }.count <= 1
+            && (listMode || (bottomBar.isEmpty && selection == nil && !reorderable))
+    }
+
+    /// Rows a list may indent, and the only rows a reorderable section may hold.
+    static let listKinds = ["task", "navigation", "label", "toggle", "menu"]
+
+    /// Whether '_selection' or '_reorder:<section id>' still addresses this projection, so a queued
+    /// or failed list command survives a newer snapshot.
+    func offersListCommand(_ id: String) -> Bool {
+        if id == "_selection" { return selection != nil }
+        guard id.hasPrefix("_reorder:") else { return false }
+        let sectionID = String(id.dropFirst("_reorder:".count))
+        return sections.contains { $0.id == sectionID && $0.reorderable == true }
+    }
+
+    /// The system edit mode owns the list while selecting or while a section can be reordered.
+    var editsList: Bool { selection != nil || sections.contains { $0.reorderable == true } }
     enum ContractError: Error { case invalidSnapshot }
 }
 
@@ -242,6 +306,16 @@ private extension NativeSurfaceRow {
         options.count == 1 && options.first?.id == "copy" && !(options.first?.title ?? "").isEmpty
             && imageUri == nil && level == nil && (points ?? []).isEmpty && (blocks ?? []).isEmpty
             && maximumValue == nil && keyboard == nil && maximumLength == nil
+    }
+
+    var hasValidListInteractions: Bool {
+        if let indent, !(0...3).contains(indent) || !NativeSurfaceSnapshot.listKinds.contains(kind) { return false }
+        let leading = swipeLeading ?? [], trailing = swipeTrailing ?? []
+        guard !leading.isEmpty || !trailing.isEmpty else { return true }
+        let options = Set(self.options.map(\.id))
+        return ["task", "navigation", "menu"].contains(kind) && leading.count <= 3 && trailing.count <= 3
+            && Set(leading).count == leading.count && Set(trailing).count == trailing.count
+            && Set(leading).isDisjoint(with: trailing) && Set(leading + trailing).isSubset(of: options)
     }
 
     var hasValidImageURI: Bool {

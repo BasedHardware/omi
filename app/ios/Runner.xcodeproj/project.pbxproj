@@ -17,6 +17,8 @@
 		5E810252D564FCEA33ACDED6 /* NativeReaderComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3097CE58FF0175FC6D5DF7DB /* NativeReaderComponents.swift */; };
 		CE5CAA1A4CB92DFC7985209F /* NativeSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */; };
 		F224C7E619E24948A840A760 /* NativeReaderComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3097CE58FF0175FC6D5DF7DB /* NativeReaderComponents.swift */; };
+		0D36464C39DCF44C33354E3E /* NativeListInteractions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA8542B29C785A2E6C1C447 /* NativeListInteractions.swift */; };
+		F3FDD437CC2D9ED0265AF1AD /* NativeListInteractions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA8542B29C785A2E6C1C447 /* NativeListInteractions.swift */; };
 		6CB1A229F8DDF62C3F558EB9 /* NativeSurfaceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F692480F0C34DBD1283BD2F8 /* NativeSurfaceContract.swift */; };
 		02BED4B552DC59F9AA34EAB3 /* NativeSurfaceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F692480F0C34DBD1283BD2F8 /* NativeSurfaceContract.swift */; };
 		2C5706F1A216FA899C7BFBA4 /* NativeGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8DA6EA972F5A4BE94DF8BB /* NativeGlass.swift */; };
@@ -266,6 +268,7 @@
 		350A10205F7718E3BDBB583B /* NativeSurfacePlatformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfacePlatformView.swift; sourceTree = "<group>"; };
 		DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfaceView.swift; sourceTree = "<group>"; };
 		3097CE58FF0175FC6D5DF7DB /* NativeReaderComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeReaderComponents.swift; sourceTree = "<group>"; };
+		1DA8542B29C785A2E6C1C447 /* NativeListInteractions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeListInteractions.swift; sourceTree = "<group>"; };
 		F692480F0C34DBD1283BD2F8 /* NativeSurfaceContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfaceContract.swift; sourceTree = "<group>"; };
 		5F8DA6EA972F5A4BE94DF8BB /* NativeGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGlass.swift; sourceTree = "<group>"; };
 		1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomePlatformView.swift; sourceTree = "<group>"; };
@@ -462,6 +465,7 @@
 				F692480F0C34DBD1283BD2F8 /* NativeSurfaceContract.swift */,
 				DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */,
 				3097CE58FF0175FC6D5DF7DB /* NativeReaderComponents.swift */,
+				1DA8542B29C785A2E6C1C447 /* NativeListInteractions.swift */,
 				350A10205F7718E3BDBB583B /* NativeSurfacePlatformView.swift */,
 				C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */,
 				1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */,
@@ -1133,6 +1137,7 @@
 				6CB1A229F8DDF62C3F558EB9 /* NativeSurfaceContract.swift in Sources */,
 				DA25761E7BCC571A7E2B6F64 /* NativeSurfaceView.swift in Sources */,
 				5E810252D564FCEA33ACDED6 /* NativeReaderComponents.swift in Sources */,
+				F3FDD437CC2D9ED0265AF1AD /* NativeListInteractions.swift in Sources */,
 				721DCC1BF25CB6049E91BEF3 /* NativeSurfacePlatformView.swift in Sources */,
 				54B82DB38A045FC9F129AAD3 /* NativeHomeContract.swift in Sources */,
 				3231DB770E215E8822E8BCD2 /* NativeHomePlatformView.swift in Sources */,
@@ -1212,6 +1217,7 @@
 				02BED4B552DC59F9AA34EAB3 /* NativeSurfaceContract.swift in Sources */,
 				CE5CAA1A4CB92DFC7985209F /* NativeSurfaceView.swift in Sources */,
 				F224C7E619E24948A840A760 /* NativeReaderComponents.swift in Sources */,
+				0D36464C39DCF44C33354E3E /* NativeListInteractions.swift in Sources */,
 				663D4480B0A96D1CC558C380 /* NativeSurfacePlatformView.swift in Sources */,
 				DE135B6BD088236D7566D3D6 /* NativeHomeContract.swift in Sources */,
 				CD51D64B482D31A12E53D31F /* NativeHomePlatformView.swift in Sources */,

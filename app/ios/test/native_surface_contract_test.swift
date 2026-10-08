@@ -194,6 +194,7 @@ struct NativeSurfaceTests {
         try activityRequests()
         try toastRequests()
         try secrets()
+        try listInteractions()
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
 
@@ -359,8 +360,110 @@ struct NativeSurfaceTests {
         rejects(reveal([secret]) {
             $0["chat"] = ["draft": "", "placeholder": "Ask Omi", "followup": "", "streaming": false, "actions": []]
         })
+        // A sensitive snapshot is never a selection, and a secret never sits in the bottom bar.
+        rejects(reveal([secret]) { $0["selection"] = ["selected": [], "selectable": ["secret_value"]] })
+        rejects(reveal([]) { $0["bottomBar"] = [secret] })
     }
 
+    /// Selection, bottom bar, reorderable and collapsible sections, indent and swipes mirror Dart.
+    static func listInteractions() throws {
+        func row(_ id: String, _ kind: String = "label", value: Any? = nil, options: [String] = []) -> [String: Any] {
+            var result: [String: Any] = ["id": id, "title": id, "kind": kind, "subtitle": "", "destructive": false,
+                "enabled": true, "options": options.map { ["id": $0, "title": $0] }]
+            if let value { result["value"] = value }
+            return result
+        }
+        func surface(_ rows: [[String: Any]], section: [String: Any] = [:], extra: [String: Any] = [:]) -> [String: Any] {
+            var input: [String: Any] = ["version": 1, "revision": 0, "title": "Library", "appearance": "system",
+                "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "",
+                "sections": [["id": "today", "title": "Today", "footer": "", "rows": rows].merging(section) { $1 }],
+                "toolbar": [], "searchEnabled": false, "searchValue": "", "searchPlaceholder": "", "refreshEnabled": false,
+                "error": "Error", "retry": "Retry", "loadingLabel": "Loading", "expandLabel": "Expand", "collapseLabel": "Collapse"]
+            input.merge(extra) { $1 }
+            return input
+        }
+        let conversations = [row("a", "navigation"), row("b", "navigation"), row("more", "button")]
+        let bar = [row("count"), row("bulk_delete", "button"), row("bulk_more", "menu", options: ["move"])]
+        let selection: [String: Any] = ["selected": ["a"], "selectable": ["a", "b"]]
+        let selecting = try NativeSurfaceSnapshot.decode(surface(conversations, extra: ["selection": selection, "bottomBar": bar]))
+        precondition(selecting.selection?.selectable == ["a", "b"] && selecting.expandLabel == "Expand")
+        precondition(selecting.allRows.map(\.id).suffix(3) == ["count", "bulk_delete", "bulk_more"])
+        let replaced = selecting.replacingValue(id: "a", value: .text("unused"))
+        precondition(replaced.selection == selecting.selection && replaced.bottomBar == selecting.bottomBar)
+        precondition(replaced.collapseLabel == "Collapse")
+        let cleared = selecting.withoutContent()
+        precondition(cleared.selection == nil && cleared.bottomBar == nil && cleared.expandLabel == nil && cleared.allRows.isEmpty)
+        precondition(selecting.offersListCommand("_selection") && !selecting.offersListCommand("_reorder:today"))
+        for invalid: [String: Any] in [["selected": [], "selectable": ["a", "foreign"]], ["selected": ["more"], "selectable": ["a"]],
+                                      ["selected": [], "selectable": ["a", "a"]], ["selected": ["a", "a"], "selectable": ["a"]]] {
+            rejects(surface(conversations, extra: ["selection": invalid]))
+        }
+        let many = (0...10000).map { row("row_\($0)") }
+        rejects(surface(many, extra: ["selection": ["selected": [], "selectable": many.map { $0["id"] as? String ?? "" }]]))
+        _ = try NativeSurfaceSnapshot.decode(surface(many, extra: ["selection": ["selected": [],
+            "selectable": many.dropFirst().map { $0["id"] as? String ?? "" }]]))
+        let chat: [String: Any] = ["draft": "", "placeholder": "Ask", "followup": "", "streaming": false, "actions": []]
+        let reader: [String: Any] = ["request": 0, "following": false, "footer": []]
+        rejects(surface(conversations, extra: ["selection": selection, "chat": chat]))
+        rejects(surface(conversations, extra: ["selection": selection, "reader": reader]))
+        rejects(surface(conversations, section: ["reorderable": true], extra: ["selection": selection]))
+
+        _ = try NativeSurfaceSnapshot.decode(surface(conversations, extra: ["bottomBar": [row("count")] + (1...5).map { row("action_\($0)", "button") }]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("count")] + (1...6).map { row("action_\($0)", "button") }]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("count"), row("other")]]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("switch", "toggle", value: false)]]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("a", "button")]]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("send", "button")], "chat": chat]))
+        rejects(surface(conversations, extra: ["bottomBar": [row("play", "button")], "reader": reader]))
+        var shell = surface([], extra: ["navigation": row("main_destination", "segmented", value: "home",
+                                                          options: ["home", "tasks", "memories", "apps", "settings"])])
+        shell["sections"] = []
+        _ = try NativeSurfaceSnapshot.decode(shell)
+        shell["bottomBar"] = [row("count")]
+        rejects(shell)
+
+        let tasks = ["x", "y", "z"].map { row($0, "task", value: false) }
+        let ordered = try NativeSurfaceSnapshot.decode(surface(tasks, section: ["reorderable": true, "collapsible": true]))
+        precondition(ordered.sections[0].reorderable == true && ordered.sections[0].collapsible == true)
+        let toggled = ordered.replacingValue(id: "x", value: .bool(true)).sections[0]
+        precondition(toggled.reorderable == true && toggled.collapsible == true && toggled.rows[0].value == .bool(true))
+        precondition(ordered.offersListCommand("_reorder:today") && !ordered.offersListCommand("_reorder:later"))
+        rejects(surface([row("choice", "choice", value: "a", options: ["a"])], section: ["reorderable": true]))
+        rejects(surface(tasks, section: ["title": "", "collapsible": true]))
+        _ = try NativeSurfaceSnapshot.decode(surface(tasks, section: ["title": "", "collapsible": false]))
+
+        let listRows: [(String, Any?)] = [("task", false), ("navigation", nil), ("label", nil), ("toggle", false), ("menu", nil)]
+        for (kind, value) in listRows {
+            var indented = row("indented", kind, value: value)
+            for level in [0, 3] {
+                indented["indent"] = level
+                let decoded = try NativeSurfaceSnapshot.decode(surface([indented]))
+                precondition(decoded.replacingValue(id: "indented", value: .bool(true)).sections[0].rows[0].indent == level)
+            }
+            for level in [-1, 4] {
+                indented["indent"] = level
+                rejects(surface([indented]))
+            }
+        }
+        var button = row("button", "button")
+        button["indent"] = 1
+        rejects(surface([button]))
+
+        var swiped = row("person", "navigation", options: ["pin", "star", "open", "delete", "rename"])
+        swiped["swipeLeading"] = ["pin", "star", "open"]
+        swiped["swipeTrailing"] = ["delete"]
+        let swipes = try NativeSurfaceSnapshot.decode(surface([swiped]))
+        precondition(swipes.replacingValue(id: "person", value: .text("x")).sections[0].rows[0].swipeTrailing == ["delete"])
+        for (leading, trailing) in [(["pin", "star", "open", "rename"], ["delete"]), (["pin"], ["pin"]),
+                                    (["archive"], []), (["pin", "pin"], [])] {
+            swiped["swipeLeading"] = leading
+            swiped["swipeTrailing"] = trailing
+            rejects(surface([swiped]))
+        }
+        var label = row("note", options: ["delete"])
+        label["swipeTrailing"] = ["delete"]
+        rejects(surface([label]))
+    }
     static func rejects(_ input: Any) {
         do { _ = try NativeSurfaceSnapshot.decode(input) }
         catch { return }
