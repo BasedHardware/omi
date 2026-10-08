@@ -25,8 +25,10 @@ async def isolated_notes_model(model: BaseChatModel) -> AsyncIterator[BaseChatMo
             # Provider-switched BYOK uses the native Anthropic client. Its
             # cached property lives in __dict__, so model_copy isolates it
             # without changing the shared model or its async connection pool.
-            client = model._async_client.with_options(http_client=transport)
-            yield model.model_copy(update={'_async_client': client})
+            # pyright: ignore[reportPrivateUsage] — langchain exposes no public
+            # accessor for the cached client; model_copy needs the real object.
+            client = model._async_client.with_options(http_client=transport)  # type: ignore[attr-defined]
+            yield model.model_copy(update={'_async_client': client})  # type: ignore[dict-item]
             return
         client = model.root_async_client.with_options(http_client=transport)
         yield model.model_copy(
