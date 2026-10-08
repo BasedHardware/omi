@@ -36,6 +36,14 @@ async def test_automatic_owner_rollover_transcript(
     harness.add_previous(receipt, [_segment('old', is_user=True)])
     controller = harness.connect(_stamped_epoch())
     matcher = SpeakerMatcher(controller.host)
+    old_call = controller.host.persistence.call
+
+    async def call(fn, *args, **kwargs):
+        if fn.__name__ == 'get_manual_speaker_receipt':
+            return (harness.rows.get(args[1]) or {}).get('manual_speaker_assignments') or {}
+        return await old_call(fn, *args, **kwargs)
+
+    controller.host.persistence.call = call
     controller.host.speakers = matcher
     controller.host.state.speaker_id_enabled = True
     matcher._profile_conversation_id = 'prev-conv'
@@ -81,3 +89,49 @@ async def test_automatic_owner_rollover_transcript(
     assert matcher.segment_assignments == {}
     assert automatic._value.get() == automatic_before + int(incoming[0].is_user)
     assert dropped._value.get() == dropped_before + int(not incoming[0].is_user)
+
+
+@pytest.mark.anyio
+async def test_carry_arbitrates_voice_matched_during_donor_read(monkeypatch):
+    from types import SimpleNamespace
+    from tests.unit.test_speaker_match import _live_matcher, _segment as audio_segment
+    from routers.listen import speakers as mod
+
+    old = np.array([[0.47, np.sqrt(1 - 0.47**2)]], dtype=np.float32)
+    new = np.array([[0.46, np.sqrt(1 - 0.46**2)]], dtype=np.float32)
+    matcher, host, emitted = _live_matcher(monkeypatch, [new])
+    host.emit_speaker_suggestion = lambda *args, **kw: emitted.append(args)
+    matcher.person_embeddings.pop('p1')
+    owner = matcher.person_embeddings['user']
+    matcher._profile_conversation_id = 'old'
+    matcher.speaker_to_person[0] = ('user', 'User')
+    matcher._mapping_origin[0] = 'automatic'
+    matcher._voice_distances[0] = {'user': 0.53}
+    matcher._voice_decisions[0] = select_speaker_match({'user': 0.53})
+    matcher._voice_centroids[0] = old
+    matcher._voice_scopes[0] = SCOPE
+    matcher.speaker_evidence[0] = deque([(old, 5.0)], maxlen=3)
+    matcher._covered_audio[0] = [(0.0, 5.0)]
+    host.state.speaker_id_enabled = True
+    host.request.uid = 'u'
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))
+
+    async def load():
+        matcher.person_embeddings['user'] = owner
+
+    async def read(fn, *args, **kwargs):
+        if fn is mod.conversations_db.get_conversation:
+            await matcher.match(1, dict(audio_segment('new', 6, 5), speaker_id_scope=SCOPE))
+            assert matcher.speaker_to_person[1][0] == 'user'
+            return {'id': 'old'}
+        return {}
+
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence = SimpleNamespace(call=read)
+    matcher.note_rollover_carry(set())
+    await matcher.refresh_for_conversation('next', owner_carry_scope=SCOPE, owner_carry_donor={'id': 'old'})
+    incoming = [TranscriptSegment(**_segment(str(v), speaker_id=v)) for v in (0, 1)]
+    process_speaker_assigned_segments(incoming, {}, matcher.speaker_to_person)
+    assert [s.is_user for s in incoming] == [False, False]
+    assert matcher.voice_identity_status[0] == matcher.voice_identity_status[1] == SpeakerIdentityStatus.ambiguous
+    assert any(args[0] == 1 and not args[1] for args in emitted), 'withdraw already published owner'

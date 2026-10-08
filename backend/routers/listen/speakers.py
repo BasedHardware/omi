@@ -189,6 +189,7 @@ class SpeakerMatcher:
             count_rollover = self._profile_conversation_id is not None and carried is not None
             self.clear()
             self._profile_conversation_id = conversation_id
+            carry_generation = self._generation
             if self.host.state.speaker_id_enabled:
                 await self._load_profiles()
             if candidates:
@@ -205,10 +206,20 @@ class SpeakerMatcher:
                 except Exception:
                     donor = {}
                 receipt = donor.get('manual_speaker_assignments') or {}
+            current_receipt = {}
+            if candidates:
+                try:
+                    current_receipt = await self.host.persistence.call(
+                        conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
+                    )
+                except Exception:
+                    current_receipt = {'segments': {'reserved': {'is_user': True}}}
             epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
             owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
             if (
-                owner_carry_scope is not None
+                carry_generation == self._generation
+                and self._profile_conversation_id == conversation_id
+                and owner_carry_scope is not None
                 and donor
                 and not any(donor.get(k) for k in ('deleted', 'discarded', 'is_locked'))
                 and owner is not None
@@ -217,7 +228,14 @@ class SpeakerMatcher:
                 and getattr(epoch, 'current_scope', None) == owner_carry_scope
             ):
                 for voice, (_, _, centroid, evidence, covered) in candidates.items():
-                    if manual_owner_reserved(receipt) or self._manual_voice_decision(receipt, voice) is not None:
+                    if voice not in self._voice_distances:
+                        self._voice_scopes[voice] = owner_carry_scope
+                    if (
+                        voice in self._voice_distances
+                        or manual_owner_reserved(receipt)
+                        or self._manual_voice_decision(receipt, voice) is not None
+                        or self._manual_voice_decision(current_receipt, voice) is not None
+                    ):
                         continue
                     if voice in manual_rejected_speakers(receipt):
                         continue
@@ -229,8 +247,6 @@ class SpeakerMatcher:
                     decision = select_speaker_match(distances)
                     if decision.person_id != USER_SELF_PERSON_ID:
                         continue
-                    self.speaker_to_person[voice] = (USER_SELF_PERSON_ID, owner['name'])
-                    self.voice_identity_status[voice] = SpeakerIdentityStatus.user
                     self._voice_distances[voice] = distances
                     self._voice_decisions[voice] = decision
                     self._voice_centroids[voice] = centroid
@@ -238,9 +254,18 @@ class SpeakerMatcher:
                     self._covered_audio[voice] = covered
                     self._voice_scopes[voice] = owner_carry_scope
                     self._voice_segments[voice] = ''
-                    self._mapping_origin[voice] = 'automatic'
-                    if carried is not None:
-                        carried.add(voice)
+                rejected = manual_rejected_speakers(current_receipt)
+                decisions = arbitrate_owner_matches(
+                    {v: d for v, d in self._voice_distances.items() if v not in rejected},
+                    {v: d for v, d in self._voice_decisions.items() if v not in rejected},
+                    owner_reserved=manual_owner_reserved(current_receipt),
+                    voice_groups=self._provider_epoch_voice_groups(),
+                )
+                self._publish_decisions(decisions, rejected)
+                if carried is not None:
+                    carried.update(
+                        v for v in candidates if decisions.get(v) and decisions[v].person_id == USER_SELF_PERSON_ID
+                    )
             if count_rollover:
                 record_live_speaker_rollover(old_mappings, old_origins, carried)
 
@@ -765,46 +790,7 @@ class SpeakerMatcher:
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
-            prior = pinned_speaker_prior_enabled()
-            pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
-            assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
-            for voice in rejected:
-                self._retract_rejected_voice(voice, self._voice_segments.get(voice))
-            for voice, result in decisions.items():
-                segment_id = self._voice_segments[voice]
-                if result.person_id is not None:
-                    self._suggested_person.pop(voice, None)
-                    self.voice_candidates.pop(voice, None)
-                    best_id = result.person_id
-                    best_name = self.person_embeddings[best_id]['name']
-                    changed = self.speaker_to_person.get(voice) != (best_id, best_name)
-                    self.speaker_to_person[voice] = (best_id, best_name)
-                    self._mapping_origin[voice] = 'automatic'
-                    status = (
-                        SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
-                    )
-                    if changed:
-                        self.host.emit_speaker_suggestion(voice, best_id, best_name, segment_id)
-                else:
-                    if result.owner_contended:
-                        self.speaker_to_person.pop(voice, None)
-                        self._mapping_origin.pop(voice, None)
-                        if self.voice_identity_status.get(voice) != SpeakerIdentityStatus.ambiguous:
-                            logger.info(
-                                'speaker_id_owner_contention surface=live speaker=%s session=%s',
-                                voice,
-                                self._session_log_id(),
-                            )
-                    status = (
-                        SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
-                    )
-                    if prior:
-                        self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
-                self._record_match_score(voice, result)
-                self.voice_identity_status[voice] = status
-                self.segment_identity_status[segment_id] = status
-            self.host.state.speaker_map_dirty = True
-            self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
+            self._publish_decisions(decisions, rejected)
         except Exception as error:
             if isinstance(error, ValidationError):
                 issues = error.errors(include_input=False, include_context=False, include_url=False)
@@ -829,6 +815,50 @@ class SpeakerMatcher:
                     type(error).__name__,
                     self._session_log_id(),
                 )
+
+    def _publish_decisions(self, decisions: Mapping[int, SpeakerMatchDecision], rejected: Mapping[int, Any]) -> None:
+        prior = pinned_speaker_prior_enabled()
+        pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
+        assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
+        for voice in rejected:
+            self._retract_rejected_voice(voice, self._voice_segments.get(voice))
+        for voice, result in decisions.items():
+            if self._mapping_origin.get(voice) == 'manual':
+                continue
+            segment_id = self._voice_segments[voice]
+            if result.person_id is not None:
+                self._suggested_person.pop(voice, None)
+                self.voice_candidates.pop(voice, None)
+                best_id = result.person_id
+                best_name = self.person_embeddings[best_id]['name']
+                changed = self.speaker_to_person.get(voice) != (best_id, best_name)
+                self.speaker_to_person[voice] = (best_id, best_name)
+                self._mapping_origin[voice] = 'automatic'
+                status = (
+                    SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
+                )
+                if changed and segment_id:
+                    self.host.emit_speaker_suggestion(voice, best_id, best_name, segment_id)
+            else:
+                if result.owner_contended:
+                    was_mapped = self.speaker_to_person.pop(voice, None)
+                    if was_mapped:
+                        self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
+                    self._mapping_origin.pop(voice, None)
+                    if self.voice_identity_status.get(voice) != SpeakerIdentityStatus.ambiguous:
+                        logger.info(
+                            'speaker_id_owner_contention surface=live speaker=%s session=%s',
+                            voice,
+                            self._session_log_id(),
+                        )
+                status = SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
+                if prior:
+                    self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
+            self._record_match_score(voice, result)
+            self.voice_identity_status[voice] = status
+            self.segment_identity_status[segment_id] = status
+        self.host.state.speaker_map_dirty = True
+        self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
 
     def _record_match_score(
         self,
