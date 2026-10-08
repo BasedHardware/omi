@@ -56,18 +56,23 @@ Build firmware from source to customize your Omi device. If you just want to ins
     | Firmware | Board target | Build output |
     |----------|--------------|--------------|
     | Consumer (Omi) | `omi/nrf5340/cpuapp` | `dfu_application.zip` + `merged.hex` + `merged_CPUNET.hex` (sysbuild) |
-    | DevKit | `xiao_ble/nrf52840/sense` | `zephyr.uf2` |
+    | DevKit | `xiao_ble_sense` (XIAO nRF52840 Sense) | `zephyr.uf2` |
 
     <Warning>
-    These targets are not interchangeable. The consumer CV1 runs on the nRF5340 and
-    builds with **sysbuild** (it produces an MCUboot-signed `dfu_application.zip`
-    plus full-flash hexes, not a UF2). Building `omi/firmware/omi` for
-    `xiao_ble/nrf52840/sense` produces a DevKit image that will not run on a CV1.
-    Prefer the preset in `omi/firmware/omi/CMakePresets.json` (`OMI`), or the
-    command line from `omi/firmware/BUILD_AND_OTA_FLASH.md`:
+    These targets are not interchangeable. The consumer CV1 is an nRF5340 image
+    built from `omi/firmware/omi` with **sysbuild** (MCUboot-signed
+    `dfu_application.zip` plus `merged.hex` and `merged_CPUNET.hex`, not a UF2).
+    The DevKit UF2 is built only from `omi/firmware/devkit`.
+
+    In nRF Connect, use the `OMI` preset in `omi/firmware/omi/CMakePresets.json`
+    and turn **sysbuild** on. The preset sets the board and `CONF_FILE=omi.conf`;
+    it does not enable sysbuild.
+
+    Or, from the west workspace `omi/firmware/v2.9.0`, after
+    `cp ../omi/omi.conf ../omi/prj.conf`:
 
     ```bash
-    west build -b omi/nrf5340/cpuapp omi/firmware/omi --sysbuild -- -DBOARD_ROOT=omi/firmware
+    west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always -- -DBOARD_ROOT=..
     ```
     </Warning>
 
@@ -76,16 +81,21 @@ Build firmware from source to customize your Omi device. If you just want to ins
   </Step>
 
   <Step title="Locate the Firmware File" icon="file">
-    After a successful build, find the output under `build/`:
+    After a successful build, find the outputs:
 
     ```text
     DevKit (UF2, drag-and-drop):
       omi/firmware/devkit/build/<your-preset>/zephyr/zephyr.uf2
 
-    Consumer CV1 (sysbuild, in the west workspace's build dir):
-      dfu_application.zip   — OTA package (app DFU / nRF Connect Mobile)
-      merged.hex            — full-flash image, application core (J-Link)
-      merged_CPUNET.hex     — full-flash image, network core (J-Link)
+    Consumer CV1, nRF Connect preset OMI with sysbuild on:
+      omi/firmware/omi/build/omi/dfu_application.zip
+      omi/firmware/omi/build/omi/merged.hex
+      omi/firmware/omi/build/omi/merged_CPUNET.hex
+
+    Consumer CV1, west command above (-d build inside omi/firmware/v2.9.0):
+      omi/firmware/v2.9.0/build/dfu_application.zip
+      omi/firmware/v2.9.0/build/merged.hex
+      omi/firmware/v2.9.0/build/merged_CPUNET.hex
     ```
   </Step>
 

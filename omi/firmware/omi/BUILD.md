@@ -20,7 +20,7 @@ The west workspace is **not** committed. Create it next to the firmware tree:
 cd omi/firmware
 mkdir -p v2.9.0 && cd v2.9.0
 west init -m https://github.com/nrfconnect/sdk-nrf --mr v2.9.0 .
-west update
+west update  # CI uses `west update -o=--depth=1 -n`; full update is fine locally
 west zephyr-export
 ```
 
@@ -36,7 +36,7 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT=..
 ```
 
-- Board: `omi/nrf5340/cpuapp` (custom board in `boards/omi/`, registered via
+- Board: `omi/nrf5340/cpuapp` (custom board in `omi/firmware/boards/omi/`, registered via
   `-DBOARD_ROOT`). Do **not** use `xiao_ble/nrf52840/sense` — that is the
   DevKit (nRF52840) target.
 - `--sysbuild` is required: it builds the application, MCUboot, and the
@@ -57,13 +57,13 @@ CI fails loudly if any of the three is missing.
 ## Flashing
 
 - **OTA (normal path):** install `dfu_application.zip` via the Omi app
-  (Settings → Device Settings → Update Firmware) or nRF Connect for Mobile.
+  (Settings → Device Settings → Product Update) or nRF Connect for Mobile.
 - **J-Link (recovery / first power-on):** flash `merged_CPUNET.hex` first, then
   `merged.hex`, over SWD (see `FLASH_3.0.8/` scripts; target
   `nRF5340_xxAA_NET` then `nRF5340_xxAA_APP`).
 
 ## Release
 
-`.github/workflows/firmware_release.yml` (manual dispatch) wraps this build and
-publishes the `Omi_CV1_v<ver>` GitHub Release that the backend serves as the
-OTA update. See `scripts/ci/README.md`.
+`.github/workflows/firmware_release.yml` (manual dispatch) runs `scripts/ci/build-cv1.sh`
+— which mirrors the commands above — and publishes the `Omi_CV1_v<ver>` GitHub
+Release that the backend serves as the OTA update. See `scripts/ci/README.md`.

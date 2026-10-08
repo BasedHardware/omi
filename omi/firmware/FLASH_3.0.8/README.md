@@ -2,12 +2,12 @@
 
 > ⚠️ **Stale bundle (added 2026-10):** the `.hex` files shipped in this folder are
 > firmware **3.0.8**, many releases behind the current `Omi_CV1_v3.0.x` releases.
-> Always download the current `merged.hex` / `merged_CPUNET.hex` (renamed
-> `Omi_CV1_v<ver>.hex` / `Omi_CV1_v<ver>_CPUNET.hex`) from
+> Always download the current `Omi_CV1_v<ver>.hex` / `Omi_CV1_v<ver>_CPUNET.hex`
+> from
 > [GitHub Releases](https://github.com/BasedHardware/omi/releases?q=release_firmware+OMI+CV1)
 > and replace the files below before flashing — the scripts expect the exact
 > names `merged.hex` and `merged_CPUNET.hex`. For OTA updates, prefer the app
-> (Settings → Device Settings → Update Firmware) with `Omi_CV1_OTA_v<ver>.zip`.
+> (Settings → Device Settings → Product Update) with `Omi_CV1_OTA_v<ver>.zip`.
 
 This guide provides step-by-step instructions for flashing the Omi firmware using J-Link on both macOS and Windows systems.
 
@@ -15,7 +15,7 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
 
 - Omi CV1 device with a SWD programming connection (J-Link + the Omi flash cable; the pendant has no USB port — the magnetic charger carries power only, not data)
 - J-Link software installed (see installation instructions below)
-- Appropriate USB drivers for your device
+- Appropriate USB drivers for the J-Link (the pendant itself has no USB port)
 - Latest firmware files downloaded from GitHub releases
 
 ## Important: Update Firmware Files Before Flashing
@@ -26,9 +26,12 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
 
 1. Go to the [Omi GitHub Releases page](https://github.com/BasedHardware/omi/releases)
 2. Find the latest release version
-3. Download the following files:
-   - `merged.hex` - Application core firmware
-   - `merged_CPUNET.hex` - Network core firmware
+3. Download the following files from the latest `Omi_CV1_v<ver>` release:
+   - `Omi_CV1_v<ver>.hex` - Application core firmware
+   - `Omi_CV1_v<ver>_CPUNET.hex` - Network core firmware
+
+   The J-Link scripts in this folder `loadfile merged.hex` / `merged_CPUNET.hex`,
+   so save the downloads under those exact names (Step 2 below).
 
 ### Step 2: Replace Existing Firmware Files
 
@@ -40,8 +43,8 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
    mv merged_CPUNET.hex merged_CPUNET.hex.backup
    ```
 3. **Replace with downloaded files**:
-   - Copy the downloaded `merged.hex` to the `MAC/` folder
-   - Copy the downloaded `merged_CPUNET.hex` to the `MAC/` folder
+   - Copy the downloaded `Omi_CV1_v<ver>.hex` into `MAC/` as `merged.hex`
+   - Copy the downloaded `Omi_CV1_v<ver>_CPUNET.hex` into `MAC/` as `merged_CPUNET.hex`
 
 **For Windows:**
 1. Navigate to the `WINDOWS\` folder in your FLASH_3.0.8 directory
@@ -49,8 +52,8 @@ This guide provides step-by-step instructions for flashing the Omi firmware usin
    - Rename `merged.hex` to `merged.hex.backup`
    - Rename `merged_CPUNET.hex` to `merged_CPUNET.hex.backup`
 3. **Replace with downloaded files**:
-   - Copy the downloaded `merged.hex` to the `WINDOWS\` folder
-   - Copy the downloaded `merged_CPUNET.hex` to the `WINDOWS\` folder
+   - Copy the downloaded `Omi_CV1_v<ver>.hex` into `WINDOWS\` as `merged.hex`
+   - Copy the downloaded `Omi_CV1_v<ver>_CPUNET.hex` into `WINDOWS\` as `merged_CPUNET.hex`
 
 ### Step 3: Verify File Replacement
 
