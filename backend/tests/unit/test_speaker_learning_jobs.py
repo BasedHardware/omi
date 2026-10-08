@@ -342,7 +342,9 @@ def test_deadline_finishes_in_flight_job_as_timeout(world, monkeypatch):
         await asyncio.sleep(60)
 
     world.extract.side_effect = slow
-    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 0.05)
+    # Leave room for the claim and executor handoff on a busy CI host; the
+    # sleeping extractor still has to be cancelled by the deadline.
+    monkeypatch.setattr(jobs, 'VOICE_LEARNING_RETRY_DEADLINE_SECONDS', 1.0)
     asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
     assert world.finished and world.finished[0][4] == 'timeout'
     assert world.extract.await_count == 1
