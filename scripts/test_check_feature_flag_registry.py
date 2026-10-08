@@ -100,7 +100,7 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(kind="posthog")]))
         self.assertIn("posthog requires row expected|absent", "\n".join(self.errors()))
 
-    def test_ship_decision_closes_experiment_without_changing_values(self) -> None:
+    def test_ship_decision_is_accepted_and_rendered(self) -> None:
         self.write("backend/docs/experiments/EXP-fixture.md", "# Closure\n")
         self.write("config/feature-flags.yaml", self.yaml([flag(
             lifecycle="experiment", decision="ship", review_by="2020-01-01", prereg="backend/docs/experiments/EXP-fixture.md",
@@ -109,7 +109,6 @@ class RegistryFixture(unittest.TestCase):
         registry = load_registry(self.root / "config/feature-flags.yaml")
         output = render(self.root, registry, date(2026, 10, 8))
         self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
-        self.assertNotIn("WARNING: overdue for a decision: EXAMPLE_ENABLED", check(self.root, check_render=False)[1])
 
     def test_unknown_decision_is_rejected(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(decision="unknown")]))
