@@ -397,6 +397,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         arrowController: _arrowController,
         arrowAnimation: _arrowAnimation,
       ),
+      // The same sheet with native chrome; its Flutter fallback keeps the sheet scaffold.
+      nativeBuilder: (context) => PlansSheet(
+        waveController: _waveController,
+        notesController: _notesController,
+        arrowController: _arrowController,
+        arrowAnimation: _arrowAnimation,
+        nativeSheet: true,
+      ),
     );
   }
 

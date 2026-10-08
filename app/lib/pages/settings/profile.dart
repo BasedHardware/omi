@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -34,8 +35,37 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _editName() async {
     PlatformManager.instance.analytics.pageOpened('Profile Change Name');
-    await showDialog(context: context, builder: (_) => const ChangeNameWidget());
+    if (!await _editNameNatively() && mounted) {
+      await showDialog(context: context, builder: (_) => const ChangeNameWidget());
+    }
     if (mounted) setState(() {});
+  }
+
+  /// The native name editor. Answers false when it was not used, so the existing dialog asks
+  /// instead; a blank name presents it again with the validation message and never saves.
+  Future<bool> _editNameNatively() async {
+    if (!nativePresentationEnabled) return false;
+    var name = initialGivenName();
+    String? error;
+    while (true) {
+      if (!mounted) return true;
+      final l10n = context.l10n;
+      final native = await showIosNativeModal(context, title: l10n.editName, guardEdits: true, actions: [
+        NativeRow('cancel', l10n.cancel, symbol: 'xmark'),
+        NativeRow('save', l10n.save),
+      ], sections: [
+        NativeSection('account_name_edit', [
+          NativeRow('name_prompt', l10n.howShouldOmiCallYou, kind: 'label'),
+          NativeRow('name', l10n.enterYourName, kind: 'text', value: name, maximumLength: 100),
+          if (error != null) NativeRow('name_validation', error, kind: 'label'),
+        ]),
+      ]);
+      if (native == null) return false;
+      if (native.action != 'save' || !mounted) return true;
+      name = native.values['name'] as String;
+      if (saveGivenName(context, name)) return true;
+      error = l10n.nameCannotBeEmpty;
+    }
   }
 
   @override

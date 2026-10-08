@@ -53,7 +53,9 @@ class FreemiumSwitchHandler {
       show: (promptContext) => showOmiSheet<void>(
         context: promptContext,
         padding: EdgeInsets.zero,
-        builder: (_) => _PlansSheetWrapper(),
+        builder: (_) => const _PlansSheetWrapper(),
+        // The same sheet with native chrome; its Flutter fallback keeps the sheet scaffold.
+        nativeBuilder: (_) => const _PlansSheetWrapper(nativeSheet: true),
       ),
     );
   }
@@ -83,6 +85,10 @@ class FreemiumSwitchHandler {
 
 /// Wrapper widget to create animation controllers for PlansSheet
 class _PlansSheetWrapper extends StatefulWidget {
+  const _PlansSheetWrapper({this.nativeSheet = false});
+
+  final bool nativeSheet;
+
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
 }
@@ -120,6 +126,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _waveController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
+      nativeSheet: widget.nativeSheet,
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/services/auth_service.dart';
@@ -18,11 +19,19 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 const _stepCount = 3;
+const _detailsLength = 500;
+const _confirmLength = 32;
+
+/// The account deletion request; the backend API unless a test supplies an inert one.
+typedef DeleteAccountRequest = Future<bool> Function({String? reason, String? reasonDetails});
 
 /// Account deletion: reason → feedback → typed confirmation. Each step is its own route, so the
 /// iOS edge swipe and system back step back one step. This widget is step 1 and owns the flow.
 class DeleteAccount extends StatefulWidget {
-  const DeleteAccount({super.key});
+  const DeleteAccount({super.key, @visibleForTesting this.deleteAccountRequest});
+
+  /// Replaces the backend request in tests only.
+  final DeleteAccountRequest? deleteAccountRequest;
 
   @override
   State<DeleteAccount> createState() => _DeleteAccountState();
@@ -30,12 +39,18 @@ class DeleteAccount extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _DeleteAccountFlow {
+  _DeleteAccountFlow(this.request);
+
+  final DeleteAccountRequest request;
   final exit = LeaveFlowExit();
   final details = TextEditingController();
   final confirm = TextEditingController();
   String? reason;
 
   String? get detailsText => details.text.trim().isNotEmpty ? details.text.trim() : null;
+
+  /// Whether [confirm] holds the localized confirmation word; the same rule gates both renderers.
+  bool confirmed(String word) => confirm.text.trim().toUpperCase() == word;
 
   void dispose() {
     details.dispose();
@@ -44,7 +59,7 @@ class _DeleteAccountFlow {
 }
 
 class _DeleteAccountState extends State<DeleteAccount> {
-  final _flow = _DeleteAccountFlow();
+  late final _flow = _DeleteAccountFlow(widget.deleteAccountRequest ?? deleteAccount);
 
   static const _reasons = [
     _Reason('privacy_concerns', FontAwesomeIcons.shield),
@@ -85,20 +100,29 @@ class _DeleteAccountState extends State<DeleteAccount> {
         _ => key,
       };
 
+  void _onPopInvoked(bool didPop) {
+    // Back button, system back and the edge swipe all leave through here.
+    if (didPop && !_flow.exit.finished) {
+      PlatformManager.instance.analytics.deleteAccountAbandoned(step: 1, reason: _flow.reason);
+    }
+  }
+
+  void _continue() {
+    final reason = _flow.reason;
+    if (reason == null) return;
+    PlatformManager.instance.analytics.deleteAccountReasonSelected(reason: reason);
+    routeToPage(context, _DeleteFeedbackStep(flow: _flow));
+  }
+
   @override
   Widget build(BuildContext context) {
     final reason = _flow.reason;
-    return LeaveFlowStepScaffold(
+    final fallback = LeaveFlowStepScaffold(
       step: 0,
       stepCount: _stepCount,
       title: context.l10n.deleteFlowReasonTitle,
       subtitle: context.l10n.deleteFlowReasonSubtitle,
-      onPopInvoked: (didPop) {
-        // Back button, system back and the edge swipe all leave through here.
-        if (didPop && !_flow.exit.finished) {
-          PlatformManager.instance.analytics.deleteAccountAbandoned(step: 1, reason: _flow.reason);
-        }
-      },
+      onPopInvoked: _onPopInvoked,
       body: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
         itemCount: _reasons.length,
@@ -113,13 +137,29 @@ class _DeleteAccountState extends State<DeleteAccount> {
       actions: OmiButton(
         label: context.l10n.continueButton,
         expand: true,
-        onPressed: reason == null
-            ? null
-            : () {
-                PlatformManager.instance.analytics.deleteAccountReasonSelected(reason: reason);
-                routeToPage(context, _DeleteFeedbackStep(flow: _flow));
-              },
+        onPressed: reason == null ? null : _continue,
       ),
+    );
+    return nativeLeaveStep(
+      context,
+      step: 0,
+      stepCount: _stepCount,
+      title: context.l10n.deleteFlowReasonTitle,
+      subtitle: context.l10n.deleteFlowReasonSubtitle,
+      canPop: true,
+      onPopInvoked: _onPopInvoked,
+      fallback: fallback,
+      sections: [
+        NativeSection('delete_reasons', [
+          for (final option in _reasons)
+            NativeRow('delete_reason:${option.key}', _label(option.key),
+                symbol: reason == option.key ? 'checkmark.circle.fill' : 'circle',
+                action: (_) => setState(() => _flow.reason = option.key)),
+        ]),
+        NativeSection('delete_reason_actions', [
+          NativeRow('leave_continue', context.l10n.continueButton, enabled: reason != null, action: (_) => _continue()),
+        ]),
+      ],
     );
   }
 }
@@ -132,7 +172,7 @@ class _DeleteFeedbackStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void next() => routeToPage(context, _DeleteConfirmStep(flow: flow));
-    return LeaveFlowStepScaffold(
+    final fallback = LeaveFlowStepScaffold(
       step: 1,
       stepCount: _stepCount,
       title: context.l10n.deleteFlowFeedbackTitle,
@@ -142,7 +182,7 @@ class _DeleteFeedbackStep extends StatelessWidget {
         child: SingleChildScrollView(
           child: LeaveFlowTextField(
             controller: flow.details,
-            maxLength: 500,
+            maxLength: _detailsLength,
             hint: context.l10n.deleteFlowFeedbackHint,
           ),
         ),
@@ -153,6 +193,37 @@ class _DeleteFeedbackStep extends StatelessWidget {
           OmiButton(label: context.l10n.continueButton, expand: true, onPressed: next),
           const SizedBox(height: OmiSpacing.xs),
           OmiButton.tertiary(label: context.l10n.skipForNow, expand: true, onPressed: next),
+        ],
+      ),
+    );
+    if (!nativePresentationEnabled) return fallback;
+    // Rebuilds with every native edit, so the next snapshot carries the current text.
+    return ListenableBuilder(
+      listenable: flow.details,
+      builder: (context, _) => nativeLeaveStep(
+        context,
+        step: 1,
+        stepCount: _stepCount,
+        title: context.l10n.deleteFlowFeedbackTitle,
+        subtitle: context.l10n.deleteFlowFeedbackSubtitle,
+        canPop: true,
+        fallback: fallback,
+        sections: [
+          NativeSection('delete_feedback', [
+            NativeRow('delete_details', context.l10n.deleteFlowFeedbackHint,
+                kind: 'text',
+                value: nativeLeaveText(flow.details.text, _detailsLength),
+                maximumLength: _detailsLength,
+                action: (value) => flow.details.text = value as String),
+          ]),
+          NativeSection('delete_feedback_actions', [
+            NativeRow('leave_continue', context.l10n.continueButton, action: (_) {
+              next();
+            }),
+            NativeRow('leave_skip', context.l10n.skipForNow, action: (_) {
+              next();
+            }),
+          ]),
         ],
       ),
     );
@@ -178,8 +249,15 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
     setState(() => _isDeleting = true);
     final details = _flow.detailsText;
 
+    // The native view shows a blocking activity while the request runs; it closes before anything else.
+    final activity = await leaveFlowActivity(context, context.l10n.deleting);
     try {
-      final ok = await deleteAccount(reason: _flow.reason, reasonDetails: details);
+      final bool ok;
+      try {
+        ok = await _flow.request(reason: _flow.reason, reasonDetails: details);
+      } finally {
+        await activity?.dismiss();
+      }
       if (!mounted) return;
       if (!ok) {
         OmiFeedback.error(context, context.l10n.deleteAccountFailed);
@@ -211,7 +289,12 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
   @override
   Widget build(BuildContext context) {
     final confirmWord = context.l10n.deleteConfirmationWord;
-    return LeaveFlowStepScaffold(
+    void keep() {
+      PlatformManager.instance.analytics.deleteAccountKeptAccount(step: 3, reason: _flow.reason);
+      _flow.exit.close(context);
+    }
+
+    final fallback = LeaveFlowStepScaffold(
       step: 2,
       stepCount: _stepCount,
       title: context.l10n.deleteFlowConfirmTitle,
@@ -256,7 +339,7 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
       actions: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _flow.confirm,
         builder: (context, value, _) {
-          final canDelete = !_isDeleting && value.text.trim().toUpperCase() == confirmWord;
+          final canDelete = !_isDeleting && _flow.confirmed(confirmWord);
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -290,16 +373,57 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
               OmiButton.secondary(
                 label: context.l10n.keepMyAccount,
                 expand: true,
-                onPressed: _isDeleting
-                    ? null
-                    : () {
-                        PlatformManager.instance.analytics.deleteAccountKeptAccount(step: 3, reason: _flow.reason);
-                        _flow.exit.close(context);
-                      },
+                onPressed: _isDeleting ? null : keep,
               ),
             ],
           );
         },
+      ),
+    );
+    if (!nativePresentationEnabled) return fallback;
+    final l10n = context.l10n;
+    // Export availability follows the shared export owner, exactly like the fallback's row.
+    return ValueListenableBuilder<bool>(
+      valueListenable: DataExport.exportInProgress,
+      builder: (context, exporting, _) => nativeLeaveStep(
+        context,
+        step: 2,
+        stepCount: _stepCount,
+        title: l10n.deleteFlowConfirmTitle,
+        subtitle: l10n.deleteFlowConfirmSubtitle,
+        canPop: !_isDeleting,
+        fallback: fallback,
+        sections: [
+          NativeSection('delete_consequences', [
+            NativeRow('delete_all_data', l10n.allDataErased, kind: 'label', symbol: 'text.bubble'),
+            NativeRow('delete_apps', l10n.appsDisconnected, kind: 'label', symbol: 'puzzlepiece'),
+            NativeRow('delete_subscription', l10n.deleteConsequenceSubscription, kind: 'label', symbol: 'creditcard'),
+          ]),
+          NativeSection('delete_export_section', [
+            NativeRow('delete_export', l10n.exportAllData,
+                symbol: 'square.and.arrow.down',
+                subtitle: exporting ? l10n.exportingAllData : '',
+                enabled: !_isDeleting && !exporting,
+                action: (_) => DataExport.run(context)),
+          ]),
+          // The field shows what was typed; Delete stays disabled until Dart finds the exact word.
+          NativeSection(
+              'delete_confirmation',
+              [
+                NativeRow('delete_confirm_word', confirmWord,
+                    kind: 'text',
+                    value: nativeLeaveText(_flow.confirm.text, _confirmLength),
+                    maximumLength: _confirmLength,
+                    enabled: !_isDeleting,
+                    action: (value) => setState(() => _flow.confirm.text = value as String)),
+                NativeRow('delete_account', l10n.deleteAccountTitle,
+                    destructive: true, enabled: !_isDeleting && _flow.confirmed(confirmWord), action: (_) async {
+                  if (!_isDeleting && _flow.confirmed(confirmWord)) await _confirmDelete();
+                }),
+                NativeRow('delete_keep', l10n.keepMyAccount, enabled: !_isDeleting, action: (_) => keep()),
+              ],
+              title: l10n.deleteTypeToConfirm),
+        ],
       ),
     );
   }
