@@ -29,6 +29,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    review,
     proactivity,
     chat,
     firmware,
@@ -316,6 +317,7 @@ app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
+app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
 
