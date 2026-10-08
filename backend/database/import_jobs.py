@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, cast
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db, run_transactional
+from ._client import db, get_firestore_client, run_transactional
 
 # ImportJobStatus.cancelled; the database layer does not import the API models.
 _CANCELLED = 'cancelled'
@@ -43,6 +43,23 @@ def update_import_job_unless_cancelled(job_id: str, updates: Dict[str, Any]) -> 
         return True
 
     return bool(run_transactional(db, apply))
+
+
+def cancel_import_job_if_active(job_id: str, *, firestore_client: Any = None) -> bool:
+    """Cancel only a pending or processing job, in the transaction that reads its status."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    job_ref = client.collection('import_jobs').document(job_id)
+
+    @firestore.transactional
+    def apply(transaction: Any) -> bool:
+        snapshot = job_ref.get(transaction=transaction)
+        current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        if not current or current.get('status') not in ('pending', 'processing'):
+            return False
+        transaction.update(job_ref, {'status': _CANCELLED, 'error': 'Cancelled by user'})
+        return True
+
+    return bool(run_transactional(client, apply))
 
 
 def update_import_job_progress(job_id: str, progress: Dict[str, Any]) -> bool:

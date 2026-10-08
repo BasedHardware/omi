@@ -24,6 +24,7 @@ from starlette.datastructures import UploadFile
 
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from routers import imports as imports_mod
+from utils import multipart
 from utils.rate_limit_config import RATE_POLICIES
 
 # A test that leaves a file open fails rather than leaking the descriptor (the
@@ -70,6 +71,7 @@ class _Worker:
 @pytest.fixture
 def staged(tmp_path, monkeypatch):
     monkeypatch.setattr(imports_mod, 'TEMP_DIR', str(tmp_path))
+    monkeypatch.setattr(imports_mod.import_quotas_db, 'reserve_import_quota', lambda *_args: 'reservation')
     job = ImportJob(id='job-9', uid=UID, status=ImportJobStatus.pending, source_type=ImportSourceType.transcript_files)
     create = MagicMock(return_value=job)
     worker = _Worker()
@@ -171,7 +173,9 @@ class _BrokenUpload(UploadFile):
 def test_failed_staging_removes_the_partial_file_and_fails_the_job(staged):
     _, worker, tmp_path = staged
 
-    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(HTTPException) as error:
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job_unless_cancelled') as update, pytest.raises(
+        HTTPException
+    ) as error:
         _call(_BrokenUpload())
 
     assert error.value.status_code == 500
@@ -185,7 +189,7 @@ def test_staged_file_is_removed_even_when_failing_the_job_raises(staged):
     _, worker, tmp_path = staged
 
     with patch.object(
-        imports_mod.import_jobs_db, 'update_import_job', side_effect=RuntimeError('firestore down')
+        imports_mod.import_jobs_db, 'update_import_job_unless_cancelled', side_effect=RuntimeError('firestore down')
     ), pytest.raises(RuntimeError):
         _call(_BrokenUpload())
 
@@ -213,7 +217,9 @@ def test_cancelled_staging_fails_the_job_removes_the_partial_file_and_reraises(s
 
     monkeypatch.setattr(imports_mod, 'submit_with_context', run_now, raising=False)
 
-    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(asyncio.CancelledError):
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job_unless_cancelled') as update, pytest.raises(
+        asyncio.CancelledError
+    ):
         _call(_CancelledUpload())
 
     assert cleanups == [imports_mod.db_executor]
@@ -224,7 +230,9 @@ def test_cancelled_staging_fails_the_job_removes_the_partial_file_and_reraises(s
 
 
 def test_failed_job_error_never_names_an_exception_class(staged):
-    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(HTTPException):
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job_unless_cancelled') as update, pytest.raises(
+        HTTPException
+    ):
         _call(_BrokenUpload())
 
     assert update.call_args.args[1]['error'] == 'Failed to save uploaded file'
@@ -241,7 +249,9 @@ def test_job_is_failed_when_the_worker_cannot_be_queued(staged, monkeypatch):
 
     monkeypatch.setattr(imports_mod, 'start_background_task', refuse)
 
-    with patch.object(imports_mod.import_jobs_db, 'update_import_job') as update, pytest.raises(HTTPException) as error:
+    with patch.object(imports_mod.import_jobs_db, 'update_import_job_unless_cancelled') as update, pytest.raises(
+        HTTPException
+    ) as error:
         _call(_upload('call.srt'))
 
     assert error.value.status_code == 503
@@ -275,7 +285,9 @@ def _client(monkeypatch, enforce) -> TestClient:
 
 def _post(client: TestClient):
     return client.post(
-        '/v1/import/transcripts', files={'file': ('call.srt', b'1\n00:00:01,000 --> 00:00:02,000\nhi\n')}
+        '/v1/import/transcripts',
+        headers={'Authorization': 'Bearer test-token'},
+        files={'file': ('call.srt', b'1\n00:00:01,000 --> 00:00:02,000\nhi\n')},
     )
 
 
@@ -283,7 +295,7 @@ def test_imports_have_their_own_modest_rate_limit():
     """Imports must not spend the chat file-upload bucket, and one import carries many files."""
     max_requests, window = RATE_POLICIES['import:upload']
 
-    assert (max_requests, window) == (10, 3600)
+    assert (max_requests, window) == (30, 3600)
 
 
 def test_upload_is_rate_limited_per_user(staged, monkeypatch):
@@ -362,3 +374,92 @@ def test_route_policy_records_the_byok_check_its_auth_runs():
     (entry,) = [r for r in manifest['routes'] if (r['method'], r['path']) == ('POST', '/v1/import/transcripts')]
 
     assert entry['policy']['byok'] == 'validated_when_headers_present'
+
+
+def test_monthly_upload_limit_rejects_before_staging(staged, monkeypatch):
+    create, worker, tmp_path = staged
+    monkeypatch.setattr(imports_mod.import_quotas_db, 'reserve_import_quota', lambda *_args: None)
+
+    response = _post(_client(monkeypatch, lambda *_args, **_kwargs: None))
+
+    assert response.status_code == 429
+    assert 'Monthly transcript upload limit' in response.json()['detail']
+    create.assert_not_called()
+    assert not worker.called.is_set()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize('language', ['', '   ', 'x' * 17, 'en/US', '日本語'])
+def test_invalid_language_falls_back_to_english(staged, language):
+    _, worker, _ = staged
+
+    _call(_upload('call.srt'), language=language)
+
+    assert worker.wait().kwargs['language_code'] == 'en'
+
+
+@pytest.mark.parametrize('language', ['es', 'zh-Hant', 'pt_BR', 'a' * 16, ' en '])
+def test_valid_language_is_stripped_and_forwarded(staged, language):
+    _, worker, _ = staged
+
+    _call(_upload('call.srt'), language=language)
+
+    assert worker.wait().kwargs['language_code'] == language.strip()
+
+
+@pytest.mark.parametrize('authorization', [None, '', 'Bearer', 'Bearer   ', 'Basic secret'])
+def test_missing_bearer_token_is_rejected_before_body_parse(monkeypatch, authorization):
+    parsed = MagicMock(side_effect=AssertionError('the body must not be parsed'))
+    with patch.object(multipart, 'parse_multipart_form', parsed):
+        client = _client(monkeypatch, lambda *_args, **_kwargs: None)
+        headers = {} if authorization is None else {'Authorization': authorization}
+        response = client.post('/v1/import/transcripts', headers=headers, files={'file': ('call.srt', b'bytes')})
+
+    assert response.status_code == 401
+    parsed.assert_not_called()
+
+
+def test_transcript_upload_fails_closed_when_hourly_limiter_is_unavailable(staged, monkeypatch):
+    create, worker, tmp_path = staged
+    real_enforce = imports_mod.auth._enforce_rate_limit
+    monkeypatch.setattr(
+        imports_mod.auth,
+        'check_rate_limit',
+        MagicMock(side_effect=imports_mod.auth.redis_pkg.exceptions.RedisError('unavailable')),
+    )
+
+    response = _post(_client(monkeypatch, real_enforce))
+
+    assert response.status_code == 503
+    create.assert_not_called()
+    assert list(tmp_path.iterdir()) == []
+    assert not worker.called.is_set()
+
+
+def test_monthly_quota_fails_closed_when_redis_is_unavailable(staged, monkeypatch):
+    create, _, tmp_path = staged
+    monkeypatch.setattr(
+        imports_mod.import_quotas_db, 'reserve_import_quota', MagicMock(side_effect=imports_mod.RedisError('down'))
+    )
+
+    response = _post(_client(monkeypatch, lambda *_args, **_kwargs: None))
+
+    assert response.status_code == 503
+    create.assert_not_called()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize('exists', [True, False])
+def test_cancel_does_not_overwrite_a_job_that_finished_or_disappeared(exists):
+    job = _stored_job('a', status='processing')
+    with patch.object(
+        imports_mod.import_jobs_db, 'get_import_job', side_effect=[job, job if exists else None]
+    ), patch.object(
+        imports_mod.import_jobs_db, 'cancel_import_job_if_active', return_value=False
+    ) as cancel, pytest.raises(
+        HTTPException
+    ) as error:
+        imports_mod.cancel_import_job('a', uid=UID)
+
+    assert error.value.status_code == (409 if exists else 404)
+    cancel.assert_called_once_with('a')

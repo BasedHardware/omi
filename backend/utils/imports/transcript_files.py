@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 
 import database.conversations as conversations_db
 import database.import_jobs as import_jobs_db
+import database.import_quotas as import_quotas_db
 import database.users as users_db
 from database.auth import get_user_full_name
 from database.document_ids import document_id_from_seed
@@ -87,6 +88,8 @@ class TranscriptImportError(Exception):
 
 
 # Why one file was skipped, as shown to the user. Exception class names stay in logs.
+MAX_REPLACEMENT_CHARACTER_SHARE = 0.02
+MONTHLY_LIMIT_REACHED = 'monthly import limit reached'
 NOT_A_TRANSCRIPT = 'not a readable transcript'
 FILE_TOO_LARGE = 'file too large'
 TRANSCRIPT_TOO_LONG = 'transcript too long'
@@ -478,14 +481,19 @@ def _decode_transcript(data: bytes) -> Optional[str]:
             text = data.decode('utf-16')
         except UnicodeDecodeError:
             return None
-        return None if '\x00' in text else text
-    if b'\x00' in data:
+        if '\x00' in text:
+            return None
+    else:
+        if b'\x00' in data:
+            return None
+        data = data.removeprefix(codecs.BOM_UTF8)
+        try:
+            text = data.decode('utf-8')
+        except UnicodeDecodeError:
+            text = data.decode('cp1252', errors='replace')
+    if text and text.count('\ufffd') / len(text) > MAX_REPLACEMENT_CHARACTER_SHARE:
         return None
-    data = data.removeprefix(codecs.BOM_UTF8)
-    try:
-        return data.decode('utf-8')
-    except UnicodeDecodeError:
-        return data.decode('cp1252', errors='replace')
+    return text
 
 
 def _txt_srt_cues(blocks: Sequence[Sequence[str]]) -> Optional[List[TranscriptCue]]:
@@ -1062,11 +1070,19 @@ def _import_file(
     payload = omit_null_processing_state(conversation.model_dump())
     if _compressed_transcript_bytes(uid, payload['transcript_segments']) > MAX_COMPRESSED_TRANSCRIPT_BYTES:
         raise TranscriptFileSkipped(TRANSCRIPT_TOO_LONG)
+    reservation = import_quotas_db.reserve_import_quota(uid, 'byte', len(data))
+    if reservation is None:
+        raise TranscriptFileSkipped(MONTHLY_LIMIT_REACHED)
+    created = False
     try:
-        return lifecycle_service.persist_imported_conversation(uid, payload)
+        created = lifecycle_service.persist_imported_conversation(uid, payload)
+        return created
     except Exception as exc:
         logger.warning('transcript import save failed job_id=%s error_class=%s', job_id, type(exc).__name__)
         raise TranscriptFileSkipped(NOT_SAVED) from exc
+    finally:
+        if not created:
+            import_quotas_db.release_import_quota(uid, 'byte', reservation)
 
 
 async def process_transcript_import(
@@ -1112,12 +1128,15 @@ async def process_transcript_import(
                 db_executor, _fail, uid, job_id, 'No transcript files (.srt, .vtt or .txt) were found in the upload.'
             )
             return
+        monthly_limit_reached = False
         for entry in upload.entries:
             if await run_blocking(db_executor, _job_cancelled, job_id):
                 await run_blocking(db_executor, _record_cancelled_counts, job_id, processed, created, skipped)
                 logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                 return
             try:
+                if monthly_limit_reached:
+                    raise TranscriptFileSkipped(MONTHLY_LIMIT_REACHED)
                 if await run_blocking(
                     storage_executor,
                     _import_file,
@@ -1134,6 +1153,7 @@ async def process_transcript_import(
                 else:
                     skipped += 1
             except TranscriptFileSkipped as skip:
+                monthly_limit_reached = monthly_limit_reached or skip.reason == MONTHLY_LIMIT_REACHED
                 errors.append(skip.reason)
             except Exception as exc:
                 logger.warning('transcript import file failed job_id=%s error_class=%s', job_id, type(exc).__name__)
@@ -1151,7 +1171,7 @@ async def process_transcript_import(
                     await run_blocking(db_executor, _record_cancelled_counts, job_id, processed, created, skipped)
                     logger.info('transcript import job %s cancelled after %s of %s files', job_id, processed, total)
                     return
-        if errors and created == 0 and skipped == 0:
+        if errors and created == 0 and skipped == 0 and not monthly_limit_reached:
             settling = True
             await run_blocking(
                 db_executor, _fail, uid, job_id, f'None of the {total} file(s) could be imported ({errors[0]}).'
@@ -1161,7 +1181,12 @@ async def process_transcript_import(
         completed = {
             'status': ImportJobStatus.completed.value,
             'completed_at': datetime.now(timezone.utc).isoformat(),
-            'error': f'{len(errors)} file(s) could not be imported' if errors else None,
+            'error': (
+                f'{len(errors)} file(s) could not be imported'
+                + (f' ({MONTHLY_LIMIT_REACHED})' if monthly_limit_reached else '')
+                if errors
+                else None
+            ),
             'conversations_created': created,
             'conversations_skipped': skipped,
         }
