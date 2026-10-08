@@ -2751,35 +2751,13 @@ class TasksStore: ObservableObject {
   // MARK: - Recurrence Helpers
 
   /// Compute the next due date for a recurring task, skipping past dates.
-  private func nextFutureDueDate(from dueDate: Date, rule: String) -> Date? {
-    let calendar = Calendar.current
-    func nextDate(from date: Date) -> Date? {
-      switch rule {
-      case "daily":
-        return calendar.date(byAdding: .day, value: 1, to: date)
-      case "weekdays":
-        var next = calendar.date(byAdding: .day, value: 1, to: date)!
-        while calendar.isDateInWeekend(next) {
-          next = calendar.date(byAdding: .day, value: 1, to: next)!
-        }
-        return next
-      case "weekly":
-        return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
-      case "biweekly":
-        return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
-      case "monthly":
-        return calendar.date(byAdding: .month, value: 1, to: date)
-      default:
-        return nil
-      }
-    }
-    guard var next = nextDate(from: dueDate) else { return nil }
-    // Skip past dates to avoid pile-up when completing late
-    while next < Date() {
-      guard let n = nextDate(from: next) else { return nil }
-      next = n
-    }
-    return next
+  func nextFutureDueDate(
+    from dueDate: Date,
+    rule: String,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    TaskRecurrenceDatePolicy.nextDueDate(from: dueDate, rule: rule, now: now, calendar: calendar)
   }
 
   // MARK: - Task Actions
