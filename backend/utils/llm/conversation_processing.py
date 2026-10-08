@@ -1387,7 +1387,13 @@ def _get_conversation_notes_legacy(
         )
     else:
         volatile_instructions = _conversation_notes_volatile_instructions(**volatile_kwargs)
-    explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+    # BYOK is excluded: a BYOK key can route conv_structure off GPT-5.6, where
+    # prompt_cache_breakpoint is not a valid content part. Anthropic rejects it
+    # (system.0.prompt_cache_breakpoint: Extra inputs are not permitted) and
+    # _get_structured maps that 400 to HTTP 500.
+    explicit_cache_enabled = (
+        shared_conversation_cache_supported() and explicit_cache_switch_enabled() and not has_byok_keys()
+    )
     cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
     messages = [
         _gpt56_cacheable_system_message(static_instructions, cache_enabled=cache_enabled, formatted=True),
