@@ -12481,4 +12481,19 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get partialRecording => 'Rakaman separa';
+
+  @override
+  String get importTranscriptFiles => 'Fail transkrip';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak import sekarang. Cuba lagi kemudian.';
+
+  @override
+  String get importFileTooLarge => 'Fail ini terlalu besar untuk diimport.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis fail ini tidak boleh diimport.';
 }

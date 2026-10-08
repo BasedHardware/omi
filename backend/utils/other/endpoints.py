@@ -666,7 +666,9 @@ def check_api_key_rate_limit(
     _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
-def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
+def with_rate_limit(
+    auth_dependency: Callable[..., Any], policy_name: str, *, fail_closed: bool = False
+) -> Callable[..., Any]:
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
@@ -675,13 +677,14 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
         policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+        fail_closed: Reject requests when Redis is unavailable (default: False).
     """
     if policy_name not in RATE_POLICIES:
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error
         return uid

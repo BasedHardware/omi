@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 sterren helpen ons echt enorm ❤️",
     "onboardingRatingPromptYes": "Ja, ik wil jullie steunen!",
     "onboardingRatingPromptNo": "Niet echt",
-    "partialRecording": "Gedeeltelijke opname"
+    "partialRecording": "Gedeeltelijke opname",
+    "importTranscriptFiles": "Transcriptiebestanden",
+    "importTranscriptFilesDescription": "Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden",
+    "importTooManyAttempts": "Te veel imports op dit moment. Probeer het later opnieuw.",
+    "importFileTooLarge": "Dit bestand is te groot om te importeren.",
+    "importUnsupportedFileType": "Dit bestandstype kan niet worden geïmporteerd."
 }

@@ -12534,4 +12534,20 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get partialRecording => 'பகுதியளவு பதிவு';
+
+  @override
+  String get importTranscriptFiles => 'படியெடுப்பு கோப்புகள்';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get importTooManyAttempts => 'இப்போது அதிகமான இறக்குமதிகள் நடைபெறுகின்றன. பின்னர் மீண்டும் முயலுங்கள்.';
+
+  @override
+  String get importFileTooLarge => 'இந்தக் கோப்பு இறக்குமதி செய்ய மிகவும் பெரியது.';
+
+  @override
+  String get importUnsupportedFileType => 'இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது.';
 }

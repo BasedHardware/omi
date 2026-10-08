@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "Оценка от 5 звезди наистина ни помага ❤️",
     "onboardingRatingPromptYes": "Да, искам да ви подкрепя!",
     "onboardingRatingPromptNo": "Не особено",
-    "partialRecording": "Частичен запис"
+    "partialRecording": "Частичен запис",
+    "importTranscriptFiles": "Файлове с транскрипции",
+    "importTranscriptFilesDescription": "Изберете транскрипции SRT, VTT или TXT или ZIP архив с тях",
+    "importTooManyAttempts": "Твърде много импортирания в момента. Опитайте отново по-късно.",
+    "importFileTooLarge": "Този файл е твърде голям за импортиране.",
+    "importUnsupportedFileType": "Файлове от този тип не могат да бъдат импортирани."
 }

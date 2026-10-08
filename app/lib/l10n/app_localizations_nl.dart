@@ -12486,4 +12486,20 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Gedeeltelijke opname';
+
+  @override
+  String get importTranscriptFiles => 'Transcriptiebestanden';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden';
+
+  @override
+  String get importTooManyAttempts => 'Te veel imports op dit moment. Probeer het later opnieuw.';
+
+  @override
+  String get importFileTooLarge => 'Dit bestand is te groot om te importeren.';
+
+  @override
+  String get importUnsupportedFileType => 'Dit bestandstype kan niet worden geïmporteerd.';
 }

@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️",
     "onboardingRatingPromptYes": "ใช่ ฉันอยากสนับสนุนคุณ!",
     "onboardingRatingPromptNo": "ไม่ค่อย",
-    "partialRecording": "การบันทึกบางส่วน"
+    "partialRecording": "การบันทึกบางส่วน",
+    "importTranscriptFiles": "ไฟล์ถอดเสียง",
+    "importTranscriptFilesDescription": "เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้",
+    "importTooManyAttempts": "มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง",
+    "importFileTooLarge": "ไฟล์นี้ใหญ่เกินไปที่จะนำเข้า",
+    "importUnsupportedFileType": "ไม่สามารถนำเข้าไฟล์ประเภทนี้ได้"
 }
