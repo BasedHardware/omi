@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "星5つの評価は私たちの大きな励みになります ❤️",
     "onboardingRatingPromptYes": "はい、応援します！",
     "onboardingRatingPromptNo": "あまり",
-    "partialRecording": "一部のみの録音"
+    "partialRecording": "一部のみの録音",
+    "importTranscriptFiles": "文字起こしファイル",
+    "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください",
+    "importTooManyAttempts": "現在インポートが多すぎます。しばらくしてからもう一度お試しください。",
+    "importFileTooLarge": "このファイルはインポートするには大きすぎます。",
+    "importUnsupportedFileType": "この種類のファイルはインポートできません。"
 }

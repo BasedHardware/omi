@@ -12438,4 +12438,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get partialRecording => 'Partial recording';
+
+  @override
+  String get importTranscriptFiles => 'Transcript files';
+
+  @override
+  String get importTranscriptFilesDescription => 'Select SRT, VTT or TXT transcripts, or a ZIP of them';
+
+  @override
+  String get importTooManyAttempts => 'Too many imports right now. Try again later.';
+
+  @override
+  String get importFileTooLarge => 'This file is too large to import.';
+
+  @override
+  String get importUnsupportedFileType => 'This file type can\'t be imported.';
 }

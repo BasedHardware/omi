@@ -1522,15 +1522,14 @@ The projection can increase bytes materially for large provenance arrays even
 though query/document counts do not change. Legacy missing-completion harvests
 retain the lean projection and may understate anchor coverage.
 
-With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
+Notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
 names and organizations come from the resolved calendar or screen-derived
 meeting context, and `spk` cluster binding follows the stricter roster guard.
 A desktop meeting capture treats the remote audio channel as mixed — when more
 than one remote participant could share it, that cluster stays `spk ?` rather
 than attributing several people's words to one name. Background context (prior
-meetings, people facts, goals, memories, and — under
-`MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` — screen text) is gathered
+meetings, people facts, goals, memories, and screen text) is gathered
 best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
@@ -1563,7 +1562,7 @@ Approved meeting screenshots feed the same pass. The Mac adjudicates frames
 before it finalizes (admission accepts an in_progress/processing conversation
 once its transcript fixes a trusted content window), and the judge stores
 `visible_participant_names` and `screen_summary` on approved frame docs only.
-Under `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED`, tile names join the roster as
+Tile names join the roster as
 `screen_activity` participants where no better source named them and each frame
 adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
 `MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
@@ -1689,12 +1688,10 @@ conflict atomically; a sweep cannot finalize an audio-bearing conversation
 that a live socket still owns.
 
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
-desktop kernel acknowledges its journal write, the materialization time. With
-`MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute
-finalization sweep re-drives receipts that are at least ten minutes old and
-still lack an intent ID. The same sweep pages through historical completed
-desktop meetings to seed missing receipts. The flag defaults off and is
-declared on both backend-listen and Cloud Run backend.
+desktop kernel acknowledges its journal write, the materialization time. The
+durable receipt projection remains on the finalization write path. The disabled
+historical receipt seeding reconciler has been removed from startup and the
+five-minute sweep.
 
 See [Listen finalization jobs](./listen_finalization_jobs.mdx) for configuration,
 replay, metrics, and the operational runbook.
@@ -2982,8 +2979,19 @@ recording, not just one buffer length). Flipping it mid-session can mismatch
 the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
-Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs;
-owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
+Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
+The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
+`window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
+`omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
+every successful persist, including the free-tier terminal stores. Sync intake's completed status is
+not a prior observation: the first enrichment counts, and a later pass counts only when that row had
+not already been enriched or terminally stored. Reprocessing an already enriched conversation does not
+increment again. Live accepts, rejects, ambiguous owner claims, and still-accumulating evidence increment
+`omi_speaker_id_live_decisions_total{target,decision}`, and the `speaker_id_decision` line carries
+`session` and `conversation`. A same-stream rollover counts mapped speakers on
+`omi_live_speaker_rollover_total{carried,target}` before the matcher clears them; automatic mappings
+are `carried=none` because only manual receipt decisions are copied.
+Owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
 Automatic non-owner naming (voiceprints and introductions) requires `named_speaker_prompts_allowed`.
 Live checks once per conversation (upgrade/downgrade observed at rotation/reconnect); sync/shadow
 reuse one batch snapshot, even with zero prints. Processing/history check once per request.

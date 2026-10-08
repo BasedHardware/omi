@@ -856,6 +856,7 @@ def resolve_task_candidate(
     expected_task_links: Optional[tuple[Optional[str], Optional[str]]] = None,
     now: Optional[datetime] = None,
     summary_item: Optional[SummaryTaskReference] = None,
+    review_edits: Optional[dict] = None,
 ) -> CandidateResolutionReceipt:
     """Atomically accept a task Candidate and create/update exactly one task."""
 
@@ -931,6 +932,11 @@ def resolve_task_candidate(
             raise CandidateConflictError('Candidate resolution is already claimed')
         if candidate.subject_kind == CandidateSubjectKind.workstream:
             raise WorkstreamCandidateResolverUnavailableError('Ticket 04 workstream resolver is not registered')
+
+        if review_edits is not None:
+            from utils.review_candidate_edits import edited_candidate
+
+            candidate = edited_candidate(candidate, review_edits)
 
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)

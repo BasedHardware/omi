@@ -1006,10 +1006,18 @@ def retrieve_vad_segments(
             if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            # Two distinct source files can independently compute the same absolute
+            # timestamp (capture_start + vad_offset). Reserve the path under the lock
+            # before export so a concurrent worker never silently overwrites it.
+            with segment_source_lock or contextlib.nullcontext():
+                segment_path = f'{path_dir}/{segment_timestamp}.wav'
+                dup = 0
+                while segment_path in segmented_paths:
+                    dup += 1
+                    segment_path = f'{path_dir}/dup{dup}_{segment_timestamp}.wav'
+                segmented_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
-            segmented_paths.add(segment_path)
             if segment_source_maps is not None:
                 # Pydub's millisecond slice starts at this original WAV sample.
                 # The derivative STT clock resets to zero; retain its bridge.
@@ -1098,6 +1106,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         trigger=ProcessingTrigger.SYNC_UPDATE,
         user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
+        # Deserialize drops relevance_decision. The raw row still has it:
+        # sync_update means a previous enrichment, sync_intake or absence does not.
+        prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
     )
     elapsed = time.monotonic() - started
     # Persistence is guaranteed here: a fenced write raises before return.

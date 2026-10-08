@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 tähteä auttaa meitä todella paljon ❤️",
     "onboardingRatingPromptYes": "Kyllä, haluan tukea teitä!",
     "onboardingRatingPromptNo": "Ei oikeastaan",
-    "partialRecording": "Osittainen tallenne"
+    "partialRecording": "Osittainen tallenne",
+    "importTranscriptFiles": "Litterointitiedostot",
+    "importTranscriptFilesDescription": "Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP",
+    "importTooManyAttempts": "Liian monta tuontia juuri nyt. Yritä myöhemmin uudelleen.",
+    "importFileTooLarge": "Tämä tiedosto on liian suuri tuotavaksi.",
+    "importUnsupportedFileType": "Tämän tyyppistä tiedostoa ei voi tuoda."
 }

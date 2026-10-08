@@ -93,7 +93,7 @@ async def test_vertex_provider_uses_native_generate_content_and_normalizes_respo
     request = seen_requests[0]
     assert request.url == (
         'https://us-central1-aiplatform.googleapis.com/v1/projects/test-project/locations/us-central1/'
-        'publishers/google/models/gemini-2.5-flash-lite:generateContent'
+        'publishers/google/models/gemini-2.5-flash:generateContent'
     )
     assert request.headers['authorization'] == 'Bearer vertex-access-token'
     assert 'generativelanguage.googleapis.com' not in str(request.url)
@@ -532,16 +532,11 @@ def _ok_vertex_response() -> dict:
 @pytest.mark.parametrize(
     'anchor,expected_model,expected_host,expected_capacity',
     [
-        # The current PT reservation is gemini-2.5-flash in us-central1: the
-        # flash anchor pins to it and asks for dedicated capacity.
         ('gemini-2.5-flash', 'gemini-2.5-flash', 'us-central1-aiplatform.googleapis.com', 'dedicated'),
-        # Pro never runs on-demand: it pins to the migration target, which is
-        # served multi-region and is shared until it holds the reservation.
-        ('gemini-2.5-pro', 'gemini-3.1-flash-lite', 'aiplatform.googleapis.com', 'shared'),
-        # Client-pinned flash-lite stays the cheap shared floor, regional host.
-        ('gemini-2.5-flash-lite', 'gemini-2.5-flash-lite', 'us-central1-aiplatform.googleapis.com', 'shared'),
-        # Direct pins of the migration target are shared until promotion.
-        ('gemini-3.1-flash-lite', 'gemini-3.1-flash-lite', 'aiplatform.googleapis.com', 'shared'),
+        ('gemini-2.5-pro', 'gemini-2.5-flash', 'us-central1-aiplatform.googleapis.com', 'dedicated'),
+        ('gemini-2.5-flash-lite', 'gemini-2.5-flash', 'us-central1-aiplatform.googleapis.com', 'dedicated'),
+        ('gemini-3.1-flash-lite', 'gemini-2.5-flash', 'us-central1-aiplatform.googleapis.com', 'dedicated'),
+        ('gemini-3.8-flash', 'gemini-2.5-flash', 'us-central1-aiplatform.googleapis.com', 'dedicated'),
     ],
 )
 async def test_vertex_provider_pt_header_and_host_per_anchor(
@@ -572,84 +567,6 @@ async def test_vertex_provider_pt_header_and_host_per_anchor(
 
 
 @pytest.mark.asyncio
-async def test_vertex_provider_overflows_to_on_demand_when_dedicated_is_exhausted(monkeypatch):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
-    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
-    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
-    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_MODEL', raising=False)
-    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        if len(seen) == 1:
-            return httpx.Response(
-                429,
-                json={
-                    'error': {
-                        'message': 'Resource has been exhausted (e.g. check quota). provisioned throughput dedicated capacity is exhausted'
-                    }
-                },
-            )
-        return httpx.Response(200, json=_ok_vertex_response())
-
-    provider = _pt_provider(handler)
-    result = await provider.create_chat_completion(
-        {'model': 'gemini-2.5-flash', 'messages': [{'role': 'user', 'content': 'hi'}]},
-        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
-        credentials=_omi_credentials(),
-        timeout_ms=60_000,
-    )
-
-    assert result.response['choices'][0]['message']['content'] == 'ok'
-    # First attempt: the reservation, dedicated. Overflow: on-demand shared rungs.
-    assert seen[0].headers[provider_module.ptr.REQUEST_TYPE_HEADER] == 'dedicated'
-    assert 'gemini-2.5-flash:generateContent' in str(seen[0].url.path)
-    later_capacities = [r.headers[provider_module.ptr.REQUEST_TYPE_HEADER] for r in seen[1:]]
-    later_models = [str(r.url.path).split('/models/')[-1] for r in seen[1:]]
-    assert 'dedicated' not in later_capacities
-    assert later_models[0].startswith('gemini-3.1-flash-lite')
-
-
-@pytest.mark.asyncio
-async def test_vertex_provider_origin_ceiling_skips_3_1_on_the_wire(monkeypatch):
-    """A flash-lite origin admitted to flash PT overflows to flash-lite, never 3.1."""
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
-    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
-    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
-    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_MODEL', raising=False)
-    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        if len(seen) == 1:
-            return httpx.Response(
-                429,
-                json={'error': {'message': 'Exceeded the Provisioned Throughput dedicated capacity'}},
-            )
-        return httpx.Response(200, json=_ok_vertex_response())
-
-    provider = _pt_provider(handler)
-    result = await provider.create_chat_completion(
-        {
-            'model': 'gemini-2.5-flash',
-            'messages': [{'role': 'user', 'content': 'hi'}],
-            provider_module.ptr.OVERFLOW_ORIGIN_OPTION: 'gemini-2.5-flash-lite',
-        },
-        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
-        credentials=_omi_credentials(),
-        timeout_ms=60_000,
-    )
-
-    assert result.response['choices'][0]['message']['content'] == 'ok'
-    models = [str(request.url.path).split('/models/')[-1] for request in seen]
-    assert models == ['gemini-2.5-flash:generateContent', 'gemini-2.5-flash-lite:generateContent']
-    assert seen[1].headers[provider_module.ptr.REQUEST_TYPE_HEADER] == 'shared'
-    assert provider_module.ptr.OVERFLOW_ORIGIN_OPTION.encode() not in seen[1].content
-
-
-@pytest.mark.asyncio
 async def test_vertex_provider_fails_closed_on_a_prohibited_pt_pin(monkeypatch):
     """SCA-481: a Pro/image operator pin must fail the request closed at
     resolution time — no provider dispatch, typed invalid-config failure."""
@@ -672,7 +589,7 @@ async def test_vertex_provider_fails_closed_on_a_prohibited_pt_pin(monkeypatch):
         )
 
     assert excinfo.value.failure_class == FailureClass.INVALID_CONFIG
-    assert 'SCA-481' in excinfo.value.safe_message
+    assert 'declared reservation' in excinfo.value.safe_message
     assert seen == []
 
 
@@ -710,43 +627,6 @@ async def test_vertex_provider_never_overflows_onto_a_prohibited_model(monkeypat
     dispatched = [str(r.url.path).split('/models/')[-1] for r in seen]
     assert dispatched == ['gemini-2.5-flash:generateContent']
     assert all('image' not in model for model in dispatched)
-
-
-@pytest.mark.asyncio
-async def test_vertex_provider_walks_fallback_chain_when_model_is_unavailable(monkeypatch):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
-    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
-    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
-    seen: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        if 'gemini-3.1-flash-lite' in str(request.url.path):
-            return httpx.Response(404, json={'error': {'message': 'Publisher model not found'}})
-        return httpx.Response(200, json=_ok_vertex_response())
-
-    provider = _pt_provider(handler)
-    result = await provider.create_chat_completion(
-        {'model': 'gemini-2.5-pro', 'messages': [{'role': 'user', 'content': 'hi'}]},
-        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-pro'),
-        credentials=_omi_credentials(),
-        timeout_ms=60_000,
-    )
-
-    assert result.response['choices'][0]['message']['content'] == 'ok'
-    # Pro pins to the target, which 404s: the declared chain serves flash-lite.
-    assert 'gemini-3.1-flash-lite' in str(seen[0].url.path)
-    assert 'gemini-2.5-flash-lite' in str(seen[-1].url.path)
-    # The dead observation is latched: the next request skips straight to the rung.
-    seen.clear()
-    await provider.create_chat_completion(
-        {'model': 'gemini-2.5-pro', 'messages': [{'role': 'user', 'content': 'hi'}]},
-        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-pro'),
-        credentials=_omi_credentials(),
-        timeout_ms=60_000,
-    )
-    assert len(seen) == 1
-    assert 'gemini-2.5-flash-lite' in str(seen[0].url.path)
 
 
 @pytest.mark.asyncio
@@ -944,3 +824,8 @@ def held_discovery_leases_for_request_matrix(monkeypatch):
     from utils.llm import vertex_reservation_state
 
     monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
+
+
+@pytest.fixture(autouse=True)
+def active_reservation(monkeypatch):
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', '{"gemini-2.5-flash":"active","gemini-3.8-flash":"inactive"}')

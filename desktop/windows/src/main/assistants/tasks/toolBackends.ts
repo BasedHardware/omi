@@ -1,6 +1,6 @@
-// The TaskAssistant's two search-tool backends — `search_similar` (vector) and
-// `search_keywords` (FTS5) — the extraction loop dispatches to so Gemini can check
-// for existing/duplicate tasks before it emits `extract_task`. Ported 1:1 from
+// The TaskAssistant's local task retrieval — `search_similar` (vector) and
+// `search_keywords` (FTS5). The JEV + Luna path uses bounded FTS context before
+// its single extraction request. Ported 1:1 from
 // Mac's `executeVectorSearch` / `executeKeywordSearch`
 // (TaskAssistant.swift:1450–1560) and the `TaskSearchResult` Codable shape
 // (TaskModels.swift:530).
@@ -13,12 +13,11 @@
 // the real PR-A storage + embedding functions and are what the loop calls.
 //
 // Faithfulness notes (Mac is the reference; verified against the running oracle):
-//  - Both backends return `TaskSearchResult[]`; the LOOP JSON-encodes them into the
-//    tool functionResponse (Mac dispatch: `JSONEncoder().encode(searchResults)`,
-//    `"[]"` on failure). `encodeSearchResults` mirrors that exactly.
+//  - Both backends return `TaskSearchResult[]`; `encodeSearchResults` remains for
+//    consumers that need the Mac-shaped model context.
 //  - The empty / no-session / error outcome is an EMPTY array (encodes to `[]`),
 //    NOT a prose "no similar tasks" string — Mac's `catch` returns `[]`.
-//  - Keyword search does NOT dedupe across the two tables: `action_items` and
+//  - Keyword search marks the source table and does NOT dedupe across the two tables: `action_items` and
 //    `staged_tasks` have independent rowid spaces, so a shared id is two different
 //    tasks. Mac appends both lists verbatim; deduping by id would wrongly drop an
 //    unrelated staged task. So we append both, no cross-table dedupe (matches Mac).
@@ -36,7 +35,7 @@ import type { TaskSimilarity } from '../../tasks/taskEmbeddingService'
 
 /** Mac's `TaskSearchResult` (TaskModels.swift:530), ported field-for-field with its
  *  exact Codable JSON keys (`match_type` / `relevance_score` are snake_case). This
- *  is the object the loop JSON-encodes (via `encodeSearchResults`, which emits ONLY
+ *  is the object `encodeSearchResults` emits ONLY
  *  these Mac fields) as each search tool's functionResponse.
  *
  *  `backendId` + `source` are Windows-only enrichment for the `search_tasks` product
@@ -58,9 +57,8 @@ export type TaskSearchResult = {
   match_type: string
   /** Relevance ranking score (higher = more important); null when unscored. */
   relevance_score: number | null
-  /** Source table this row came from. Populated by the vector backend (the only one
-   *  the `search_tasks` product tool reads); absent on results the extraction loop
-   *  produces that never surface to a mutation tool. */
+  /** Source table this row came from. Used by the product tool and by task
+   *  extraction so relation IDs can only target action-item rows. */
   source?: TaskEmbeddingSource
   /** The action-item backendId, when the row is a synced `action_item`; null for an
    *  unsynced action item or any staged task. */
@@ -205,7 +203,8 @@ export async function executeKeywordSearchWith(
         status: statusOf(r),
         similarity: null,
         match_type: 'fts',
-        relevance_score: r.relevanceScore
+        relevance_score: r.relevanceScore,
+        source: 'action_item'
       })
     }
     for (const r of deps.searchStagedTasksFTS(ftsQuery, KEYWORD_LIMIT)) {
@@ -215,7 +214,8 @@ export async function executeKeywordSearchWith(
         status: 'active', // Mac hardcodes staged FTS results as "active"
         similarity: null,
         match_type: 'fts',
-        relevance_score: r.relevanceScore
+        relevance_score: r.relevanceScore,
+        source: 'staged_task'
       })
     }
   } catch {

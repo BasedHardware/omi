@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "Ocjena od 5 zvjezdica nam zaista puno pomaže ❤️",
     "onboardingRatingPromptYes": "Da, želim vas podržati!",
     "onboardingRatingPromptNo": "Ne baš",
-    "partialRecording": "Djelimičan snimak"
+    "partialRecording": "Djelimičan snimak",
+    "importTranscriptFiles": "Datoteke transkripta",
+    "importTranscriptFilesDescription": "Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima",
+    "importTooManyAttempts": "Trenutno ima previše uvoza. Pokušajte ponovo kasnije.",
+    "importFileTooLarge": "Ova datoteka je prevelika za uvoz.",
+    "importUnsupportedFileType": "Ova vrsta datoteke se ne može uvesti."
 }

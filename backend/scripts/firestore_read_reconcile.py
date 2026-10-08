@@ -8,10 +8,14 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 TABLE = "based-hardware.gcp_billing_export.gcp_billing_export_resource_v1_01B287_9348DC_02D256"
+PROJECT_ID = "based-hardware"
 # Services we ship that read Firestore. A ledger row from any of them,
 # including pusher, still sums into the scaled sample.
 SHIPPED_SERVICES = frozenset(
@@ -182,13 +186,55 @@ WHERE _PARTITIONTIME >= TIMESTAMP_SUB(TIMESTAMP('{start}'), INTERVAL 2 DAY)
   AND service.description = 'App Engine'
   AND sku.description = 'Cloud Firestore Read Ops'
   AND usage.unit = 'requests'"""
-    bq = subprocess.run(
-        ["bq", "query", "--project_id=based-hardware", "--use_legacy_sql=false", "--format=json", sql],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    billing_rows = json.loads(bq.stdout)
+    try:
+        # BigQuery REST jobs.query with a token minted in-process from the
+        # ambient credential via google-auth, which reads
+        # GOOGLE_APPLICATION_CREDENTIALS natively — including auth@v3's WIF
+        # external-account credential. The `bq` CLI AND gcloud's own
+        # print-access-token are unusable accountlessly here: both resolve an
+        # "already authenticated account" from an interactive-session config
+        # that federated CI never has (FC-bq-federated-quota-project: seven
+        # dispatches). The REST path plus google-auth has no account layer.
+        # timeoutMs is raised to the HTTP budget: jobs.query answers HTTP 200
+        # with jobComplete=false and no rows when the aggregate outlives the
+        # default 10s server wait, which would read as a zero bill.
+        import google.auth
+        import google.auth.transport.requests
+
+        credentials, _ = google.auth.default(scopes=("https://www.googleapis.com/auth/cloud-platform",))
+        credentials.refresh(google.auth.transport.requests.Request())
+        token = credentials.token
+        endpoint = f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}/queries"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        body = json.dumps({"query": sql, "useLegacySql": False, "timeoutMs": 120000}).encode()
+        last_error = "no attempt"
+        payload: dict[str, Any] | None = None
+        for attempt in range(3):
+            request = urllib.request.Request(endpoint, data=body, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    loaded = json.load(response)
+                if not isinstance(loaded, dict) or not loaded.get("jobComplete"):
+                    last_error = f"jobs.query incomplete after timeoutMs: jobComplete=false (attempt {attempt + 1})"
+                    continue
+                payload = loaded
+                break
+            except urllib.error.HTTPError as exc:
+                body_text = exc.read().decode(errors="replace")
+                last_error = f"HTTP {exc.code}: {body_text[:400]}"
+                if exc.code < 500 and exc.code != 429:
+                    break
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+            time.sleep(5 * (attempt + 1))
+        if payload is None or not payload.get("jobComplete"):
+            raise RuntimeError(f"billing query failed after 3 attempts; last: {last_error}")
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip().splitlines()
+        raise RuntimeError(
+            f"bq token mint failed (rc={exc.returncode}): {detail[-1] if detail else '<no stderr>'}"
+        ) from exc
+    billing_rows = [{"billed": row["f"][0]["v"]} for row in payload.get("rows", [])]
     billed = float(billing_rows[0]["billed"]) if billing_rows else 0.0
     records: list[dict[str, Any]] = []
     for hour in range(24):

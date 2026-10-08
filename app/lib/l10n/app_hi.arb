@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️",
     "onboardingRatingPromptYes": "हाँ, मुझे आपको सपोर्ट करना है!",
     "onboardingRatingPromptNo": "ज़्यादा नहीं",
-    "partialRecording": "आंशिक रिकॉर्डिंग"
+    "partialRecording": "आंशिक रिकॉर्डिंग",
+    "importTranscriptFiles": "ट्रांसक्रिप्ट फ़ाइलें",
+    "importTranscriptFilesDescription": "SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें",
+    "importTooManyAttempts": "अभी बहुत अधिक आयात हो रहे हैं। बाद में फिर से प्रयास करें।",
+    "importFileTooLarge": "यह फ़ाइल आयात करने के लिए बहुत बड़ी है।",
+    "importUnsupportedFileType": "इस प्रकार की फ़ाइल आयात नहीं की जा सकती।"
 }

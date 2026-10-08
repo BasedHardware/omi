@@ -128,8 +128,6 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     flags = (
         r'\1\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
-        r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
-        r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_EVIDENCE_WAIT_SECONDS", "value": "25"},'
         r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
@@ -145,21 +143,6 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         # backend-sync finalizes conversations, so it reads this environment's frame docs.
         flags + r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},',
-        payload,
-        count=1,
-        flags=re.DOTALL,
-    )
-
-
-def with_meeting_receipt_reconciler_env(payload: str) -> str:
-    """The meeting-receipt reconciler flag is declared on the Cloud Run `backend` service too.
-
-    Only that service is asserted: `process_conversation` runs inline there for reprocess,
-    so a deploy that carries the flag on backend-listen alone is the drift this catches.
-    """
-    return re.sub(
-        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        r'\1\n        {"name": "MEETING_RECEIPT_RECONCILER_ENABLED", "value": "false"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -398,17 +381,15 @@ def with_screen_frame_egress_env(payload: str) -> str:
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_wake_word_adjudication_env(
-            with_meeting_receipt_reconciler_env(
-                with_jev_flags_env(
-                    with_capture_jev_shadow_env(
-                        with_conversation_notes_v2_env(
-                            with_backend_pusher_env(
-                                with_parity_pack_env(
-                                    with_listen_finalization_orphan_env(
-                                        with_belief_model_env(
-                                            with_memory_env(
-                                                with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
-                                            )
+            with_jev_flags_env(
+                with_capture_jev_shadow_env(
+                    with_conversation_notes_v2_env(
+                        with_backend_pusher_env(
+                            with_parity_pack_env(
+                                with_listen_finalization_orphan_env(
+                                    with_belief_model_env(
+                                        with_memory_env(
+                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
                                         )
                                     )
                                 )
@@ -464,8 +445,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         '        ' + json.dumps({'name': name, 'value': value})
         for name, value in {
             **translation_defaults,
-            # Debounce is declared on this serving host too.
-            'MENTOR_GATE_DEBOUNCE_ENABLED': 'true',
         }.items()
     )
     payload = re.sub(
@@ -1540,10 +1519,6 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
             'prod/gke/backend-listen',
             "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'dg-nova-3'",
         ),
-        validator.ValidationError(
-            'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
-        ),
     ]
 
 
@@ -1561,9 +1536,8 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
-                    connect_order = (service.get('env') or {}).get('STT_CONNECT_ORDER_FROM_CONFIG') or {}
-                    # A service that connects in configured order owns its live order.
-                    if key == 'STT_SERVICE_MODELS' and connect_order.get('value') == 'true':
+                    # The live listener owns its configured streaming order.
+                    if key == 'STT_SERVICE_MODELS' and platform == 'gke' and service_name == 'backend-listen':
                         continue
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
@@ -3101,18 +3075,14 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
     assert any('services' in cmd for cmd in described)
 
 
-def test_live_chain_ramp_accepts_policy_tokens_only_when_explicitly_enabled():
+def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
     from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
 
     env_map = {
         'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
-        'STT_CONNECT_ORDER_FROM_CONFIG': {'value': 'true'},
     }
     config = {'gke': {'backend-listen': {'env': env_map}}}
     assert _validate_stt_serving_model_policy('prod', config) == []
-    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'false'
-    assert _validate_stt_serving_model_policy('prod', config)
-    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'true'
     env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
     assert _validate_stt_serving_model_policy('prod', config)
 

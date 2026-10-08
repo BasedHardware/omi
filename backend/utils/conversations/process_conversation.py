@@ -39,8 +39,7 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
 )
 from database.apps import record_app_usage, get_omi_personas_by_uid_db
-from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
-from utils.conversations.transcript_chunks import build_transcript_chunks
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
@@ -122,6 +121,12 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.observability.owner_recognition import (
+    emit_finalized_owner_recognition,
+    lookup_owner_voiceprint,
+    owner_recognition_already_observed,
+    owner_recognition_needs_profile,
+)
 from utils.metrics import (
     record_jit_first_open,
     record_lazy_desktop_deferral,
@@ -235,9 +240,7 @@ from utils.conversations.meeting_context import (
     store_meeting_context as _store_meeting_context,
 )
 from utils.conversations.meeting_notes_wiring import (
-    meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
     meeting_notes_episode_evidence_enabled as _meeting_notes_episode_evidence_enabled,
-    meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
     rich_notes_inputs,
     rich_roster_inputs,
 )
@@ -394,16 +397,15 @@ def _get_structured(
                     if episode_enabled
                     else []
                 )
-                if _meeting_notes_rich_context_enabled() or episode_enabled:
-                    roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
-                        uid,
-                        conversation,
-                        calendar_context,
-                        tz_str,
-                        include_background=True,
-                        include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                        **({'evidence_items': episode_items} if episode_enabled else {}),
-                    )
+                roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
+                    uid,
+                    conversation,
+                    calendar_context,
+                    tz_str,
+                    include_background=True,
+                    include_screen_text=True,
+                    **({'evidence_items': episode_items} if episode_enabled else {}),
+                )
                 prefix = build_conversation_prompt_prefix(
                     uid=uid,
                     conversation_id=prompt_conversation_id,
@@ -583,16 +585,15 @@ def _get_structured(
         roster: Optional[MeetingRoster] = None
         meeting_context_block: Optional[str] = None
         desktop_capture, screen_frames = False, ()
-        if _meeting_notes_rich_context_enabled() or episode_enabled:
-            roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
-                uid,
-                main_conv,
-                calendar_context,
-                tz_str,
-                include_background=True,
-                include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                **({'evidence_items': episode_items} if episode_enabled else {}),
-            )
+        roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
+            uid,
+            main_conv,
+            calendar_context,
+            tz_str,
+            include_background=True,
+            include_screen_text=True,
+            **({'evidence_items': episode_items} if episode_enabled else {}),
+        )
         if episode_enabled:
             episode_items[:0] = import_module('utils.conversations.episode_evidence').capture_evidence(
                 main_conv,
@@ -794,8 +795,7 @@ def trigger_conversation_apps(
                 app_calendar_context = _stored_meeting_context(conversation)
                 app_roster: Optional[MeetingRoster] = None
                 app_desktop_capture = False
-                if _meeting_notes_rich_context_enabled():
-                    app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
+                app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
                     transcript=app_transcript,
@@ -1557,8 +1557,7 @@ def _extract_memories_canonical(
                 prompt_speaker_map = {}
             prompt_roster: Optional[MeetingRoster] = None
             prompt_desktop_capture = False
-            if _meeting_notes_rich_context_enabled():
-                prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
+            prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -2123,20 +2122,6 @@ def _save_action_items(
     )
 
 
-# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
-# retrieval over raw transcript text, which the summary-only conversation vectors miss.
-TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
-
-
-def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments: List[Any] = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
-    chunks = build_transcript_chunks(
-        cast(List[Dict[str, Any]], segments), conversation.started_at or conversation.created_at
-    )
-    if chunks:
-        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
-
-
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid) or ''
@@ -2631,6 +2616,7 @@ def process_conversation(
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
     recovery_transcript_decoded: bool = True,
+    prior_relevance_decision: Mapping[str, Any] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2640,10 +2626,43 @@ def process_conversation(
     """
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
+    # Snapshot before this call replaces structured or status. Sync intake's
+    # completed status is not an observation; see owner_recognition_already_observed.
+    already_observed = owner_recognition_already_observed(
+        conversation,
+        is_reprocess=is_reprocess,
+        trigger=trigger,
+        prior_relevance_decision=prior_relevance_decision,
+    )
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
+
+    def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # One observation per conversation, on every successful persist. The
+        # free-tier terminal stores and the eager-extraction denial return
+        # through report_persistence, so a new early return that reports a
+        # completed write is observed too. Telemetry must not fail the write.
+        try:
+            profile = None
+            if owner_recognition_needs_profile(completed):
+                profile = lookup_owner_voiceprint(uid, read_embedding=users_db.get_user_speaker_embedding)
+            emit_finalized_owner_recognition(
+                completed,
+                uid=uid,
+                already_observed=already_observed,
+                owner_profile_present=profile,
+            )
+        except Exception:
+            try:
+                logger.warning(
+                    'owner_recognition_outcome emit_failed uid=%s conversation=%s',
+                    uid,
+                    getattr(completed, 'id', None),
+                )
+            except Exception:
+                return
 
     def report_persistence(
         current: bool,
@@ -2653,6 +2672,7 @@ def process_conversation(
     ) -> None:
         if current and completed is not None:
             record_capture_loss(completed)
+            _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:
@@ -3091,8 +3111,6 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             if not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-                if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
