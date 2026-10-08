@@ -11,10 +11,10 @@ import 'package:omi/pages/review/widgets/review_question_card.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-final _task = ReviewItem(
+const _task = ReviewItem(
   itemId: 'task:c1',
   kind: ReviewItemKind.task,
-  task: const TaskItem(candidateId: 'c1', description: 'Send the signed SOW'),
+  task: TaskItem(candidateId: 'c1', description: 'Send the signed SOW'),
 );
 
 const _speaker = ReviewItem(
