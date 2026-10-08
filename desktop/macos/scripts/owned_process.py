@@ -82,6 +82,18 @@ def _linux_stat(pid: int) -> list[str] | None:
     return data[marker + 2 :].split()
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 1:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def process_start(pid: int) -> str | None:
     """Stable start identity. Equality is the check; resolution is one second on macOS."""
     if sys.platform == "linux":
@@ -513,10 +525,12 @@ def stop(args: argparse.Namespace) -> int:
         print("owned-process: deadlines must be positive", file=sys.stderr)
         return 2
     leader_pid = receipt.get("leader_pid")
+    # A live pid whose start identity cannot be read is still not this receipt.
+    # ps can fail under load; that must not become a successful stop.
     mismatched = (
         isinstance(leader_pid, int)
         and leader_pid > 1
-        and process_start(leader_pid) is not None
+        and _pid_alive(leader_pid)
         and not leader_matches(receipt)
     )
     cleared = reap(receipt, signal.SIGTERM, deadline)
