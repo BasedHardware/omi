@@ -143,6 +143,7 @@ _GENERIC_SPEAKER_RE = re.compile(
 # (a tag or voice ends at the next '<', and a header name is capped).
 _VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^<>\s][^<>]*)>')
 _VOICE_END_RE = re.compile(r'</v\s*>')
+_WORD_RE = re.compile(r'\w')
 # WebVTT escapes every literal '<', so any '<...>' in a cue is markup.
 _TAG_RE = re.compile(r'<[^<>]*>')
 # SRT does not escape: only its own formatting tags (<i>, <b>, <u>, <s>, <font ...>) are
@@ -312,8 +313,12 @@ def _voice_runs(raw: str) -> List[tuple[Optional[str], str]]:
     <v Bob>Not yet.</v>`` is two runs, and text outside every span is a run with no
     voice. As in the WebVTT parser, ``<v>`` opens a span inside any still open, ``</v>``
     closes the innermost, and an unclosed span runs to the end of the cue; text goes to
-    the innermost open voice. Other tags are formatting and are dropped. Adjacent runs of
-    one voice merge, and runs left with no words (the space between two spans) are dropped.
+    the innermost open voice. Other tags are formatting and are dropped.
+
+    A run with no word characters (the space or the "- " dash between two spans) is
+    dropped when the cue has words elsewhere, so it never becomes a turn of its own;
+    then adjacent runs of one voice merge. Raises ``TranscriptFileSkipped`` once the cue
+    holds more spans than a conversation can hold segments.
     """
     pieces: List[tuple[Optional[str], List[str]]] = [(None, [])]
     voices: List[str] = []
@@ -329,18 +334,22 @@ def _voice_runs(raw: str) -> List[tuple[Optional[str], str]]:
                 voices.pop()
         else:
             continue
+        # Spans alternate with the text between them: past twice the cap, the runs are too.
+        if len(pieces) > 2 * MAX_TRANSCRIPT_SEGMENTS:
+            raise TranscriptFileSkipped(TRANSCRIPT_TOO_LONG)
         pieces.append((voices[-1] if voices else None, []))
     pieces[-1][1].append(raw[position:])
-    runs: List[tuple[Optional[str], str]] = []
-    for speaker, parts in pieces:
-        body = _plain_cue_text(''.join(parts), _TAG_RE)
-        if not body:
-            continue
-        if runs and runs[-1][0] == speaker:
-            runs[-1] = (speaker, f'{runs[-1][1]} {body}')
+    bodies = [(speaker, _plain_cue_text(''.join(parts), _TAG_RE)) for speaker, parts in pieces]
+    bodies = [(speaker, body) for speaker, body in bodies if body]
+    if any(_WORD_RE.search(body) for _, body in bodies):
+        bodies = [(speaker, body) for speaker, body in bodies if _WORD_RE.search(body)]
+    merged: List[tuple[Optional[str], List[str]]] = []
+    for speaker, body in bodies:
+        if merged and merged[-1][0] == speaker:
+            merged[-1][1].append(body)
         else:
-            runs.append((speaker, body))
-    return runs
+            merged.append((speaker, [body]))
+    return [(speaker, ' '.join(parts)) for speaker, parts in merged]
 
 
 def _voice_run_cues(
@@ -350,12 +359,15 @@ def _voice_run_cues(
 
     A cue gives no timing finer than its own range, so each run gets a consecutive
     slice of it in proportion to its words, the first starting at the cue's start and
-    the last ending at its end; the runs stay in order and never overlap. A cue
-    without a usable range (a missing time, or an end not after the start) leaves
-    every run with the cue's own timing, for ``segments_from_cues`` to settle.
+    the last ending at its end (rounded to the millisecond); the runs stay in order
+    and do not overlap. A cue whose range is too short to give every run a slice of at
+    least a millisecond, or that has no usable range (a missing time, or an end not
+    after the start), leaves every run with the cue's own timing, for
+    ``segments_from_cues`` to settle; those runs share that range.
     """
+    unsplit = [TranscriptCue(text=text, speaker=speaker, start=start, end=end) for speaker, text in runs]
     if start is None or end is None or end <= start or len(runs) == 1:
-        return [TranscriptCue(text=text, speaker=speaker, start=start, end=end) for speaker, text in runs]
+        return unsplit
     words = [max(1, len(text.split())) for _, text in runs]
     total = sum(words)
     cues: List[TranscriptCue] = []
@@ -364,6 +376,8 @@ def _voice_run_cues(
     for (speaker, text), count in zip(runs, words):
         spoken += count
         run_end = end if spoken == total else round(start + (end - start) * spoken / total, 3)
+        if run_end <= run_start:
+            return unsplit
         cues.append(TranscriptCue(text=text, speaker=speaker, start=run_start, end=run_end))
         run_start = run_end
     return cues
@@ -383,6 +397,9 @@ def parse_vtt(text: str) -> List[TranscriptCue]:
         if not timing or not runs:
             continue
         cues.extend(_voice_run_cues(runs, _seconds(timing.group(1)), _seconds(timing.group(2))))
+        if len(cues) > MAX_TRANSCRIPT_SEGMENTS:
+            # More turns than one conversation holds: stop rather than split the rest.
+            raise TranscriptFileSkipped(TRANSCRIPT_TOO_LONG)
     return _assign_speakers(cues)
 
 

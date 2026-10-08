@@ -259,6 +259,57 @@ def test_vtt_voice_spans_split_a_cue_into_runs(cue, expected):
     assert all(a.end == b.start for a, b in zip(cues, cues[1:]))
 
 
+def test_punctuation_between_voice_spans_is_not_a_speakerless_turn():
+    """Exporters mark each voice with a dash; the dash is not a third, unnamed speaker."""
+    vtt = 'WEBVTT\n\n00:00:10.000 --> 00:00:20.000\n- <v Alice>Hi there</v>\n- <v Bob>Yo</v>\n'
+
+    cues = tf.parse_vtt(vtt)
+    segments = tf.segments_from_cues(cues, owner_name='Alice', people={'bob': 'person-bob'})
+
+    assert [(c.speaker, c.text) for c in cues] == [('Alice', 'Hi there'), ('Bob', 'Yo')]
+    assert [(s.speaker_id, s.is_user, s.person_id) for s in segments] == [(0, True, None), (1, False, 'person-bob')]
+
+
+def test_a_cue_with_no_words_at_all_keeps_its_text():
+    cues = tf.parse_vtt('WEBVTT\n\n00:00:10.000 --> 00:00:20.000\n\u266a \u266a\n')
+
+    assert [(c.speaker, c.text) for c in cues] == [(None, '\u266a \u266a')]
+
+
+def test_a_cue_too_short_to_share_out_keeps_its_timing_on_each_run():
+    """Millisecond slices would round to an empty run: no run is ever zero-length."""
+    vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:01.002\n<v A>one</v> <v B>two</v> <v C>three</v>\n'
+
+    cues = tf.parse_vtt(vtt)
+
+    assert [c.speaker for c in cues] == ['A', 'B', 'C']
+    assert all(c.end > c.start for c in cues)
+    assert {(c.start, c.end) for c in cues} == {(1.0, 1.002)}
+
+
+@pytest.mark.parametrize('cue_count', [1, 4], ids=['one-cue', 'across-cues'])
+def test_splitting_voices_stops_once_the_file_is_over_the_segment_cap(monkeypatch, cue_count):
+    monkeypatch.setattr(tf, 'MAX_TRANSCRIPT_SEGMENTS', 3)
+    voices = ''.join(f'<v S{index}>w{index}</v>' for index in range(4 // cue_count))
+    cue = f'00:00:01.000 --> 00:00:02.000\n{voices}\n'
+    vtt = 'WEBVTT\n\n' + '\n'.join([cue] * cue_count)
+
+    with pytest.raises(tf.TranscriptFileSkipped) as skipped:
+        tf.parse_transcript_file('call.vtt', vtt.encode('utf-8'))
+
+    assert skipped.value.reason == tf.TRANSCRIPT_TOO_LONG
+
+
+def test_a_cue_of_many_voice_spans_is_refused_in_linear_time():
+    vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n' + '<v A>x</v>-' * 200_000 + '\n'
+    started = time.perf_counter()
+
+    with pytest.raises(tf.TranscriptFileSkipped):
+        tf.parse_transcript_file('call.vtt', vtt.encode('utf-8'))
+
+    assert time.perf_counter() - started < 1.0
+
+
 def test_a_voice_split_cue_without_a_usable_range_keeps_its_timing_on_each_run():
     cues = tf.parse_vtt('WEBVTT\n\n00:00:20.000 --> 00:00:10.000\n<v Alice>Hi</v> <v Bob>Hello</v>\n')
 
