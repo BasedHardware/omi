@@ -283,6 +283,9 @@ def _provider_segment(segment_id, start, end, text):
 # ---------------------------------------------------------------------------
 class FailoverStack:
     def __init__(self, monkeypatch, *, v2: bool, create_speakers: bool = False, owner_name: str = 'Alice'):
+        # The legacy connector remains live for BYOK sessions; these tests
+        # pin its capture and speaker behavior across provider failover.
+        monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
         self.clock = {'wall': T0, 'mono': 0.0}
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
         self.v2 = v2
