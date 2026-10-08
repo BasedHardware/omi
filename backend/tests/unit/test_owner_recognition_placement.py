@@ -48,11 +48,13 @@ def test_clipped_embedding_duration_is_the_owner_evidence_floor():
     assert not resolution.voice_identities
 
 
-def test_late_audio_retry_persists_identity_without_processing(env, monkeypatch):
+@pytest.mark.parametrize('grouping', ['unavailable', 'resolved'])
+def test_late_audio_retry_persists_identity_without_processing(env, monkeypatch, grouping):
     conversation = _capture_shifted_conversation([0, 0])
     conversation.status = 'completed'
     raw = conversation.model_dump()
     raw['updated_at'] = conversation.created_at
+    raw['speaker_resolution'] = {'status': grouping, 'participant_speaker_ids': [0]}
     monkeypatch.setattr(stage.conversations_db, 'get_conversation', lambda *a: raw)
     writes = []
 

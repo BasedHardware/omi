@@ -3665,3 +3665,7 @@ account-deletion marker in the same transaction; no compute-plane fallback is us
 
 The late-audio retry excludes both `phone` and `phone_call`, as well as desktop,
 to preserve channel-authored identity and the free-desktop processing boundary.
+
+Participant grouping marked `resolved` does not by itself suppress the late
+identity retry: only a resolved row already containing an owner label is skipped.
+A completed owner miss can therefore use newly available audio/profile evidence.
