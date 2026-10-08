@@ -18216,7 +18216,7 @@ abstract class AppLocalizations {
   /// Empty state when iOS reports no Bluetooth HFP microphone inputs
   ///
   /// In en, this message translates to:
-  /// **'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'**
+  /// **'No Bluetooth microphones found. Connect your glasses in your phone\'s Bluetooth settings, then try again.'**
   String get rayBanMetaMicPickerEmpty;
 
   /// Error state when available Bluetooth HFP inputs cannot be read
@@ -18228,7 +18228,7 @@ abstract class AppLocalizations {
   /// Error shown when the selected Bluetooth HFP microphone cannot connect
   ///
   /// In en, this message translates to:
-  /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
+  /// **'Could not connect to that microphone. Make sure it is connected in your phone\'s Bluetooth settings.'**
   String get rayBanMetaMicPickerConnectError;
 
   /// No description provided for @syncStatusTooOld.

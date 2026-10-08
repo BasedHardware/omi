@@ -9841,7 +9841,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Δεν βρέθηκαν μικρόφωνα Bluetooth. Συνδέστε τα γυαλιά στις Ρυθμίσεις του iPhone και δοκιμάστε ξανά.';
+      'Δεν βρέθηκαν μικρόφωνα Bluetooth. Συνδέστε τα γυαλιά στις ρυθμίσεις Bluetooth του τηλεφώνου σας και δοκιμάστε ξανά.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9849,7 +9849,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Δεν ήταν δυνατή η σύνδεση σε αυτό το μικρόφωνο. Βεβαιωθείτε ότι είναι συνδεδεμένο στις Ρυθμίσεις του iPhone.';
+      'Δεν ήταν δυνατή η σύνδεση σε αυτό το μικρόφωνο. Βεβαιωθείτε ότι είναι συνδεδεμένο στις ρυθμίσεις Bluetooth του τηλεφώνου σας.';
 
   @override
   String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';

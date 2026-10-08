@@ -71,4 +71,7 @@ interface RayBanMetaDatBackend {
      * Returns true when the intent belonged to the toolkit.
      */
     fun handleIntent(activity: Activity, intent: Intent): Boolean
+
+    /** Ends any session and cancels every collector; the backend is unusable after. */
+    fun close()
 }

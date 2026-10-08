@@ -52,6 +52,7 @@ class RayBanMetaAudioCapture(context: Context) {
         private const val SCO_POLL_INTERVAL_MS = 100L
         private const val ROUTE_CHECK_ATTEMPTS = 20
         private const val ROUTE_CHECK_INTERVAL_MS = 50L
+        private const val READ_THREAD_JOIN_MS = 1000L
 
         /** Stable identity for an HFP input; AudioDeviceInfo.id changes on every reconnect. */
         fun uidOf(device: AudioDeviceInfo): String =
@@ -84,6 +85,10 @@ class RayBanMetaAudioCapture(context: Context) {
     private var previousMode = AudioManager.MODE_NORMAL
     private var routingListener: AudioRouting.OnRoutingChangedListener? = null
     @Volatile private var generation = 0
+    // A recorder whose read thread outlived teardown's join; released by that thread on exit.
+    @Volatile private var pendingRelease: AudioRecord? = null
+    @Volatile private var readThreadExited = true
+    private val releaseLock = Any()
 
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
@@ -280,6 +285,8 @@ class RayBanMetaAudioCapture(context: Context) {
         }
 
         val listener = AudioRouting.OnRoutingChangedListener { routing ->
+            // Late callbacks from a previous capture run must not fail the current one.
+            if (startGeneration != generation) return@OnRoutingChangedListener
             val routed = routing.routedDevice
             val active = routed?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO &&
                 (targetUid == null || uidOf(routed) == targetUid)
@@ -292,6 +299,7 @@ class RayBanMetaAudioCapture(context: Context) {
         onRouteChanged?.invoke(true)
         onRunningChanged?.invoke(true)
 
+        readThreadExited = false
         val thread = Thread({ readLoop(record, startGeneration) }, "RayBanMetaAudioRead")
         recordThread = thread
         thread.start()
@@ -317,6 +325,14 @@ class RayBanMetaAudioCapture(context: Context) {
                 if (frames % 600 == 0L) Log.d(TAG, "streaming frames=$frames (~${frames / 10}s)")
             }
         }
+        // Teardown could not join in time and handed the release to this thread.
+        synchronized(releaseLock) {
+            readThreadExited = true
+            if (pendingRelease === record) {
+                pendingRelease = null
+                record.release()
+            }
+        }
     }
 
     private fun teardown() {
@@ -324,14 +340,26 @@ class RayBanMetaAudioCapture(context: Context) {
         audioRecord = null
         routingListener?.let { listener -> record?.removeOnRoutingChangedListener(listener) }
         routingListener = null
-        record?.let {
-            runCatching { it.stop() }
-            it.release()
-        }
-        recordThread?.let { thread ->
-            if (thread != Thread.currentThread()) runCatching { thread.join(500) }
-        }
+        // Order matters: stop() unblocks a pending read(), the read thread must
+        // then exit before release() frees the native recorder it may still touch.
+        record?.let { runCatching { it.stop() } }
+        val thread = recordThread
         recordThread = null
+        var threadExited = true
+        if (thread != null && thread != Thread.currentThread()) {
+            runCatching { thread.join(READ_THREAD_JOIN_MS) }
+            threadExited = !thread.isAlive
+        }
+        synchronized(releaseLock) {
+            if (threadExited || readThreadExited) {
+                record?.release()
+            } else {
+                // Never free a recorder a live thread may still read; hand the
+                // release to the thread's own exit path instead.
+                Log.w(TAG, "read thread still alive after ${READ_THREAD_JOIN_MS}ms; deferring AudioRecord release")
+                pendingRelease = record
+            }
+        }
         releaseRoute()
         targetUid = null
         Log.i(TAG, "stopped")

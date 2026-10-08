@@ -9766,7 +9766,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Nenašli sa žiadne Bluetooth mikrofóny. Pripojte okuliare v nastaveniach iPhonu a skúste to znova.';
+      'Nenašli sa žiadne Bluetooth mikrofóny. Pripojte okuliare v nastaveniach Bluetooth v telefóne a skúste to znova.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9774,7 +9774,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'K tomuto mikrofónu sa nepodarilo pripojiť. Uistite sa, že je pripojený v nastaveniach iPhonu.';
+      'K tomuto mikrofónu sa nepodarilo pripojiť. Uistite sa, že je pripojený v nastaveniach Bluetooth v telefóne.';
 
   @override
   String get syncStatusTooOld => 'Príliš staré na synchronizáciu — Omi ho nemôže prijať';

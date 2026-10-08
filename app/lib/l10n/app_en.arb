@@ -11581,7 +11581,7 @@
     "@rayBanMetaMicPickerDescription": {
         "description": "Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff"
     },
-    "rayBanMetaMicPickerEmpty": "No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.",
+    "rayBanMetaMicPickerEmpty": "No Bluetooth microphones found. Connect your glasses in your phone's Bluetooth settings, then try again.",
     "@rayBanMetaMicPickerEmpty": {
         "description": "Empty state when iOS reports no Bluetooth HFP microphone inputs"
     },
@@ -11589,7 +11589,7 @@
     "@rayBanMetaMicPickerLoadError": {
         "description": "Error state when available Bluetooth HFP inputs cannot be read"
     },
-    "rayBanMetaMicPickerConnectError": "Could not connect to that microphone. Make sure it is connected in iPhone Settings.",
+    "rayBanMetaMicPickerConnectError": "Could not connect to that microphone. Make sure it is connected in your phone's Bluetooth settings.",
     "@rayBanMetaMicPickerConnectError": {
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
     },

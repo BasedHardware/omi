@@ -18,7 +18,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * The dev flavor compiles src/noDat, so this pins the labeled audio-only
+ * Compiled only for the dev/prod flavors (src/testNoDat), which link the
+ * toolkit-free src/noDat factory, so this pins the labeled audio-only
  * contract the shared Dart layer relies on: no toolkit, no faked camera, and
  * never a phone-mic fallback when the glasses' HFP input is absent.
  */
@@ -64,7 +65,9 @@ class RayBanMetaHostApiImplTest {
         var glasses: Int? = null
         api.getAvailableGlasses { glasses = it.getOrNull()?.size }
         assertEquals(0, glasses)
-        expectFlutterError("camera_unavailable") { api.startCamera() }
+        var startError: Throwable? = null
+        api.startCamera { startError = it.exceptionOrNull() }
+        assertEquals("camera_unavailable", (startError as? FlutterError)?.code)
         expectFlutterError("camera_unavailable") { api.capturePhoto() }
     }
 

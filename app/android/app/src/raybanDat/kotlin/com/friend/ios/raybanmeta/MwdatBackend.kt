@@ -19,7 +19,6 @@ import com.meta.wearable.dat.camera.types.StreamConfiguration
 import com.meta.wearable.dat.camera.types.StreamState
 import com.meta.wearable.dat.camera.types.VideoQuality
 import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.selectors.SpecificDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
@@ -33,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -65,6 +65,10 @@ internal class MwdatBackend(
         // side so a FULL-resolution capture can't balloon the upload.
         private const val MAX_PHOTO_EDGE = 1280
         private const val JPEG_QUALITY = 85
+
+        // Wearables is a process-wide singleton, but a new backend is built each
+        // time the Flutter engine attaches; initialize the toolkit only once.
+        @Volatile private var toolkitInitialized = false
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -92,8 +96,11 @@ internal class MwdatBackend(
     override fun initialize() {
         if (initialized) return
         val started = SystemClock.elapsedRealtime()
-        Wearables.initialize(context).errorOrNull()?.let { error ->
-            throw FlutterError("dat_init", error.description, null)
+        if (!toolkitInitialized) {
+            Wearables.initialize(context).errorOrNull()?.let { error ->
+                throw FlutterError("dat_init", error.description, null)
+            }
+            toolkitInitialized = true
         }
         initialized = true
         Log.i(TAG, "Wearables initialized duration_ms=${SystemClock.elapsedRealtime() - started} devMode=${Wearables.isDevMode}")
@@ -141,6 +148,14 @@ internal class MwdatBackend(
         latestGlasses.forEach { events.onGlassesDiscovered(it) }
     }
 
+    override fun close() {
+        disconnect()
+        metadataJobs.values.forEach { it.cancel() }
+        metadataJobs.clear()
+        scope.cancel()
+        Log.i(TAG, "closed")
+    }
+
     override fun handleIntent(activity: Activity, intent: Intent): Boolean {
         val result = Wearables.handleIntent(intent) { request ->
             Log.i(TAG, "registration request from Meta AI flow=${request.flowId}")
@@ -182,8 +197,20 @@ internal class MwdatBackend(
         connectedDeviceId = deviceId
         setConnection("connecting")
 
+        // Only ever open the glasses the user picked. An unknown id (stale
+        // selection, glasses unpaired in Meta AI) fails instead of silently
+        // binding whichever glasses happen to be nearby.
         val known = Wearables.devices.value.firstOrNull { it.identifier == deviceId }
-        val selector = if (known != null) SpecificDeviceSelector(known) else AutoDeviceSelector()
+        if (known == null) {
+            setConnection("disconnected")
+            connectedDeviceId = null
+            throw FlutterError(
+                "unknown_device",
+                "These glasses are not registered with Meta AI on this phone. Reconnect them from the device list.",
+                null,
+            )
+        }
+        val selector = SpecificDeviceSelector(known)
         val result = Wearables.createSession(selector)
         val created = result.getOrNull()
         if (created == null) {
@@ -299,8 +326,12 @@ internal class MwdatBackend(
             newStream.state.collect { state ->
                 streamState = state
                 Log.i(TAG, "camera stream state=$state t=${SystemClock.elapsedRealtime() - started}ms")
-                events.onCameraStateChanged(state.name.lowercase())
-                if (state == StreamState.CLOSED) clearCamera(emitStopped = false)
+                if (state == StreamState.CLOSED) {
+                    // Terminal: Dart only knows 'stopped', so report that.
+                    clearCamera(emitStopped = true)
+                } else {
+                    events.onCameraStateChanged(state.name.lowercase())
+                }
             }
         }
         cameraJobs += scope.launch {

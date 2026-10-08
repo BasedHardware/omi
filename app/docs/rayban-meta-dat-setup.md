@@ -152,9 +152,10 @@ current firmware, and glasses **Developer Mode** enabled in the Meta AI app.
 
 1. Run `bash setup.sh android` once in a fresh checkout (seeds Firebase files
    and generated Dart sources), then stop its default launch.
-2. Build and run the flavor — no wrapper script and no `--dart-define` are
-   needed (Android has no plugin conflict to work around, and Dart detects the
-   toolkit through `getAvailabilityMode()`):
+2. Build and run the flavor. Unlike iOS there is no wrapper script and no
+   `--dart-define=OMI_RAYBAN_DAT=true`: Android has no plugin conflict to work
+   around, and Dart detects the toolkit through `getAvailabilityMode()`. The
+   usual profile defines for a dev build still apply:
 
    ```bash
    cd app
@@ -179,6 +180,12 @@ and register the `omirayban` callback scheme for the Android package there.
 
 The flavor also opts out of the toolkit's default analytics and crash
 reporting to Meta (`src/raybanDat/AndroidManifest.xml`).
+
+The capture foreground service (`RayBanMetaForegroundService`) is promoted
+only with the types in use — `microphone` while audio runs, `connectedDevice`
+while the camera session runs — and declares `stopWithTask="true"`: swiping
+Omi away ends glasses capture, because the Flutter engine that consumes the
+audio and photos dies with the task.
 
 Audio uses the platform Bluetooth SCO route in every flavor
 (`RayBanMetaAudioCapture.kt`): `setCommunicationDevice` on Android 12+,

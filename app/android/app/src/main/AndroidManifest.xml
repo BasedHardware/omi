@@ -220,7 +220,7 @@
         <!-- Ray-Ban Meta glasses — keeps HFP mic capture / DAT session alive in background -->
         <service
             android:name="com.friend.ios.raybanmeta.RayBanMetaForegroundService"
-            android:foregroundServiceType="microphone|connectedDevice"
+            android:foregroundServiceType="microphone|connectedDevice|shortService"
             android:stopWithTask="true"
             android:exported="false" />
 

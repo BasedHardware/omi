@@ -9845,7 +9845,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.';
+      'Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. ஃபோனின் Bluetooth அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9853,7 +9853,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
+      'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது ஃபோனின் Bluetooth அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
 
   @override
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';

@@ -43,9 +43,14 @@ class RayBanMetaHostApiImpl(
     private val audioCapture = RayBanMetaAudioCapture(appContext)
     private val dat: RayBanMetaDatBackend? = RayBanMetaDatBackendFactory.create(appContext, this)
 
-    // Foreground-service holders; the service runs while either is true.
+    // Foreground-service holders; the service runs while either is true and is
+    // promoted only with the types actually in use.
     private var audioActive = false
     private var cameraActive = false
+
+    // Bumped by stopCamera/disconnect so a camera start still queued behind
+    // audio routing is cancelled instead of starting after the caller stopped.
+    private var cameraStartGeneration = 0
 
     init {
         audioCapture.onFrame = { frame, sampleRate ->
@@ -60,6 +65,12 @@ class RayBanMetaHostApiImpl(
                 audioActive = running
                 updateForegroundService()
             }
+        }
+        RayBanMetaForegroundService.onPromotionFailed = { reason ->
+            onError(
+                "background_capture_unavailable",
+                "Android refused the background capture service ($reason); capture continues while Omi is open",
+            )
         }
         Log.i(TAG, "initialized mode=${getAvailabilityMode()}")
     }
@@ -80,7 +91,7 @@ class RayBanMetaHostApiImpl(
 
     private fun updateForegroundService() {
         if (audioActive || cameraActive) {
-            RayBanMetaForegroundService.start(appContext)
+            RayBanMetaForegroundService.update(appContext, microphone = audioActive, connectedDevice = cameraActive)
         } else {
             RayBanMetaForegroundService.stop(appContext)
         }
@@ -94,6 +105,8 @@ class RayBanMetaHostApiImpl(
             Log.w(TAG, "dispose: disconnect failed: ${e.message}")
         }
         audioCapture.release()
+        RayBanMetaForegroundService.onPromotionFailed = null
+        dat?.close()
         audioActive = false
         cameraActive = false
         updateForegroundService()
@@ -196,10 +209,8 @@ class RayBanMetaHostApiImpl(
 
     override fun disconnect() {
         audioCapture.stop()
-        dat?.let { backend ->
-            backend.stopCamera()
-            backend.disconnect()
-        }
+        stopCamera()
+        dat?.disconnect()
     }
 
     override fun getConnectionState(): String {
@@ -230,31 +241,56 @@ class RayBanMetaHostApiImpl(
         backend.cameraPermissionStatus { status -> onMain { callback(Result.success(status)) } }
     }
 
-    override fun startCamera() {
-        val backend = dat ?: throw FlutterError(
-            "camera_unavailable",
-            "Image capture requires the Meta Wearables toolkit build",
-            null,
+    override fun startCamera(callback: (Result<Unit>) -> Unit) {
+        val backend = dat ?: return callback(
+            Result.failure(
+                FlutterError("camera_unavailable", "Image capture requires the Meta Wearables toolkit build", null),
+            ),
         )
-        backend.initialize()
-        if (backend.connectionState() != "connected") {
-            throw FlutterError("not_connected", "Connect to the glasses first", null)
+        try {
+            backend.initialize()
+        } catch (e: Throwable) {
+            return callback(Result.failure(e))
         }
+        if (backend.connectionState() != "connected") {
+            return callback(Result.failure(FlutterError("not_connected", "Connect to the glasses first", null)))
+        }
+        val generation = ++cameraStartGeneration
         cameraActive = true
         updateForegroundService()
-        // Meta's ordering rule: HFP must be fully routed before the DAT stream starts.
-        audioCapture.runAfterPendingStart {
-            try {
-                backend.startCamera()
-            } catch (e: Throwable) {
-                cameraActive = false
-                updateForegroundService()
-                onError("camera_stream", e.message ?: "Could not start the DAT camera stream")
+        // Meta's ordering rule: HFP must be fully routed before the DAT stream
+        // starts, so the start runs after any in-flight audio routing. The Pigeon
+        // call completes only then, with the real outcome.
+        val queued = runCatching {
+            audioCapture.runAfterPendingStart {
+                if (generation != cameraStartGeneration) {
+                    callback(
+                        Result.failure(
+                            FlutterError("camera_start_cancelled", "The camera was stopped before it started", null),
+                        ),
+                    )
+                    return@runAfterPendingStart
+                }
+                try {
+                    backend.startCamera()
+                    callback(Result.success(Unit))
+                } catch (e: Throwable) {
+                    cameraActive = false
+                    updateForegroundService()
+                    callback(Result.failure(e))
+                }
             }
+        }
+        queued.exceptionOrNull()?.let { e ->
+            // The audio worker is gone (bridge disposed); nothing will run the start.
+            cameraActive = false
+            updateForegroundService()
+            callback(Result.failure(FlutterError("camera_stream", e.message ?: "Camera start could not be scheduled", null)))
         }
     }
 
     override fun stopCamera() {
+        cameraStartGeneration++
         dat?.stopCamera()
         if (cameraActive) {
             cameraActive = false
@@ -282,9 +318,12 @@ class RayBanMetaHostApiImpl(
     }
 
     override fun onConnectionStateChanged(deviceId: String, state: String) = onMain {
-        if (state == "disconnected" && cameraActive) {
-            cameraActive = false
-            updateForegroundService()
+        if (state == "disconnected") {
+            cameraStartGeneration++ // a start queued for the lost session must not run
+            if (cameraActive) {
+                cameraActive = false
+                updateForegroundService()
+            }
         }
         flutterApi.onConnectionStateChanged(deviceId, state) {}
     }

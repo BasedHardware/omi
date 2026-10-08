@@ -366,6 +366,10 @@ abstract class RayBanMetaHostAPI {
 
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).
+  /// Completes once the native start has actually run (Android may first wait
+  /// for an in-flight HFP audio route, per Meta's audio-before-camera rule) and
+  /// fails with its error, so callers see the real outcome.
+  @async
   @SwiftFunction('startCamera()')
   void startCamera();
 

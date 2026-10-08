@@ -9617,13 +9617,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get rayBanMetaMicPickerDescription => 'メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。';
 
   @override
-  String get rayBanMetaMicPickerEmpty => 'Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。';
+  String get rayBanMetaMicPickerEmpty => 'Bluetooth マイクが見つかりません。スマートフォンの Bluetooth 設定でメガネを接続してから、もう一度お試しください。';
 
   @override
   String get rayBanMetaMicPickerLoadError => 'Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。';
 
   @override
-  String get rayBanMetaMicPickerConnectError => 'そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。';
+  String get rayBanMetaMicPickerConnectError => 'そのマイクに接続できませんでした。スマートフォンの Bluetooth 設定で接続されていることを確認してください。';
 
   @override
   String get syncStatusTooOld => '古すぎて同期できません — Omi は受け付けられません';

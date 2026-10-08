@@ -9789,7 +9789,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth mikrofonų nerasta. Prijunkite akinius iPhone nustatymuose ir bandykite dar kartą.';
+      'Bluetooth mikrofonų nerasta. Prijunkite akinius telefono Bluetooth nustatymuose ir bandykite dar kartą.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9797,7 +9797,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose.';
+      'Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas telefono Bluetooth nustatymuose.';
 
   @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';

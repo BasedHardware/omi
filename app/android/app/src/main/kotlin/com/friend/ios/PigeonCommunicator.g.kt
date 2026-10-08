@@ -1530,8 +1530,11 @@ interface RayBanMetaHostAPI {
   /**
    * Starts the DAT camera stream session so photo capture is ready. While
    * active the glasses' capture LED is on (hardware-enforced by Meta).
+   * Completes once the native start has actually run (Android may first wait
+   * for an in-flight HFP audio route, per Meta's audio-before-camera rule) and
+   * fails with its error, so callers see the real outcome.
    */
-  fun startCamera()
+  fun startCamera(callback: (Result<Unit>) -> Unit)
   fun stopCamera()
   /** Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured. */
   fun capturePhoto()
@@ -1794,13 +1797,14 @@ interface RayBanMetaHostAPI {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
-            val wrapped: List<Any?> = try {
-              api.startCamera()
-              listOf(null)
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            api.startCamera{ result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(null))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

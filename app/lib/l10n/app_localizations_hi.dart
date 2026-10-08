@@ -9753,7 +9753,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'कोई Bluetooth माइक्रोफ़ोन नहीं मिला। iPhone सेटिंग्स में चश्मा कनेक्ट करें, फिर दोबारा कोशिश करें।';
+      'कोई Bluetooth माइक्रोफ़ोन नहीं मिला। फ़ोन की Bluetooth सेटिंग्स में चश्मा कनेक्ट करें, फिर दोबारा कोशिश करें।';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9761,7 +9761,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'उस माइक्रोफ़ोन से कनेक्ट नहीं हो सके। सुनिश्चित करें कि वह iPhone सेटिंग्स में कनेक्ट है।';
+      'उस माइक्रोफ़ोन से कनेक्ट नहीं हो सके। सुनिश्चित करें कि वह फ़ोन की Bluetooth सेटिंग्स में कनेक्ट है।';
 
   @override
   String get syncStatusTooOld => 'सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता';

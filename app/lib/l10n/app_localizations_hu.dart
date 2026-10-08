@@ -9812,7 +9812,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Nem található Bluetooth-mikrofon. Csatlakoztasd a szemüveget az iPhone Beállításokban, majd próbáld újra.';
+      'Nem található Bluetooth-mikrofon. Csatlakoztasd a szemüveget a telefon Bluetooth-beállításaiban, majd próbáld újra.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9820,7 +9820,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e az iPhone Beállításokban.';
+      'Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e a telefon Bluetooth-beállításaiban.';
 
   @override
   String get syncStatusTooOld => 'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';

@@ -9775,7 +9775,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Inga Bluetooth-mikrofoner hittades. Anslut glasögonen i iPhone-inställningarna och försök igen.';
+      'Inga Bluetooth-mikrofoner hittades. Anslut glasögonen i telefonens Bluetooth-inställningar och försök igen.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9783,7 +9783,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Det gick inte att ansluta till mikrofonen. Kontrollera att den är ansluten i iPhone-inställningarna.';
+      'Det gick inte att ansluta till mikrofonen. Kontrollera att den är ansluten i telefonens Bluetooth-inställningar.';
 
   @override
   String get syncStatusTooOld => 'För gammal för att synkas — Omi kan inte ta emot den';

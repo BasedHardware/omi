@@ -9711,14 +9711,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'لم يتم العثور على ميكروفونات Bluetooth. وصّل نظارتك في إعدادات iPhone، ثم حاول مرة أخرى.';
+      'لم يتم العثور على ميكروفونات Bluetooth. وصّل نظارتك في إعدادات Bluetooth في هاتفك، ثم حاول مرة أخرى.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
       'تعذر تحميل ميكروفونات Bluetooth. تأكد من تشغيل Bluetooth، ثم حاول مرة أخرى.';
 
   @override
-  String get rayBanMetaMicPickerConnectError => 'تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات iPhone.';
+  String get rayBanMetaMicPickerConnectError =>
+      'تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات Bluetooth في هاتفك.';
 
   @override
   String get syncStatusTooOld => 'قديم جدًا للمزامنة — لا يمكن لـ Omi قبوله';

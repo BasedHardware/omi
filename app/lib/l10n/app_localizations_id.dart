@@ -9781,7 +9781,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Tidak ada mikrofon Bluetooth yang ditemukan. Hubungkan kacamata di Pengaturan iPhone, lalu coba lagi.';
+      'Tidak ada mikrofon Bluetooth yang ditemukan. Hubungkan kacamata di pengaturan Bluetooth ponsel, lalu coba lagi.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9789,7 +9789,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di Pengaturan iPhone.';
+      'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di pengaturan Bluetooth ponsel.';
 
   @override
   String get syncStatusTooOld => 'Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya';
