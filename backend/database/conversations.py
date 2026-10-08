@@ -2224,7 +2224,7 @@ def get_conversation_for_capture_check(uid: str, conversation_id: str, *, firest
     user_ref = client.collection('users').document(uid)
     snapshot = user_ref.collection(conversations_collection).document(conversation_id).get()
     raw = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
-    if not raw:
+    if not raw or is_soft_deleted(raw):
         return None, None
     return prepare_conversation_for_read(raw, uid), transcript_fingerprint(raw)
 
