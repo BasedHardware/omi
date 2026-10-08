@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
@@ -29,6 +35,10 @@ class PermissionsInterstitialPage extends StatefulWidget {
 
   final OnboardingPermissionsSource? source;
 
+  /// The SwiftUI preview on iOS (or the debug-only native test host) draws the panel's native
+  /// projection; every other build keeps the Flutter page.
+  static bool get nativeEnabled => (iosSwiftUiEnabled && Platform.isIOS) || IosNativeSurface.debugNativeHostForTest;
+
   @override
   State<PermissionsInterstitialPage> createState() => _PermissionsInterstitialPageState();
 }
@@ -45,8 +55,40 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
     Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const HomePageWrapper()), (route) => false);
   }
 
+  bool _continuing = false;
+
+  /// Continue: asks for whatever is still missing, reports completion, then goes home.
+  Future<void> _continue(BuildContext context) async {
+    await requestMissingOnboardingPermissions(resolveOnboardingPermissionsSource(context, widget.source));
+    if (!context.mounted) return;
+    PlatformManager.instance.analytics.permissionsInterstitialCompleted();
+    _goHome(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!PermissionsInterstitialPage.nativeEnabled) return _classic(context);
+    // The panel's native projection with this page's Continue; a host that cannot draw it restores
+    // this complete page (logo and card), not only the panel's own step.
+    return Scaffold(
+      backgroundColor: OmiColors.surface0,
+      body: NativeNavigationChrome(
+        wrapFallback: (_) => NativeNavigationChrome(enabled: false, child: _classic(context)),
+        child: OnboardingPermissionsPanel(
+          source: widget.source,
+          nativeContinue: () {
+            // One Continue at a time: a repeated native command must not ask twice or go home twice.
+            // Once Home replaced this page, a late command is ignored too.
+            if (_continuing || ModalRoute.of(context)?.isCurrent == false) return;
+            _continuing = true;
+            unawaited(_continue(context).whenComplete(() => _continuing = false));
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _classic(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       body: Column(
@@ -86,14 +128,7 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
                   key: const Key('permissions_interstitial_continue'),
                   label: context.l10n.continueButton,
                   expand: true,
-                  onPressed: () async {
-                    await requestMissingOnboardingPermissions(
-                      resolveOnboardingPermissionsSource(context, widget.source),
-                    );
-                    if (!context.mounted) return;
-                    PlatformManager.instance.analytics.permissionsInterstitialCompleted();
-                    _goHome(context);
-                  },
+                  onPressed: () => _continue(context),
                 ),
               ],
             ),

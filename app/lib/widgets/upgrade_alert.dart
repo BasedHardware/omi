@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -71,28 +72,90 @@ Future<void> showUpdatePrompt(
   required VoidCallback onUpdate,
   required VoidCallback onLater,
 }) async {
-  final updated = await showOmiSurfaceSheet<bool>(
+  final padding = EdgeInsets.fromLTRB(OmiSpacing.xl, required ? OmiSpacing.xl : 0, OmiSpacing.xl, OmiSpacing.xs);
+  UpdatePromptSheet sheet(BuildContext sheetContext, {required bool native}) => UpdatePromptSheet(
+        promptKey: key,
+        required: required,
+        native: native,
+        padding: padding,
+        releaseNotes: releaseNotes,
+        onUpdate: required ? onUpdate : () => Navigator.of(sheetContext).pop(true),
+        onLater: () => Navigator.of(sheetContext).pop(false),
+      );
+  final updated = await showOmiSheet<bool>(
     context: context,
     isDismissible: !required,
     enableDrag: !required,
-    showDragHandle: !required,
-    builder: (sheetContext) => PopScope(
-      canPop: !required,
-      child: OmiSheetScaffold(
-        showCloseButton: false,
-        padding: EdgeInsets.fromLTRB(OmiSpacing.xl, required ? OmiSpacing.xl : 0, OmiSpacing.xl, OmiSpacing.xs),
-        child: UpdatePrompt(
-          key: key,
-          required: required,
-          releaseNotes: releaseNotes,
-          onUpdate: required ? onUpdate : () => Navigator.of(sheetContext).pop(true),
-          onLater: () => Navigator.of(sheetContext).pop(false),
-        ),
-      ),
-    ),
+    showCloseButton: false,
+    padding: padding,
+    builder: (sheetContext) => sheet(sheetContext, native: false),
+    nativeBuilder: (sheetContext) => sheet(sheetContext, native: true),
   );
   if (required) return;
   updated == true ? onUpdate() : onLater();
+}
+
+/// The update sheet's body: [UpdatePrompt], or with [native] the same rows as one native surface
+/// whose fallback is the complete Flutter sheet. A [required] update cannot be popped (no swipe,
+/// scrim or back), and Update leaves it up.
+class UpdatePromptSheet extends StatelessWidget {
+  const UpdatePromptSheet({
+    super.key,
+    required this.required,
+    required this.native,
+    required this.onUpdate,
+    required this.onLater,
+    this.releaseNotes,
+    this.promptKey,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final Key? promptKey;
+  final bool required, native;
+  final String? releaseNotes;
+  final VoidCallback onUpdate;
+  final VoidCallback onLater;
+
+  /// The fallback sheet's padding, as the Flutter sheet uses it.
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final prompt = UpdatePrompt(
+        key: promptKey, required: required, releaseNotes: releaseNotes, onUpdate: onUpdate, onLater: onLater);
+    return PopScope(canPop: !required, child: native ? _native(context, prompt) : prompt);
+  }
+
+  /// A command that arrives while an optional sheet is already closing must not pop the route beneath.
+  static void _answer(BuildContext context, VoidCallback answer) {
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    answer();
+  }
+
+  Widget _native(BuildContext context, Widget prompt) {
+    final l10n = context.l10n;
+    final notes = UpdateWhatsNew.fromReleaseNotes(releaseNotes);
+    final title = required ? l10n.updateRequiredTitle : l10n.updateAvailableTitle;
+    return IosNativeSurface(
+      title: title,
+      fallback: OmiSheetScaffold(showCloseButton: false, padding: padding, child: prompt),
+      sections: [
+        NativeSection('update_prompt', [
+          NativeRow('update_title', title, kind: 'label', symbol: 'arrow.down.app'),
+          NativeRow('update_message', required ? l10n.updateRequiredMessage : l10n.updateAvailableMessage,
+              kind: 'label'),
+        ]),
+        if (notes != null)
+          NativeSection('update_whats_new', title: l10n.whatsNew, [
+            for (final (index, line) in notes.split('\n').indexed) NativeRow('update_note_$index', line, kind: 'label'),
+          ]),
+        NativeSection('update_actions', [
+          NativeRow('update_now', l10n.update, action: (_) => _answer(context, onUpdate)),
+          if (!required) NativeRow('update_not_now', l10n.notNow, action: (_) => _answer(context, onLater)),
+        ]),
+      ],
+    );
+  }
 }
 
 /// The update sheet's content, in Omi's own words rather than the `upgrader` package's ("…is now

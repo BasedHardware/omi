@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -108,27 +110,47 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
     _promptClosed = Completer<void>();
     const TypedEvents().emit(const OnboardingSetupRatingPromptShown());
     final l10n = context.l10n;
-    final answer = await showDialog<OnboardingSetupRatingPromptAnsweredAnswer>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => OmiAlertDialog(
-        title: l10n.onboardingRatingPromptTitle,
-        message: l10n.onboardingRatingPromptBody,
-        actions: [
-          OmiDialogAction(
-            key: const Key('onboarding_rating_yes'),
-            label: l10n.onboardingRatingPromptYes,
-            isDefault: true,
-            onPressed: () => Navigator.of(dialogContext).pop(OnboardingSetupRatingPromptAnsweredAnswer.support),
-          ),
-          OmiDialogAction(
-            key: const Key('onboarding_rating_no'),
-            label: l10n.onboardingRatingPromptNo,
-            onPressed: () => Navigator.of(dialogContext).pop(OnboardingSetupRatingPromptAnsweredAnswer.notReally),
-          ),
-        ],
-      ),
-    );
+    final native = nativePresentationEnabled
+        ? await showIosNativeModal(context,
+            title: l10n.onboardingRatingPromptTitle,
+            alert: true,
+            dismissible: false,
+            cancelId: 'not_really',
+            actions: [
+                NativeRow('not_really', l10n.onboardingRatingPromptNo),
+                NativeRow('support', l10n.onboardingRatingPromptYes),
+              ],
+            sections: [
+                NativeSection('rating', [NativeRow('rating_message', l10n.onboardingRatingPromptBody, kind: 'label')]),
+              ])
+        : null;
+    final answer = native != null
+        ? nativeRatingAnswer(native)
+        : !mounted
+            ? null
+            : await showDialog<OnboardingSetupRatingPromptAnsweredAnswer>(
+                context: context,
+                barrierDismissible: false,
+                builder: (dialogContext) => OmiAlertDialog(
+                  title: l10n.onboardingRatingPromptTitle,
+                  message: l10n.onboardingRatingPromptBody,
+                  actions: [
+                    OmiDialogAction(
+                      key: const Key('onboarding_rating_yes'),
+                      label: l10n.onboardingRatingPromptYes,
+                      isDefault: true,
+                      onPressed: () =>
+                          Navigator.of(dialogContext).pop(OnboardingSetupRatingPromptAnsweredAnswer.support),
+                    ),
+                    OmiDialogAction(
+                      key: const Key('onboarding_rating_no'),
+                      label: l10n.onboardingRatingPromptNo,
+                      onPressed: () =>
+                          Navigator.of(dialogContext).pop(OnboardingSetupRatingPromptAnsweredAnswer.notReally),
+                    ),
+                  ],
+                ),
+              );
     _promptOpen = false;
     _promptClosed!.complete();
     if (answer == null) return;
@@ -146,6 +168,45 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
 
   @override
   Widget build(BuildContext context) {
+    final classic = _buildClassic(context);
+    if (!nativePresentationEnabled) return classic;
+    final l10n = context.l10n;
+    final steps = _steps(context);
+    return IosNativeSurface(
+      title: l10n.onboardingSetupTitle,
+      largeTitle: true,
+      publicSurface: true,
+      fallback: classic,
+      sections: [
+        NativeSection('onboarding_setup_intro', [
+          NativeRow('onboarding_setup_subtitle', l10n.onboardingSetupSubtitle, kind: 'label'),
+        ]),
+        NativeSection('onboarding_setup_steps', [
+          for (var i = 0; i < steps.length; i++)
+            NativeRow('onboarding_setup_step_$i', steps[i],
+                kind: 'label',
+                symbol: i < _completed
+                    ? 'checkmark.circle.fill'
+                    : i == _completed
+                        ? 'circle.dotted'
+                        : 'circle'),
+        ]),
+      ],
+    );
+  }
+
+  List<String> _steps(BuildContext context) {
+    final l10n = context.l10n;
+    return [
+      l10n.onboardingSetupStepWorkspace,
+      l10n.onboardingSetupStepLanguage,
+      l10n.onboardingSetupStepMemory,
+      l10n.onboardingSetupStepDevices,
+      l10n.onboardingSetupStepPersonalize,
+    ];
+  }
+
+  Widget _buildClassic(BuildContext context) {
     final l10n = context.l10n;
     final steps = [
       l10n.onboardingSetupStepWorkspace,
@@ -206,6 +267,15 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
       ),
     );
   }
+}
+
+/// How the native rating alert was answered: Yes is support, the Not Really (cancel) action is
+/// notReally, and anything else (an invalidated session, an unmounted page, a dismissal) is no answer.
+@visibleForTesting
+OnboardingSetupRatingPromptAnsweredAnswer? nativeRatingAnswer(NativeModalResult result) {
+  if (result.action == 'support') return OnboardingSetupRatingPromptAnsweredAnswer.support;
+  if (result.reason == 'cancel') return OnboardingSetupRatingPromptAnsweredAnswer.notReally;
+  return null;
 }
 
 enum _StepState { pending, active, done }
