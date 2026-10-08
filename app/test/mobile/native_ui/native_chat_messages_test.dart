@@ -15,6 +15,8 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/chat/widgets/chat_chrome.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/chat_message_native.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -25,8 +27,11 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
@@ -73,6 +78,7 @@ class _Tasks extends ActionItemsProvider {
 
   final List<ActionItemWithMetadata> _items;
   final updates = <(String, bool)>[];
+  var loads = 0;
   Completer<void>? pending;
 
   @override
@@ -82,7 +88,7 @@ class _Tasks extends ActionItemsProvider {
   bool get isLoading => false;
 
   @override
-  Future<void> ensureLoaded({bool showShimmer = false}) async {}
+  Future<void> ensureLoaded({bool showShimmer = false}) async => loads++;
 
   @override
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
@@ -90,6 +96,15 @@ class _Tasks extends ActionItemsProvider {
     await pending?.future;
     return true;
   }
+}
+
+/// The real provider over a loaded transcript, without its history and chat-app reads.
+class _PageMessages extends MessageProvider {
+  @override
+  Future<void> fetchChatApps() async {}
+
+  @override
+  Future refreshMessages({bool dropdownSelected = false}) async {}
 }
 
 class _Analytics implements AnalyticsAdapter {
@@ -485,6 +500,15 @@ void main() {
         ],
         tasks: tasks);
     await tester.pump();
+    // The provider's own constructor preload is the only load so far.
+    final preload = tasks.loads;
+    await tester.pump(const Duration(seconds: 1));
+    expect(tasks.loads, preload, reason: 'history alone never loads tasks; Swift showing a card does');
+    expect(harness.row('chat_task_a1_1').subtitle, _l10n.loading);
+    await dispatch(harness, '_visible:chat_task_a1_1', null);
+    await dispatch(harness, '_visible:chat_task_a1_0', null);
+    await tester.pump();
+    expect(tasks.loads, preload + 1, reason: 'once per message');
     expect(harness.row('chat_task_a1_0').kind, 'task');
     expect(harness.row('chat_task_a1_0').value, false);
     final first = dispatch(harness, 'chat_task_a1_0', true);
@@ -647,6 +671,113 @@ void main() {
     expect(harness.row('chat_file_h1_0').symbol, 'doc.richtext');
     expect(harness.row('chat_file_h1_0').kind, 'label');
     expect(harness.rows.any((row) => row.id.startsWith('chat_file_h2_')), isFalse);
+  });
+
+  group('ChatPage', () {
+    Future<(NativeTestHost, MessageProvider)> pumpPage(WidgetTester tester) async {
+      _mockPackageInfo();
+      final host = NativeTestHost.install();
+      final provider = _PageMessages()
+        ..messages = [
+          _human('h1', 'Plan my week'),
+          _ai('a1', text: '## Week\n\n- **Ship** it', blocks: [
+            {'id': 'b-task', 'type': 'taskCard', 'taskId': 'task-1'},
+          ])
+            ..chartData = ChartData('line', 'Steps', [
+              ChartDataset('Steps', [ChartDataPoint('Mon', 3), ChartDataPoint('Tue', 5)])
+            ]),
+        ]
+        ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+          throw Exception('socket closed');
+        };
+      provider.addMessageLocally('hello');
+      await provider.sendMessageStreamToServer('hello');
+      final memories = MemoriesProvider(
+        fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+            const GetMemoriesResult([], true),
+        fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+            const GetLedgerHistoryResult([], supported: true),
+      );
+      addTearDown(memories.dispose);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppearanceProvider(read: () => 'dark', write: (_) async {})),
+          ChangeNotifierProvider<MessageProvider>.value(value: provider),
+          ChangeNotifierProvider<ActionItemsProvider>.value(value: _Tasks([_task('task-1')])),
+          ChangeNotifierProvider<GoalsProvider>(create: (_) => GoalsProvider()),
+          ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
+          ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+          ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (_) => HomeProvider()),
+          ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (_) => AppProvider()),
+          ChangeNotifierProvider(
+              create: (_) => IntegrationProvider(
+                    fetchStatus: (_) async => null,
+                    saveStatus: (_, __) async => false,
+                    deleteStatus: (_) async => false,
+                    persistPref: (_, __) async {},
+                  )),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: [Locale('en')],
+          home: ChatPage(),
+        ),
+      ));
+      await NativeTestHost.settle(tester);
+      return (host, provider);
+    }
+
+    List<NativeRow> pageRows(WidgetTester tester) =>
+        IosNativeSurface.debugDispatchRows(tester.state<State<IosNativeSurface>>(find.byType(IosNativeSurface)));
+
+    /// The row ids of the last snapshot the page published to the native view.
+    List<String> published(NativeTestHost host, int view) {
+      final update = host.calls.lastWhere((call) => call.$1 == view && call.$2.method == 'update').$2;
+      return [
+        for (final section in (update.arguments as Map)['sections'] as List)
+          for (final row in (section as Map)['rows'] as List) (row as Map)['id'] as String,
+      ];
+    }
+
+    testWidgets('structured replies stay native: the page publishes them instead of its fallback', (tester) async {
+      final (host, provider) = await pumpPage(tester);
+      final failed = provider.messages.last;
+      expect(provider.isReplyFailed(failed), isTrue);
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(find.byType(ChatHeader), findsNothing, reason: 'the classic chat is not mounted');
+      final view = host.created.single;
+      final ids = published(host, view);
+      expect(ids.toSet(), hasLength(ids.length), reason: 'transcript rows and page rows share one id space');
+      expect(
+          ids,
+          containsAll([
+            'chat_message_h1',
+            'chat_message_a1',
+            'chat_task_a1_0',
+            'chat_chart_a1_0',
+            'chat_actions_a1_0',
+            'chat_message_${failed.id}',
+          ]));
+      expect(pageRows(tester).singleWhere((row) => row.id == 'chat_message_${failed.id}').symbol, 'arrow.clockwise');
+      expect(ids.contains('chat_context'), isFalse);
+    });
+
+    testWidgets('Ask Omi from the actions menu quotes the trimmed text as the next context', (tester) async {
+      final (host, _) = await pumpPage(tester);
+      _present((_) => {
+            'action': 'ask',
+            'values': {'chat_ask_text': '  Ship it  '},
+            'reason': 'action',
+          });
+      final view = host.created.single;
+      await host.sendFromNative(view, const MethodCall('action', {'id': 'chat_actions_a1_0', 'value': 'ask'}));
+      await NativeTestHost.settle(tester);
+      expect(pageRows(tester).singleWhere((row) => row.id == 'chat_context').title, 'Ship it');
+      expect(published(host, view), contains('chat_context'));
+      expect(host.disposed, isEmpty, reason: 'the chat never fell back to Flutter');
+    });
   });
 
   group('What went wrong?', () {

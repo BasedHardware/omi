@@ -1,8 +1,10 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -10,26 +12,15 @@ import 'package:omi/providers/message_provider.dart';
 import 'journeys/support/hermetic_boot.dart';
 import 'support/native_host_harness.dart';
 
-/// The chat's real provider over a transcript that is already loaded. Only the network edges are
-/// replaced: no history or chat-app read, and the rating request (which the shared fixture backend
-/// does not route) answers success, after which the rating is recorded as the provider does.
+/// The chat's real provider over a transcript that is already loaded. Only its history and
+/// chat-app reads are skipped; a rating runs the real [MessageProvider.setMessageNps] path through
+/// the hermetic fixture backend.
 class _HostMessages extends MessageProvider {
-  final rated = <int>[];
-
   @override
   Future<void> fetchChatApps() async {}
 
   @override
   Future<void> refreshMessages({bool dropdownSelected = false}) async {}
-
-  @override
-  Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
-    rated.add(value);
-    message.askForNps = false;
-    message.rating = value == 0 ? null : value;
-    notifyListeners();
-    return true;
-  }
 }
 
 ServerMessage _message(String id, String sender, String text, {List<Map<String, dynamic>> blocks = const []}) =>
@@ -46,8 +37,11 @@ void main() {
   runNativeHostSuite((checkNativeHost) {
     testWidgets('chat replies render their rich body, actions and task cards inline', (tester) async {
       // The fixture principal, local API base and harness platform services: nothing reaches the network.
-      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      final backend = await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
       addTearDown(JourneyHermeticBoot.stop);
+      // The fixture backend does not route chat ratings; answer the one request at the HTTP seam.
+      const ratingPath = '/v1/users/analytics/chat_message';
+      backend.failNext('POST', ratingPath, status: 200, body: '{"status":"ok"}');
       final messages = _HostMessages()
         ..messages = [
           _message('host-user-1', 'human', 'What should I focus on this week?'),
@@ -90,10 +84,13 @@ void main() {
 
       await nativeProjectedRow(tester, 'chat_actions_host-ai-1_0').action!('helpful');
       await tester.pump();
-      expect(messages.rated, [1]);
+      expect(backend.countOf('POST', ratingPath), 1);
       expect(messages.messages[1].rating, 1);
-      expect(nativeProjectedRow(tester, 'chat_actions_host-ai-1_0').subtitle, isNotEmpty);
+      expect(nativeProjectedRow(tester, 'chat_actions_host-ai-1_0').subtitle,
+          lookupAppLocalizations(const Locale('en')).helpful);
 
+      // Swift reports the card visible; the tasks owner hydrates once for this message.
+      await nativeProjectedRow(tester, 'chat_task_host-ai-2_0').onVisible?.call(null);
       await tester.pump(const Duration(seconds: 1));
       final task = nativeProjectedRow(tester, 'chat_task_host-ai-2_0');
       expect((task.kind, task.value), ('task', false));

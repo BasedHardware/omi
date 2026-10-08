@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/mobile/native_ui/native_rich_text.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/memories/widgets/memory_dialog.dart';
@@ -629,14 +630,19 @@ class ChatNativeTranscript {
       case MemoryLinkContentBlock():
         final id = next('memory');
         final memories = context.watch<MemoriesProvider?>();
-        if (memories != null && _memoryHydration.add(key)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!_disposed && !memories.hasLoaded) memories.loadMemories();
-          });
+        // Memories load once per message, when Swift first shows its card: never for history alone.
+        void hydrate(Object? _) {
+          if (!_disposed && memories != null && _memoryHydration.add(key) && !memories.hasLoaded) {
+            memories.loadMemories();
+          }
         }
+
         final memory = memories?.memories.firstWhereOrNull((memory) => memory.id == block.memoryId);
         if (memory == null && memories?.loading != true) {
-          return [_unavailableRow(id, l10n.chatBlockMemory, 'brain', l10n.chatBlockUnavailable)];
+          return [
+            NativeRow(id, l10n.chatBlockMemory,
+                kind: 'label', subtitle: l10n.chatBlockUnavailable, symbol: 'brain', onVisible: hydrate),
+          ];
         }
         return [
           NativeRow(
@@ -646,6 +652,7 @@ class ChatNativeTranscript {
             subtitle: memory == null ? l10n.loading : l10n.chatBlockOpenInMemories,
             symbol: 'brain',
             enabled: memory != null,
+            onVisible: hydrate,
             action: memory == null ? null : (_) => showMemoryDialog(context, memories!, memory: memory),
           ),
         ];
@@ -726,22 +733,26 @@ class ChatNativeTranscript {
     final l10n = context.l10n;
     final tasks = context.watch<ActionItemsProvider?>();
     if (tasks == null) return _unavailableRow(id, l10n.chatBlockTask, 'checklist', l10n.chatBlockUnavailable);
-    if (_taskHydration.add(key)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (_disposed) return;
-        try {
-          await tasks.ensureLoaded();
-        } finally {
-          // A failed load settles too: the card reads unavailable instead of loading forever.
-          _taskHydrated.add(key);
-          _changed();
-        }
-      });
+    // Tasks load once per message, when Swift first shows its card: never for history alone.
+    Future<void> hydrate(Object? _) async {
+      if (_disposed || !_taskHydration.add(key)) return;
+      try {
+        await tasks.ensureLoaded();
+      } finally {
+        // A failed load settles too: the card reads unavailable instead of loading forever.
+        _taskHydrated.add(key);
+        _changed();
+      }
     }
+
     final item = tasks.actionItems.firstWhereOrNull((item) => item.id == block.taskId || item.taskId == block.taskId);
     if (item == null) {
       final loading = !_taskHydrated.contains(key) || tasks.isLoading;
-      return _unavailableRow(id, l10n.chatBlockTask, 'checklist', loading ? l10n.loading : l10n.chatBlockUnavailable);
+      return NativeRow(id, l10n.chatBlockTask,
+          kind: 'label',
+          subtitle: loading ? l10n.loading : l10n.chatBlockUnavailable,
+          symbol: 'checklist',
+          onVisible: hydrate);
     }
     return NativeRow(
       id,
@@ -749,6 +760,7 @@ class ChatNativeTranscript {
       kind: 'task',
       value: item.completed,
       subtitle: l10n.chatBlockTask,
+      onVisible: hydrate,
       action: (value) async {
         if (value is! bool || !_toggling.add(id)) return;
         try {
@@ -948,13 +960,21 @@ class _RichBody {
   final Map<String, String> links;
 }
 
-/// The plans sheet the chat opens when the chat quota runs out. It stays in the Flutter sheet
-/// scaffold: [PlansSheet] projects its own native surface there, and its unprojected states (the
-/// training-data opt-in, plans it cannot map) keep the scaffold's close control.
+/// The plans sheet the chat opens when the chat quota runs out. Natively, [PlansSheet] projects its
+/// own surface, with its own close row, and the hero animations stay stopped beneath it; a surface
+/// that falls back gets the Flutter sheet scaffold and its close control back. Plans the projection
+/// cannot map keep [PlansSheet]'s complete classic body, which closes by drag or the scrim.
 Future<void> showChatQuotaPlansSheet(BuildContext context) => showOmiSheet<void>(
       context: context,
       padding: EdgeInsets.zero,
       builder: (_) => const _QuotaPlansSheet(),
+      nativeBuilder: (_) => TickerMode(
+        enabled: false,
+        child: NativeNavigationChrome(
+          wrapFallback: (fallback) => OmiSheetScaffold(padding: EdgeInsets.zero, child: fallback),
+          child: const _QuotaPlansSheet(),
+        ),
+      ),
     );
 
 class _QuotaPlansSheet extends StatefulWidget {
