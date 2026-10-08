@@ -3,22 +3,24 @@
 
 The supervisor is a direct child of the launcher. It starts the command in a
 new session and records the leader pid, process-group id, start identity, and
-an unguessable token placed in the leader argv and in OWNED_PROCESS_TOKEN.
-Children inherit that environment.
+an unguessable token. The token is one argv element of the leader and the
+exact environment field OWNED_PROCESS_TOKEN, which children inherit.
 
-On success, failure, SIGINT, SIGTERM, SIGHUP, an optional run deadline, or
-death of the launcher, the supervisor signals only processes that still match
-that identity: the token, or membership in the leader's process group while
-the leader's start identity still matches. A shutdown deadline bounds the
-SIGTERM wait; leftovers are then SIGKILL'd. `stop --receipt` uses the same
-check and will not signal a pid whose start identity or token does not match.
+A process is signalled only when that proof is rechecked immediately
+beforehand: the environment field is exactly OWNED_PROCESS_TOKEN=<token>, or
+the recorded leader pid still has that start identity and the token as its own
+argv element. A token buried inside a longer argument is not proof. Process
+group membership is not proof. It is only a reason to refuse success when a
+member remains that cannot be proven, so an env-cleared child is not reported
+as cleaned up and is not signalled.
+
+`stop --receipt` uses the same proof. A malformed token or schema fails
+closed. A live pid whose start identity does not match is not signalled.
 
 This does not cover SIGKILL of the supervisor itself, a grandchild that both
 leaves the process group and clears OWNED_PROCESS_TOKEN, or a host crash.
 macOS has no parent-death signal. The supervisor polls its parent pid and, on
-Linux, also requests PR_SET_PDEATHSIG. A reused pid is not signalled when the
-recorded start identity or token does not match; a check-then-signal race
-remains and is narrowed by that pair of checks.
+Linux, also requests PR_SET_PDEATHSIG.
 """
 
 from __future__ import annotations
@@ -41,8 +43,10 @@ EXIT_TIMEOUT = 124
 EXIT_STARTUP = 125
 EXIT_PARENT_DIED = 129
 EXIT_REFUSED = 2
+_PS_CAP_SECONDS = 2.0
 
 _STOP = {"requested": False, "signal": signal.SIGTERM}
+_DEADLINE = {"at": None}
 
 
 def _install_handlers() -> None:
@@ -67,13 +71,33 @@ def _arm_parent_death_signal() -> None:
         return
 
 
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _ps_timeout() -> float | None:
+    if _DEADLINE["at"] is None:
+        return _PS_CAP_SECONDS
+    remaining = _DEADLINE["at"] - time.monotonic()
+    if remaining <= 0:
+        return None
+    return min(_PS_CAP_SECONDS, remaining)
+
+
+def _ps(args: list[str], *, missing_ok: bool) -> bytes | None:
+    """Run ps. None means the table could not be read; b'' means no rows."""
+    timeout = _ps_timeout()
+    if timeout is None:
+        return None
+    try:
+        return subprocess.check_output(args, stderr=subprocess.DEVNULL, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None
+    except subprocess.CalledProcessError:
+        return b"" if missing_ok else None
+    except OSError:
+        return None
 
 
 def _linux_stat(pid: int) -> list[str] | None:
     try:
-        data = _read_text(Path(f"/proc/{pid}/stat"))
+        data = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
     except OSError:
         return None
     marker = data.rfind(")")
@@ -83,7 +107,7 @@ def _linux_stat(pid: int) -> list[str] | None:
 
 
 def _pid_alive(pid: int) -> bool:
-    if pid <= 1:
+    if not isinstance(pid, int) or pid <= 1:
         return False
     try:
         os.kill(pid, 0)
@@ -101,191 +125,222 @@ def process_start(pid: int) -> str | None:
         if not fields or len(fields) < 20:
             return None
         return "ticks:" + fields[19]
-    try:
-        out = subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "lstart="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, OSError):
+    out = _ps(["ps", "-p", str(pid), "-o", "lstart="], missing_ok=True)
+    if not out:
         return None
-    start = " ".join(out.split())
+    start = " ".join(out.decode("utf-8", "replace").split())
     return start or None
 
 
-def _command_line(pid: int) -> str:
+def _valid_token(token: object) -> bool:
+    return isinstance(token, str) and len(token) == 32 and all(char in "0123456789abcdef" for char in token)
+
+
+def receipt_signal_error(receipt: object) -> str | None:
+    """Fail closed before any signal. A short or non-hex token is forged."""
+    if not isinstance(receipt, dict):
+        return "receipt must be an object"
+    if receipt.get("schema_version") != SCHEMA_VERSION:
+        return "unsupported receipt schema"
+    if not _valid_token(receipt.get("token")):
+        return "token must be 32 lowercase hex characters"
+    return None
+
+
+def _exact_env_field(token: str) -> bytes:
+    return f"{TOKEN_ENV}={token}".encode()
+
+
+def _blob_has_exact_env(blob: bytes, token: str) -> bool:
+    field = _exact_env_field(token)
+    padded = b" " + blob + b" "
+    return b" " + field + b" " in padded
+
+
+def _linux_exact_env(pid: int, token: str) -> bool:
+    try:
+        blob = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return False
+    return _exact_env_field(token) in blob.split(b"\0")
+
+
+def _command_line(pid: int) -> str | None:
+    """None when ps cannot be read. Empty when the pid is gone."""
     if sys.platform == "linux":
         try:
             blob = Path(f"/proc/{pid}/cmdline").read_bytes()
         except OSError:
             return ""
-        return blob.replace(b"\0", b" ").decode("utf-8", "replace")
-    try:
-        out = subprocess.check_output(
-            ["ps", "-p", str(pid), "-ww", "-o", "command="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        return ""
-    return out.strip()
+        return blob.replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    out = _ps(["ps", "-p", str(pid), "-ww", "-o", "command="], missing_ok=True)
+    if out is None:
+        return None
+    return out.decode("utf-8", "replace").strip()
 
 
-def _process_has_token(pid: int, token: str) -> bool:
-    if token.encode() in _process_blob(pid):
-        return True
-    return False
+def _has_exact_word(text: str, word: str) -> bool:
+    if not word:
+        return False
+    return f" {word} " in f" {text} "
 
 
-def _process_blob(pid: int) -> bytes:
+def _argv_has_exact_token(pid: int, token: str) -> bool:
+    command = _command_line(pid)
+    if not command:
+        return False
+    return _has_exact_word(command, token)
+
+
+def _exact_env(pid: int, token: str) -> bool:
     if sys.platform == "linux":
-        chunks = []
-        for name in ("cmdline", "environ"):
-            try:
-                chunks.append(Path(f"/proc/{pid}/{name}").read_bytes())
-            except OSError:
-                continue
-        return b"\0".join(chunks)
-    try:
-        out = subprocess.check_output(
-            ["ps", "-p", str(pid), "-ww", "-E", "-o", "command="],
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        return b""
-    return out
+        return _linux_exact_env(pid, token)
+    out = _ps(["ps", "-p", str(pid), "-ww", "-E", "-o", "command="], missing_ok=True)
+    if not out:
+        return False
+    return _blob_has_exact_env(out, token)
 
 
-def _snapshot() -> list[tuple[int, int, int]]:
-    """Return (pid, ppid, pgid) for current processes. No environments."""
+def _pids_with_exact_env(token: str) -> set[int] | None:
+    if sys.platform == "linux":
+        found: set[int] = set()
+        try:
+            entries = list(Path("/proc").iterdir())
+        except OSError:
+            return None
+        for entry in entries:
+            if entry.name.isdigit() and _linux_exact_env(int(entry.name), token):
+                found.add(int(entry.name))
+        return found
+    out = _ps(["ps", "-axww", "-E", "-o", "pid=", "-o", "command="], missing_ok=False)
+    if out is None:
+        return None
+    found = set()
+    for line in out.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        pid_text, sep, rest = stripped.partition(b" ")
+        if sep and pid_text.isdigit() and _blob_has_exact_env(rest, token):
+            found.add(int(pid_text))
+    return found
+
+
+def _proven_leader(receipt: dict) -> int | None:
+    pid = receipt.get("leader_pid")
+    start = receipt.get("leader_start")
+    token = receipt.get("token")
+    if not isinstance(pid, int) or pid <= 1 or not isinstance(start, str) or not start or not _valid_token(token):
+        return None
+    if process_start(pid) != start:
+        return None
+    if _exact_env(pid, token) or _argv_has_exact_token(pid, token):
+        return pid
+    return None
+
+
+def _snapshot() -> list[tuple[int, int, int]] | None:
+    """(pid, ppid, pgid). None means the table could not be read."""
     rows: list[tuple[int, int, int]] = []
     if sys.platform == "linux":
-        proc = Path("/proc")
-        for entry in proc.iterdir():
+        try:
+            entries = list(Path("/proc").iterdir())
+        except OSError:
+            return None
+        for entry in entries:
             if not entry.name.isdigit():
                 continue
             fields = _linux_stat(int(entry.name))
             if not fields or len(fields) < 3:
                 continue
-            ppid, pgrp = int(fields[1]), int(fields[2])
-            rows.append((int(entry.name), ppid, pgrp))
+            rows.append((int(entry.name), int(fields[1]), int(fields[2])))
         return rows
-    try:
-        out = subprocess.check_output(
-            ["ps", "-ax", "-o", "pid=", "-o", "ppid=", "-o", "pgid="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        return rows
-    for line in out.splitlines():
+    out = _ps(["ps", "-ax", "-o", "pid=", "-o", "ppid=", "-o", "pgid="], missing_ok=False)
+    if out is None:
+        return None
+    for line in out.decode("utf-8", "replace").splitlines():
         parts = line.split()
         if len(parts) >= 3 and all(part.isdigit() for part in parts[:3]):
             rows.append((int(parts[0]), int(parts[1]), int(parts[2])))
     return rows
 
 
-def leader_matches(receipt: dict) -> bool:
-    pid = receipt.get("leader_pid")
-    start = receipt.get("leader_start")
-    token = receipt.get("token")
-    if not isinstance(pid, int) or pid <= 1 or not isinstance(start, str) or not isinstance(token, str):
-        return False
-    if process_start(pid) != start:
-        return False
-    return _process_has_token(pid, token)
-
-
-def _pgid(pid: int, rows: list[tuple[int, int, int]] | None = None) -> int | None:
-    table = rows if rows is not None else _snapshot()
-    for row_pid, _ppid, row_pgid in table:
-        if row_pid == pid:
-            return row_pgid
-    return None
-
-
 def supervisor_matches(receipt: dict, receipt_path: Path) -> bool:
     pid = receipt.get("supervisor_pid")
     start = receipt.get("supervisor_start")
-    if not isinstance(pid, int) or pid <= 1 or not isinstance(start, str):
+    if not isinstance(pid, int) or pid <= 1 or pid == os.getpid() or not isinstance(start, str) or not start:
         return False
-    if pid == os.getpid() or process_start(pid) != start:
+    if process_start(pid) != start:
         return False
-    return str(receipt_path) in _command_line(pid)
+    command = _command_line(pid)
+    if command is None:
+        return False
+    return _has_exact_word(command, str(receipt_path))
 
 
-def owned_pids(receipt: dict) -> set[int]:
-    """Pids safe to signal. Never includes this process, the supervisor, or pid 1."""
-    token = receipt.get("token")
-    if not isinstance(token, str) or not token:
+def owned_pids(receipt: dict) -> set[int] | None:
+    """Pids safe to consider. None means ownership could not be read."""
+    if receipt_signal_error(receipt):
         return set()
-    rows = _snapshot()
-    matched = leader_matches(receipt)
-    leader_pid = receipt.get("leader_pid")
-    leader_pgid = receipt.get("leader_pgid")
-    by_pid = {pid: (ppid, pgid) for pid, ppid, pgid in rows}
-    selected: set[int] = set()
-    if matched and isinstance(leader_pgid, int):
-        selected.update(pid for pid, (_ppid, pgid) in by_pid.items() if pgid == leader_pgid)
-        changed = True
-        while changed:
-            changed = False
-            for pid, (ppid, _pgid) in by_pid.items():
-                if pid not in selected and ppid in selected:
-                    selected.add(pid)
-                    changed = True
-    token_hits = _pids_with_token(token)
-    if matched:
-        confirmed = set(token_hits)
-        confirmed.update(
-            pid
-            for pid in selected
-            if pid in token_hits or by_pid.get(pid, (None, None))[1] == leader_pgid
-        )
-    else:
-        # The leader pid may have been reused. Do not signal it without a token.
-        confirmed = set(token_hits)
-        if isinstance(leader_pid, int) and leader_pid not in token_hits:
-            confirmed.discard(leader_pid)
-    confirmed.discard(os.getpid())
-    confirmed.discard(1)
+    token = receipt["token"]
+    found = _pids_with_exact_env(token)
+    if found is None:
+        return None
+    leader = _proven_leader(receipt)
+    if leader is not None:
+        found.add(leader)
+    found.discard(os.getpid())
+    found.discard(1)
     supervisor_pid = receipt.get("supervisor_pid")
     if isinstance(supervisor_pid, int):
-        confirmed.discard(supervisor_pid)
-    return {pid for pid in confirmed if pid > 1}
+        found.discard(supervisor_pid)
+    return {pid for pid in found if pid > 1}
 
 
-def _pids_with_token(token: str) -> set[int]:
-    found: set[int] = set()
-    encoded = token.encode()
-    if sys.platform == "linux":
-        for entry in Path("/proc").iterdir():
-            if not entry.name.isdigit():
-                continue
-            pid = int(entry.name)
-            if encoded in _process_blob(pid):
-                found.add(pid)
-        return found
-    try:
-        out = subprocess.check_output(
-            ["ps", "-axww", "-E", "-o", "pid=", "-o", "command="],
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        return found
-    for line in out.splitlines():
-        stripped = line.strip()
-        if not stripped:
+def _pid_owned_now(pid: int, receipt: dict) -> bool:
+    """Recheck proof immediately before a signal. Never trust an earlier set."""
+    if pid <= 1 or pid == os.getpid() or receipt_signal_error(receipt):
+        return False
+    supervisor_pid = receipt.get("supervisor_pid")
+    if isinstance(supervisor_pid, int) and pid == supervisor_pid:
+        return False
+    token = receipt["token"]
+    if _exact_env(pid, token):
+        return True
+    return _proven_leader(receipt) == pid
+
+
+def _unproven_group_members(receipt: dict) -> set[int] | None:
+    """Live same-group pids we must not signal and must not call cleaned up.
+
+    The recorded leader is excluded: a stale leader is a refusal, not a child.
+    None means the process table could not be read.
+    """
+    pgid = receipt.get("leader_pgid")
+    if not isinstance(pgid, int) or pgid <= 1:
+        return set()
+    rows = _snapshot()
+    if rows is None:
+        return None
+    token = receipt["token"]
+    leader_pid = receipt.get("leader_pid")
+    leftover: set[int] = set()
+    for pid, _ppid, row_pgid in rows:
+        if row_pgid != pgid or pid <= 1 or pid == os.getpid():
             continue
-        pid_text, sep, rest = stripped.partition(b" ")
-        if sep and pid_text.isdigit() and encoded in rest:
-            found.add(int(pid_text))
-    return found
+        if isinstance(leader_pid, int) and pid == leader_pid:
+            continue
+        if not _pid_alive(pid):
+            continue
+        if _exact_env(pid, token) or _proven_leader(receipt) == pid:
+            continue
+        leftover.add(pid)
+    return leftover
 
 
-def _signal_pids(pids: set[int], sig: int) -> None:
+def _signal_pids(pids: set[int], sig: int, receipt: dict) -> None:
     for pid in sorted(pids):
-        if pid <= 1 or pid == os.getpid():
+        if not _pid_owned_now(pid, receipt):
             continue
         try:
             os.kill(pid, sig)
@@ -309,8 +364,8 @@ def _write_receipt(path: Path, payload: dict) -> None:
 
 def _load_receipt(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != SCHEMA_VERSION:
-        raise SystemExit(f"owned-process: unsupported receipt schema in {path}")
+    if not isinstance(payload, dict):
+        raise SystemExit(f"owned-process: receipt is not an object: {path}")
     return payload
 
 
@@ -327,57 +382,48 @@ def _limits(shutdown: float, run_deadline: float | None) -> dict:
     }
 
 
-def _still_owned(pid: int, receipt: dict) -> bool:
-    token = receipt.get("token")
-    if not isinstance(token, str) or pid <= 1 or pid == os.getpid():
-        return False
-    if _process_has_token(pid, token):
-        return True
-    leader_pgid = receipt.get("leader_pgid")
-    return leader_matches(receipt) and isinstance(leader_pgid, int) and _pgid(pid) == leader_pgid
-
-
 def _alive_owned(pids: set[int], receipt: dict) -> set[int]:
-    alive: set[int] = set()
-    for pid in pids:
-        if pid <= 1 or pid == os.getpid():
-            continue
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            continue
-        except PermissionError:
-            alive.add(pid)
-            continue
-        if _still_owned(pid, receipt):
-            alive.add(pid)
-    return alive
+    return {pid for pid in pids if _pid_owned_now(pid, receipt) and _pid_alive(pid)}
 
 
 def reap(receipt: dict, first_signal: int, shutdown_deadline: float) -> bool:
-    """Signal the owned set, then SIGKILL anything still matching after the deadline."""
-    targets = owned_pids(receipt)
-    _signal_pids(targets, first_signal)
-    end = time.monotonic() + shutdown_deadline
-    next_scan = time.monotonic() + 0.2
-    while time.monotonic() < end:
-        if time.monotonic() >= next_scan:
-            targets = owned_pids(receipt)
-            next_scan = time.monotonic() + 0.2
-        else:
+    """Signal proven processes, then fail if an unproven group member remains."""
+    if receipt_signal_error(receipt):
+        return False
+    deadline_at = time.monotonic() + shutdown_deadline
+    _DEADLINE["at"] = deadline_at
+    try:
+        targets = owned_pids(receipt)
+        if targets is None:
+            return False
+        _signal_pids(targets, first_signal, receipt)
+        while time.monotonic() < deadline_at:
             targets = _alive_owned(targets, receipt)
-        if not targets:
-            return True
-        time.sleep(0.05)
-    targets = owned_pids(receipt)
-    _signal_pids(targets, signal.SIGKILL)
-    kill_end = time.monotonic() + min(2.0, shutdown_deadline)
-    while time.monotonic() < kill_end:
-        targets = _alive_owned(targets, receipt)
-        if not targets:
-            return True
-        time.sleep(0.05)
-    return not _alive_owned(owned_pids(receipt), receipt)
+            if not targets:
+                break
+            time.sleep(0.05)
+        else:
+            _signal_pids(targets, signal.SIGKILL, receipt)
+            kill_end = time.monotonic() + min(1.0, max(0.0, deadline_at - time.monotonic()))
+            while time.monotonic() < kill_end:
+                targets = _alive_owned(targets, receipt)
+                if not targets:
+                    break
+                time.sleep(0.05)
+            if _alive_owned(targets, receipt):
+                return False
+        # One confirmation scan for a child that appeared during shutdown.
+        confirmed = owned_pids(receipt)
+        if confirmed is None:
+            return False
+        if confirmed:
+            _signal_pids(confirmed, signal.SIGKILL, receipt)
+            if _alive_owned(confirmed, receipt):
+                return False
+        leftover = _unproven_group_members(receipt)
+        return leftover is not None and not leftover
+    finally:
+        _DEADLINE["at"] = None
 
 
 def _leader_argv(token: str, command: list[str]) -> list[str]:
@@ -421,6 +467,25 @@ def supervise(args: argparse.Namespace) -> int:
     _arm_parent_death_signal()
     token = secrets.token_hex(16)
     original_ppid = os.getppid()
+    if original_ppid <= 1:
+        # The launcher exited before this process sampled it. Do not start work.
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "label": args.label,
+            "token": token,
+            "state": "stopped",
+            "outcome": "parent_died",
+            "cleared": True,
+            "supervisor_pid": os.getpid(),
+            "supervisor_start": process_start(os.getpid()),
+            "leader_pid": None,
+            "leader_pgid": None,
+            "leader_start": None,
+            "command": command,
+            "limits": _limits(args.shutdown_deadline, args.run_deadline),
+        }
+        _write_receipt(args.receipt, payload)
+        return EXIT_PARENT_DIED
     supervisor_pid = os.getpid()
     supervisor_start = process_start(supervisor_pid)
     receipt_path = args.receipt
@@ -441,6 +506,7 @@ def supervise(args: argparse.Namespace) -> int:
     if os.getppid() != original_ppid:
         payload["state"] = "stopped"
         payload["outcome"] = "parent_died"
+        payload["cleared"] = False
         _write_receipt(receipt_path, payload)
         return EXIT_PARENT_DIED
 
@@ -454,6 +520,7 @@ def supervise(args: argparse.Namespace) -> int:
         payload["state"] = "stopped"
         payload["outcome"] = "startup_failed"
         payload["detail"] = str(exc)
+        payload["cleared"] = True
         _write_receipt(receipt_path, payload)
         return EXIT_STARTUP
 
@@ -462,6 +529,14 @@ def supervise(args: argparse.Namespace) -> int:
     payload["leader_start"] = process_start(leader.pid)
     payload["state"] = "running"
     _write_receipt(receipt_path, payload)
+    if os.getppid() != original_ppid:
+        cleared = reap(payload, signal.SIGTERM, args.shutdown_deadline)
+        payload["state"] = "stopped"
+        payload["outcome"] = "parent_died"
+        payload["cleared"] = cleared
+        payload["exit_code"] = EXIT_PARENT_DIED if cleared else 1
+        _write_receipt(receipt_path, payload)
+        return EXIT_PARENT_DIED if cleared else 1
 
     started = time.monotonic()
     run_deadline = args.run_deadline
@@ -486,10 +561,6 @@ def supervise(args: argparse.Namespace) -> int:
 
     if outcome == "signal":
         first = int(_STOP["signal"])
-    elif outcome == "timeout":
-        first = signal.SIGTERM
-    elif outcome == "parent_died":
-        first = signal.SIGTERM
     else:
         first = signal.SIGTERM
     cleared = reap(payload, first, args.shutdown_deadline)
@@ -504,11 +575,28 @@ def supervise(args: argparse.Namespace) -> int:
     if not cleared:
         code = 1 if code == 0 else code
     payload["state"] = "stopped"
-    payload["outcome"] = outcome
+    payload["outcome"] = outcome if cleared or outcome != "exited" else "exited_children_unproven"
     payload["exit_code"] = code
     payload["cleared"] = cleared
     _write_receipt(receipt_path, payload)
     return code
+
+
+def _stop_supervisor(receipt: dict, receipt_path: Path, deadline: float) -> None:
+    if not supervisor_matches(receipt, receipt_path):
+        return
+    try:
+        os.kill(int(receipt["supervisor_pid"]), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, TypeError, ValueError):
+        return
+    end = time.monotonic() + deadline
+    while time.monotonic() < end and supervisor_matches(receipt, receipt_path):
+        time.sleep(0.05)
+    if supervisor_matches(receipt, receipt_path):
+        try:
+            os.kill(int(receipt["supervisor_pid"]), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, TypeError, ValueError):
+            pass
 
 
 def stop(args: argparse.Namespace) -> int:
@@ -516,47 +604,46 @@ def stop(args: argparse.Namespace) -> int:
     if not path.is_file():
         print(f"owned-process: receipt not found: {path}", file=sys.stderr)
         return 2
-    receipt = _load_receipt(path)
+    try:
+        receipt = _load_receipt(path)
+    except (OSError, json.JSONDecodeError, SystemExit, UnicodeError, RecursionError):
+        print("owned-process: receipt is not usable", file=sys.stderr)
+        return 2
+    error = receipt_signal_error(receipt)
+    if error:
+        print(f"owned-process: {error}", file=sys.stderr)
+        return 2
     deadline = args.shutdown_deadline
     if deadline is None:
-        recorded = receipt.get("limits", {}).get("shutdown_deadline_seconds", 10)
-        deadline = float(recorded)
+        recorded = receipt.get("limits", {}).get("shutdown_deadline_seconds", 10) if isinstance(receipt.get("limits"), dict) else 10
+        try:
+            deadline = float(recorded)
+        except (TypeError, ValueError):
+            deadline = 10
     if deadline <= 0:
         print("owned-process: deadlines must be positive", file=sys.stderr)
         return 2
     leader_pid = receipt.get("leader_pid")
-    # A live pid whose start identity cannot be read is still not this receipt.
-    # ps can fail under load; that must not become a successful stop.
     mismatched = (
         isinstance(leader_pid, int)
         and leader_pid > 1
         and _pid_alive(leader_pid)
-        and not leader_matches(receipt)
+        and _proven_leader(receipt) != leader_pid
     )
     cleared = reap(receipt, signal.SIGTERM, deadline)
-    if supervisor_matches(receipt, path):
-        try:
-            os.kill(int(receipt["supervisor_pid"]), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, TypeError, ValueError):
-            pass
-        end = time.monotonic() + deadline
-        while time.monotonic() < end and supervisor_matches(receipt, path):
-            time.sleep(0.05)
-        if supervisor_matches(receipt, path):
-            try:
-                os.kill(int(receipt["supervisor_pid"]), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError, TypeError, ValueError):
-                pass
+    _stop_supervisor(receipt, path, deadline)
+    if mismatched and not (owned_pids(receipt) or set()):
+        return EXIT_REFUSED
     if not cleared:
         receipt["state"] = "stopped"
         receipt["outcome"] = "stop_incomplete"
+        receipt["cleared"] = False
         _write_receipt(path, receipt)
         return 1
-    if mismatched and not owned_pids(receipt):
-        return EXIT_REFUSED
     if receipt.get("state") != "stopped":
         receipt["state"] = "stopped"
         receipt["outcome"] = receipt.get("outcome") or "stopped"
+        receipt["cleared"] = True
         _write_receipt(path, receipt)
     return 0
 

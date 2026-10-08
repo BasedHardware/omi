@@ -862,13 +862,8 @@ PY
 }
 
 stop_fault_flow() {
-  local status=0 attempt
-  # Signal the supervisor we spawned. It reaps the session it created, including
-  # the omi-harness process and grandchildren. stop --receipt repeats that with
-  # start-identity and token checks so a reused pid is not signalled.
-  if [[ -n "${FAULT_FLOW_PID:-}" ]] && kill -0 "$FAULT_FLOW_PID" 2>/dev/null; then
-    kill -TERM "$FAULT_FLOW_PID" 2>/dev/null || true
-  fi
+  local status=0
+  # Receipt proof is the only signal path. A bare pid may have been reused.
   if [[ -n "${FAULT_FLOW_RECEIPT:-}" && -f "$FAULT_FLOW_RECEIPT" ]]; then
     if ! python3 "$SOURCE_DIR/owned_process.py" stop \
       --receipt "$FAULT_FLOW_RECEIPT" \
@@ -877,15 +872,9 @@ stop_fault_flow() {
     fi
   fi
   if [[ -n "${FAULT_FLOW_PID:-}" ]]; then
-    for attempt in $(seq 1 50); do
-      kill -0 "$FAULT_FLOW_PID" 2>/dev/null || break
-      sleep 0.1
-    done
-    if kill -0 "$FAULT_FLOW_PID" 2>/dev/null; then
-      kill -KILL "$FAULT_FLOW_PID" 2>/dev/null || true
-      status=1
+    if ! kill -0 "$FAULT_FLOW_PID" 2>/dev/null; then
+      wait "$FAULT_FLOW_PID" 2>/dev/null || true
     fi
-    wait "$FAULT_FLOW_PID" 2>/dev/null || true
     FAULT_FLOW_PID=""
   fi
   return "$status"

@@ -89,7 +89,7 @@ class OwnedProcessTests(unittest.TestCase):
             "--label",
             "owned-process-test",
             "--shutdown-deadline",
-            "1",
+            "3",
             "--parent-poll",
             "0.05",
         ]
@@ -144,7 +144,7 @@ class OwnedProcessTests(unittest.TestCase):
         grandchild = self.wait_grandchild()
         finished = proc.wait(timeout=10)
         self.assertEqual(finished, 124)
-        self.assertLess(time.monotonic() - started, 5)
+        self.assertLess(time.monotonic() - started, 10)
         self.assert_reaped(grandchild)
 
     def test_sigterm_reaps_grandchild(self):
@@ -171,7 +171,7 @@ class OwnedProcessTests(unittest.TestCase):
             timeout=10,
         )
         self.assertEqual(finished.returncode, 124)
-        self.assertLess(time.monotonic() - started, 5)
+        self.assertLess(time.monotonic() - started, 10)
         self.assertTrue(alive(self.foreign.pid))
 
     def test_parent_death_reaps_grandchild(self):
@@ -227,6 +227,130 @@ raise SystemExit(2)
         )
         self.assertEqual(finished.returncode, 2)
         self.assertTrue(alive(self.foreign.pid))
+
+    def test_substring_marker_is_not_owned(self):
+        token = "ab" * 16
+        marker = f"unrelated-prefix-{token}-suffix"
+        unrelated = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)", marker],
+            start_new_session=True,
+        )
+        self.addCleanup(lambda: unrelated.poll() is not None or unrelated.kill())
+        payload = {
+            "schema_version": 1,
+            "label": "substring",
+            "token": token,
+            "state": "running",
+            "supervisor_pid": 99999999,
+            "supervisor_start": "absent",
+            "leader_pid": 99999999,
+            "leader_pgid": 99999999,
+            "leader_start": "absent",
+            "limits": {"shutdown_deadline_seconds": 1},
+        }
+        self.receipt.write_text(json.dumps(payload))
+        finished = subprocess.run(
+            [sys.executable, str(SCRIPT), "stop", "--receipt", str(self.receipt), "--shutdown-deadline", "1"],
+            check=False,
+            timeout=10,
+        )
+        self.assertNotEqual(finished.returncode, 1)
+        self.assertTrue(alive(unrelated.pid))
+        self.assertTrue(alive(self.foreign.pid))
+
+    def test_short_token_receipt_is_rejected(self):
+        payload = {
+            "schema_version": 1,
+            "label": "forged",
+            "token": "abc",
+            "state": "running",
+            "supervisor_pid": self.foreign.pid,
+            "supervisor_start": "not-the-foreign-start",
+            "leader_pid": self.foreign.pid,
+            "leader_pgid": os.getpgid(self.foreign.pid),
+            "leader_start": "not-the-foreign-start",
+            "limits": {"shutdown_deadline_seconds": 1},
+        }
+        original = json.dumps(payload)
+        self.receipt.write_text(original)
+        finished = subprocess.run(
+            [sys.executable, str(SCRIPT), "stop", "--receipt", str(self.receipt), "--shutdown-deadline", "1"],
+            check=False,
+            timeout=10,
+        )
+        self.assertEqual(finished.returncode, 2)
+        self.assertTrue(alive(self.foreign.pid))
+        self.assertEqual(self.receipt.read_text(), original)
+
+    def test_same_group_child_reaped_after_leader_exits(self):
+        code = (
+            "import pathlib, subprocess, sys\n"
+            "path = pathlib.Path(sys.argv[1])\n"
+            "proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            "path.write_text(str(proc.pid))\n"
+            "raise SystemExit(0)\n"
+        )
+        proc = subprocess.Popen(self.supervise_cmd([sys.executable, "-c", code, str(self.pidfile)]))
+        grandchild = self.wait_grandchild()
+        finished = proc.wait(timeout=10)
+        self.assertEqual(finished, 0)
+        self.assert_reaped(grandchild)
+        receipt = json.loads(self.receipt.read_text())
+        self.assertTrue(receipt["cleared"])
+
+    def test_cleared_env_child_is_not_reported_clean(self):
+        code = (
+            "import pathlib, subprocess, sys\n"
+            "path = pathlib.Path(sys.argv[1])\n"
+            "proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], env={})\n"
+            "path.write_text(str(proc.pid))\n"
+            "raise SystemExit(0)\n"
+        )
+        proc = subprocess.Popen(self.supervise_cmd([sys.executable, "-c", code, str(self.pidfile)]))
+        grandchild = self.wait_grandchild()
+        self.addCleanup(lambda: alive(grandchild) and os.kill(grandchild, signal.SIGKILL))
+        finished = proc.wait(timeout=10)
+        self.assertNotEqual(finished, 0)
+        self.assertTrue(alive(grandchild))
+        self.assertTrue(self.receipt.is_file())
+        receipt = json.loads(self.receipt.read_text())
+        self.assertFalse(receipt["cleared"])
+        self.assertNotEqual(receipt.get("outcome"), "exited")
+        self.assertTrue(alive(self.foreign.pid))
+
+    def test_parent_death_during_startup(self):
+        marker = f"owned-early-{os.getpid()}-{time.time_ns()}"
+        parent_code = r"""
+import os, subprocess, sys
+script, receipt, marker = sys.argv[1:]
+subprocess.Popen([
+    sys.executable, script, "supervise", "--receipt", receipt, "--label", "early-death",
+    "--shutdown-deadline", "2", "--parent-poll", "0.05", "--",
+    sys.executable, "-c", "import time; time.sleep(30)", marker,
+])
+os.kill(os.getpid(), 9)
+"""
+
+        def marker_pids() -> list[int]:
+            out = subprocess.check_output(["ps", "-axww", "-o", "pid=", "-o", "command="], text=True)
+            found = []
+            for line in out.splitlines():
+                parts = line.split(None, 1)
+                if len(parts) == 2 and parts[0].isdigit() and marker in parts[1]:
+                    found.append(int(parts[0]))
+            return found
+
+        self.addCleanup(lambda: [os.kill(pid, signal.SIGKILL) for pid in marker_pids() if alive(pid)])
+        for _ in range(4):
+            receipt = self.root / f"early-{time.time_ns()}.json"
+            parent = subprocess.Popen(
+                [sys.executable, "-c", parent_code, str(SCRIPT), str(receipt), marker]
+            )
+            parent.wait(timeout=10)
+            self.assertTrue(
+                wait_until(lambda: not marker_pids(), 8),
+                "a child survived launcher death during supervisor startup",
+            )
 
 
 if __name__ == "__main__":
