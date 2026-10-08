@@ -511,18 +511,26 @@ final class PreviewUITests: XCTestCase {
         capture(app, "native-level-control")
     }
 
-    func testLevelVoiceOverIncrementSendsOneStep() {
+    /// Moves a level one grid value by dragging its thumb from [from] to [to] (fractions of the row width).
+    /// iOS XCUITest has no increment()/decrement(), so a short drag stands in for one adjustable step.
+    func stepLevel(_ level: XCUIElement, from: CGFloat, to: CGFloat) {
+        let start = level.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.75))
+        let end = level.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.75))
+        start.press(forDuration: 0.3, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+    }
+
+    func testLevelOneStepSendsOneValue() {
         let app = start(["surface", "level"])
         let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
         XCTAssertTrue(level.waitForExistence(timeout: 10))
-        level.increment()
+        stepLevel(level, from: 0.5, to: 0.75)
         let stepped = NSPredicate { _, _ in
             app.staticTexts["preview-last-action"].label == "led_brightness:75.0" && (level.value as? String) == "75%"
         }
         expectation(for: stepped, evaluatedWith: nil)
         waitForExpectations(timeout: 5)
         XCTAssertEqual(app.staticTexts["preview-last-saved"].label, "level-sends:1")
-        level.decrement()
+        stepLevel(level, from: 0.75, to: 0.5)
         let back = NSPredicate { _, _ in app.staticTexts["preview-last-action"].label == "led_brightness:50.0" }
         expectation(for: back, evaluatedWith: nil)
         waitForExpectations(timeout: 5)
@@ -544,7 +552,7 @@ final class PreviewUITests: XCTestCase {
         let app = start(["surface", "level", "failed-level"])
         let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
         XCTAssertTrue(level.waitForExistence(timeout: 10))
-        level.increment()
+        stepLevel(level, from: 0.5, to: 0.75)
         XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 5))
         let reverted = NSPredicate { _, _ in (level.value as? String) == "50%" }
         expectation(for: reverted, evaluatedWith: nil)
@@ -555,7 +563,7 @@ final class PreviewUITests: XCTestCase {
         app.buttons["save"].tap()
         Thread.sleep(forTimeInterval: 1)
         XCTAssertFalse(app.staticTexts["save:"].exists)
-        level.decrement()
+        stepLevel(level, from: 0.5, to: 0.25)
         XCTAssertTrue(app.staticTexts["level-sends:2"].waitForExistence(timeout: 5))
     }
 
