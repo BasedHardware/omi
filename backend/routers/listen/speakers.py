@@ -53,6 +53,9 @@ logger = logging.getLogger(__name__)
 
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 MAX_SPEAKER_VOICES = 128
+MAX_OWNER_FAILED_LOADS = 8
+MAX_OWNER_PROFILE_RETRIES = 7
+MAX_OWNER_AUDIO_REPAIRS = 3
 
 # The enumerated early-exit reasons for live speaker-ID matching. Every return
 # before a match decision bumps exactly one of these (Prometheus counter label
@@ -138,6 +141,10 @@ class SpeakerMatcher:
         self._owner_name_resolved = False
         self._profile_retry_after = 0.0
         self._owner_load_failed = False
+        self._owner_failed_loads = 0
+        self._owner_profile_retries = 0
+        self._owner_audio_repairs = 0
+        self._owner_audio_retry_after = 0.0
 
     def note_rollover_carry(self, carried_speaker_ids: set[int]) -> None:
         """Manual receipt ids copied by this rollover; automatic ids join after validation."""
@@ -153,9 +160,13 @@ class SpeakerMatcher:
         async with self._profile_lock:
             if self._profile_conversation_id == conversation_id:
                 self._pending_rollover_carry = None
-                if self._owner_load_failed and time.monotonic() >= self._profile_retry_after:
-                    self._profile_retry_after = time.monotonic() + 30.0
-                    await self._load_profiles()
+                if (
+                    self._owner_load_failed
+                    and self._owner_failed_loads < MAX_OWNER_FAILED_LOADS
+                    and self._owner_profile_retries < MAX_OWNER_PROFILE_RETRIES
+                    and time.monotonic() >= self._profile_retry_after
+                ):
+                    await self._load_profiles(owner_only=True)
                 return
             # Automatic continuity has no receipt/training authority. Only a
             # still-current provider stream and an unchanged owner print qualify.
@@ -305,7 +316,7 @@ class SpeakerMatcher:
                 self._named_speakers_allowed = bool(allowed)
             return bool(self._named_speakers_allowed)
 
-    async def _load_profiles(self) -> None:
+    async def _load_profiles(self, *, owner_only: bool = False) -> None:
         eligible = (
             getattr(self.host.request, 'include_speech_profile', True)
             and not getattr(self.host.request, 'onboarding_mode', False)
@@ -313,19 +324,35 @@ class SpeakerMatcher:
             and not getattr(self.host, 'use_custom_stt', False)
         )
         self._owner_load_failed = False
-        self._profile_retry_after = time.monotonic() + 30.0
-        if eligible:
+        may_load = self._owner_failed_loads < MAX_OWNER_FAILED_LOADS and (
+            not owner_only or self._owner_profile_retries < MAX_OWNER_PROFILE_RETRIES
+        )
+        if eligible and not may_load:
+            self._owner_load_failed = True
+        if eligible and may_load:
+            if owner_only:
+                self._owner_profile_retries += 1
             try:
                 stored_embedding = await self.host.persistence.call(
                     user_db.get_user_speaker_embedding, self.host.request.uid
                 )
+                repair = (
+                    validated_embedding(stored_embedding) is None
+                    and not stored_embedding
+                    and self.host.has_speech_profile
+                    and self._owner_audio_repairs < MAX_OWNER_AUDIO_REPAIRS
+                    and time.monotonic() >= self._owner_audio_retry_after
+                )
+                if repair:
+                    self._owner_audio_repairs += 1
+                    self._owner_audio_retry_after = time.monotonic() + 30.0 * 4 ** (self._owner_audio_repairs - 1)
                 vector = await run_blocking(
                     sync_executor,
                     load_owner_embedding,
                     self.host.request.uid,
                     users=user_db,
                     stored_embedding=stored_embedding,
-                    allow_audio_repair=self.host.has_speech_profile,
+                    allow_audio_repair=repair,
                     audio_loader=get_profile_audio_if_exists,
                     read_file=_read_file,
                     extractor=extract_embedding_from_bytes,
@@ -344,6 +371,13 @@ class SpeakerMatcher:
             except Exception as error:
                 self._owner_load_failed = True
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
+            if self._owner_load_failed:
+                self._owner_failed_loads += 1
+        self._profile_retry_after = time.monotonic() + min(480.0, 30.0 * 2 ** max(0, self._owner_failed_loads - 1))
+        if owner_only:
+            # Paid people and entitlement were loaded by the conversation refresh.
+            # Owner outages must not turn their projection into a polling loop.
+            return
         try:
             if not await self.named_speakers_allowed():
                 return
