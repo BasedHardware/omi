@@ -750,10 +750,18 @@ def apply_speaker_resolution(
     speaker_ids: Mapping[str, int],
     identities: Mapping[int, Identity],
     identity_statuses: Mapping[int, str],
+    *,
+    contradicted_segment_ids: Optional[set[str]] = None,
 ) -> None:
     scope = f'conversation:{conversation.id}'
     origin = _started_at(conversation)
     for segment in conversation.transcript_segments:
+        if segment.id in (contradicted_segment_ids or set()) and segment.speaker_label_source == 'auto':
+            segment.is_user = False
+            segment.person_id = None
+            segment.speaker_identity_status = SpeakerIdentityStatus.unknown
+            segment.speaker_match_source = None
+            segment.speaker_label_source = None
         new_id = speaker_ids.get(segment.id) if segment.id else None
         if new_id is None:
             continue
@@ -1332,7 +1340,11 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
     apply_speaker_resolution(
-        conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
+        conversation,
+        resolution.speaker_ids,
+        resolution.voice_identities,
+        resolution.voice_identity_statuses,
+        contradicted_segment_ids=resolution.contradicted_segment_ids,
     )
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
         conversation.speaker_resolution = ConversationSpeakers(

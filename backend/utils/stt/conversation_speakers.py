@@ -86,6 +86,7 @@ class SpeakerResolution:
     coverage: float
     """Share of embeddable speech that voice evidence or a manual label placed."""
     stats: Dict[str, Any] = field(default_factory=dict)
+    contradicted_segment_ids: Set[str] = field(default_factory=set)
     match_scores: List[dict] = field(default_factory=list)
     voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
     """Evidence states for automatic voices only; manual receipts remain authoritative."""
@@ -356,11 +357,16 @@ def resolve_conversation_speakers(
             for segment in unit_segments[i]:
                 cluster_of_segment[_seg(segment, 'id')] = position
 
-    by_old_id: Dict[int, Dict[int, float]] = {}
+    by_old_id: Dict[Tuple[str, int], Dict[int, float]] = {}
+    contradicted = set()
+
+    def capture_key(segment):
+        return (_seg(segment, 'speaker_id_scope') or '', int(_seg(segment, 'speaker_id')))
+
     for segment in eligible:
         position = cluster_of_segment.get(_seg(segment, 'id'))
         if position is not None:
-            votes = by_old_id.setdefault(int(_seg(segment, 'speaker_id')), {})
+            votes = by_old_id.setdefault(capture_key(segment), {})
             votes[position] = votes.get(position, 0.0) + max(_duration(segment), 1e-3)
     placed = sorted(
         (
@@ -375,14 +381,29 @@ def resolve_conversation_speakers(
         segment_id = _seg(segment, 'id')
         if segment_id in cluster_of_segment:
             continue
-        votes = by_old_id.get(int(_seg(segment, 'speaker_id')))
+        votes = by_old_id.get(capture_key(segment))
         if votes:
-            # Capture's own label is the best evidence for a clip that was not embedded.
-            cluster_of_segment[segment_id] = max(votes.items(), key=lambda item: (item[1], -item[0]))[0]
+            if len(votes) == 1:
+                cluster_of_segment[segment_id] = next(iter(votes))
+            else:
+                # Acoustic contradiction within this provider voice: no majority
+                # can establish which person uttered an unembedded short reply.
+                contradicted.add(segment_id)
         elif placed and _duration(segment) < MIN_EMBED_SECONDS:
             # Too short to ever embed: the voice speaking around it.
             center = (float(_seg(segment, 'start', 0.0) or 0.0) + float(_seg(segment, 'end', 0.0) or 0.0)) / 2.0
-            cluster_of_segment[segment_id] = placed[int(np.argmin(np.abs(centers - center)))][1]
+            source_scope = _seg(segment, 'speaker_id_scope') or ''
+            neighbors = [
+                (
+                    (float(_seg(s, 'start', 0.0) or 0.0) + float(_seg(s, 'end', 0.0) or 0.0)) / 2.0,
+                    cluster_of_segment[_seg(s, 'id')],
+                )
+                for s in eligible
+                if _seg(s, 'id') in cluster_of_segment
+                and (not source_scope or (_seg(s, 'speaker_id_scope') or '') == source_scope)
+            ]
+            if neighbors:
+                cluster_of_segment[segment_id] = min(neighbors, key=lambda item: abs(item[0] - center))[1]
         # Otherwise it was embeddable but not embedded yet (budget, missing audio):
         # it keeps capture's id rather than borrowing a neighbour's voice.
 
@@ -475,6 +496,7 @@ def resolve_conversation_speakers(
     except Exception:
         match_scores.record_failure(None)
     return SpeakerResolution(
+        contradicted_segment_ids=contradicted,
         speaker_ids=speaker_ids,
         significant_speaker_ids=significant,
         voice_identities={

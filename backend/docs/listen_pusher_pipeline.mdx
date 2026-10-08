@@ -3631,3 +3631,16 @@ transaction. It never learns from an automatic recognition decision. Live
 requests that explicitly exclude a profile, onboarding and channel-authored
 capture remain excluded. Eligible sockets retain the bounded matcher loop so
 a later confirmed profile can be observed on rotation or a bounded load retry.
+
+Short-fragment inheritance is bound to `(speaker_id_scope, speaker_id)`.
+Acoustically contradicted provider voices cannot assign an unembedded short
+reply by majority; automatic identity on such a reply is withdrawn. Manual
+receipt authority still wins. Nearest-fragment fallback cannot cross a known
+source scope. Manual merge reallocates automatic-only sources through the
+existing allocator, retaining absolute capture positions. Sources containing
+manual authority retain their numeric ids; full cross-source receipt migration
+remains outside this patch and is a merge residual.
+
+Free-desktop deterministic minimum paths still emit no managed calls. This
+patch does not add a diarizer pass before those admission exits; unmatched free
+desktop captures and budget-skipped custom-STT captures remain a residual.
