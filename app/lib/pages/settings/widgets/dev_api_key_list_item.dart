@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -15,24 +16,8 @@ class DevApiKeyListItem extends StatelessWidget {
 
   const DevApiKeyListItem({super.key, required this.apiKey});
 
-  List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) {
-    if (scopes == null || scopes.isEmpty) {
-      return [_buildChip(context.l10n.readOnlyScope)];
-    }
-
-    final hasRead = scopes.any((s) => s.endsWith(':read'));
-    final hasWrite = scopes.any((s) => s.endsWith(':write'));
-
-    if (hasRead && hasWrite && scopes.length == 8) {
-      return [_buildChip(context.l10n.fullAccessScope)];
-    }
-
-    final chips = <Widget>[];
-    if (hasRead) chips.add(_buildChip(context.l10n.readScope));
-    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope));
-
-    return chips;
-  }
+  List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) =>
+      [for (final label in devKeyScopeSummary(context.l10n, scopes)) _buildChip(label)];
 
   Widget _buildChip(String label) {
     return Container(
@@ -96,15 +81,29 @@ class DevApiKeyListItem extends StatelessWidget {
   }
 
   /// Revoking a key cannot be undone, so it is confirmed every time (docs/ux-contract.md §4).
-  Future<void> _confirmRevoke(BuildContext context) async {
-    final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-    final confirmed = await showOmiConfirm(
-      context,
-      title: context.l10n.revokeKeyQuestion,
-      message: context.l10n.revokeKeyConfirmation(apiKey.name),
-      confirmLabel: context.l10n.revoke,
-      destructive: true,
-    );
-    if (confirmed) provider.deleteKey(apiKey.id);
-  }
+  Future<void> _confirmRevoke(BuildContext context) =>
+      confirmDevApiKeyRevoke(context, Provider.of<DevApiKeyProvider>(context, listen: false), apiKey);
+}
+
+/// The scope labels shown for a developer key: Read Only when it has none, Full Access when it has
+/// every scope, otherwise Read and/or Write. The Flutter chips and the native row share it.
+List<String> devKeyScopeSummary(AppLocalizations l10n, List<String>? scopes) {
+  if (scopes == null || scopes.isEmpty) return [l10n.readOnlyScope];
+  final hasRead = scopes.any((s) => s.endsWith(':read'));
+  final hasWrite = scopes.any((s) => s.endsWith(':write'));
+  if (hasRead && hasWrite && scopes.length == 8) return [l10n.fullAccessScope];
+  return [if (hasRead) l10n.readScope, if (hasWrite) l10n.writeScope];
+}
+
+/// Asks before revoking [apiKey], then revokes it through [provider]. Answers whether it was confirmed.
+Future<bool> confirmDevApiKeyRevoke(BuildContext context, DevApiKeyProvider provider, DevApiKey apiKey) async {
+  final confirmed = await showOmiConfirm(
+    context,
+    title: context.l10n.revokeKeyQuestion,
+    message: context.l10n.revokeKeyConfirmation(apiKey.name),
+    confirmLabel: context.l10n.revoke,
+    destructive: true,
+  );
+  if (confirmed) await provider.deleteKey(apiKey.id);
+  return confirmed;
 }

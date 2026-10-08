@@ -12,14 +12,6 @@ extension _NativeDeveloperPresentation on _DeveloperSettingsPageState {
       PlatformManager.instance.analytics.pageOpened(analytics);
     }
 
-    void section(String title, Widget body) {
-      routeToPage(
-          context,
-          Scaffold(
-              appBar: AppBar(title: Text(title), leading: const OmiBackButton()),
-              body: SingleChildScrollView(padding: const EdgeInsets.all(OmiSpacing.lg), child: body)));
-    }
-
     NativeSection webhook(String id, String title, String description, bool enabled, ValueChanged<bool> toggle,
             TextEditingController controller) =>
         NativeSection(id, [
@@ -90,9 +82,9 @@ extension _NativeDeveloperPresentation on _DeveloperSettingsPageState {
               'developer_credentials',
               [
                 NativeRow('developer_api_keys', l10n.developerApi,
-                    kind: 'navigation', action: (_) => section(l10n.developerApi, const DeveloperApiKeysSection())),
+                    kind: 'navigation', action: (_) => routeToPage(pageContext, const DeveloperApiKeysPage())),
                 NativeRow('developer_mcp_keys', l10n.mcp,
-                    kind: 'navigation', action: (_) => section(l10n.mcp, const DeveloperMcpSection())),
+                    kind: 'navigation', action: (_) => routeToPage(pageContext, const DeveloperMcpPage())),
                 NativeRow('developer_webhook_docs', l10n.docs,
                     action: (_) => docs('https://docs.omi.me/doc/developer/apps/Introduction', 'Webhooks'))
               ],

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_created_dialog.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -38,12 +40,15 @@ class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
 
   Future<void> _createKey() async {
     if (!_canCreate) return;
+    final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
     setState(() => _isCreating = true);
     final provider = Provider.of<McpProvider>(context, listen: false);
     final newKey = await provider.createKey(_nameController.text.trim());
 
     if (!mounted) return;
     Navigator.of(context).pop(); // Close this dialog
+    // With native presentation, a key created for an account that has since changed is never shown.
+    if (nativePresentationEnabled && (owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner))) return;
     if (newKey != null) {
       showDialog(
         context: context,

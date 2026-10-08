@@ -184,11 +184,7 @@ Widget nativeAppOwnerForm(
       if (updating && provider.updateAppId != null)
         NativeRow('owner_api_keys', l10n.developerApi,
             kind: 'navigation',
-            action: (_) => routeToPage(
-                context,
-                Scaffold(
-                    appBar: AppBar(title: Text(l10n.developerApi), leading: const OmiBackButton()),
-                    body: ApiKeysWidget(appId: provider.updateAppId!))))
+            action: (_) => routeToPage(context, ApiKeysWidget(appId: provider.updateAppId!, page: true)))
     ])
   ];
   return _NativeOwnerExitGuard(

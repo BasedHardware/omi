@@ -2,20 +2,38 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/widgets/dev_api_key_created_dialog.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-class CreateDevApiKeySheet extends StatefulWidget {
-  const CreateDevApiKeySheet({super.key});
+/// The resources a developer key can be scoped to, each with a read and a write scope.
+const devApiKeyScopeResources = ['conversations', 'memories', 'action_items', 'goals'];
 
-  static Future<void> show(BuildContext context, DevApiKeyProvider provider) {
-    return showOmiSheet(
+class CreateDevApiKeySheet extends StatefulWidget {
+  const CreateDevApiKeySheet({super.key, this.native = false});
+
+  /// The native form. It closes with the created key, and [show] reveals it from the page, so the
+  /// one-time sheet never depends on this closed sheet's context.
+  final bool native;
+
+  static Future<void> show(BuildContext context, DevApiKeyProvider provider) async {
+    final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
+    final created = await showOmiSheet<DevApiKeyCreated>(
       context: context,
       title: context.l10n.createApiKey,
       builder: (ctx) => ChangeNotifierProvider.value(value: provider, child: const CreateDevApiKeySheet()),
+      nativeBuilder: (ctx) =>
+          ChangeNotifierProvider.value(value: provider, child: const CreateDevApiKeySheet(native: true)),
     );
+    // Only with native presentation does the form close with a key; it is revealed only to the account
+    // that created it.
+    if (created == null || !context.mounted) return;
+    if (owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
+    await DevApiKeyCreatedSheet.show(context, created);
   }
 
   @override
@@ -38,6 +56,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     'goals:write': false,
   };
 
+  bool _confirmingDiscard = false;
+
+  bool get _dirty => _nameController.text.isNotEmpty || _scopes.values.any((selected) => selected);
+
   List<String> get _selectedScopes {
     return _scopes.entries.where((e) => e.value).map((e) => e.key).toList();
   }
@@ -46,6 +68,12 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     setState(() {
       _scopes[scope] = !_scopes[scope]!;
     });
+  }
+
+  /// Sets one allowlisted scope; anything else is ignored.
+  void _setScope(String scope, bool selected) {
+    if (!_scopes.containsKey(scope)) return;
+    setState(() => _scopes[scope] = selected);
   }
 
   void _selectReadOnly() {
@@ -71,25 +99,42 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
   }
 
   Future<void> _createKey() async {
-    if (_formKey.currentState!.validate()) {
+    // The native form has no Flutter validator mounted; it applies the same rule.
+    final form = _formKey.currentState;
+    if (!_isCreating && (form != null ? form.validate() : _nameController.text.trim().isNotEmpty)) {
+      final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
       setState(() => _isCreating = true);
       final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
       final selectedScopes = _selectedScopes.isEmpty ? null : _selectedScopes;
       final newKey = await provider.createKey(_nameController.text.trim(), scopes: selectedScopes);
 
       if (mounted) {
+        // With native presentation, a key created for an account that has since changed is never shown.
+        final current =
+            !nativePresentationEnabled || owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
+        // With native presentation the page reveals the key ([show]), never this closing sheet's context.
+        if (widget.native || nativePresentationEnabled) {
+          Navigator.of(context).pop(current ? newKey : null);
+          if (newKey == null && current) _showCreateError(provider);
+          return;
+        }
         Navigator.of(context).pop();
+        if (!current) return;
         if (newKey != null) {
           DevApiKeyCreatedSheet.show(context, newKey);
         } else {
-          final error = provider.error;
-          OmiFeedback.error(
-            context,
-            error != null ? context.l10n.failedToCreateKeyWithError(error) : context.l10n.failedToCreateKeyTryAgain,
-          );
+          _showCreateError(provider);
         }
       }
     }
+  }
+
+  void _showCreateError(DevApiKeyProvider provider) {
+    final error = provider.error;
+    OmiFeedback.error(
+      context,
+      error != null ? context.l10n.failedToCreateKeyWithError(error) : context.l10n.failedToCreateKeyTryAgain,
+    );
   }
 
   bool get _isReadOnly {
@@ -116,6 +161,79 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final classic = _buildClassic(context);
+    return widget.native ? _buildNative(context, classic) : classic;
+  }
+
+  /// The same form as native rows. Edits update this State; Create runs [_createKey].
+  Widget _buildNative(BuildContext context, Widget classic) {
+    final l10n = context.l10n;
+    final name = _nameController.text;
+    final resourceTitles = {
+      'conversations': l10n.conversations,
+      'memories': l10n.memories,
+      'action_items': l10n.actionItems,
+      'goals': l10n.goals,
+    };
+    NativeRow preset(String id, String title, bool selected, VoidCallback select) => NativeRow(id, title,
+        symbol: selected ? 'checkmark.circle.fill' : 'circle', enabled: !_isCreating, action: (_) => select());
+    return PopScope(
+      canPop: !_dirty && !_isCreating,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _isCreating || _confirmingDiscard) return;
+        _confirmingDiscard = true;
+        final discard = await confirmDiscardChanges(context);
+        _confirmingDiscard = false;
+        if (discard && context.mounted) Navigator.of(context).pop();
+      },
+      child: IosNativeSurface(
+        title: l10n.createApiKey,
+        fallback: OmiSheetScaffold(title: l10n.createApiKey, child: classic),
+        toolbar: [
+          NativeRow('dev_key_cancel', l10n.cancel,
+              symbol: 'xmark', enabled: !_isCreating, action: (_) => Navigator.of(context).maybePop()),
+          NativeRow('dev_key_create', l10n.createKey,
+              symbol: 'checkmark', enabled: name.trim().isNotEmpty && !_isCreating, action: (_) => _createKey()),
+        ],
+        sections: [
+          NativeSection('dev_key_about', [NativeRow('dev_key_intro', l10n.accessDataProgrammatically, kind: 'label')]),
+          NativeSection(
+              'dev_key_naming',
+              [
+                NativeRow('dev_key_name', l10n.keyNamePlaceholder,
+                    kind: 'text',
+                    value: name.characters.take(100).toString(),
+                    maximumLength: 100,
+                    enabled: !_isCreating,
+                    action: (value) => setState(() => _nameController.text = value as String)),
+              ],
+              title: l10n.keyNameLabel),
+          NativeSection(
+              'dev_key_presets',
+              [
+                preset('dev_key_preset:read_only', l10n.readOnlyScope, _isReadOnly, _selectReadOnly),
+                preset('dev_key_preset:full_access', l10n.fullAccessScope, _isFullAccess, _selectFullAccess),
+              ],
+              title: l10n.permissionsLabel),
+          for (final resource in devApiKeyScopeResources)
+            NativeSection(
+                'dev_key_scope:$resource',
+                [
+                  for (final (access, title) in [('read', l10n.readScope), ('write', l10n.writeScope)])
+                    NativeRow('dev_key_scope:$resource:$access', title,
+                        kind: 'toggle',
+                        value: _scopes['$resource:$access'] ?? false,
+                        enabled: !_isCreating,
+                        action: (value) => _setScope('$resource:$access', value as bool)),
+                ],
+                title: resourceTitles[resource]!,
+                footer: resource == devApiKeyScopeResources.last ? l10n.permissionsInfoNote : ''),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassic(BuildContext context) {
     final l10n = context.l10n;
     return SingleChildScrollView(
       child: Form(
