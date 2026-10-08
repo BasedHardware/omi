@@ -138,6 +138,8 @@ def test_memories_static_prefix_is_byte_identical_across_transcripts():
     captured: list = []
 
     class Model:
+        model_name = 'gpt-6-luna'
+
         def invoke(self, messages):
             captured.append(messages)
             return SimpleNamespace(content='{"items": []}')
@@ -192,6 +194,8 @@ def test_conv_apps_prefix_path_static_instructions_are_byte_identical_across_con
     long_task = 'summarize the meeting and list every decision. ' * 120
 
     class RecordingModel:
+        model_name = 'gpt-6-luna'
+
         def invoke(self, messages):
             recorded.append({'messages': messages, 'kwargs': current['kwargs']})
             return SimpleNamespace(content='summary')

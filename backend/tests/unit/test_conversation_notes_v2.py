@@ -247,6 +247,8 @@ def test_memory_places_conversation_context_after_the_instruction_prefix(monkeyp
     assert 'spk 1 Ash Kalb' in prefix.context
 
     class MemoryModel:
+        model_name = 'gpt-6-luna'
+
         def __init__(self):
             self.messages = None
 
