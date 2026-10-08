@@ -166,9 +166,6 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'true'
-            category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
@@ -179,9 +176,6 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
-          STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'true'
-            category: rollout
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
@@ -276,9 +270,6 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
-            category: rollout
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
             value: 'true'
             category: rollout
@@ -288,12 +279,6 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
@@ -412,9 +397,6 @@ environments:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -587,12 +569,6 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
@@ -613,9 +589,6 @@ environments:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -1076,21 +1049,12 @@ environments:
             LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
-            MEETING_RECEIPT_RECONCILER_ENABLED:
-              value: 'false'
-              category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
               value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
@@ -1194,9 +1158,6 @@ environments:
               category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
-              category: rollout
-            MENTOR_GATE_DEBOUNCE_ENABLED:
-              value: 'true'
               category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
@@ -1477,12 +1438,6 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
@@ -2262,9 +2217,6 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_FLEX:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2674,9 +2626,6 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'true'
-            category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
@@ -2687,9 +2636,6 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
-          STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'true'
-            category: rollout
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
@@ -2784,9 +2730,6 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
-            category: rollout
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
             value: 'true'
             category: rollout
@@ -2796,12 +2739,6 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
@@ -2943,9 +2880,6 @@ environments:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
             category: rollout
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
@@ -3146,12 +3080,6 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
@@ -3199,9 +3127,6 @@ environments:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
@@ -3562,21 +3487,12 @@ environments:
             LLM_GATEWAY_ACCOUNTING_ENABLED:
               value: 'true'
               category: rollout
-            MEETING_RECEIPT_RECONCILER_ENABLED:
-              value: 'false'
-              category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
               value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
@@ -3689,9 +3605,6 @@ environments:
               category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
-              category: rollout
-            MENTOR_GATE_DEBOUNCE_ENABLED:
-              value: 'true'
               category: rollout
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
@@ -3995,12 +3908,6 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
@@ -4798,9 +4705,6 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_FLEX:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
