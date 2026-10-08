@@ -1529,6 +1529,7 @@ enum ToolActivityTimelinePresentation {
   static func accessibilityValue(for status: ToolCallStatus) -> String {
     switch status {
     case .running: return "Running"
+    case .waitingApproval: return "Waiting for your approval"
     case .slow: return "Still working"
     case .stalled: return "Taking longer than usual"
     case .completed: return "Completed"
@@ -1718,6 +1719,15 @@ struct ToolCallCard: View {
     VStack(alignment: .leading, spacing: 0) {
       ToolCallActivityHeadline(name: name, status: displayStatus) {
         toolHeader
+      }
+
+      // The card below this row is the person's turn; say so where the stall
+      // banner would otherwise have appeared.
+      if displayStatus == .waitingApproval {
+        Text("Waiting for your approval")
+          .scaledFont(size: OmiType.micro)
+          .foregroundStyle(Ink.secondary)
+          .padding(.leading, ToolActivityTimelineLayout.iconColumn)
       }
 
       if isExpanded || showUnavailable {

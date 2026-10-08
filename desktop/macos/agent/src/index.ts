@@ -1259,7 +1259,10 @@ function startOmiToolsRelay(): Promise<string> {
 
 // --- ACP subprocess management ---
 
-const acpAdapter = new AcpRuntimeAdapter({ log: logErr });
+const acpAdapter = new AcpRuntimeAdapter({
+  log: logErr,
+  isRunWaitingOnUser: (runId) => runtimeKernel?.isRunWaitingOnUser(runId) ?? false,
+});
 
 /** Send a JSON-RPC request to the ACP subprocess and wait for the response */
 async function acpRequest(
@@ -1710,6 +1713,7 @@ async function main(): Promise<void> {
   const ensureHermesAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
+      isRunWaitingOnUser: (runId) => runtimeKernel?.isRunWaitingOnUser(runId) ?? false,
       maxWorkers: 1,
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
@@ -1717,6 +1721,7 @@ async function main(): Promise<void> {
   const ensureOpenClawAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "openclaw", {
       log: logErr,
+      isRunWaitingOnUser: (runId) => runtimeKernel?.isRunWaitingOnUser(runId) ?? false,
       maxWorkers: configuredPiMonoMaxWorkers(),
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });

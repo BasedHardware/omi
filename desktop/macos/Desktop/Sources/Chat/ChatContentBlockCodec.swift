@@ -290,11 +290,11 @@ enum ChatContentBlockCodec {
     case .text(let id, let text):
       return ["type": "text", "id": id, "text": text]
     case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
-      // Three-way mapping: in-flight (.running, .slow, .stalled) persists as
-      // "running" so reload resumes the spinner; .completed / .failed keep codes.
+      // Three-way mapping: in-flight (.running, .waitingApproval, .slow, .stalled)
+      // persists as "running" so reload resumes the spinner; .completed / .failed keep codes.
       let statusCode: String
       switch status {
-      case .running, .slow, .stalled: statusCode = "running"
+      case .running, .waitingApproval, .slow, .stalled: statusCode = "running"
       case .completed: statusCode = "completed"
       case .failed: statusCode = "failed"
       }
