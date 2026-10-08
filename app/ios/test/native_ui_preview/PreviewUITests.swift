@@ -434,18 +434,25 @@ final class PreviewUITests: XCTestCase {
         let app = start(["surface", "indent"])
         let root = app.staticTexts["indent_0"]
         XCTAssertTrue(root.waitForExistence(timeout: 10))
-        let child = app.staticTexts["indent_1"], grandchild = app.staticTexts["indent_2"]
-        XCTAssertEqual(child.frame.minX - root.frame.minX, 20, accuracy: 1)
-        XCTAssertEqual(grandchild.frame.minX - root.frame.minX, 40, accuracy: 1)
-        let rootCell = listCell(app, "indent_0"), grandchildCell = listCell(app, "indent_2")
+        let rootCell = listCell(app, "indent_0"), childCell = listCell(app, "indent_1")
+        let grandchildCell = listCell(app, "indent_2")
         XCTAssertEqual(rootCell.frame.height, grandchildCell.frame.height, accuracy: 0.5)
+        // A label row's accessibility frame spans its whole list cell, so measure where the text is drawn:
+        // the high-contrast pixels across the middle of each cell, which the faint indent rule never reaches.
         let screenshot = app.screenshot().image
-        func gutter(_ cell: XCUIElement, _ label: XCUIElement) -> CGRect {
-            CGRect(x: cell.frame.minX + 4, y: label.frame.midY - 4, width: label.frame.minX - cell.frame.minX - 8, height: 8)
+        func text(_ cell: XCUIElement) -> CGRect {
+            inkBounds(screenshot, in: cell.frame.insetBy(dx: 0, dy: cell.frame.height / 3)) ?? .zero
         }
-        XCTAssertFalse(varies(screenshot, in: gutter(rootCell, root)), "An unindented row draws no rule")
-        XCTAssertTrue(varies(screenshot, in: gutter(listCell(app, "indent_1"), child)), "The indent rule is visible")
-        XCTAssertTrue(varies(screenshot, in: gutter(grandchildCell, grandchild)))
+        let rootText = text(rootCell), childText = text(childCell), grandchildText = text(grandchildCell)
+        XCTAssertGreaterThan(rootText.width, 0, "The row's text is drawn")
+        XCTAssertEqual(childText.minX - rootText.minX, 20, accuracy: 1)
+        XCTAssertEqual(grandchildText.minX - rootText.minX, 40, accuracy: 1)
+        func gutter(_ cell: XCUIElement, _ text: CGRect) -> CGRect {
+            CGRect(x: cell.frame.minX + 4, y: cell.frame.midY - 4, width: text.minX - cell.frame.minX - 8, height: 8)
+        }
+        XCTAssertFalse(varies(screenshot, in: gutter(rootCell, rootText)), "An unindented row draws no rule")
+        XCTAssertTrue(varies(screenshot, in: gutter(childCell, childText)), "The indent rule is visible")
+        XCTAssertTrue(varies(screenshot, in: gutter(grandchildCell, grandchildText)))
         capture(app, "native-list-indent")
     }
 
@@ -471,19 +478,46 @@ final class PreviewUITests: XCTestCase {
 
     /// Whether the brightness inside [frame] (screen points) varies, so something is drawn there.
     func varies(_ image: UIImage, in frame: CGRect) -> Bool {
-        guard let cgImage = image.cgImage, frame.width > 0 else { return false }
+        guard let region = brightness(image, in: frame) else { return false }
+        return (region.values.max() ?? 0) - (region.values.min() ?? 0) > 45
+    }
+
+    /// The bounds (screen points) of what is drawn with high contrast inside [frame]: pixels whose
+    /// brightness (0...765) differs from the region's most common brightness by more than [contrast].
+    /// Text clears the default; a quaternary rule or a separator does not.
+    func inkBounds(_ image: UIImage, in frame: CGRect, contrast: Int = 300) -> CGRect? {
+        guard let region = brightness(image, in: frame) else { return nil }
+        var histogram = [Int](repeating: 0, count: 766)
+        for value in region.values { histogram[value] += 1 }
+        let background = histogram.indices.max { histogram[$0] < histogram[$1] } ?? 0
+        var ink: (minX: Int, minY: Int, maxX: Int, maxY: Int)?
+        for y in 0..<region.height {
+            for x in 0..<region.width where abs(region.values[y * region.width + x] - background) > contrast {
+                ink = (min(ink?.minX ?? x, x), min(ink?.minY ?? y, y), max(ink?.maxX ?? x, x), max(ink?.maxY ?? y, y))
+            }
+        }
+        guard let ink else { return nil }
+        let origin = region.pixels.origin, scale = region.scale
+        return CGRect(x: (origin.x + CGFloat(ink.minX)) / scale, y: (origin.y + CGFloat(ink.minY)) / scale,
+                      width: CGFloat(ink.maxX - ink.minX + 1) / scale, height: CGFloat(ink.maxY - ink.minY + 1) / scale)
+    }
+
+    /// Each pixel's brightness (r + g + b) inside [frame] (screen points), row by row from the top.
+    func brightness(_ image: UIImage, in frame: CGRect)
+        -> (values: [Int], width: Int, height: Int, pixels: CGRect, scale: CGFloat)? {
+        guard let cgImage = image.cgImage, frame.width > 0, frame.height > 0 else { return nil }
         let scale = CGFloat(cgImage.width) / image.size.width
         let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale,
                             height: frame.height * scale).integral
-        guard let crop = cgImage.cropping(to: pixels) else { return false }
+        guard let crop = cgImage.cropping(to: pixels) else { return nil }
         let width = crop.width, height = crop.height
         var data = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(data: &data, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
-        let brightness = stride(from: 0, to: data.count, by: 4).map { Int(data[$0]) + Int(data[$0 + 1]) + Int(data[$0 + 2]) }
-        return (brightness.max() ?? 0) - (brightness.min() ?? 0) > 45
+        let values = stride(from: 0, to: data.count, by: 4).map { Int(data[$0]) + Int(data[$0 + 1]) + Int(data[$0 + 2]) }
+        return (values, width, height, pixels, scale)
     }
 
     func testLevelShowsTitleAndValueAndCommitsOnceOnRelease() {
@@ -810,7 +844,10 @@ final class PreviewUITests: XCTestCase {
         let hint = app.staticTexts["graph_hint"]
         let proceed = app.buttons["graph_continue"]
         XCTAssertTrue(hint.exists)
-        XCTAssertLessThanOrEqual(hint.frame.maxY, graph.frame.minY + 1)
+        // A label row's accessibility frame reaches past its text, so compare where the hint is drawn.
+        let hintText = inkBounds(app.screenshot().image, in: hint.frame) ?? .null
+        XCTAssertFalse(hintText.isNull, "The hint is drawn")
+        XCTAssertLessThanOrEqual(hintText.maxY, graph.frame.minY + 1)
         XCTAssertGreaterThanOrEqual(proceed.frame.minY, graph.frame.maxY - 1)
         XCTAssertGreaterThan(graph.frame.height, 100)
         XCTAssertTrue(proceed.isHittable)
@@ -837,7 +874,15 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(zoom.exists)
         XCTAssertEqual(zoom.label, "Memory Graph")
         XCTAssertEqual(zoom.value as? String, "100%")
-        XCTAssertTrue(adjustable(zoom), "VoiceOver can adjust the graph's zoom")
+        // XCUITest on iOS reports neither the adjustable trait nor VoiceOver's swipe up and down, so the
+        // fixture adjusts the element as VoiceOver does, and only when it carries the adjustable trait.
+        app.buttons["preview-voiceover-increment"].tap()
+        waitForLabel(app.staticTexts["preview-last-saved"], "graph_canvas_zoom:incremented")
+        wait(until: zoom.value as? String == "125%", "VoiceOver can zoom the graph in")
+        app.buttons["preview-voiceover-decrement"].tap()
+        waitForLabel(app.staticTexts["preview-last-saved"], "graph_canvas_zoom:decremented")
+        wait(until: zoom.value as? String == "100%", "VoiceOver can zoom the graph out")
+        XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture", "Zooming sends nothing to Dart")
     }
 
     func testGraphCardTapSendsNilAndTheListStillScrolls() {
@@ -916,11 +961,6 @@ final class PreviewUITests: XCTestCase {
         return stride(from: 0, to: a.count, by: 4).filter { index in
             (0..<3).contains { abs(Int(a[index + $0]) - Int(b[index + $0])) > 4 }
         }.count
-    }
-
-    /// Whether the element carries UIAccessibilityTraitAdjustable, as VoiceOver's swipe up/down needs.
-    func adjustable(_ element: XCUIElement) -> Bool {
-        element.elementType == .slider || element.debugDescription.contains("Adjustable")
     }
 
     func wait(until condition: @escaping @autoclosure () -> Bool, _ message: String, timeout: TimeInterval = 15) {
@@ -1108,11 +1148,15 @@ final class PreviewUITests: XCTestCase {
     func testSwipingTheToastDownReportsSwiped() {
         let app = start(["toast"])
         app.buttons["toast-undo"].tap()
-        let message = app.staticTexts["native-toast-message"]
-        XCTAssertTrue(message.waitForExistence(timeout: 5))
-        message.swipeDown()
+        let toast = app.otherElements["native-toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        // Drag the capsule well past the 24 pt threshold. swipeDown() scales its travel to the element, so
+        // on the one-line message it moves the finger only about 8 pt and the toast rightly springs back.
+        let centre = toast.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        centre.press(forDuration: 0.05, thenDragTo: centre.withOffset(CGVector(dx: 0, dy: 80)), withVelocity: .fast,
+                     thenHoldForDuration: 0)
         waitForLabel(app.staticTexts["toast-outcomes"], "1:swiped")
-        XCTAssertTrue(waitForDisappearance(app.otherElements["native-toast"]))
+        XCTAssertTrue(waitForDisappearance(toast))
     }
 
     func testToastFollowsRightToLeftAndAccessibilityTextSizes() {

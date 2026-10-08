@@ -57,10 +57,49 @@ struct PreviewApp: App {
                         if ProcessInfo.processInfo.arguments.contains("selection") || ProcessInfo.processInfo.arguments.contains("reorder") {
                             Button("Burst list") { harness.burstListCommand() }.accessibilityIdentifier("preview-burst-list")
                         }
+                        if ProcessInfo.processInfo.arguments.contains("graph-fill") {
+                            Button("Zoom +") { harness.lastSaved = PreviewVoiceOver.adjust("graph_canvas_zoom", increment: true) }
+                                .accessibilityIdentifier("preview-voiceover-increment")
+                            Button("Zoom -") { harness.lastSaved = PreviewVoiceOver.adjust("graph_canvas_zoom", increment: false) }
+                                .accessibilityIdentifier("preview-voiceover-decrement")
+                        }
                     }.font(.caption).padding()
                     }
                 }
         }
+    }
+}
+
+/// Stands in for VoiceOver's swipe up and down, which XCUITest on iOS can neither send nor detect: it
+/// finds the element in the app's own accessibility tree and adjusts it as VoiceOver does, only when
+/// the element carries the adjustable trait.
+@MainActor
+enum PreviewVoiceOver {
+    static func adjust(_ identifier: String, increment: Bool) -> String {
+        var visited = Set<ObjectIdentifier>()
+        for window in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap(\.windows) {
+            guard let element = find(identifier, in: window, visited: &visited) else { continue }
+            guard element.accessibilityTraits.contains(.adjustable) else { return "\(identifier):not-adjustable" }
+            if increment { element.accessibilityIncrement() } else { element.accessibilityDecrement() }
+            return "\(identifier):\(increment ? "incremented" : "decremented")"
+        }
+        return "\(identifier):missing"
+    }
+
+    private static func find(_ identifier: String, in element: NSObject, visited: inout Set<ObjectIdentifier>) -> NSObject? {
+        guard visited.insert(ObjectIdentifier(element)).inserted else { return nil }
+        if element.responds(to: NSSelectorFromString("accessibilityIdentifier")),
+           element.value(forKey: "accessibilityIdentifier") as? String == identifier { return element }
+        var children = element.accessibilityElements as? [NSObject] ?? []
+        let count = element.accessibilityElementCount()
+        if children.isEmpty, count != NSNotFound, count > 0 {
+            children = (0..<count).compactMap { element.accessibilityElement(at: $0) as? NSObject }
+        }
+        if let view = element as? UIView { children += view.subviews }
+        for child in children {
+            if let found = find(identifier, in: child, visited: &visited) { return found }
+        }
+        return nil
     }
 }
 
