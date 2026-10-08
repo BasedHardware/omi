@@ -12449,17 +12449,30 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Deneyiminiz kişiselleştiriliyor';
 
   @override
-  String get onboardingRatingPromptTitle => 'Beklerken, Omi\'yi kullanmak hoşunuza gitti mi?';
+  String get onboardingRatingPromptTitle => 'Omi\'yi beğeniyor musunuz?';
 
   @override
-  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️';
+  String get onboardingRatingPromptYes => 'Evet';
 
   @override
-  String get onboardingRatingPromptYes => 'Evet, size destek olmak istiyorum!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pek değil';
+  String get onboardingRatingPromptNo => 'Hayır';
 
   @override
   String get partialRecording => 'Kısmi kayıt';
+
+  @override
+  String get importTranscriptFiles => 'Transkript dosyaları';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin';
+
+  @override
+  String get importTooManyAttempts => 'Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.';
+
+  @override
+  String get importFileTooLarge => 'Bu dosya içe aktarmak için çok büyük.';
+
+  @override
+  String get importUnsupportedFileType => 'Bu dosya türü içe aktarılamaz.';
 }

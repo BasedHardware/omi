@@ -12431,17 +12431,29 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Sinu kogemuse isikupärastamine';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kuni ootad, kas Omi kasutamine on meeldiv olnud?';
+  String get onboardingRatingPromptTitle => 'Kas Omi meeldib sulle?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+  String get onboardingRatingPromptYes => 'Jah';
 
   @override
-  String get onboardingRatingPromptYes => 'Jah, tahan teid toetada!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pigem mitte';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osaline salvestus';
+
+  @override
+  String get importTranscriptFiles => 'Transkriptsioonifailid';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Praegu on liiga palju importimisi. Proovi hiljem uuesti.';
+
+  @override
+  String get importFileTooLarge => 'See fail on importimiseks liiga suur.';
+
+  @override
+  String get importUnsupportedFileType => 'Seda failitüüpi ei saa importida.';
 }

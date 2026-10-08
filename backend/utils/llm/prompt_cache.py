@@ -16,7 +16,6 @@ nothing, so callers preflight with :func:`has_cacheable_prefix` first.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -64,33 +63,16 @@ EXPLICIT_CACHE_OPTIONS = {'mode': 'explicit', 'ttl': '30m'}
 EXPLICIT_CACHE_BREAKPOINT = {'mode': 'explicit'}
 
 
-# One kill switch for every explicit-cache caller. Unset means enabled.
-GPT56_EXPLICIT_CACHE_ENABLED_ENV = 'OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED'
-
-
 def has_cacheable_prefix(content: str) -> bool:
     """Conservative preflight: is this block worth marking for a cache write?"""
     return len(content) >= EXPLICIT_CACHE_MINIMUM_CHARACTERS
-
-
-def explicit_cache_switch_enabled() -> bool:
-    """The operator kill switch shared by every explicit-cache caller.
-
-    Callers still add their own route condition (the explicit contract is
-    GPT-5.6-only); this owns just the env semantics so a rollback is one
-    variable everywhere rather than one per feature.
-    """
-    value = os.getenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV)
-    if value is None:
-        return True
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def gpt56_explicit_cache_enabled() -> bool:
     """May this process put ``prompt_cache_options`` on a request at all?
 
     True when the gateway lanes (which pin the GPT-5.6 family) are the route and
-    the kill switch is not off. Whether a given prefix earns a breakpoint is a
+    the model supports it. Whether a given prefix earns a breakpoint is a
     separate, per-caller question.
 
     Sending :data:`EXPLICIT_CACHE_OPTIONS` with *no* breakpoint is not a no-op:
@@ -102,7 +84,7 @@ def gpt56_explicit_cache_enabled() -> bool:
         from utils.llm.gateway_client import should_route_features_through_gateway
     except ImportError:  # pragma: no cover - isolated suites import this module alone
         return False
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
+    return should_route_features_through_gateway()
 
 
 def cache_write_opt_out_options() -> dict[str, str] | None:

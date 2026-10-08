@@ -11404,9 +11404,13 @@
     "onboardingSetupStepMemory": "Sine-set up ang iyong memory",
     "onboardingSetupStepDevices": "Kinokonekta ang iyong mga device",
     "onboardingSetupStepPersonalize": "Pini-personalize ang iyong karanasan",
-    "onboardingRatingPromptTitle": "Habang naghihintay, masarap bang gamitin ang Omi?",
-    "onboardingRatingPromptBody": "Malaking tulong sa amin ang 5 stars ❤️",
-    "onboardingRatingPromptYes": "Oo, gusto ko kayong suportahan!",
-    "onboardingRatingPromptNo": "Hindi masyado",
-    "partialRecording": "Bahagyang pagrekord"
+    "onboardingRatingPromptTitle": "Nag-e-enjoy ka ba sa Omi?",
+    "onboardingRatingPromptYes": "Oo",
+    "onboardingRatingPromptNo": "Hindi",
+    "partialRecording": "Bahagyang pagrekord",
+    "importTranscriptFiles": "Mga file ng transcript",
+    "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito",
+    "importTooManyAttempts": "Masyadong maraming pag-import ngayon. Subukan ulit mamaya.",
+    "importFileTooLarge": "Masyadong malaki ang file na ito para i-import.",
+    "importUnsupportedFileType": "Hindi ma-import ang ganitong uri ng file."
 }

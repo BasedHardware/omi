@@ -3847,9 +3847,13 @@
     "onboardingSetupStepMemory": "Ρύθμιση της μνήμης σας",
     "onboardingSetupStepDevices": "Σύνδεση των συσκευών σας",
     "onboardingSetupStepPersonalize": "Προσαρμογή της εμπειρίας σας",
-    "onboardingRatingPromptTitle": "Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;",
-    "onboardingRatingPromptBody": "Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️",
-    "onboardingRatingPromptYes": "Ναι, θέλω να σας στηρίξω!",
-    "onboardingRatingPromptNo": "Όχι ακριβώς",
-    "partialRecording": "Μερική ηχογράφηση"
+    "onboardingRatingPromptTitle": "Σας αρέσει το Omi;",
+    "onboardingRatingPromptYes": "Ναι",
+    "onboardingRatingPromptNo": "Όχι",
+    "partialRecording": "Μερική ηχογράφηση",
+    "importTranscriptFiles": "Αρχεία απομαγνητοφωνήσεων",
+    "importTranscriptFilesDescription": "Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει",
+    "importTooManyAttempts": "Πάρα πολλές εισαγωγές αυτή τη στιγμή. Δοκιμάστε ξανά αργότερα.",
+    "importFileTooLarge": "Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή.",
+    "importUnsupportedFileType": "Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί."
 }

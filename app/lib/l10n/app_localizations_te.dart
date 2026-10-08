@@ -12488,17 +12488,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'మీ అనుభవం వ్యక్తిగతీకరించబడుతోంది';
 
   @override
-  String get onboardingRatingPromptTitle => 'వేచి ఉన్నప్పుడు, Omi వాడటం బాగుందా?';
+  String get onboardingRatingPromptTitle => 'మీకు Omi నచ్చుతోందా?';
 
   @override
-  String get onboardingRatingPromptBody => '5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం ❤️';
+  String get onboardingRatingPromptYes => 'అవును';
 
   @override
-  String get onboardingRatingPromptYes => 'అవును, నేను మీకు మద్దతు ఇవ్వాలనుకుంటున్నాను!';
-
-  @override
-  String get onboardingRatingPromptNo => 'అంతగా లేదు';
+  String get onboardingRatingPromptNo => 'కాదు';
 
   @override
   String get partialRecording => 'పాక్షిక రికార్డింగ్';
+
+  @override
+  String get importTranscriptFiles => 'ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి';
+
+  @override
+  String get importTooManyAttempts => 'ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get importFileTooLarge => 'ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.';
+
+  @override
+  String get importUnsupportedFileType => 'ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.';
 }

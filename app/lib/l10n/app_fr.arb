@@ -3882,9 +3882,13 @@
     "onboardingSetupStepMemory": "Configuration de votre mémoire",
     "onboardingSetupStepDevices": "Connexion de vos appareils",
     "onboardingSetupStepPersonalize": "Personnalisation de votre expérience",
-    "onboardingRatingPromptTitle": "Pendant que vous patientez, Omi vous plaît-il ?",
-    "onboardingRatingPromptBody": "Une note de 5 étoiles nous aide vraiment beaucoup ❤️",
-    "onboardingRatingPromptYes": "Oui, je veux vous soutenir !",
-    "onboardingRatingPromptNo": "Pas vraiment",
-    "partialRecording": "Enregistrement partiel"
+    "onboardingRatingPromptTitle": "Vous aimez Omi ?",
+    "onboardingRatingPromptYes": "Oui",
+    "onboardingRatingPromptNo": "Non",
+    "partialRecording": "Enregistrement partiel",
+    "importTranscriptFiles": "Fichiers de transcription",
+    "importTranscriptFilesDescription": "Sélectionnez des transcriptions SRT, VTT ou TXT, ou un ZIP les contenant",
+    "importTooManyAttempts": "Trop d'importations en ce moment. Réessayez plus tard.",
+    "importFileTooLarge": "Ce fichier est trop volumineux pour être importé.",
+    "importUnsupportedFileType": "Ce type de fichier ne peut pas être importé."
 }

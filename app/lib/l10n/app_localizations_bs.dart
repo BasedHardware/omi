@@ -12466,17 +12466,29 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personaliziramo tvoje iskustvo';
 
   @override
-  String get onboardingRatingPromptTitle => 'Dok čekaš, je li ti ugodno koristiti Omi?';
+  String get onboardingRatingPromptTitle => 'Uživate li u Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ocjena od 5 zvjezdica nam zaista puno pomaže ❤️';
+  String get onboardingRatingPromptYes => 'Da';
 
   @override
-  String get onboardingRatingPromptYes => 'Da, želim vas podržati!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ne baš';
+  String get onboardingRatingPromptNo => 'Ne';
 
   @override
   String get partialRecording => 'Djelimičan snimak';
+
+  @override
+  String get importTranscriptFiles => 'Datoteke transkripta';
+
+  @override
+  String get importTranscriptFilesDescription => 'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
+
+  @override
+  String get importTooManyAttempts => 'Trenutno ima previše uvoza. Pokušajte ponovo kasnije.';
+
+  @override
+  String get importFileTooLarge => 'Ova datoteka je prevelika za uvoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ova vrsta datoteke se ne može uvesti.';
 }

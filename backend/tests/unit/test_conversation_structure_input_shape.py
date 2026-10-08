@@ -32,7 +32,6 @@ def processing(stack, monkeypatch):
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
-    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
     monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *_, **__: [])
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
     monkeypatch.setattr(pc, '_primary_user_name', lambda *_: None)

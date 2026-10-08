@@ -11404,9 +11404,13 @@
     "onboardingSetupStepMemory": "আপনার মেমরি সেট আপ করা হচ্ছে",
     "onboardingSetupStepDevices": "আপনার ডিভাইস সংযুক্ত করা হচ্ছে",
     "onboardingSetupStepPersonalize": "আপনার অভিজ্ঞতা ব্যক্তিগতকরণ করা হচ্ছে",
-    "onboardingRatingPromptTitle": "অপেক্ষা করার সময় বলুন, Omi ব্যবহার করতে কেমন লাগছে?",
-    "onboardingRatingPromptBody": "৫ স্টার রেটিং দিলে আমরা সত্যিই অনেক সাহায্য পাই ❤️",
-    "onboardingRatingPromptYes": "হ্যাঁ, আমি আপনাদের সমর্থন করতে চাই!",
-    "onboardingRatingPromptNo": "তেমন না",
-    "partialRecording": "আংশিক রেকর্ডিং"
+    "onboardingRatingPromptTitle": "আপনি কি Omi উপভোগ করছেন?",
+    "onboardingRatingPromptYes": "হ্যাঁ",
+    "onboardingRatingPromptNo": "না",
+    "partialRecording": "আংশিক রেকর্ডিং",
+    "importTranscriptFiles": "ট্রান্সক্রিপ্ট ফাইল",
+    "importTranscriptFilesDescription": "SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন",
+    "importTooManyAttempts": "এই মুহূর্তে অনেক বেশি আমদানি চলছে। পরে আবার চেষ্টা করুন।",
+    "importFileTooLarge": "এই ফাইলটি আমদানি করার জন্য অনেক বড়।",
+    "importUnsupportedFileType": "এই ধরনের ফাইল আমদানি করা যায় না।"
 }

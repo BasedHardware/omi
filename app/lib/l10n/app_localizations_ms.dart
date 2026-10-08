@@ -12468,17 +12468,29 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Memperibadikan pengalaman anda';
 
   @override
-  String get onboardingRatingPromptTitle => 'Sementara menunggu, adakah Omi menyenangkan untuk digunakan?';
+  String get onboardingRatingPromptTitle => 'Adakah anda menikmati Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Memberi kami 5 bintang sangat membantu kami ❤️';
+  String get onboardingRatingPromptYes => 'Ya';
 
   @override
-  String get onboardingRatingPromptYes => 'Ya, saya mahu menyokong anda!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Tidak begitu';
+  String get onboardingRatingPromptNo => 'Tidak';
 
   @override
   String get partialRecording => 'Rakaman separa';
+
+  @override
+  String get importTranscriptFiles => 'Fail transkrip';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak import sekarang. Cuba lagi kemudian.';
+
+  @override
+  String get importFileTooLarge => 'Fail ini terlalu besar untuk diimport.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis fail ini tidak boleh diimport.';
 }

@@ -3882,9 +3882,13 @@
     "onboardingSetupStepMemory": "Menyiapkan memori Anda",
     "onboardingSetupStepDevices": "Menghubungkan perangkat Anda",
     "onboardingSetupStepPersonalize": "Mempersonalisasi pengalaman Anda",
-    "onboardingRatingPromptTitle": "Sambil menunggu, apakah Omi menyenangkan digunakan?",
-    "onboardingRatingPromptBody": "Memberi kami bintang 5 sangat membantu kami ❤️",
-    "onboardingRatingPromptYes": "Ya, saya ingin mendukung kalian!",
-    "onboardingRatingPromptNo": "Kurang",
-    "partialRecording": "Rekaman sebagian"
+    "onboardingRatingPromptTitle": "Apakah kamu menikmati Omi?",
+    "onboardingRatingPromptYes": "Ya",
+    "onboardingRatingPromptNo": "Tidak",
+    "partialRecording": "Rekaman sebagian",
+    "importTranscriptFiles": "File transkrip",
+    "importTranscriptFilesDescription": "Pilih transkrip SRT, VTT, atau TXT, atau ZIP yang berisi transkrip tersebut",
+    "importTooManyAttempts": "Terlalu banyak impor saat ini. Coba lagi nanti.",
+    "importFileTooLarge": "File ini terlalu besar untuk diimpor.",
+    "importUnsupportedFileType": "Jenis file ini tidak dapat diimpor."
 }

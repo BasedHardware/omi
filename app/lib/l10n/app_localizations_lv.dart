@@ -12465,17 +12465,29 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Tiek personalizēta jūsu pieredze';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kamēr gaidāt, vai Omi ir bijis patīkami lietot?';
+  String get onboardingRatingPromptTitle => 'Vai jums patīk Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 zvaigžņu vērtējums mums ļoti palīdz ❤️';
+  String get onboardingRatingPromptYes => 'Jā';
 
   @override
-  String get onboardingRatingPromptYes => 'Jā, es vēlos jūs atbalstīt!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ne gluži';
+  String get onboardingRatingPromptNo => 'Nē';
 
   @override
   String get partialRecording => 'Daļējs ieraksts';
+
+  @override
+  String get importTranscriptFiles => 'Transkripciju faili';
+
+  @override
+  String get importTranscriptFilesDescription => 'Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām';
+
+  @override
+  String get importTooManyAttempts => 'Pašlaik ir pārāk daudz importēšanu. Mēģiniet vēlreiz vēlāk.';
+
+  @override
+  String get importFileTooLarge => 'Šis fails ir pārāk liels importēšanai.';
+
+  @override
+  String get importUnsupportedFileType => 'Šāda veida failu nevar importēt.';
 }

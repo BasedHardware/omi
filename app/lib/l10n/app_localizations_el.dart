@@ -12517,17 +12517,30 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Προσαρμογή της εμπειρίας σας';
 
   @override
-  String get onboardingRatingPromptTitle => 'Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;';
+  String get onboardingRatingPromptTitle => 'Σας αρέσει το Omi;';
 
   @override
-  String get onboardingRatingPromptBody => 'Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️';
+  String get onboardingRatingPromptYes => 'Ναι';
 
   @override
-  String get onboardingRatingPromptYes => 'Ναι, θέλω να σας στηρίξω!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Όχι ακριβώς';
+  String get onboardingRatingPromptNo => 'Όχι';
 
   @override
   String get partialRecording => 'Μερική ηχογράφηση';
+
+  @override
+  String get importTranscriptFiles => 'Αρχεία απομαγνητοφωνήσεων';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει';
+
+  @override
+  String get importTooManyAttempts => 'Πάρα πολλές εισαγωγές αυτή τη στιγμή. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get importFileTooLarge => 'Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή.';
+
+  @override
+  String get importUnsupportedFileType => 'Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί.';
 }

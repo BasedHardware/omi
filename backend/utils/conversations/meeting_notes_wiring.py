@@ -61,10 +61,7 @@ def meeting_notes_screen_frames_context_enabled() -> bool:
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Frame names and summaries are screen text: they ride the screen-text flag.
-    # Images need the same docs, so either flag loads them.
-    if not (meeting_notes_screen_text_context_enabled() or meeting_notes_screen_frames_context_enabled()):
-        return ()
+    # Screen text is always available; images still have their own gate.
     return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
 
 

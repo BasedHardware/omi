@@ -425,12 +425,11 @@ class TestImagesReachTheProvider:
 
 
 class TestWiringFlags:
-    """Names/moments ride MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED; images need their own flag."""
+    """Screen text evidence is unconditional; image attachment keeps its own gate."""
 
     def _run(self, monkeypatch, *, screen_text, frames):
         from utils.conversations import meeting_notes_wiring as wiring
 
-        monkeypatch.setenv('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED', 'true' if screen_text else 'false')
         monkeypatch.setenv('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED', 'true' if frames else 'false')
         evidence = (_evidence('a', 2, ['Jordan Rivera'], 'Google Meet call'),)
         loaded: list[str] = []
@@ -462,9 +461,9 @@ class TestWiringFlags:
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
         return names, images, captured.get('screen_moments'), loaded
 
-    def test_everything_off_reads_no_frames(self, monkeypatch):
+    def test_screen_text_evidence_still_loads_without_images(self, monkeypatch):
         names, images, moments, loaded = self._run(monkeypatch, screen_text=False, frames=False)
-        assert (names, images, moments, loaded) == ([], (), (), [])
+        assert (names, images, moments, loaded) == (['Jordan Rivera'], (), (), ['conv-1'])
 
     def test_screen_text_flag_adds_names_and_moments_but_no_images(self, monkeypatch):
         names, images, moments, _loaded = self._run(monkeypatch, screen_text=True, frames=False)

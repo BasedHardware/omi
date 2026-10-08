@@ -12435,17 +12435,29 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'شخصی‌سازی تجربه شما';
 
   @override
-  String get onboardingRatingPromptTitle => 'تا آماده شدن، استفاده از Omi برایتان خوشایند بوده؟';
+  String get onboardingRatingPromptTitle => 'آیا از Omi لذت می‌برید؟';
 
   @override
-  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+  String get onboardingRatingPromptYes => 'بله';
 
   @override
-  String get onboardingRatingPromptYes => 'بله، می‌خواهم از شما حمایت کنم!';
-
-  @override
-  String get onboardingRatingPromptNo => 'نه چندان';
+  String get onboardingRatingPromptNo => 'خیر';
 
   @override
   String get partialRecording => 'ضبط ناقص';
+
+  @override
+  String get importTranscriptFiles => 'فایل‌های رونوشت';
+
+  @override
+  String get importTranscriptFilesDescription => 'رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید';
+
+  @override
+  String get importTooManyAttempts => 'در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get importFileTooLarge => 'این فایل برای وارد کردن بیش از حد بزرگ است.';
+
+  @override
+  String get importUnsupportedFileType => 'این نوع فایل را نمی‌توان وارد کرد.';
 }

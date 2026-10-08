@@ -3847,9 +3847,13 @@
     "onboardingSetupStepMemory": "Sinu mälu seadistamine",
     "onboardingSetupStepDevices": "Sinu seadmete ühendamine",
     "onboardingSetupStepPersonalize": "Sinu kogemuse isikupärastamine",
-    "onboardingRatingPromptTitle": "Kuni ootad, kas Omi kasutamine on meeldiv olnud?",
-    "onboardingRatingPromptBody": "5 tärni aitavad meid tõesti palju ❤️",
-    "onboardingRatingPromptYes": "Jah, tahan teid toetada!",
-    "onboardingRatingPromptNo": "Pigem mitte",
-    "partialRecording": "Osaline salvestus"
+    "onboardingRatingPromptTitle": "Kas Omi meeldib sulle?",
+    "onboardingRatingPromptYes": "Jah",
+    "onboardingRatingPromptNo": "Ei",
+    "partialRecording": "Osaline salvestus",
+    "importTranscriptFiles": "Transkriptsioonifailid",
+    "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP",
+    "importTooManyAttempts": "Praegu on liiga palju importimisi. Proovi hiljem uuesti.",
+    "importFileTooLarge": "See fail on importimiseks liiga suur.",
+    "importUnsupportedFileType": "Seda failitüüpi ei saa importida."
 }

@@ -12469,17 +12469,29 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персаналізацыя вашага вопыту';
 
   @override
-  String get onboardingRatingPromptTitle => 'Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?';
+  String get onboardingRatingPromptTitle => 'Вам падабаецца Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Ацэнка ў 5 зорак вельмі нам дапаможа ❤️';
+  String get onboardingRatingPromptYes => 'Так';
 
   @override
-  String get onboardingRatingPromptYes => 'Так, хачу вас падтрымаць!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не асабліва';
+  String get onboardingRatingPromptNo => 'Не';
 
   @override
   String get partialRecording => 'Частковы запіс';
+
+  @override
+  String get importTranscriptFiles => 'Файлы стэнаграм';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі';
+
+  @override
+  String get importTooManyAttempts => 'Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.';
+
+  @override
+  String get importFileTooLarge => 'Гэты файл занадта вялікі для імпарту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы гэтага тыпу нельга імпартаваць.';
 }

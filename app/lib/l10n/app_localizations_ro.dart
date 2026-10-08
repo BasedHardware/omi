@@ -12492,17 +12492,29 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Se personalizează experiența ta';
 
   @override
-  String get onboardingRatingPromptTitle => 'Cât aștepți, ți-a plăcut să folosești Omi?';
+  String get onboardingRatingPromptTitle => 'Îți place Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat ❤️';
+  String get onboardingRatingPromptYes => 'Da';
 
   @override
-  String get onboardingRatingPromptYes => 'Da, vreau să vă susțin!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nu prea';
+  String get onboardingRatingPromptNo => 'Nu';
 
   @override
   String get partialRecording => 'Înregistrare parțială';
+
+  @override
+  String get importTranscriptFiles => 'Fișiere de transcriere';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele';
+
+  @override
+  String get importTooManyAttempts => 'Prea multe importuri în acest moment. Încearcă din nou mai târziu.';
+
+  @override
+  String get importFileTooLarge => 'Acest fișier este prea mare pentru a fi importat.';
+
+  @override
+  String get importUnsupportedFileType => 'Acest tip de fișier nu poate fi importat.';
 }

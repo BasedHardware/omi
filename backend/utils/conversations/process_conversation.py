@@ -38,8 +38,7 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
 )
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
-from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
-from utils.conversations.transcript_chunks import build_transcript_chunks
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
@@ -954,8 +953,7 @@ def trigger_conversation_apps(
                 app_calendar_context = _stored_meeting_context(conversation)
                 app_roster: Optional[MeetingRoster] = None
                 app_desktop_capture = False
-                if _meeting_notes_rich_context_enabled():
-                    app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
+                app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
                     transcript=app_transcript,
@@ -1717,8 +1715,7 @@ def _extract_memories_canonical(
                 prompt_speaker_map = {}
             prompt_roster: Optional[MeetingRoster] = None
             prompt_desktop_capture = False
-            if _meeting_notes_rich_context_enabled():
-                prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
+            prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -2281,20 +2278,6 @@ def _save_action_items(
             'persistence_path': 'canonical_candidate',
         },
     )
-
-
-# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
-# retrieval over raw transcript text, which the summary-only conversation vectors miss.
-TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
-
-
-def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments: List[Any] = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
-    chunks = build_transcript_chunks(
-        cast(List[Dict[str, Any]], segments), conversation.started_at or conversation.created_at
-    )
-    if chunks:
-        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
@@ -3299,8 +3282,6 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             if not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-                if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an

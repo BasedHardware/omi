@@ -3882,9 +3882,13 @@
     "onboardingSetupStepMemory": "Konfigurujemy Twoją pamięć",
     "onboardingSetupStepDevices": "Łączymy Twoje urządzenia",
     "onboardingSetupStepPersonalize": "Personalizujemy Twoje doświadczenie",
-    "onboardingRatingPromptTitle": "Skoro czekasz, czy Omi dobrze Ci się sprawdza?",
-    "onboardingRatingPromptBody": "Ocena 5 gwiazdek naprawdę nam pomaga ❤️",
-    "onboardingRatingPromptYes": "Tak, chcę Was wesprzeć!",
-    "onboardingRatingPromptNo": "Niezbyt",
-    "partialRecording": "Częściowe nagranie"
+    "onboardingRatingPromptTitle": "Podoba Ci się Omi?",
+    "onboardingRatingPromptYes": "Tak",
+    "onboardingRatingPromptNo": "Nie",
+    "partialRecording": "Częściowe nagranie",
+    "importTranscriptFiles": "Pliki transkrypcji",
+    "importTranscriptFilesDescription": "Wybierz transkrypcje SRT, VTT lub TXT albo plik ZIP z nimi",
+    "importTooManyAttempts": "Zbyt wiele importów w tej chwili. Spróbuj ponownie później.",
+    "importFileTooLarge": "Ten plik jest zbyt duży, aby go zaimportować.",
+    "importUnsupportedFileType": "Nie można zaimportować pliku tego typu."
 }

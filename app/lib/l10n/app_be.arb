@@ -11404,9 +11404,13 @@
     "onboardingSetupStepMemory": "Налада вашай памяці",
     "onboardingSetupStepDevices": "Падключэнне вашых прылад",
     "onboardingSetupStepPersonalize": "Персаналізацыя вашага вопыту",
-    "onboardingRatingPromptTitle": "Пакуль вы чакаеце, ці прыемна вам карыстацца Omi?",
-    "onboardingRatingPromptBody": "Ацэнка ў 5 зорак вельмі нам дапаможа ❤️",
-    "onboardingRatingPromptYes": "Так, хачу вас падтрымаць!",
-    "onboardingRatingPromptNo": "Не асабліва",
-    "partialRecording": "Частковы запіс"
+    "onboardingRatingPromptTitle": "Вам падабаецца Omi?",
+    "onboardingRatingPromptYes": "Так",
+    "onboardingRatingPromptNo": "Не",
+    "partialRecording": "Частковы запіс",
+    "importTranscriptFiles": "Файлы стэнаграм",
+    "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
+    "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",
+    "importFileTooLarge": "Гэты файл занадта вялікі для імпарту.",
+    "importUnsupportedFileType": "Файлы гэтага тыпу нельга імпартаваць."
 }

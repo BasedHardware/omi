@@ -38,8 +38,6 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_NOTES_V2_ENABLED",
     "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
     "CONVERSATION_OCR_CONTEXT_ENABLED",
-    "MEETING_NOTES_RICH_CONTEXT_ENABLED",
-    "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED",
     "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
     "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
@@ -74,6 +72,9 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
     }
 )
+# The API domain and the Review routes run on backend-listen. Pusher's
+# pusher/main.py entrypoint does not mount routers/review.py.
+_REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -94,7 +95,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_CONNECT_ORDER_FROM_CONFIG",
             "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
@@ -140,7 +140,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
-            "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
@@ -150,7 +149,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE",
             "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED",
             "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE",
-            "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
             "OMI_PARITY_PACK_ALLOWED_PRINCIPALS",
             "OMI_PARITY_PACK_CAPTURE",
             "OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS",
@@ -176,7 +174,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "X_OAUTH_CLIENT_SECRET",
         }
     )
-    | _TRANSLATION_LISTEN_ONLY,
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -199,7 +198,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_CONNECT_ORDER_FROM_CONFIG",
             "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_NO_TEXT_RESCUE_ENABLED",
@@ -252,12 +250,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
-            "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
-            "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
             # Only backend-listen serves api.omi.me; its shared-chat route
             # validates the frontend service OIDC identity at the API edge.
             "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
@@ -277,7 +273,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "X_OAUTH_CLIENT_SECRET",
         }
     )
-    | _TRANSLATION_LISTEN_ONLY,
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY,
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {

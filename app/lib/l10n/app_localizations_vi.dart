@@ -12432,17 +12432,29 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Đang cá nhân hóa trải nghiệm của bạn';
 
   @override
-  String get onboardingRatingPromptTitle => 'Trong lúc chờ, bạn thấy dùng Omi có thích không?';
+  String get onboardingRatingPromptTitle => 'Bạn có thích Omi không?';
 
   @override
-  String get onboardingRatingPromptBody => 'Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️';
+  String get onboardingRatingPromptYes => 'Có';
 
   @override
-  String get onboardingRatingPromptYes => 'Có, tôi muốn ủng hộ các bạn!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Không hẳn';
+  String get onboardingRatingPromptNo => 'Không';
 
   @override
   String get partialRecording => 'Bản ghi một phần';
+
+  @override
+  String get importTranscriptFiles => 'Tệp bản chép lời';
+
+  @override
+  String get importTranscriptFilesDescription => 'Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng';
+
+  @override
+  String get importTooManyAttempts => 'Hiện có quá nhiều lượt nhập dữ liệu. Vui lòng thử lại sau.';
+
+  @override
+  String get importFileTooLarge => 'Tệp này quá lớn để nhập dữ liệu.';
+
+  @override
+  String get importUnsupportedFileType => 'Không thể nhập loại tệp này.';
 }

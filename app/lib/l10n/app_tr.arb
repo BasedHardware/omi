@@ -3882,9 +3882,13 @@
     "onboardingSetupStepMemory": "Belleğiniz ayarlanıyor",
     "onboardingSetupStepDevices": "Cihazlarınız bağlanıyor",
     "onboardingSetupStepPersonalize": "Deneyiminiz kişiselleştiriliyor",
-    "onboardingRatingPromptTitle": "Beklerken, Omi'yi kullanmak hoşunuza gitti mi?",
-    "onboardingRatingPromptBody": "5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️",
-    "onboardingRatingPromptYes": "Evet, size destek olmak istiyorum!",
-    "onboardingRatingPromptNo": "Pek değil",
-    "partialRecording": "Kısmi kayıt"
+    "onboardingRatingPromptTitle": "Omi'yi beğeniyor musunuz?",
+    "onboardingRatingPromptYes": "Evet",
+    "onboardingRatingPromptNo": "Hayır",
+    "partialRecording": "Kısmi kayıt",
+    "importTranscriptFiles": "Transkript dosyaları",
+    "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin",
+    "importTooManyAttempts": "Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.",
+    "importFileTooLarge": "Bu dosya içe aktarmak için çok büyük.",
+    "importUnsupportedFileType": "Bu dosya türü içe aktarılamaz."
 }

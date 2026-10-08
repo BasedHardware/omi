@@ -12485,17 +12485,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Az élményed személyre szabása';
 
   @override
-  String get onboardingRatingPromptTitle => 'Amíg vársz, jó élmény volt az Omi használata?';
+  String get onboardingRatingPromptTitle => 'Tetszik az Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
+  String get onboardingRatingPromptYes => 'Igen';
 
   @override
-  String get onboardingRatingPromptYes => 'Igen, szeretnék támogatni titeket!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nem igazán';
+  String get onboardingRatingPromptNo => 'Nem';
 
   @override
   String get partialRecording => 'Részleges felvétel';
+
+  @override
+  String get importTranscriptFiles => 'Átiratfájlok';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt';
+
+  @override
+  String get importTooManyAttempts => 'Jelenleg túl sok az importálás. Próbálja újra később.';
+
+  @override
+  String get importFileTooLarge => 'Ez a fájl túl nagy az importáláshoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ez a fájltípus nem importálható.';
 }

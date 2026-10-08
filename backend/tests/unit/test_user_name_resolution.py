@@ -171,3 +171,44 @@ def test_developer_conversation_http_response_resolves_owner(sources, monkeypatc
     assert response.status_code == 200, response.text
     segments = response.json()['transcript_segments']
     assert [segment['speaker_name'] for segment in segments] == ['David', 'Speaker 1']
+
+
+def test_full_name_keeps_every_word_of_the_firebase_name_without_a_firestore_read(sources):
+    sources.firebase.return_value.display_name = 'Alice Example'
+    sources.document.to_dict.return_value = {'name': 'Bob'}
+    assert auth.get_user_full_name('u') == 'Alice Example'
+    sources.client.collection.assert_not_called()
+    sources.cache.assert_not_called()  # the name cache holds first names
+
+
+@pytest.mark.parametrize('firebase_state', ['missing', 'no_display_name', 'anonymous'])
+@pytest.mark.parametrize(
+    'document,expected',
+    [
+        ({'name': 'Bob Smith', 'ai_user_profile': {'profile_text': '- David Zhang'}}, 'Bob Smith'),
+        ({'ai_user_profile': {'profile_text': '- David Zhang (张大正) is an engineer.'}}, 'David Zhang'),
+        ({'ai_user_profile': {'profile_text': '- 张大正'}}, '张大正'),
+    ],
+)
+def test_full_name_follows_the_first_name_sources_in_order(sources, firebase_state, document, expected):
+    if firebase_state == 'missing':
+        sources.firebase.side_effect = ValueError('missing user')
+    elif firebase_state == 'anonymous':
+        sources.firebase.return_value.display_name = 'AnonymousUser'
+    sources.document.to_dict.return_value = document
+    assert auth.get_user_full_name('u') == expected
+    assert auth.get_user_name('u', use_default=False) == expected.split(' ')[0]
+
+
+@pytest.mark.parametrize('state', ['absent', 'anonymous', 'malformed', 'unavailable', 'not-an-identity'])
+def test_full_name_is_none_without_an_identity_source(sources, state):
+    sources.firebase.return_value.display_name = 'AnonymousUser' if state == 'anonymous' else None
+    if state == 'absent':
+        sources.document.exists = False
+    elif state == 'malformed':
+        sources.document.to_dict.return_value = {'ai_user_profile': 'bad data'}
+    elif state == 'unavailable':
+        sources.client.collection.side_effect = RuntimeError('unavailable')
+    elif state == 'not-an-identity':
+        sources.document.to_dict.return_value = {'ai_user_profile': {'profile_text': '- Met David Zhang yesterday.'}}
+    assert auth.get_user_full_name('u') is None

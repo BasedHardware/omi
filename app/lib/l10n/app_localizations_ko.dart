@@ -12250,17 +12250,29 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => '맞춤 환경 설정 중';
 
   @override
-  String get onboardingRatingPromptTitle => '기다리는 동안 Omi가 마음에 드셨나요?';
+  String get onboardingRatingPromptTitle => 'Omi가 마음에 드시나요?';
 
   @override
-  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 ❤️';
+  String get onboardingRatingPromptYes => '예';
 
   @override
-  String get onboardingRatingPromptYes => '네, 응원할게요!';
-
-  @override
-  String get onboardingRatingPromptNo => '별로예요';
+  String get onboardingRatingPromptNo => '아니요';
 
   @override
   String get partialRecording => '부분 녹음';
+
+  @override
+  String get importTranscriptFiles => '녹취록 파일';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT 또는 TXT 녹취록이나 이를 묶은 ZIP 파일을 선택하세요';
+
+  @override
+  String get importTooManyAttempts => '지금은 가져오기 요청이 너무 많습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get importFileTooLarge => '이 파일은 너무 커서 가져올 수 없습니다.';
+
+  @override
+  String get importUnsupportedFileType => '이 파일 형식은 가져올 수 없습니다.';
 }

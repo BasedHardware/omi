@@ -3847,9 +3847,13 @@
     "onboardingSetupStepMemory": "Configurant la teva memòria",
     "onboardingSetupStepDevices": "Connectant els teus dispositius",
     "onboardingSetupStepPersonalize": "Personalitzant la teva experiència",
-    "onboardingRatingPromptTitle": "Mentre esperes, t'agrada utilitzar Omi?",
-    "onboardingRatingPromptBody": "Valorar-nos amb 5 estrelles ens ajuda molt ❤️",
-    "onboardingRatingPromptYes": "Sí, vull donar-vos suport!",
-    "onboardingRatingPromptNo": "No gaire",
-    "partialRecording": "Enregistrament parcial"
+    "onboardingRatingPromptTitle": "T'agrada Omi?",
+    "onboardingRatingPromptYes": "Sí",
+    "onboardingRatingPromptNo": "No",
+    "partialRecording": "Enregistrament parcial",
+    "importTranscriptFiles": "Fitxers de transcripció",
+    "importTranscriptFilesDescription": "Selecciona transcripcions SRT, VTT o TXT, o un ZIP que les contingui",
+    "importTooManyAttempts": "Hi ha massa importacions ara mateix. Torna-ho a provar més tard.",
+    "importFileTooLarge": "Aquest fitxer és massa gran per importar-lo.",
+    "importUnsupportedFileType": "Aquest tipus de fitxer no es pot importar."
 }

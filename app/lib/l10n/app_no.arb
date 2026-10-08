@@ -3847,9 +3847,13 @@
     "onboardingSetupStepMemory": "Setter opp minnet ditt",
     "onboardingSetupStepDevices": "Kobler til enhetene dine",
     "onboardingSetupStepPersonalize": "Tilpasser opplevelsen din",
-    "onboardingRatingPromptTitle": "Mens du venter, har Omi vært fin å bruke?",
-    "onboardingRatingPromptBody": "5 stjerner hjelper oss virkelig mye ❤️",
-    "onboardingRatingPromptYes": "Ja, jeg vil støtte dere!",
-    "onboardingRatingPromptNo": "Ikke egentlig",
-    "partialRecording": "Delvis opptak"
+    "onboardingRatingPromptTitle": "Liker du Omi?",
+    "onboardingRatingPromptYes": "Ja",
+    "onboardingRatingPromptNo": "Nei",
+    "partialRecording": "Delvis opptak",
+    "importTranscriptFiles": "Transkripsjonsfiler",
+    "importTranscriptFilesDescription": "Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem",
+    "importTooManyAttempts": "For mange importer akkurat nå. Prøv igjen senere.",
+    "importFileTooLarge": "Denne filen er for stor til å importeres.",
+    "importUnsupportedFileType": "Denne filtypen kan ikke importeres."
 }

@@ -307,7 +307,6 @@ def test_legacy_notes_configuration_cannot_bypass_shaped_mode(monkeypatch):
     uid, expected = 'test', 'new'
     monkeypatch.setenv(shaped.FLAG, 'on')
     monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda c: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')

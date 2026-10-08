@@ -12371,17 +12371,29 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'กำลังปรับแต่งประสบการณ์ของคุณ';
 
   @override
-  String get onboardingRatingPromptTitle => 'ระหว่างรอ Omi ใช้งานแล้วถูกใจไหม';
+  String get onboardingRatingPromptTitle => 'คุณชอบ Omi ไหม?';
 
   @override
-  String get onboardingRatingPromptBody => 'การให้ 5 ดาวช่วยเราได้มากจริงๆ ❤️';
+  String get onboardingRatingPromptYes => 'ใช่';
 
   @override
-  String get onboardingRatingPromptYes => 'ใช่ ฉันอยากสนับสนุนคุณ!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ไม่ค่อย';
+  String get onboardingRatingPromptNo => 'ไม่';
 
   @override
   String get partialRecording => 'การบันทึกบางส่วน';
+
+  @override
+  String get importTranscriptFiles => 'ไฟล์ถอดเสียง';
+
+  @override
+  String get importTranscriptFilesDescription => 'เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้';
+
+  @override
+  String get importTooManyAttempts => 'มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get importFileTooLarge => 'ไฟล์นี้ใหญ่เกินไปที่จะนำเข้า';
+
+  @override
+  String get importUnsupportedFileType => 'ไม่สามารถนำเข้าไฟล์ประเภทนี้ได้';
 }

@@ -3847,9 +3847,13 @@
     "onboardingSetupStepMemory": "Nustatoma jūsų atmintis",
     "onboardingSetupStepDevices": "Jungiami jūsų įrenginiai",
     "onboardingSetupStepPersonalize": "Personalizuojama jūsų patirtis",
-    "onboardingRatingPromptTitle": "Kol laukiate, ar Omi buvo malonu naudoti?",
-    "onboardingRatingPromptBody": "5 žvaigždučių įvertinimas mums labai padeda ❤️",
-    "onboardingRatingPromptYes": "Taip, noriu jus palaikyti!",
-    "onboardingRatingPromptNo": "Ne visai",
-    "partialRecording": "Dalinis įrašas"
+    "onboardingRatingPromptTitle": "Ar jums patinka Omi?",
+    "onboardingRatingPromptYes": "Taip",
+    "onboardingRatingPromptNo": "Ne",
+    "partialRecording": "Dalinis įrašas",
+    "importTranscriptFiles": "Transkripcijų failai",
+    "importTranscriptFilesDescription": "Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą",
+    "importTooManyAttempts": "Šiuo metu per daug importavimų. Bandykite vėliau.",
+    "importFileTooLarge": "Šis failas per didelis, kad būtų importuotas.",
+    "importUnsupportedFileType": "Šio tipo failo importuoti negalima."
 }

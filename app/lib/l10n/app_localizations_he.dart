@@ -12346,17 +12346,29 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'מתאימים אישית את החוויה שלך';
 
   @override
-  String get onboardingRatingPromptTitle => 'בזמן שמחכים, נעים לכם להשתמש ב-Omi?';
+  String get onboardingRatingPromptTitle => 'נהנים מ-Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'דירוג של 5 כוכבים עוזר לנו מאוד ❤️';
+  String get onboardingRatingPromptYes => 'כן';
 
   @override
-  String get onboardingRatingPromptYes => 'כן, אני רוצה לתמוך בכם!';
-
-  @override
-  String get onboardingRatingPromptNo => 'לא ממש';
+  String get onboardingRatingPromptNo => 'לא';
 
   @override
   String get partialRecording => 'הקלטה חלקית';
+
+  @override
+  String get importTranscriptFiles => 'קובצי תמלול';
+
+  @override
+  String get importTranscriptFilesDescription => 'בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם';
+
+  @override
+  String get importTooManyAttempts => 'יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.';
+
+  @override
+  String get importFileTooLarge => 'הקובץ גדול מדי לייבוא.';
+
+  @override
+  String get importUnsupportedFileType => 'לא ניתן לייבא סוג קובץ זה.';
 }

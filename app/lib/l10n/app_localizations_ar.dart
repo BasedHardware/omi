@@ -12366,17 +12366,29 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'تخصيص تجربتك';
 
   @override
-  String get onboardingRatingPromptTitle => 'بينما تنتظر، هل كان استخدام Omi ممتعًا؟';
+  String get onboardingRatingPromptTitle => 'هل تستمتع باستخدام Omi؟';
 
   @override
-  String get onboardingRatingPromptBody => 'تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️';
+  String get onboardingRatingPromptYes => 'نعم';
 
   @override
-  String get onboardingRatingPromptYes => 'نعم، أريد أن أدعمكم!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ليس تمامًا';
+  String get onboardingRatingPromptNo => 'لا';
 
   @override
   String get partialRecording => 'تسجيل جزئي';
+
+  @override
+  String get importTranscriptFiles => 'ملفات النصوص';
+
+  @override
+  String get importTranscriptFilesDescription => 'اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها';
+
+  @override
+  String get importTooManyAttempts => 'عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get importFileTooLarge => 'هذا الملف كبير جدًا بحيث لا يمكن استيراده.';
+
+  @override
+  String get importUnsupportedFileType => 'لا يمكن استيراد هذا النوع من الملفات.';
 }

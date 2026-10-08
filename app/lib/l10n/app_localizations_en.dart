@@ -12425,17 +12425,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalizing your experience';
 
   @override
-  String get onboardingRatingPromptTitle => 'While you wait, has Omi been nice to use?';
+  String get onboardingRatingPromptTitle => 'Are you enjoying Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Rating us 5 stars really helps us out ❤️';
+  String get onboardingRatingPromptYes => 'Yes';
 
   @override
-  String get onboardingRatingPromptYes => 'Yes, I want to support you!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Not really';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Partial recording';
+
+  @override
+  String get importTranscriptFiles => 'Transcript files';
+
+  @override
+  String get importTranscriptFilesDescription => 'Select SRT, VTT or TXT transcripts, or a ZIP of them';
+
+  @override
+  String get importTooManyAttempts => 'Too many imports right now. Try again later.';
+
+  @override
+  String get importFileTooLarge => 'This file is too large to import.';
+
+  @override
+  String get importUnsupportedFileType => 'This file type can\'t be imported.';
 }

@@ -12437,17 +12437,29 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Tilpasser opplevelsen din';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mens du venter, har Omi vært fin å bruke?';
+  String get onboardingRatingPromptTitle => 'Liker du Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 stjerner hjelper oss virkelig mye ❤️';
+  String get onboardingRatingPromptYes => 'Ja';
 
   @override
-  String get onboardingRatingPromptYes => 'Ja, jeg vil støtte dere!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ikke egentlig';
+  String get onboardingRatingPromptNo => 'Nei';
 
   @override
   String get partialRecording => 'Delvis opptak';
+
+  @override
+  String get importTranscriptFiles => 'Transkripsjonsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem';
+
+  @override
+  String get importTooManyAttempts => 'For mange importer akkurat nå. Prøv igjen senere.';
+
+  @override
+  String get importFileTooLarge => 'Denne filen er for stor til å importeres.';
+
+  @override
+  String get importUnsupportedFileType => 'Denne filtypen kan ikke importeres.';
 }

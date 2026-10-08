@@ -12441,17 +12441,29 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Kokemustasi personoidaan';
 
   @override
-  String get onboardingRatingPromptTitle => 'Odotellessasi: onko Omin käyttö ollut mukavaa?';
+  String get onboardingRatingPromptTitle => 'Pidätkö Omista?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon ❤️';
+  String get onboardingRatingPromptYes => 'Kyllä';
 
   @override
-  String get onboardingRatingPromptYes => 'Kyllä, haluan tukea teitä!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ei oikeastaan';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osittainen tallenne';
+
+  @override
+  String get importTranscriptFiles => 'Litterointitiedostot';
+
+  @override
+  String get importTranscriptFilesDescription => 'Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Liian monta tuontia juuri nyt. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get importFileTooLarge => 'Tämä tiedosto on liian suuri tuotavaksi.';
+
+  @override
+  String get importUnsupportedFileType => 'Tämän tyyppistä tiedostoa ei voi tuoda.';
 }

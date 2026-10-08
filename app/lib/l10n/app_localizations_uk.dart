@@ -12465,17 +12465,29 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персоналізуємо ваш досвід';
 
   @override
-  String get onboardingRatingPromptTitle => 'Поки чекаєте, вам приємно користуватися Omi?';
+  String get onboardingRatingPromptTitle => 'Вам подобається Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оцінка в 5 зірок дуже нам допоможе ❤️';
+  String get onboardingRatingPromptYes => 'Так';
 
   @override
-  String get onboardingRatingPromptYes => 'Так, хочу вас підтримати!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не дуже';
+  String get onboardingRatingPromptNo => 'Ні';
 
   @override
   String get partialRecording => 'Частковий запис';
+
+  @override
+  String get importTranscriptFiles => 'Файли розшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними';
+
+  @override
+  String get importTooManyAttempts => 'Зараз забагато імпортів. Спробуйте пізніше.';
+
+  @override
+  String get importFileTooLarge => 'Цей файл завеликий для імпорту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файли цього типу не можна імпортувати.';
 }

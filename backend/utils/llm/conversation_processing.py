@@ -165,7 +165,7 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 def _gpt56_explicit_cache_enabled() -> bool:
     # The route half stays local so this module's gateway seam remains patchable;
     # the kill-switch half is owned once, in prompt_cache, for every caller.
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
+    return should_route_features_through_gateway()
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -1521,7 +1521,7 @@ def get_app_result(
 Name: {app.name}
 Description: {app.description}
 Task: {app.memory_prompt}'''
-        explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+        explicit_cache_enabled = shared_conversation_cache_supported()
         cache_enabled = explicit_cache_enabled and has_cacheable_prefix(instructions)
         model = get_llm(
             'conv_app_result',

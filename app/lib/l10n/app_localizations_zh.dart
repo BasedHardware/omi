@@ -12225,17 +12225,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingSetupStepPersonalize => '正在个性化你的体验';
 
   @override
-  String get onboardingRatingPromptTitle => '等待的时候，Omi 用起来还顺手吗？';
+  String get onboardingRatingPromptTitle => '你喜欢 Omi 吗？';
 
   @override
-  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
+  String get onboardingRatingPromptYes => '是';
 
   @override
-  String get onboardingRatingPromptYes => '好的，我想支持你们！';
-
-  @override
-  String get onboardingRatingPromptNo => '不太满意';
+  String get onboardingRatingPromptNo => '否';
 
   @override
   String get partialRecording => '部分录音';
+
+  @override
+  String get importTranscriptFiles => '转录文件';
+
+  @override
+  String get importTranscriptFilesDescription => '选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件';
+
+  @override
+  String get importTooManyAttempts => '当前导入次数过多，请稍后再试。';
+
+  @override
+  String get importFileTooLarge => '此文件过大，无法导入。';
+
+  @override
+  String get importUnsupportedFileType => '无法导入此类型的文件。';
 }

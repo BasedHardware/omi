@@ -12497,17 +12497,29 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Го персонализираме вашето искуство';
 
   @override
-  String get onboardingRatingPromptTitle => 'Додека чекате, дали ви е пријатно да го користите Omi?';
+  String get onboardingRatingPromptTitle => 'Дали уживате во Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оцена со 5 ѕвезди навистина ни помага ❤️';
+  String get onboardingRatingPromptYes => 'Да';
 
   @override
-  String get onboardingRatingPromptYes => 'Да, сакам да ве поддржам!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не баш';
+  String get onboardingRatingPromptNo => 'Не';
 
   @override
   String get partialRecording => 'Делумна снимка';
+
+  @override
+  String get importTranscriptFiles => 'Датотеки со транскрипти';
+
+  @override
+  String get importTranscriptFilesDescription => 'Изберете SRT, VTT или TXT транскрипти или ZIP со нив';
+
+  @override
+  String get importTooManyAttempts => 'Моментално има премногу увезувања. Обидете се повторно подоцна.';
+
+  @override
+  String get importFileTooLarge => 'Оваа датотека е преголема за увезување.';
+
+  @override
+  String get importUnsupportedFileType => 'Овој тип на датотека не може да се увезе.';
 }

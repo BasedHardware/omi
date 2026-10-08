@@ -75,7 +75,6 @@ def _notes_call(monkeypatch, *, transcript: str, started_at: datetime, tz: str, 
     monkeypatch.setattr(conv_proc, 'isolated_notes_model', isolated_fake)
     monkeypatch.setattr(conv_proc, 'get_llm', fake_get_llm)
     monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
-    monkeypatch.setattr(conv_proc, 'explicit_cache_switch_enabled', lambda: True)
     prefix = build_conversation_prompt_prefix(
         conversation_id=f'conv-{transcript[:8]}',
         transcript=transcript,
@@ -208,7 +207,6 @@ def test_conv_apps_prefix_path_static_instructions_are_byte_identical_across_con
 
     monkeypatch.setattr(conv_proc, 'get_llm', _get_llm)
     monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
-    monkeypatch.setattr(conv_proc, 'explicit_cache_switch_enabled', lambda: True)
 
     app = App(
         id='app-notes',

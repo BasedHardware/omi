@@ -41,8 +41,6 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
     EXPLICIT_CACHE_MINIMUM_CHARACTERS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,
-    explicit_cache_switch_enabled,
     gpt56_explicit_cache_enabled,
 )
 
@@ -58,7 +56,6 @@ SHORT_TASK = 'summarize it'
 @pytest.fixture
 def gateway_on(monkeypatch):
     """The explicit contract is gateway-lane-only; pin the route for lane tests."""
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     monkeypatch.setattr('utils.llm.gateway_client.should_route_features_through_gateway', lambda: True)
 
 
@@ -240,7 +237,6 @@ def _run_metadata_extraction(monkeypatch, *, gateway=True, byok=False):
         model = _FakeModel(captured)
         return model.bind(**kwargs) if kwargs else model
 
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     monkeypatch.setattr('utils.llm.gateway_client.should_route_features_through_gateway', lambda: gateway)
     monkeypatch.setattr('utils.byok.has_byok_keys', lambda: byok)
     monkeypatch.setattr(chat_module, 'get_llm', _get_llm)
@@ -292,14 +288,6 @@ def test_langchain_really_drops_kwargs_bound_before_with_structured_output(real_
 @pytest.mark.parametrize('kwargs', [{'gateway': False}, {'byok': True}])
 def test_metadata_extraction_sends_nothing_when_a_guard_declines(monkeypatch, kwargs):
     assert _run_metadata_extraction(monkeypatch, **kwargs)['invoked_kwargs'] == {}
-
-
-def test_metadata_extraction_honours_the_kill_switch(monkeypatch):
-    monkeypatch.setenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
-    monkeypatch.setattr('utils.llm.gateway_client.should_route_features_through_gateway', lambda: True)
-    from utils.llm.prompt_cache import cache_write_opt_out_options
-
-    assert cache_write_opt_out_options() is None
 
 
 # ---------------------------------------------------------------------------
@@ -378,22 +366,11 @@ def test_a_client_routing_key_alone_is_never_turned_into_a_non_cache_request(gat
 
 
 # ---------------------------------------------------------------------------
-# The switch itself
+# Gateway route capability
 # ---------------------------------------------------------------------------
 
 
-def test_kill_switch_semantics(monkeypatch):
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
-    assert explicit_cache_switch_enabled()
-    for off in ('false', '0', 'off', 'no'):
-        monkeypatch.setenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, off)
-        assert not explicit_cache_switch_enabled()
-    monkeypatch.setenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
-    assert explicit_cache_switch_enabled()
-
-
 def test_explicit_cache_requires_the_gateway_route(monkeypatch):
-    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     with patch('utils.llm.gateway_client.should_route_features_through_gateway', lambda: False):
         assert not gpt56_explicit_cache_enabled()
     with patch('utils.llm.gateway_client.should_route_features_through_gateway', lambda: True):

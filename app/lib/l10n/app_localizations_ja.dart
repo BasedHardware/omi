@@ -12246,17 +12246,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'あなた向けにカスタマイズ中';
 
   @override
-  String get onboardingRatingPromptTitle => 'お待ちの間に、Omiは使いやすいですか？';
+  String get onboardingRatingPromptTitle => 'Omiを楽しんでいますか？';
 
   @override
-  String get onboardingRatingPromptBody => '星5つの評価は私たちの大きな励みになります ❤️';
+  String get onboardingRatingPromptYes => 'はい';
 
   @override
-  String get onboardingRatingPromptYes => 'はい、応援します！';
-
-  @override
-  String get onboardingRatingPromptNo => 'あまり';
+  String get onboardingRatingPromptNo => 'いいえ';
 
   @override
   String get partialRecording => '一部のみの録音';
+
+  @override
+  String get importTranscriptFiles => '文字起こしファイル';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください';
+
+  @override
+  String get importTooManyAttempts => '現在インポートが多すぎます。しばらくしてからもう一度お試しください。';
+
+  @override
+  String get importFileTooLarge => 'このファイルはインポートするには大きすぎます。';
+
+  @override
+  String get importUnsupportedFileType => 'この種類のファイルはインポートできません。';
 }

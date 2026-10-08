@@ -11404,9 +11404,13 @@
     "onboardingSetupStepMemory": "Postavljamo tvoju memoriju",
     "onboardingSetupStepDevices": "Povezujemo tvoje uređaje",
     "onboardingSetupStepPersonalize": "Personaliziramo tvoje iskustvo",
-    "onboardingRatingPromptTitle": "Dok čekaš, je li ti ugodno koristiti Omi?",
-    "onboardingRatingPromptBody": "Ocjena od 5 zvjezdica nam stvarno puno pomaže ❤️",
-    "onboardingRatingPromptYes": "Da, želim vas podržati!",
-    "onboardingRatingPromptNo": "Ne baš",
-    "partialRecording": "Djelomična snimka"
+    "onboardingRatingPromptTitle": "Uživate li u Omi?",
+    "onboardingRatingPromptYes": "Da",
+    "onboardingRatingPromptNo": "Ne",
+    "partialRecording": "Djelomična snimka",
+    "importTranscriptFiles": "Datoteke transkripata",
+    "importTranscriptFilesDescription": "Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima",
+    "importTooManyAttempts": "Trenutačno ima previše uvoza. Pokušajte ponovno kasnije.",
+    "importFileTooLarge": "Ova je datoteka prevelika za uvoz.",
+    "importUnsupportedFileType": "Ova vrsta datoteke ne može se uvesti."
 }
