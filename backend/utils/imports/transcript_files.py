@@ -140,6 +140,7 @@ _GENERIC_SPEAKER_RE = re.compile(
 # must stay linear: no two adjacent unbounded runs that can trade characters
 # (a tag or voice ends at the next '<', and a header name is capped).
 _VOICE_RE = re.compile(r'<v(?:\.[\w.-]+)?\s+([^<>\s][^<>]*)>')
+_VOICE_END_RE = re.compile(r'</v\s*>')
 # WebVTT escapes every literal '<', so any '<...>' in a cue is markup.
 _TAG_RE = re.compile(r'<[^<>]*>')
 # SRT does not escape: only its own formatting tags (<i>, <b>, <u>, <s>, <font ...>) are
@@ -302,6 +303,70 @@ def parse_srt(text: str) -> List[TranscriptCue]:
     return _assign_speakers(cues)
 
 
+def _voice_runs(raw: str) -> List[tuple[Optional[str], str]]:
+    """A WebVTT cue's text as (voice, plain text) runs, in order.
+
+    A voice annotates only its own span (WebVTT 4.2.2), so ``<v Alice>Ship it?</v>
+    <v Bob>Not yet.</v>`` is two runs, and text outside every span is a run with no
+    voice. As in the WebVTT parser, ``<v>`` opens a span inside any still open, ``</v>``
+    closes the innermost, and an unclosed span runs to the end of the cue; text goes to
+    the innermost open voice. Other tags are formatting and are dropped. Adjacent runs of
+    one voice merge, and runs left with no words (the space between two spans) are dropped.
+    """
+    pieces: List[tuple[Optional[str], List[str]]] = [(None, [])]
+    voices: List[str] = []
+    position = 0
+    for tag in _TAG_RE.finditer(raw):
+        pieces[-1][1].append(raw[position : tag.start()])
+        position = tag.end()
+        voice = _VOICE_RE.fullmatch(tag.group(0))
+        if voice:
+            voices.append(_unescape(voice.group(1)).strip())
+        elif _VOICE_END_RE.fullmatch(tag.group(0)):
+            if voices:
+                voices.pop()
+        else:
+            continue
+        pieces.append((voices[-1] if voices else None, []))
+    pieces[-1][1].append(raw[position:])
+    runs: List[tuple[Optional[str], str]] = []
+    for speaker, parts in pieces:
+        body = _plain_cue_text(''.join(parts), _TAG_RE)
+        if not body:
+            continue
+        if runs and runs[-1][0] == speaker:
+            runs[-1] = (speaker, f'{runs[-1][1]} {body}')
+        else:
+            runs.append((speaker, body))
+    return runs
+
+
+def _voice_run_cues(
+    runs: Sequence[tuple[Optional[str], str]], start: Optional[float], end: Optional[float]
+) -> List[TranscriptCue]:
+    """One cue per voice run, sharing out the cue's time range by word count.
+
+    A cue gives no timing finer than its own range, so each run gets a consecutive
+    slice of it in proportion to its words, the first starting at the cue's start and
+    the last ending at its end; the runs stay in order and never overlap. A cue
+    without a usable range (a missing time, or an end not after the start) leaves
+    every run with the cue's own timing, for ``segments_from_cues`` to settle.
+    """
+    if start is None or end is None or end <= start or len(runs) == 1:
+        return [TranscriptCue(text=text, speaker=speaker, start=start, end=end) for speaker, text in runs]
+    words = [max(1, len(text.split())) for _, text in runs]
+    total = sum(words)
+    cues: List[TranscriptCue] = []
+    spoken = 0
+    run_start = start
+    for (speaker, text), count in zip(runs, words):
+        spoken += count
+        run_end = end if spoken == total else round(start + (end - start) * spoken / total, 3)
+        cues.append(TranscriptCue(text=text, speaker=speaker, start=run_start, end=run_end))
+        run_start = run_end
+    return cues
+
+
 def parse_vtt(text: str) -> List[TranscriptCue]:
     cues: List[TranscriptCue] = []
     for lines in _blocks(text):
@@ -312,19 +377,10 @@ def parse_vtt(text: str) -> List[TranscriptCue]:
         if timing_index is None:
             continue
         timing = _CUE_TIMING_RE.match(lines[timing_index])
-        raw = ' '.join(lines[timing_index + 1 :])
-        voice = _VOICE_RE.search(raw)
-        body = _plain_cue_text(raw, _TAG_RE)
-        if not timing or not body:
+        runs = _voice_runs(' '.join(lines[timing_index + 1 :]))
+        if not timing or not runs:
             continue
-        cues.append(
-            TranscriptCue(
-                text=body,
-                speaker=_unescape(voice.group(1)).strip() if voice else None,
-                start=_seconds(timing.group(1)),
-                end=_seconds(timing.group(2)),
-            )
-        )
+        cues.extend(_voice_run_cues(runs, _seconds(timing.group(1)), _seconds(timing.group(2))))
     return _assign_speakers(cues)
 
 

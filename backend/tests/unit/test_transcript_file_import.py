@@ -195,6 +195,75 @@ def test_vtt_skips_header_notes_and_ids_and_reads_voice_tags():
     ]
 
 
+def test_each_voice_span_in_a_vtt_cue_keeps_its_own_speaker():
+    """WebVTT scopes a voice to its span, so a two-voice cue is two turns, not one under the first voice."""
+    data = (
+        b'WEBVTT\n\n00:01.000 --> 00:05.000\n' b'<v Alice Doe>Can we ship?</v> <v Bob Smith>No, wait for review.</v>\n'
+    )
+    parsed = tf.parse_transcript_file('standup.vtt', data)
+    assert parsed is not None
+
+    conversation = tf.build_imported_conversation(
+        UID,
+        parsed,
+        data,
+        source=ConversationSource.unknown,
+        language_code='en',
+        owner_name='Alice Doe',
+        people={'bob smith': 'person-bob'},
+        fallback_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    segments = conversation.transcript_segments
+    assert [(s.text, s.is_user, s.person_id) for s in segments] == [
+        ('Can we ship?', True, None),
+        ('No, wait for review.', False, 'person-bob'),
+    ]
+    assert segments[0].speaker_id != segments[1].speaker_id
+    # The cue's range is shared out by word count (3 of 7 words, then 4 of 7), in order.
+    assert (segments[0].start, segments[1].end) == (1.0, 5.0)
+    assert segments[0].end == segments[1].start == pytest.approx(1.0 + 4.0 * 3 / 7, abs=0.001)
+
+
+@pytest.mark.parametrize(
+    ('cue', 'expected'),
+    [
+        pytest.param(
+            'So, <v Bob>hi there</v> and then <v Carol &amp; Co>bye</v>',
+            [(None, 'So,'), ('Bob', 'hi there'), (None, 'and then'), ('Carol & Co', 'bye')],
+            id='unvoiced-text-around-the-spans',
+        ),
+        pytest.param(
+            '<v Alice>Hi <v Bob>Hello',
+            [('Alice', 'Hi'), ('Bob', 'Hello')],
+            id='unclosed-voices',
+        ),
+        pytest.param(
+            '<v Alice>Hi <b>all</b></v> <v Alice>and welcome</v>',
+            [('Alice', 'Hi all and welcome')],
+            id='adjacent-spans-of-one-voice-merge',
+        ),
+        pytest.param(
+            '<v Speaker 1>Hi</v><v.loud Bob>Alice: <i>hey</i></v>',
+            [('Speaker 1', 'Hi'), ('Bob', 'Alice: hey')],
+            id='classes-and-formatting-tags',
+        ),
+    ],
+)
+def test_vtt_voice_spans_split_a_cue_into_runs(cue, expected):
+    cues = tf.parse_vtt(f'WEBVTT\n\n00:00:10.000 --> 00:00:20.000\n{cue}\n')
+
+    assert [(c.speaker, c.text) for c in cues] == expected
+    assert cues[0].start == 10.0 and cues[-1].end == 20.0
+    assert all(a.end == b.start for a, b in zip(cues, cues[1:]))
+
+
+def test_a_voice_split_cue_without_a_usable_range_keeps_its_timing_on_each_run():
+    cues = tf.parse_vtt('WEBVTT\n\n00:00:20.000 --> 00:00:10.000\n<v Alice>Hi</v> <v Bob>Hello</v>\n')
+
+    assert [(c.speaker, c.start, c.end) for c in cues] == [('Alice', 20.0, 10.0), ('Bob', 20.0, 10.0)]
+
+
 def test_otter_style_header_lines_start_timed_speaker_turns():
     cues = tf.parse_text_transcript(OTTER_STYLE_TXT)
 
