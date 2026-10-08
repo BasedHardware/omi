@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/chat_message_plan.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 
@@ -41,23 +42,9 @@ class ChatContentBlockList extends StatelessWidget {
   final Future<ServerConversation?> Function(String id)? fetchConversation;
 
   /// True when at least one block in [message] has an interactable component.
-  static bool hasRenderableBlocks(ServerMessage message) {
-    return message.typedContentBlocks.any(_isRenderable);
-  }
+  static bool hasRenderableBlocks(ServerMessage message) => ChatMessagePlan.hasRenderableBlocks(message);
 
-  static bool _isRenderable(ChatContentBlock block) {
-    return block is TaskCardContentBlock ||
-        block is GoalLinkContentBlock ||
-        block is CaptureLinkContentBlock ||
-        block is ConversationLinkContentBlock ||
-        block is MemoryLinkContentBlock ||
-        block is QuestionCardContentBlock ||
-        block is DiscoveryCardContentBlock ||
-        block is AgentSpawnContentBlock ||
-        block is AgentCompletionContentBlock;
-  }
-
-  Widget? _build(ChatContentBlock block) {
+  Widget _build(ChatContentBlock block) {
     switch (block) {
       case TaskCardContentBlock():
         return TaskCardBlock(block: block);
@@ -78,45 +65,23 @@ class ChatContentBlockList extends StatelessWidget {
       case AgentCompletionContentBlock():
         return AgentCompletionBlock(block: block);
       case TextContentBlock():
-        if (renderStructuredFallbackText && block.text.trim().isNotEmpty) {
-          return _StructuredFallbackText(
-            key: ValueKey('chat-block-text-${block.id}'),
-            text: block.text,
-            onAskOmi: onAskOmi,
-          );
-        }
-        return null;
       case ThinkingContentBlock():
       case ToolCallContentBlock():
       case CitationContentBlock():
       case UnknownContentBlock():
-        return null;
+        // [chatBlockEntries] carries only renderable components; text renders as an entry's text.
+        return const SizedBox.shrink();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
-    for (var index = 0; index < message.contentBlocks.length; index++) {
-      final rawBlock = message.contentBlocks[index];
-      // Walk the raw wire array instead of only the typed projection. The
-      // decoder intentionally drops malformed blocks, but the message body
-      // still contains their canonical fallback line. Keeping this pass raw
-      // prevents a mixed turn from losing that line beside a valid card.
-      final block = ChatContentBlock.tryDecode(rawBlock);
-      final fallback = renderStructuredFallbackText ? message.structuredFallbackTextForRawBlock(rawBlock) : null;
-      final fallbackKey =
-          rawBlock['id'] is String && (rawBlock['id'] as String).isNotEmpty ? rawBlock['id'] as String : '$index';
-      final widget = block == null ? null : _build(block);
-      final child = widget ??
-          (fallback == null
-              ? null
-              : _StructuredFallbackText(
-                  key: ValueKey('chat-block-fallback-$fallbackKey'),
-                  text: fallback,
-                  onAskOmi: onAskOmi,
-                ));
-      if (child == null) continue;
+    for (final entry in chatBlockEntries(message, renderStructuredFallbackText: renderStructuredFallbackText)) {
+      final component = entry.component;
+      final child = component != null
+          ? _build(component)
+          : _StructuredFallbackText(key: ValueKey('chat-block-${entry.key}'), text: entry.text!, onAskOmi: onAskOmi);
       if (children.isNotEmpty) children.add(const SizedBox(height: 8));
       children.add(child);
     }

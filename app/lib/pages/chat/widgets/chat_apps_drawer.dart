@@ -25,7 +25,12 @@ class ChatAppsDrawer extends StatelessWidget {
     required this.onEnableApps,
     required this.onDisableApp,
     required this.onClearChat,
+    this.sheet = false,
   });
+
+  /// Presented as the native options sheet rather than the end drawer. The native surface then
+  /// carries the sheet, and its Flutter fallback sits in the sheet scaffold without drawer chrome.
+  final bool sheet;
 
   /// The id of the chosen app, or `'no_selected'` for Omi.
   final ValueChanged<String> onSelectApp;
@@ -36,189 +41,195 @@ class ChatAppsDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Drawer(
-      backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
-      child: SafeArea(
-        child: Consumer2<MessageProvider, AppProvider>(
-          builder: (context, messageProvider, appProvider, child) {
-            final chatApps = messageProvider.chatApps;
-            final selectedAppId = appProvider.selectedChatAppId;
-            final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
+    final content = Consumer2<MessageProvider, AppProvider>(
+      builder: (context, messageProvider, appProvider, child) {
+        final chatApps = messageProvider.chatApps;
+        final selectedAppId = appProvider.selectedChatAppId;
+        final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
 
-            void choose(String id) {
-              Navigator.of(context).pop();
-              onSelectApp(id);
-            }
+        void choose(String id) {
+          Navigator.of(context).pop();
+          onSelectApp(id);
+        }
 
-            final classic = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(
-                    OmiSpacing.lg,
-                    OmiSpacing.xs,
-                    OmiSpacing.xxs,
-                    0,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          header: true,
-                          child: Text(
-                            l10n.chatAppsTitle,
-                            style: OmiType.title3,
-                          ),
-                        ),
+        final classic = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(
+                OmiSpacing.lg,
+                OmiSpacing.xs,
+                OmiSpacing.xxs,
+                0,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        l10n.chatAppsTitle,
+                        style: OmiType.title3,
                       ),
-                      OmiCloseButton(color: OmiColors.textSecondary),
-                    ],
-                  ),
-                ),
-                Divider(color: OmiColors.border, height: 1),
-                Expanded(
-                  // The rows say what they are: no "Select App" label above them, and no empty-state
-                  // sentence that explains the Enable Apps row below it.
-                  child: ListView(
-                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                    children: [
-                      _AppRow(
-                        avatar: const ChatOmiAvatar(),
-                        name: l10n.omiAppName,
-                        isSelected: isOmiSelected,
-                        onTap: () => choose('no_selected'),
-                      ),
-                      for (final app in chatApps)
-                        _AppRow(
-                          avatar: ChatAppAvatar(app: app),
-                          name: app.getName(),
-                          isSelected: selectedAppId == app.id,
-                          onTap: () => choose(app.id),
-                          onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
-                        ),
-                      if (messageProvider.isLoadingChatApps && chatApps.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(OmiSpacing.lg),
-                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
-                        )
-                      else if (messageProvider.chatAppsProblem != null)
-                        Padding(
-                          padding: const EdgeInsets.all(OmiSpacing.md),
-                          child: OmiErrorState(
-                            message: l10n.chatAppsLoadFailed,
-                            onRetry: messageProvider.fetchChatApps,
-                          ),
-                        ),
-                      ListTile(
-                        leading: Padding(
-                          padding: const EdgeInsets.only(left: 2),
-                          child: FaIcon(
-                            FontAwesomeIcons.circlePlus,
-                            color: OmiColors.textPrimary,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(l10n.enableApps, style: OmiType.callout),
-                        trailing: Icon(
-                          Icons.chevron_right,
-                          color: OmiColors.textTertiary,
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          onEnableApps();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(color: OmiColors.border, height: 1),
-                ListTile(
-                  leading: Padding(
-                    padding: const EdgeInsets.only(left: 2),
-                    child: FaIcon(
-                      FontAwesomeIcons.solidTrashCan,
-                      color: OmiColors.danger,
-                      size: 20,
                     ),
                   ),
-                  title: Text(
-                    l10n.clearChat,
-                    style: OmiType.callout.copyWith(color: OmiColors.danger),
+                  OmiCloseButton(color: OmiColors.textSecondary),
+                ],
+              ),
+            ),
+            Divider(color: OmiColors.border, height: 1),
+            Expanded(
+              // The rows say what they are: no "Select App" label above them, and no empty-state
+              // sentence that explains the Enable Apps row below it.
+              child: ListView(
+                padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                children: [
+                  _AppRow(
+                    avatar: const ChatOmiAvatar(),
+                    name: l10n.omiAppName,
+                    isSelected: isOmiSelected,
+                    onTap: () => choose('no_selected'),
                   ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onClearChat();
-                  },
-                ),
-              ],
-            );
-            return IosNativeSurface(
-              title: l10n.chatAppsTitle,
-              fallback: classic,
-              loading: messageProvider.isLoadingChatApps,
-              toolbar: [
-                NativeRow(
-                  'chat_apps_close',
-                  l10n.close,
-                  symbol: 'xmark',
-                  action: (_) => Navigator.of(context).pop(),
-                ),
-              ],
-              sections: [
-                NativeSection('chat_apps', [
-                  NativeRow(
-                    'chat_app_omi',
-                    l10n.omiAppName,
-                    symbol: isOmiSelected ? 'checkmark.circle.fill' : 'bubble.left',
-                    enabled: messageProvider.canSwitchChat,
-                    action: (_) => choose('no_selected'),
-                  ),
-                  for (final app in chatApps) ...[
-                    NativeRow(
-                      'chat_app_${app.id}',
-                      app.getName(),
-                      imageUri: nativeImageUri(app.getImageUrl()),
-                      symbol: selectedAppId == app.id ? 'checkmark.circle.fill' : null,
-                      enabled: messageProvider.canSwitchChat,
-                      action: (_) => choose(app.id),
+                  for (final app in chatApps)
+                    _AppRow(
+                      avatar: ChatAppAvatar(app: app),
+                      name: app.getName(),
+                      isSelected: selectedAppId == app.id,
+                      onTap: () => choose(app.id),
+                      onDisable: selectedAppId != app.id ? () => onDisableApp(app) : null,
                     ),
-                    if (selectedAppId != app.id)
-                      NativeRow(
-                        'chat_app_disable_${app.id}',
-                        l10n.disableAppNamed(app.getName()),
-                        destructive: true,
-                        enabled: messageProvider.canSwitchChat,
-                        action: (_) => onDisableApp(app),
+                  if (messageProvider.isLoadingChatApps && chatApps.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(OmiSpacing.lg),
+                      child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                    )
+                  else if (messageProvider.chatAppsProblem != null)
+                    Padding(
+                      padding: const EdgeInsets.all(OmiSpacing.md),
+                      child: OmiErrorState(
+                        message: l10n.chatAppsLoadFailed,
+                        onRetry: messageProvider.fetchChatApps,
                       ),
-                  ],
-                  NativeRow(
-                    'chat_apps_enable',
-                    l10n.enableApps,
-                    symbol: 'plus',
-                    action: (_) {
+                    ),
+                  ListTile(
+                    leading: Padding(
+                      padding: const EdgeInsets.only(left: 2),
+                      child: FaIcon(
+                        FontAwesomeIcons.circlePlus,
+                        color: OmiColors.textPrimary,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(l10n.enableApps, style: OmiType.callout),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: OmiColors.textTertiary,
+                    ),
+                    onTap: () {
                       Navigator.of(context).pop();
                       onEnableApps();
                     },
                   ),
-                ]),
-                NativeSection('chat_apps_clear', [
+                ],
+              ),
+            ),
+            Divider(color: OmiColors.border, height: 1),
+            ListTile(
+              leading: Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: FaIcon(
+                  FontAwesomeIcons.solidTrashCan,
+                  color: OmiColors.danger,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                l10n.clearChat,
+                style: OmiType.callout.copyWith(color: OmiColors.danger),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                onClearChat();
+              },
+            ),
+          ],
+        );
+        return IosNativeSurface(
+          title: l10n.chatAppsTitle,
+          fallback: sheet
+              ? OmiSheetScaffold(
+                  showCloseButton: false,
+                  padding: EdgeInsets.zero,
+                  child: SizedBox(height: MediaQuery.sizeOf(context).height * .8, child: classic),
+                )
+              : classic,
+          loading: messageProvider.isLoadingChatApps,
+          toolbar: [
+            NativeRow(
+              'chat_apps_close',
+              l10n.close,
+              symbol: 'xmark',
+              action: (_) => Navigator.of(context).pop(),
+            ),
+          ],
+          sections: [
+            NativeSection('chat_apps', [
+              NativeRow(
+                'chat_app_omi',
+                l10n.omiAppName,
+                symbol: isOmiSelected ? 'checkmark.circle.fill' : 'bubble.left',
+                enabled: messageProvider.canSwitchChat,
+                action: (_) => choose('no_selected'),
+              ),
+              for (final app in chatApps) ...[
+                NativeRow(
+                  'chat_app_${app.id}',
+                  app.getName(),
+                  imageUri: nativeImageUri(app.getImageUrl()),
+                  symbol: selectedAppId == app.id ? 'checkmark.circle.fill' : null,
+                  enabled: messageProvider.canSwitchChat,
+                  action: (_) => choose(app.id),
+                ),
+                if (selectedAppId != app.id)
                   NativeRow(
-                    'chat_apps_clear_action',
-                    l10n.clearChat,
+                    'chat_app_disable_${app.id}',
+                    l10n.disableAppNamed(app.getName()),
                     destructive: true,
                     enabled: messageProvider.canSwitchChat,
-                    action: (_) {
-                      Navigator.of(context).pop();
-                      onClearChat();
-                    },
+                    action: (_) => onDisableApp(app),
                   ),
-                ]),
               ],
-            );
-          },
-        ),
-      ),
+              NativeRow(
+                'chat_apps_enable',
+                l10n.enableApps,
+                symbol: 'plus',
+                action: (_) {
+                  Navigator.of(context).pop();
+                  onEnableApps();
+                },
+              ),
+            ]),
+            NativeSection('chat_apps_clear', [
+              NativeRow(
+                'chat_apps_clear_action',
+                l10n.clearChat,
+                destructive: true,
+                enabled: messageProvider.canSwitchChat,
+                action: (_) {
+                  Navigator.of(context).pop();
+                  onClearChat();
+                },
+              ),
+            ]),
+          ],
+        );
+      },
+    );
+    if (sheet) return content;
+    return Drawer(
+      backgroundColor: OmiColors.surface1,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
+      child: SafeArea(child: content),
     );
   }
 }

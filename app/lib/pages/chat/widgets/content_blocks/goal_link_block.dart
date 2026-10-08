@@ -51,41 +51,46 @@ class GoalLinkBlock extends StatelessWidget {
           actionTitle: l10n.chatBlockOpenInGoals,
           actionKey: Key('chat-block-goalLink-${block.id}-open'),
           isOpening: goal == null,
-          onAction: goal == null ? null : () => _showGoalSheet(context, goal),
+          onAction: goal == null ? null : () => showGoalLinkSheet(context, block, goal),
         );
       },
     );
   }
+}
 
-  void _showGoalSheet(BuildContext context, Goal goal) {
-    showOmiSheet<void>(
-      context: context,
-      title: goal.title,
-      builder: (sheetContext) {
-        final unit = goal.unit?.trim();
-        final progress = '${_format(goal.currentValue)} / ${_format(goal.targetValue)}'
-            '${unit == null || unit.isEmpty ? '' : ' $unit'}';
-        return Padding(
-          padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChatBlockEyebrow(icon: Icons.flag_outlined, label: sheetContext.l10n.chatBlockGoal),
-              const SizedBox(height: OmiSpacing.xs),
-              Text(
-                progress,
-                key: Key('chat-block-goalLink-${block.id}-progress'),
-                style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+/// The goal's progress as the goal sheet shows it, for example '3 / 10 km'.
+String formatGoalProgress(Goal goal) {
+  final unit = goal.unit?.trim();
+  return '${formatGoalValue(goal.currentValue)} / ${formatGoalValue(goal.targetValue)}'
+      '${unit == null || unit.isEmpty ? '' : ' $unit'}';
+}
 
-  static String _format(double value) {
-    return value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
-  }
+String formatGoalValue(double value) {
+  return value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
+}
+
+/// The goal's title and progress. Mobile has no goal detail route, so this sheet is the destination.
+void showGoalLinkSheet(BuildContext context, GoalLinkContentBlock block, Goal goal) {
+  showOmiSheet<void>(
+    context: context,
+    title: goal.title,
+    builder: (sheetContext) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChatBlockEyebrow(icon: Icons.flag_outlined, label: sheetContext.l10n.chatBlockGoal),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              formatGoalProgress(goal),
+              key: Key('chat-block-goalLink-${block.id}-progress'),
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

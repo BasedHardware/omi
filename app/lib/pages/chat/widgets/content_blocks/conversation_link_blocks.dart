@@ -18,11 +18,14 @@ import 'chat_block_chrome.dart';
 /// Reuses the citation preamble already shipped in chat: resolve from the
 /// grouped provider map, fall back to a fetch by id, then push
 /// [ConversationDetailPage]. Returns false when the conversation is gone so the
-/// caller can show the unavailable state instead of a dead end.
+/// caller can show the unavailable state instead of a dead end. With [isCurrent], a session that
+/// changed while the conversation resolved navigates nowhere; the caller checks it again before
+/// reading the result.
 Future<bool> openChatBlockConversation(
   BuildContext context, {
   required String conversationId,
   Future<ServerConversation?> Function(String id)? fetchConversation,
+  bool Function()? isCurrent,
 }) async {
   final conversations = Provider.of<ConversationProvider>(context, listen: false);
   final fetch = fetchConversation ?? getConversationById;
@@ -31,7 +34,7 @@ Future<bool> openChatBlockConversation(
     conversationId: conversationId,
     fetchConversation: fetch,
   );
-  if (!context.mounted) return false;
+  if (!context.mounted || isCurrent?.call() == false) return false;
   if (conversation == null) return false;
 
   var located = conversations.getConversationDateAndIndexById(conversation.id);

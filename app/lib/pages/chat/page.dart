@@ -24,8 +24,8 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/chat_message_native.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -97,6 +97,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   String? _selectedContext;
   bool _quotaSheetShown = false;
+  late final _nativeTranscript = ChatNativeTranscript(onChanged: () {
+    if (mounted) setState(() {});
+  });
   ChatPageContext? _chatScope;
 
   @override
@@ -217,6 +220,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
+    _nativeTranscript.dispose();
     _latestJumpIdleTimer?.cancel();
     _cancelPendingScrolls();
     textController.dispose();
@@ -279,12 +283,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
               key: scaffoldKey,
               backgroundColor: Colors.transparent,
               appBar: ChatHeader(provider: provider),
-              endDrawer: ChatAppsDrawer(
-                onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
-                onEnableApps: _navigateToChatAppsPage,
-                onDisableApp: _disableChatApp,
-                onClearChat: _showClearChatDialog,
-              ),
+              endDrawer: _chatAppsDrawer(),
               onEndDrawerChanged: (isOpened) {
                 if (isOpened) {
                   // Unfocus text field when drawer opens
@@ -378,28 +377,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                     enabled: !provider.loadingOlderMessages && provider.canSwitchChat,
                     action: (_) => provider.loadOlderMessages(),
                   ),
-                for (final message in provider.messages) ...[
-                  NativeRow(
-                    'chat_message_${message.id}',
-                    provider.isReplyFailed(message) ? l10n.chatReplyFailed : message.text,
-                    kind: message.sender == MessageSender.ai ? 'message_ai' : 'message_user',
-                    subtitle: provider.isReplyFailed(message) ? l10n.tryAgain : l10n.open,
-                    onVisible: (_) {
-                      if (message.sender == MessageSender.ai && !message.isEmpty) {
-                        provider.markChatResultVisible(message.id);
-                      }
-                    },
-                    action: (_) =>
-                        provider.canRetryReply(message) ? _retryReply(message) : _openNativeMessage(message, provider),
+                ..._nativeTranscript.rows(
+                  context,
+                  provider,
+                  ChatNativeActions(
+                    send: _sendMessageUtil,
+                    askOmi: (text) => setState(() => _selectedContext = text),
+                    retry: _retryReply,
+                    setMessageNps: provider.setMessageNps,
+                    updateConversation: (conversation) =>
+                        context.read<ConversationProvider>().updateConversation(conversation),
                   ),
-                  for (final (index, file) in message.files.indexed)
-                    NativeRow(
-                      'chat_message_file_${message.id}_${index}_${file.id}',
-                      file.name,
-                      kind: 'label',
-                      imageUri: file.mimeTypeToFileType() == 'image' ? nativeImageUri(file.thumbnail) : null,
-                    ),
-                ],
+                ),
                 for (final file in provider.selectedFiles)
                   NativeRow(
                     'chat_selected_file_${file.path}',
@@ -534,40 +523,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         context: context,
         builder: (_) => SizedBox(
           height: MediaQuery.sizeOf(context).height * .8,
-          child: ChatAppsDrawer(
-            onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
-            onEnableApps: _navigateToChatAppsPage,
-            onDisableApp: _disableChatApp,
-            onClearChat: _showClearChatDialog,
-          ),
+          child: _chatAppsDrawer(),
         ),
+        nativeBuilder: (_) => _chatAppsDrawer(sheet: true),
       );
 
-  Future<void> _openNativeMessage(
-    ServerMessage message,
-    MessageProvider provider,
-  ) =>
-      showOmiSheet<void>(
-        context: context,
-        builder: (_) => SingleChildScrollView(
-          child: message.sender == MessageSender.ai
-              ? AIMessage(
-                  displayOptions: true,
-                  message: message,
-                  sendMessage: _sendMessageUtil,
-                  onAskOmi: (text) => setState(() => _selectedContext = text),
-                  appSender: provider.messageSenderApp(message.appId),
-                  updateConversation: (conversation) =>
-                      context.read<ConversationProvider>().updateConversation(conversation),
-                  setMessageNps: (value, {reason}) => provider.setMessageNps(message, value, reason: reason),
-                  replyFailed: provider.isReplyFailed(message),
-                  onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null,
-                )
-              : HumanMessage(
-                  message: message,
-                  onAskOmi: (text) => setState(() => _selectedContext = text),
-                ),
-        ),
+  ChatAppsDrawer _chatAppsDrawer({bool sheet = false}) => ChatAppsDrawer(
+        onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+        onEnableApps: _navigateToChatAppsPage,
+        onDisableApp: _disableChatApp,
+        onClearChat: _showClearChatDialog,
+        sheet: sheet,
       );
 
   Future<void> _loadOlderMessages(MessageProvider provider) async {
@@ -1076,11 +1042,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();
-    showOmiSheet<void>(
-      context: context,
-      padding: EdgeInsets.zero,
-      builder: (_) => const _PlansSheetWrapper(),
-    );
+    showChatQuotaPlansSheet(context);
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1519,58 +1481,6 @@ class _SelectedTextChip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
-
-  @override
-  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
-}
-
-class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
-  late AnimationController _waveController;
-  late AnimationController _arrowController;
-  late AnimationController _notesController;
-  late Animation<double> _arrowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-    _arrowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat();
-    _notesController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-    _arrowAnimation = Tween<double>(begin: 0, end: 10).animate(
-      CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    _arrowController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _waveController,
-      notesController: _notesController,
-      arrowController: _arrowController,
-      arrowAnimation: _arrowAnimation,
     );
   }
 }

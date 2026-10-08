@@ -18,7 +18,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/models/chat_evidence_reference.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -37,8 +37,10 @@ import 'package:omi/widgets/components/chat_evidence_card.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'markdown_message_widget.dart';
+import 'chat_message_plan.dart';
 import 'message_action_bar.dart';
 
+export 'chat_message_plan.dart' show visibleSupplementalEvidence, isConversationSourceEvidence;
 export 'message_action_bar.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -162,6 +164,19 @@ FaIconData _getThinkingIcon(String thinkingText) {
   return FontAwesomeIcons.brain; // Default brain icon
 }
 
+/// The SF Symbol for a step without an app icon: the same choice as [_getThinkingIcon].
+String chatThinkingSymbol(String thinkingText) {
+  final text = thinkingText.toLowerCase();
+  if (text.contains('thinking')) return 'brain';
+  if (text.contains('searching the web') || text.contains('searching web')) return 'magnifyingglass';
+  if (text.contains('conversations')) return 'bubble.left.and.bubble.right';
+  if (text.contains('memories')) return 'lightbulb';
+  if (text.contains('action item')) return 'checklist';
+  if (text.contains('product info')) return 'info.circle';
+  if (text.contains('search')) return 'magnifyingglass';
+  return 'brain';
+}
+
 /// Build the thinking icon widget - either an integration logo or a fallback icon
 Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color? color}) {
   final logoPath = _getIntegrationLogoPath(thinkingText);
@@ -179,27 +194,6 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color? c
     );
   }
   return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color ?? OmiColors.textPrimary);
-}
-
-/// Conversation-shaped evidence is the same source list as [ServerMessage.memories].
-/// Keep those citations on [MemoriesMessageWidget] only.
-bool isConversationSourceEvidence(ChatEvidenceReferenceKind kind) {
-  return kind == ChatEvidenceReferenceKind.conversationSummary || kind == ChatEvidenceReferenceKind.conversationSegment;
-}
-
-/// Supplemental chrome to render beside the answer. Conversation sources that
-/// already appear as citation cards are stripped so the message has one list.
-ChatEvidenceReferenceEnvelope? visibleSupplementalEvidence(ServerMessage message) {
-  final evidence = message.evidenceEnvelope;
-  if (evidence == null || evidence.isEmpty) return null;
-  if (message.memories.isEmpty) return evidence;
-  final leftover = evidence.references.where((ref) => !isConversationSourceEvidence(ref.kind)).toList();
-  if (leftover.isEmpty) return null;
-  return ChatEvidenceReferenceEnvelope(
-    schemaVersion: evidence.schemaVersion,
-    requestId: evidence.requestId,
-    references: leftover,
-  );
 }
 
 /// Resolve a cited conversation from the local grouped map, then fetch by id.
@@ -320,19 +314,9 @@ Widget buildMessageWidget(
   bool showThinkingAfterText = false,
   Future<ServerConversation?> Function(String id)? fetchConversation,
 }) {
-  final hasRenderableBlocks = ChatContentBlockList.hasRenderableBlocks(message);
-  // A message whose text is only the fallback synthesized from its blocks has
-  // nothing to say that the components do not already show, so the components
-  // replace the body instead of repeating it. Keep this decision explicit for
-  // the block list: day summaries, memory citations, and the initial-options
-  // surface still render the normal body and must not render its text block a
-  // second time below it.
-  final blocksReplaceBody = hasRenderableBlocks &&
-      message.memories.isEmpty &&
-      message.type != MessageType.daySummary &&
-      !displayOptions &&
-      message.textIsStructuredFallback;
-  final contentBlocks = hasRenderableBlocks
+  final plan = ChatMessagePlan.of(message, displayOptions: displayOptions, showTypingIndicator: showTypingIndicator);
+  final blocksReplaceBody = plan.blocksReplaceBody;
+  final contentBlocks = plan.has(ChatMessagePartKind.blocks) || blocksReplaceBody
       ? ChatContentBlockList(
           message: message,
           sendMessage: sendMessage,
@@ -343,51 +327,52 @@ Widget buildMessageWidget(
       : null;
 
   final Widget messageWidget;
-  if (blocksReplaceBody) {
-    messageWidget = contentBlocks!;
-  } else if (message.memories.isNotEmpty) {
-    messageWidget = MemoriesMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageMemories: message.memories,
-      messageText: message.isEmpty ? '…' : message.text.decodeString,
-      updateConversation: updateConversation,
-      message: message,
-      setMessageNps: sendMessageNps,
-      date: message.createdAt,
-      onAskOmi: onAskOmi,
-      fetchConversation: fetchConversation,
-    );
-  } else if (message.type == MessageType.daySummary) {
-    messageWidget = DaySummaryWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageText: message.text.decodeString,
-      date: message.createdAt,
-    );
-  } else if (displayOptions) {
-    messageWidget = InitialMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      messageText: message.text.decodeString,
-      sendMessage: sendMessage,
-      onAskOmi: onAskOmi,
-    );
-  } else {
-    messageWidget = NormalMessageWidget(
-      showTypingIndicator: showTypingIndicator,
-      showThinkingAfterText: showThinkingAfterText,
-      thinkings: message.thinkings,
-      messageText: message.text.decodeString,
-      message: message,
-      setMessageNps: sendMessageNps,
-      createdAt: message.createdAt,
-      onAskOmi: onAskOmi,
-    );
+  switch (plan.layout) {
+    case ChatMessageLayout.blocks:
+      messageWidget = contentBlocks!;
+    case ChatMessageLayout.citations:
+      messageWidget = MemoriesMessageWidget(
+        showTypingIndicator: showTypingIndicator,
+        messageMemories: message.memories,
+        messageText: message.isEmpty ? '…' : message.text.decodeString,
+        updateConversation: updateConversation,
+        message: message,
+        setMessageNps: sendMessageNps,
+        date: message.createdAt,
+        onAskOmi: onAskOmi,
+        fetchConversation: fetchConversation,
+      );
+    case ChatMessageLayout.daySummary:
+      messageWidget = DaySummaryWidget(
+        showTypingIndicator: showTypingIndicator,
+        messageText: message.text.decodeString,
+        date: message.createdAt,
+      );
+    case ChatMessageLayout.initialOptions:
+      messageWidget = InitialMessageWidget(
+        showTypingIndicator: showTypingIndicator,
+        messageText: message.text.decodeString,
+        sendMessage: sendMessage,
+        onAskOmi: onAskOmi,
+      );
+    case ChatMessageLayout.normal:
+      messageWidget = NormalMessageWidget(
+        showTypingIndicator: showTypingIndicator,
+        showThinkingAfterText: showThinkingAfterText,
+        thinkings: message.thinkings,
+        messageText: message.text.decodeString,
+        message: message,
+        setMessageNps: sendMessageNps,
+        createdAt: message.createdAt,
+        onAskOmi: onAskOmi,
+      );
   }
 
-  final evidence = visibleSupplementalEvidence(message);
-  final appendBlocks = contentBlocks != null && !blocksReplaceBody;
+  final evidence = plan.evidence;
+  final appendBlocks = plan.has(ChatMessagePartKind.blocks);
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
-  final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
+  final reviewCard = plan.reviewCard;
   // Follow-ups are transient composer suggestions, not part of each historical answer's chrome.
   if (evidence == null && !appendBlocks && reviewCard == null) return messageWidget;
   return Column(
@@ -397,7 +382,7 @@ Widget buildMessageWidget(
       messageWidget,
       if (appendBlocks) ...[
         const SizedBox(height: 8),
-        contentBlocks,
+        contentBlocks!,
       ],
       if (reviewCard != null) ...[
         const SizedBox(height: 12),
@@ -490,7 +475,7 @@ class DaySummaryWidget extends StatelessWidget {
     );
   }
 
-  List<String> splitMessage(String message) {
+  static List<String> splitMessage(String message) {
     // Check if the string contains numbered items using regex
     bool hasNumbers = RegExp(r'^\d+\.\s').hasMatch(message);
 
@@ -850,61 +835,21 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     );
   }
 
-  Future<void> _openCitedConversation(int index, MessageConversation citation) async {
-    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-    if (!connectivityProvider.isConnected) {
-      OmiFeedback.error(context, context.l10n.pleaseCheckInternetConnection);
-      return;
-    }
-
-    final memProvider = Provider.of<ConversationProvider>(context, listen: false);
-    final fetch = widget.fetchConversation ?? getConversationById;
-    ServerConversation? conversation = await resolveChatCitationConversation(
-      conversations: memProvider,
-      conversationId: citation.id,
-      fetchConversation: (id) async {
-        if (conversationDetailLoading[index]) return null;
-        setState(() => conversationDetailLoading[index] = true);
-        try {
-          return await fetch(id);
-        } finally {
-          if (mounted) setState(() => conversationDetailLoading[index] = false);
-        }
-      },
-    );
-
-    if (!mounted) return;
-    if (conversation == null) {
-      OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
-      return;
-    }
-
-    var located = memProvider.getConversationDateAndIndexById(conversation.id);
-    var date = located?.$1;
-    if (date == null) {
-      (_, date) = memProvider.addConversationWithDateGrouped(conversation);
-    }
-
-    PlatformManager.instance.analytics.chatMessageConversationClicked(conversation);
-    if (!context.mounted) return;
-    context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
-    await routeToPage(context, ConversationDetailPage(conversation: conversation));
-
-    if (SharedPreferencesUtil().modifiedConversationDetails?.id == conversation.id) {
-      final modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
-      widget.updateConversation(modifiedDetails);
-      final copy = List<MessageConversation>.from(widget.messageMemories);
-      copy[index] = MessageConversation(
-        modifiedDetails.id,
-        modifiedDetails.createdAt,
-        MessageConversationStructured(modifiedDetails.structured.title, modifiedDetails.structured.emoji),
+  Future<void> _openCitedConversation(int index, MessageConversation citation) => openChatCitation(
+        context,
+        citation,
+        fetchConversation: widget.fetchConversation,
+        isLoading: () => conversationDetailLoading[index],
+        setLoading: (loading) => setState(() => conversationDetailLoading[index] = loading),
+        updateConversation: widget.updateConversation,
+        replaceCitation: (replacement) {
+          final copy = List<MessageConversation>.from(widget.messageMemories);
+          copy[index] = replacement;
+          widget.messageMemories.clear();
+          widget.messageMemories.addAll(copy);
+          if (mounted) setState(() {});
+        },
       );
-      widget.messageMemories.clear();
-      widget.messageMemories.addAll(copy);
-      SharedPreferencesUtil().modifiedConversationDetails = null;
-      if (mounted) setState(() {});
-    }
-  }
 
   String tryDecodeText(String text) {
     try {
@@ -912,6 +857,73 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     } catch (e) {
       return text;
     }
+  }
+}
+
+/// Opens a cited conversation: the offline error, the local map or a guarded fetch, the not-found
+/// notice, analytics, the detail route, and on return any details the reader modified there.
+///
+/// [isLoading]/[setLoading] guard one fetch per citation; [setLoading] runs only while [context]
+/// is mounted. [isCurrent] fences the route to the account session that asked for it.
+Future<void> openChatCitation(
+  BuildContext context,
+  MessageConversation citation, {
+  required bool Function() isLoading,
+  required void Function(bool loading) setLoading,
+  required void Function(ServerConversation conversation) updateConversation,
+  required void Function(MessageConversation replacement) replaceCitation,
+  Future<ServerConversation?> Function(String id)? fetchConversation,
+  bool Function()? isCurrent,
+}) async {
+  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+  if (!connectivityProvider.isConnected) {
+    OmiFeedback.error(context, context.l10n.pleaseCheckInternetConnection);
+    return;
+  }
+
+  final memProvider = Provider.of<ConversationProvider>(context, listen: false);
+  final fetch = fetchConversation ?? getConversationById;
+  ServerConversation? conversation = await resolveChatCitationConversation(
+    conversations: memProvider,
+    conversationId: citation.id,
+    fetchConversation: (id) async {
+      if (isLoading()) return null;
+      setLoading(true);
+      try {
+        return await fetch(id);
+      } finally {
+        if (context.mounted) setLoading(false);
+      }
+    },
+  );
+
+  if (!context.mounted || isCurrent?.call() == false) return;
+  if (conversation == null) {
+    OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
+    return;
+  }
+
+  var located = memProvider.getConversationDateAndIndexById(conversation.id);
+  var date = located?.$1;
+  if (date == null) {
+    (_, date) = memProvider.addConversationWithDateGrouped(conversation);
+  }
+
+  PlatformManager.instance.analytics.chatMessageConversationClicked(conversation);
+  if (!context.mounted) return;
+  context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
+  await routeToPage(context, ConversationDetailPage(conversation: conversation));
+  if (isCurrent?.call() == false) return;
+
+  if (SharedPreferencesUtil().modifiedConversationDetails?.id == conversation.id) {
+    final modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
+    updateConversation(modifiedDetails);
+    replaceCitation(MessageConversation(
+      modifiedDetails.id,
+      modifiedDetails.createdAt,
+      MessageConversationStructured(modifiedDetails.structured.title, modifiedDetails.structured.emoji),
+    ));
+    SharedPreferencesUtil().modifiedConversationDetails = null;
   }
 }
 
@@ -1169,6 +1181,16 @@ class InitialOptionWidget extends StatelessWidget {
   }
 }
 
+/// The localized reason a reply failed, shared by the Flutter error card and the native transcript.
+String chatReplyFailureText(AppLocalizations l10n, ChatStreamFailureClass? failure) => switch (failure) {
+      ChatStreamFailureClass.offline => l10n.chatReplyOffline,
+      ChatStreamFailureClass.server => l10n.chatReplyServerError,
+      ChatStreamFailureClass.timeout => l10n.chatReplyTimeout,
+      ChatStreamFailureClass.notSignedIn => l10n.chatReplyNotSignedIn,
+      ChatStreamFailureClass.quota => l10n.chatQuotaExceededReply,
+      _ => l10n.chatReplyFailed,
+    };
+
 /// A reply that failed: a localized reason and Try Again, which sends the user's message again.
 class ChatReplyError extends StatelessWidget {
   const ChatReplyError({super.key, this.failure, this.onRetry});
@@ -1181,14 +1203,7 @@ class ChatReplyError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final reason = switch (failure) {
-      ChatStreamFailureClass.offline => l10n.chatReplyOffline,
-      ChatStreamFailureClass.server => l10n.chatReplyServerError,
-      ChatStreamFailureClass.timeout => l10n.chatReplyTimeout,
-      ChatStreamFailureClass.notSignedIn => l10n.chatReplyNotSignedIn,
-      ChatStreamFailureClass.quota => l10n.chatQuotaExceededReply,
-      _ => l10n.chatReplyFailed,
-    };
+    final reason = chatReplyFailureText(l10n, failure);
     return Semantics(
       liveRegion: true,
       child: Container(

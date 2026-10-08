@@ -5,6 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/ui/ui.dart';
 
+/// Opens a link tapped in a chat reply. The Flutter Markdown body and the native rich reply both
+/// hand their links here, so neither renderer opens a URL on its own.
+Future<void> openChatMarkdownLink(String href) async {
+  await launchUrl(Uri.parse(href));
+}
+
 Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
   return MarkdownBody(
     data: message.trimRight(),
@@ -25,7 +31,7 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
     ),
     onTapLink: (text, href, title) {
       if (href != null) {
-        launchUrl(Uri.parse(href));
+        openChatMarkdownLink(href);
       }
     },
   );
