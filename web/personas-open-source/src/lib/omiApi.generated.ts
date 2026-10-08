@@ -3959,6 +3959,7 @@ export interface RejectSpeakerRequest {
 }
 
 export interface ReleaseChannel {
+  app_build?: number | null;
   release_channel: "testflight" | "app_store" | "dev";
 }
 
