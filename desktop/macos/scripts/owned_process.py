@@ -199,11 +199,34 @@ def _argv_has_exact_token(pid: int, token: str) -> bool:
     return _has_exact_word(command, token)
 
 
+def _record_is_comm_only(blob: bytes) -> bool:
+    """macOS ps sometimes prints only `(name)` and omits the environment.
+
+    That record is not evidence the token is absent.
+    """
+    stripped = blob.strip()
+    return (
+        bool(stripped)
+        and b"=" not in stripped
+        and len(stripped) < 64
+        and stripped.startswith(b"(")
+        and stripped.endswith(b")")
+    )
+
+
 def _exact_env(pid: int, token: str) -> bool:
     if sys.platform == "linux":
         return _linux_exact_env(pid, token)
-    out = _ps(["ps", "-p", str(pid), "-ww", "-E", "-o", "command="], missing_ok=True)
-    if not out:
+    args = ["ps", "-p", str(pid), "-ww", "-E", "-o", "command="]
+    out = _ps(args, missing_ok=True)
+    if out is None:
+        return False
+    if _record_is_comm_only(out):
+        again = _ps(args, missing_ok=True)
+        if again is None:
+            return False
+        out = again
+    if not out or _record_is_comm_only(out):
         return False
     return _blob_has_exact_env(out, token)
 

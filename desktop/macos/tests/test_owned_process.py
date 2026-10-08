@@ -72,6 +72,22 @@ class OwnedProcessTests(unittest.TestCase):
             self.foreign.kill()
             self.foreign.wait(timeout=5)
 
+    @staticmethod
+    def _env_probe_class(mod, pid: int, token: str) -> str:
+        """Classify one follow-up ps read. This does not decide the assertion."""
+        out = mod._ps(["ps", "-p", str(pid), "-ww", "-E", "-o", "command="], missing_ok=True)
+        if out is None:
+            kind = "unreadable"
+        elif out == b"":
+            kind = "empty"
+        elif mod._record_is_comm_only(out):
+            kind = "comm-only"
+        elif mod._blob_has_exact_env(out, token):
+            kind = "match"
+        else:
+            kind = "absent"
+        return f"exact env probe failed after the child was ready; follow-up ps class={kind}"
+
     def supervise_cmd(
         self,
         command: list[str],
@@ -359,8 +375,14 @@ raise SystemExit(2)
         self.assertFalse(mod._blob_has_exact_env(b"prefix" + field + b"\n", token))
         env = os.environ.copy()
         env[mod.TOKEN_ENV] = token
+        ready = self.pidfile
         child = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
+            [
+                sys.executable,
+                "-c",
+                "import pathlib, sys, time; pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(30)",
+                str(ready),
+            ],
             env=env,
             start_new_session=True,
         )
@@ -371,14 +393,15 @@ raise SystemExit(2)
                 proc.wait(timeout=5)
 
         self.addCleanup(_stop)
-        seen = False
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if mod._exact_env(child.pid, token):
-                seen = True
-                break
-            time.sleep(0.05)
-        self.assertTrue(seen, "exact trailing token was not visible to a bounded ps read")
+        handshake = time.monotonic() + 3
+        while not ready.is_file() and time.monotonic() < handshake:
+            time.sleep(0.02)
+        self.assertTrue(ready.is_file(), "child did not reach the readiness handshake")
+        self.assertIsNone(child.poll())
+        self.assertTrue(
+            mod._exact_env(child.pid, token),
+            self._env_probe_class(mod, child.pid, token),
+        )
         self.assertFalse(mod._exact_env(child.pid, "ab" * 16))
 
     def test_expired_probe_does_not_report_success(self):
