@@ -283,11 +283,13 @@ def resolve_conversation_speakers(
     for index, cluster in enumerate(clusters):
         evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
         try:
-            score_seconds[index] = (
-                sum(embedding_seconds[sid] for sid in evidence_ids)
-                if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids)
-                else None
-            )
+            if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids):
+                seconds = [float(embedding_seconds[sid]) for sid in evidence_ids]
+                if any(not np.isfinite(value) or value < 0 for value in seconds):
+                    raise ValueError('Invalid embedded audio duration')
+                score_seconds[index] = sum(seconds)
+            else:
+                score_seconds[index] = None
         except Exception:
             score_seconds[index] = None
             match_scores.record_failure(None, reason='malformed_doc')
