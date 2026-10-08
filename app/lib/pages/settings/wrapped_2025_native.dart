@@ -119,7 +119,7 @@ extension _Wrapped2025Native on _Wrapped2025PageState {
     final daysActive = _wrappedField<int>(result['days_active']) ?? (totalConvs / 3).ceil();
     final percentile = l10n.wrappedTopPercentUser(_calculatePercentile(totalConvs).toString());
 
-    // Top categories (2), with the classic page's placeholder shares when no breakdown exists.
+    // Top categories (2), with the classic card's computed shares (0% when no breakdown exists).
     final breakdown = <String, int>{};
     for (final item in _wrappedField<List>(result['category_breakdown']) ?? const []) {
       if (item is! Map) continue;
@@ -130,17 +130,13 @@ extension _Wrapped2025Native on _Wrapped2025PageState {
         _wrappedField<String>(category) ?? (throw const _MalformedWrapped()),
     ];
     final total = breakdown.values.fold<int>(0, (sum, value) => sum + value);
-    var categories = [
+    final categories = [
       for (final category in topCategories)
         (
           name: _formatCategory(category),
           percentage: total > 0 ? ((breakdown[category] ?? 0) / total * 100).round() : 0,
         ),
     ];
-    if (total == 0 && categories.isNotEmpty) {
-      const placeholder = [40, 25, 15, 12, 8];
-      categories = [for (final (i, entry) in categories.indexed) (name: entry.name, percentage: placeholder[i])];
-    }
 
     // Actions (3).
     final tasks = _wrappedField<int>(result['total_action_items']) ?? 0;
@@ -250,8 +246,7 @@ extension _Wrapped2025Native on _Wrapped2025PageState {
         share('actions', _shareActions),
       ]),
       card('days', [
-        // The classic card's own header copy.
-        label('wrapped_days', 'Your Top Days', card: 4),
+        label('wrapped_days', l10n.wrappedYourTopDays, card: 4),
         ...dayRows('wrapped_day', memorable),
         share('days', _shareMemorableDays),
       ]),

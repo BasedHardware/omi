@@ -72,14 +72,36 @@ void main() {
       await checkNativeHost(tester, 'native-preferences-shortcuts-wrapped-voice-dark');
       expect(nativeProjectedRow(tester, 'voice_current').subtitle, 'Kore');
 
-      await nativeProjectedRow(tester, 'voice_current').action!(null);
+      // The command answers once the picker closes, so it is started without awaiting it.
+      final opened = nativeProjectedRow(tester, 'voice_current').action!(null);
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
       expect(find.byType(NativeVoicePicker), findsOneWidget);
+      final picker = find.descendant(of: find.byType(NativeVoicePicker), matching: find.byType(UiKitView));
+      expect(picker, findsOneWidget, reason: 'the picker renders natively, not the Flutter fallback list');
+      int? id;
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (id == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+        id = nativeViewId(tester, picker);
+      }
+      expect(id, isNotNull, reason: 'the picker UIKit view must finish creating');
+      await Future<void>.delayed(const Duration(seconds: 1));
+      await tester.pump();
+      final received =
+          await MethodChannel('com.omi.native_ui/surface/$id').invokeMapMethod<String, Object?>('debugPresentation');
+      final projected = tester.widget<UiKitView>(picker).creationParams as Map;
+      final projectedToolbar = (projected['toolbar'] as List).map((row) => (row as Map)['id']).toList();
+      expect(projectedToolbar, contains('voice_picker_close'));
+      expect((received!['toolbar'] as List).map((row) => (row as Map)['id']), projectedToolbar,
+          reason: 'Swift accepted the picker snapshot');
+      expect(await captureNativeHostScreenshot('native-preferences-shortcuts-wrapped-voice-picker-dark'), isNotEmpty);
       expect(nativeProjectedRow(tester, 'voice:1').symbol, 'checkmark');
       await nativeProjectedRow(tester, 'voice:2').action!(null);
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
+      await opened;
 
       expect(patched, ['Puck']);
       expect(stops, 1, reason: 'closing the picker stops any preview');

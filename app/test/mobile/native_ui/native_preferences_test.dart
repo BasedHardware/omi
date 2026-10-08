@@ -16,6 +16,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
@@ -529,6 +530,11 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
 
       expect(fetches, 2, reason: 'no poll after the session changed');
+      // The surface invalidates rather than updates after the session change, so read its dispatch rows.
+      final ids =
+          IosNativeSurface.debugDispatchRows(tester.state(find.byType(IosNativeSurface))).map((row) => row.id).toList();
+      expect(ids, contains('wrapped_progress'), reason: 'the in-flight done result was never applied');
+      expect(ids.where((id) => id.startsWith('wrapped_share:') || id.startsWith('wrapped_card:')), isEmpty);
       await tester.pumpWidget(const SizedBox());
     });
   });
