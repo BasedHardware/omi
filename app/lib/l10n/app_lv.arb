@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Iepriekš ierakstīts",
     "pendantRecordingSyncBlocked": "Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.",
     "pendantFullSyncBlocked": "Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.",
-    "conversationsNotCapturedCount": "Nav ierakstīts ({count})",
     "transcriptionNoAudio": "Transkripcija nesaņem audio",
     "chatBlockTask": "Uzdevums",
     "chatBlockGoal": "Mērķis",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Kamēr gaidāt, vai Omi ir bijis patīkami lietot?",
     "onboardingRatingPromptBody": "5 zvaigžņu vērtējums mums ļoti palīdz ❤️",
     "onboardingRatingPromptYes": "Jā, es vēlos jūs atbalstīt!",
-    "onboardingRatingPromptNo": "Ne gluži"
+    "onboardingRatingPromptNo": "Ne gluži",
+    "partialRecording": "Daļējs ieraksts"
 }

@@ -9933,11 +9933,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Pendant\'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Kaydedilmedi ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name adlı kişinin ses profili';
   }
@@ -12464,4 +12459,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Pek değil';
+
+  @override
+  String get partialRecording => 'Kısmi kayıt';
 }

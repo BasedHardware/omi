@@ -3229,7 +3229,6 @@
     "prerecordedTranscript": "Предзапись",
     "pendantRecordingSyncBlocked": "Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
     "pendantFullSyncBlocked": "Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
-    "conversationsNotCapturedCount": "Не записано ({count})",
     "transcriptionNoAudio": "Транскрипция не получает аудио",
     "chatBlockTask": "Задача",
     "chatBlockGoal": "Цель",
@@ -3886,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Пока вы ждёте, приятно ли вам пользоваться Omi?",
     "onboardingRatingPromptBody": "Оценка в 5 звёзд очень нам поможет ❤️",
     "onboardingRatingPromptYes": "Да, хочу вас поддержать!",
-    "onboardingRatingPromptNo": "Не совсем"
+    "onboardingRatingPromptNo": "Не совсем",
+    "partialRecording": "Частичная запись"
 }

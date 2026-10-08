@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "사전 녹음",
     "pendantRecordingSyncBlocked": "Pendant가 아직 녹음 중이어서 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 후 다시 동기화하세요.",
     "pendantFullSyncBlocked": "Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.",
-    "conversationsNotCapturedCount": "기록되지 않음 ({count})",
     "transcriptionNoAudio": "전사가 오디오를 받지 못하고 있습니다",
     "chatBlockTask": "작업",
     "chatBlockGoal": "목표",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "기다리는 동안 Omi가 마음에 드셨나요?",
     "onboardingRatingPromptBody": "별 5개를 주시면 큰 힘이 됩니다 ❤️",
     "onboardingRatingPromptYes": "네, 응원할게요!",
-    "onboardingRatingPromptNo": "별로예요"
+    "onboardingRatingPromptNo": "별로예요",
+    "partialRecording": "부분 녹음"
 }

@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "预录",
     "pendantRecordingSyncBlocked": "Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
     "pendantFullSyncBlocked": "Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
-    "conversationsNotCapturedCount": "未记录 ({count})",
     "transcriptionNoAudio": "转录未接收到音频",
     "chatBlockTask": "任务",
     "chatBlockGoal": "目标",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "等待的时候，Omi 用起来还顺手吗？",
     "onboardingRatingPromptBody": "给我们 5 星好评对我们真的很有帮助 ❤️",
     "onboardingRatingPromptYes": "好的，我想支持你们！",
-    "onboardingRatingPromptNo": "不太满意"
+    "onboardingRatingPromptNo": "不太满意",
+    "partialRecording": "部分录音"
 }

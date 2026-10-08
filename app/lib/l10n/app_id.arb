@@ -3229,7 +3229,6 @@
     "prerecordedTranscript": "Prarekam",
     "pendantRecordingSyncBlocked": "Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.",
     "pendantFullSyncBlocked": "Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.",
-    "conversationsNotCapturedCount": "Tidak direkam ({count})",
     "transcriptionNoAudio": "Transkripsi tidak menerima audio",
     "chatBlockTask": "Tugas",
     "chatBlockGoal": "Tujuan",
@@ -3886,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Sambil menunggu, apakah Omi menyenangkan digunakan?",
     "onboardingRatingPromptBody": "Memberi kami bintang 5 sangat membantu kami ❤️",
     "onboardingRatingPromptYes": "Ya, saya ingin mendukung kalian!",
-    "onboardingRatingPromptNo": "Kurang"
+    "onboardingRatingPromptNo": "Kurang",
+    "partialRecording": "Rekaman sebagian"
 }

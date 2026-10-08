@@ -93,18 +93,19 @@ convergence remains described in `OWNERSHIP.md`.
 
 ## Tiered pendant uplink
 
-Live pendant capture uses `conversationSilenceDuration` for its uplink silence
-window (default 120 seconds; the existing `-1` option means four hours). Capture
-start and speech transcript callbacks arm the timer. BLE packets alone never
-extend it. Expiry uses the existing durable admission gate, cancels the BLE audio
-subscription, closes the listen socket, finalizes the WAL tail and requests
-conversation processing. Live Activity publishes the existing Paused state.
+Automatic silence pause is disabled under INV-CAP-1. Current firmware discards
+sampled frames while connected with no audio subscriber, so a transcript deadline
+cannot authorize cancelling the BLE subscription or closing the listen socket.
+The timer is not armed and queued expiry events have no effects. Conversation
+silence settings still reach the server for segmentation.
 
-`uplinkSilencePaused` distinguishes this automatic pause from manual mute without
-changing shared capture emissions. Link reconnection and Home check-only starts
-preserve pause. Foreground or a charge-start edge resumes a fresh recording;
-manual mute still wins. Repeated charging reads across reconnect are not edges.
-Phone microphone pause continues to preserve its conversation and socket.
+`uplinkSilencePaused` is retained only to recover historical #20837 state.
+Startup clears that automatic mute through the serialized capture owner; a newer
+explicit user pause clears the marker and remains authoritative. Foreground and
+charge-start recovery of a historical marker still respect the sync fence.
+Manual pendant pause and phone microphone pause keep their existing behavior.
+A future pause needs an advertised, verified retention and drain capability; there
+is no opt-in that bypasses that requirement on current firmware.
 
 A committed, unmuted live pendant session must have connected transports or
 active transport reconciliation whenever no sync scope is active. Resume
@@ -121,12 +122,6 @@ The first successful charging observation inherits its connection's initial
 resume gate. A connection admitted only for sync observes without resuming;
 an authorized connection retains its charge edge even if another scope has
 since started, and capture defers/reconciles the transport work above.
-
-TODO(astra) (#5491): connected-but-unsubscribed Omi firmware currently discards its TX
-queue instead of writing offline storage (`omi/firmware/omi/src/lib/core/transport.c`,
-`pusher`: storage writes require `!conn`). Therefore speech after timeout can be
-missed until resume; a live-mode ring-buffer guarantee needs firmware work outside
-this change. Existing backlog still syncs. No firmware is changed here.
 
 Periodic sync is a bounded backlog pass through RecordingTransferCoordinator.
 It permits device discovery but fences live socket/audio starts, and expiration

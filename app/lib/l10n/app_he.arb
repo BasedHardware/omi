@@ -10751,7 +10751,6 @@
     "prerecordedTranscript": "הוקלט מראש",
     "pendantRecordingSyncBlocked": "ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.",
     "pendantFullSyncBlocked": "האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.",
-    "conversationsNotCapturedCount": "לא הוקלט ({count})",
     "transcriptionNoAudio": "התמליל אינו מקבל שמע",
     "chatBlockTask": "משימה",
     "chatBlockGoal": "יעד",
@@ -11408,5 +11407,6 @@
     "onboardingRatingPromptTitle": "בזמן שמחכים, נעים לכם להשתמש ב-Omi?",
     "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
     "onboardingRatingPromptYes": "כן, אני רוצה לתמוך בכם!",
-    "onboardingRatingPromptNo": "לא ממש"
+    "onboardingRatingPromptNo": "לא ממש",
+    "partialRecording": "הקלטה חלקית"
 }

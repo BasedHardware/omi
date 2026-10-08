@@ -183,6 +183,7 @@ from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation
 from utils.sync.telemetry import bounded_exception_class
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
+from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
@@ -193,7 +194,9 @@ from utils.sync.speaker_identity import build_person_embeddings_cache as _build_
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
+from utils.observability.journeys import record_client_journey_accepted, record_client_journey_terminal
 
 logger = logging.getLogger(__name__)
 
@@ -1003,10 +1006,18 @@ def retrieve_vad_segments(
             if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
                 continue
             segment_timestamp = start_timestamp + segment['start']
-            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            # Two distinct source files can independently compute the same absolute
+            # timestamp (capture_start + vad_offset). Reserve the path under the lock
+            # before export so a concurrent worker never silently overwrites it.
+            with segment_source_lock or contextlib.nullcontext():
+                segment_path = f'{path_dir}/{segment_timestamp}.wav'
+                dup = 0
+                while segment_path in segmented_paths:
+                    dup += 1
+                    segment_path = f'{path_dir}/dup{dup}_{segment_timestamp}.wav'
+                segmented_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
-            segmented_paths.add(segment_path)
             if segment_source_maps is not None:
                 # Pydub's millisecond slice starts at this original WAV sample.
                 # The derivative STT clock resets to zero; retain its bridge.
@@ -1077,6 +1088,17 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language = conversation.language or 'en'
 
     was_discarded = conversation.discarded
+    prior_decision = conversation_data.get('relevance_decision')
+    # process_conversation persists relevance_decision.trigger == 'sync_update'.
+    # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
+    # this function; that stored trigger is the already-processed signal.
+    already_sync_processed = (
+        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
+    )
+    # Visible rows must not accept again. A prior discard is not a visible
+    # finalization, so discarded -> visible still accepts once.
+    already_visible_finalized = already_sync_processed and not was_discarded
+    started = time.monotonic()
     processed_conversation = process_conversation(
         uid=uid,
         language_code=language or 'en',
@@ -1085,6 +1107,16 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         user_kept=is_user_curated(conversation_data),
         persistence_observer=_require_current_conversation_persistence,
     )
+    elapsed = time.monotonic() - started
+    # Persistence is guaranteed here: a fenced write raises before return.
+    # client_platform is the Conversation field set at sync intake; None -> unknown.
+    client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)
+    if processed_conversation.discarded:
+        if not already_sync_processed:
+            record_client_journey_terminal('conversation_finalization', client_kind, 'cancelled', elapsed)
+    elif not already_visible_finalized:
+        record_client_journey_accepted('conversation_finalization', client_kind)
+        record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
     # Limitless uploads commonly begin as a short discarded fragment and only
     # become a real conversation after later WAL segments are merged. The
@@ -1250,17 +1282,27 @@ def process_segment(
         # retry further. Counting it as a failed segment finalized the whole
         # job failed, and the client re-uploaded the same noise on every pass
         # until it gave up and showed the recording as permanently failed.
-        def _log_empty_retry(outcome: str) -> None:
+        def _log_empty_retry(outcome: str, words: int = 0, raw_empty: bool = False) -> None:
             logger.info(
-                'event=sync_transcription_empty_retry outcome=%s provider=%s lane=%s job_ref=%s attempt_ref=%s',
+                'event=sync_transcription_empty_retry outcome=%s provider=%s model=%s lane=%s '
+                'raw_empty=%s words=%s detected_language=%s job_ref=%s attempt_ref=%s',
                 outcome,
                 bounded_provider(provider),
+                _bounded_sync_model(model),
                 _bounded_sync_lane(sync_lane),
+                str(bool(raw_empty)).lower(),
+                min(int(words), 100000),
+                (
+                    _bounded_retry_language(detected_language)
+                    if outcome != 'started'
+                    else _bounded_retry_language(req_language)
+                ),
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
             )
 
         empty_retried = False
+        recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
         while True:
             phase = 'provider_call'
@@ -1277,12 +1319,13 @@ def process_segment(
             transcript_segments = postprocess_words(words, 0) if words else []
             if transcript_segments:
                 if empty_retried:
-                    _log_empty_retry('recovered')
+                    _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
+                    recovered_via_retry = True
                 break
             if empty_retried:
                 # Words survived the provider but nothing survived post-processing:
                 # again no transcribable speech, valid and empty rather than failed.
-                _log_empty_retry('still_empty')
+                _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,
@@ -1294,7 +1337,7 @@ def process_segment(
                 )
                 return False
             empty_retried = True
-            _log_empty_retry('started')
+            _log_empty_retry('started', words=len(words or []), raw_empty=not words)
 
         # Chronological scheduling reduces bridge work; the transaction remains
         # correct when independent jobs or a timed-out worker arrive out of order.
@@ -1374,6 +1417,21 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
+        if recovered_via_retry:
+            # The 'recovered' event fires at the provider boundary; this one
+            # confirms the recovered segment actually persisted. Measured
+            # durable recovery is the input a gate/kill decision needs — do
+            # not price the retry from 'recovered' alone.
+            logger.info(
+                'event=sync_transcription_empty_retry outcome=durable_recovered provider=%s model=%s lane=%s '
+                'segments=%s job_ref=%s attempt_ref=%s',
+                bounded_provider(provider),
+                _bounded_sync_model(model),
+                _bounded_sync_lane(sync_lane),
+                len(transcript_segments),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
         record_capture_evidence_metric(incoming)
 
         def mark_finalize():

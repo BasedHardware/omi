@@ -9932,11 +9932,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'O armazenamento do Pendant está cheio e ele ainda está no modo de gravação, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Não capturado ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Perfil de voz de $name';
   }
@@ -12470,4 +12465,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Nem tanto';
+
+  @override
+  String get partialRecording => 'Gravação parcial';
 }

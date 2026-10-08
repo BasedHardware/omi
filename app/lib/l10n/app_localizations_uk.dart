@@ -9945,11 +9945,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Пам\'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Не записано ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Голосовий профіль: $name';
   }
@@ -12480,4 +12475,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Не дуже';
+
+  @override
+  String get partialRecording => 'Частковий запис';
 }

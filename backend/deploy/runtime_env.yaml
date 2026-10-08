@@ -887,6 +887,10 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: rollout
@@ -2946,6 +2950,9 @@ environments:
           SONIOX_IDLE_CLOSE_SECONDS:
             value: '45'
             category: rollout
+          STT_NO_TEXT_RESCUE_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
@@ -3011,7 +3018,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3214,7 +3221,7 @@ environments:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
@@ -3344,6 +3351,10 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: rollout
@@ -3754,7 +3765,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4077,7 +4088,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'
@@ -4369,7 +4380,7 @@ environments:
               value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_ENABLED:
               value: 'true'

@@ -405,20 +405,25 @@ def _format_validation_error(entry: Any) -> str:
     return str(msg or entry)
 
 
+# RFC 9110 delay-seconds is ``1*DIGIT`` (ASCII digits only).
+_DELAY_SECONDS_RE = re.compile(r"[0-9]+")
+
+
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
     """Parse the Retry-After header per RFC 9110 (delay-seconds or HTTP-date)."""
     if not value:
         return None
     cleaned = value.strip()
-    try:
+    # float() also accepts signs, fractions, exponents, underscores, inf/nan
+    # and non-ASCII digits. None of those are delay-seconds, so only a plain
+    # digit run takes the numeric path; anything else falls through to the
+    # HTTP-date parse below.
+    if _DELAY_SECONDS_RE.fullmatch(cleaned):
         parsed = float(cleaned)
-    except (ValueError, OverflowError):
-        parsed = None
-    else:
-        # float() accepts inf, nan, and exponent overflow. Those are not
-        # delay-seconds and must not become an infinite cooldown.
+        # A digit run too long for a float overflows to inf, which must not
+        # become an infinite cooldown.
         if math.isfinite(parsed):
-            return max(0.0, parsed)
+            return parsed
 
     try:
         dt = parsedate_to_datetime(cleaned)

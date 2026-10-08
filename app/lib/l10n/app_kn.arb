@@ -10751,7 +10751,6 @@
     "prerecordedTranscript": "ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್",
     "pendantRecordingSyncBlocked": "Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.",
     "pendantFullSyncBlocked": "Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.",
-    "conversationsNotCapturedCount": "ದಾಖಲಾಗಿಲ್ಲ ({count})",
     "transcriptionNoAudio": "ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ",
     "chatBlockTask": "ಕಾರ್ಯ",
     "chatBlockGoal": "ಗುರಿ",
@@ -11408,5 +11407,6 @@
     "onboardingRatingPromptTitle": "ಕಾಯುತ್ತಿರುವಾಗ, Omi ಬಳಸುವುದು ಚೆನ್ನಾಗಿದೆಯೇ?",
     "onboardingRatingPromptBody": "5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ ❤️",
     "onboardingRatingPromptYes": "ಹೌದು, ನಾನು ನಿಮ್ಮನ್ನು ಬೆಂಬಲಿಸಲು ಬಯಸುತ್ತೇನೆ!",
-    "onboardingRatingPromptNo": "ಅಷ್ಟಾಗಿ ಇಲ್ಲ"
+    "onboardingRatingPromptNo": "ಅಷ್ಟಾಗಿ ಇಲ್ಲ",
+    "partialRecording": "ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ"
 }

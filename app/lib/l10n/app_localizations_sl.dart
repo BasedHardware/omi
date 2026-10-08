@@ -9951,11 +9951,6 @@ class AppLocalizationsSl extends AppLocalizations {
       'Pomnilnik Pendanta je poln in je še vedno v načinu snemanja, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Ni posneto ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Glasovni profil: $name';
   }
@@ -12482,4 +12477,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ne ravno';
+
+  @override
+  String get partialRecording => 'Delni posnetek';
 }

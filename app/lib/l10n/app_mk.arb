@@ -10751,7 +10751,6 @@
     "prerecordedTranscript": "Претходно снимено",
     "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
     "pendantFullSyncBlocked": "Меморијата на Pendant е полна и тој сè уште е во режим на снимање, па зачуваното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
-    "conversationsNotCapturedCount": "Не е снимено ({count})",
     "transcriptionNoAudio": "Транскрипцијата не прима аудио",
     "chatBlockTask": "Задача",
     "chatBlockGoal": "Цел",
@@ -11408,5 +11407,6 @@
     "onboardingRatingPromptTitle": "Додека чекате, дали ви е пријатно да го користите Omi?",
     "onboardingRatingPromptBody": "Оцена со 5 ѕвезди навистина ни помага ❤️",
     "onboardingRatingPromptYes": "Да, сакам да ве поддржам!",
-    "onboardingRatingPromptNo": "Не баш"
+    "onboardingRatingPromptNo": "Не баш",
+    "partialRecording": "Делумна снимка"
 }

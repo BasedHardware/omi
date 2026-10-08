@@ -9917,11 +9917,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Không được ghi âm ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Hồ sơ giọng nói của $name';
   }
@@ -12447,4 +12442,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Không hẳn';
+
+  @override
+  String get partialRecording => 'Bản ghi một phần';
 }

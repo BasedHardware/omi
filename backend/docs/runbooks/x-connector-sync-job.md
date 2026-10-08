@@ -1,6 +1,6 @@
 # x-connector-sync-job runbook
 
-Dedicated Cloud Run Job for X (Twitter) connector incremental sync. Scheduler owns the 6h cadence; the entrypoint always runs `run_x_sync_job()` (no hour-modulo gate).
+Dedicated Cloud Run Job for X (Twitter) connector incremental sync. Scheduler owns the 12h cadence; the entrypoint always runs `run_x_sync_job()` (no hour-modulo gate).
 
 ## Deploy
 
@@ -43,7 +43,7 @@ gcloud run jobs execute x-connector-sync-job \
   --wait
 ```
 
-## Cloud Scheduler (6h)
+## Cloud Scheduler (12h)
 
 Create once per environment (not done by the deploy workflow; workflow only **validates** an existing job):
 
@@ -66,7 +66,7 @@ gcloud run jobs add-iam-policy-binding x-connector-sync-job \
 gcloud scheduler jobs create http x-connector-sync-6h \
   --location="$REGION" \
   --project="$PROJECT" \
-  --schedule="0 */6 * * *" \
+  --schedule="0 3,15 * * *" \
   --time-zone="Etc/UTC" \
   --uri="https://run.googleapis.com/v2/projects/${PROJECT}/locations/${REGION}/jobs/x-connector-sync-job:run" \
   --http-method=POST \
@@ -80,7 +80,7 @@ Update an existing job:
 gcloud scheduler jobs update http x-connector-sync-6h \
   --location=us-central1 \
   --project="$PROJECT" \
-  --schedule="0 */6 * * *" \
+  --schedule="0 3,15 * * *" \
   --time-zone="Etc/UTC" \
   --uri="https://run.googleapis.com/v2/projects/${PROJECT}/locations/us-central1/jobs/x-connector-sync-job:run" \
   --http-method=POST \

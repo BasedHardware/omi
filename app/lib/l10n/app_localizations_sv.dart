@@ -9923,11 +9923,6 @@ class AppLocalizationsSv extends AppLocalizations {
       'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Inte fångat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Röstprofil för $name';
   }
@@ -12457,4 +12452,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Inte direkt';
+
+  @override
+  String get partialRecording => 'Delvis inspelning';
 }

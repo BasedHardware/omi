@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "पूर्व-रिकॉर्डेड",
     "pendantRecordingSyncBlocked": "Pendant अभी भी रिकॉर्ड कर रहा है, इसलिए उसमें संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।",
     "pendantFullSyncBlocked": "Pendant का स्टोरेज भर गया है और यह अभी भी रिकॉर्डिंग मोड में है, इसलिए संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।",
-    "conversationsNotCapturedCount": "रिकॉर्ड नहीं हुआ ({count})",
     "transcriptionNoAudio": "ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है",
     "chatBlockTask": "कार्य",
     "chatBlockGoal": "लक्ष्य",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "इंतज़ार के दौरान बताइए, क्या Omi इस्तेमाल करना अच्छा लगा?",
     "onboardingRatingPromptBody": "5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️",
     "onboardingRatingPromptYes": "हाँ, मुझे आपको सपोर्ट करना है!",
-    "onboardingRatingPromptNo": "ज़्यादा नहीं"
+    "onboardingRatingPromptNo": "ज़्यादा नहीं",
+    "partialRecording": "आंशिक रिकॉर्डिंग"
 }

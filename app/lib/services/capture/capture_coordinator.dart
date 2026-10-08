@@ -533,6 +533,10 @@ class CaptureEnvironment {
     this.systemAudioRecording = false,
     this.systemSurfaceRecordingId,
     this.systemSurfaceConversationRevision = 0,
+    this.livenessEpoch = 0,
+    this.appSuspended = false,
+    this.appSuspendedAt,
+    this.appResumedAt,
   });
 
   /// `_preferences.capturePolicy.muted`.
@@ -551,6 +555,12 @@ class CaptureEnvironment {
   final bool phoneMicSupportsBatch;
   final bool transcriptReady;
   final bool socketConnected;
+
+  /// Ephemeral lifecycle mirror; never a capture admission or uplink policy.
+  final int livenessEpoch;
+  final bool appSuspended;
+  final DateTime? appSuspendedAt;
+  final DateTime? appResumedAt;
 
   /// `recordingDeviceServiceReady` — device present or a mic lane active.
   final bool deviceServiceReady;
@@ -697,6 +707,24 @@ class MicInterruptionChanged extends CaptureEvent {
 /// `_onMicStalled` / `_onBatchStalled` — the reducer picks the lane.
 class NativeMicStalled extends CaptureEvent {
   const NativeMicStalled();
+}
+
+enum CaptureLivenessReason { noFrames, socketDown }
+
+/// A bounded watchdog observation tied to the session that was sampled.
+class CaptureLivenessFailure extends CaptureEvent {
+  const CaptureLivenessFailure({
+    required this.sessionKey,
+    required this.reason,
+    required this.gapStartedAt,
+    required this.observedAt,
+    required this.observationEpoch,
+  });
+  final String sessionKey;
+  final CaptureLivenessReason reason;
+  final DateTime gapStartedAt;
+  final DateTime observedAt;
+  final int observationEpoch;
 }
 
 /// `onAppResumed`.
@@ -1367,6 +1395,16 @@ class CaptureCoordinator {
     return done.future;
   }
 
+  /// Lifecycle invalidation is synchronous, so resume cannot sit behind the
+  /// stale watchdog event it must retire. Already-issued WAL writes may finish.
+  void clearPendingLivenessFailures() {
+    _queue.removeWhere((item) {
+      if (item.event is! CaptureLivenessFailure) return false;
+      if (!item.done.isCompleted) item.done.complete(CaptureDispatchOutcome.denied(_state));
+      return true;
+    });
+  }
+
   /// Deny new dispatches; in-flight effects drain on their own.
   void dispose() {
     _disposed = true;
@@ -1442,7 +1480,19 @@ class CaptureCoordinator {
       Object? result = transition.result;
       for (var i = 0; i < transition.effects.length; i++) {
         try {
-          final value = await _execute(transition.effects[i]);
+          // Resume may arrive while a WAL boundary awaits disk. Revalidate
+          // before the next effect, especially before restarting the mic.
+          var effect = transition.effects[i];
+          if (event is CaptureLivenessFailure) {
+            final currentEnvironment = _readEnvironment();
+            if (!_livenessFailureIsCurrent(_state, event, currentEnvironment)) {
+              return CaptureDispatchOutcome.completed(state: _state);
+            }
+            if (effect is RunStage && (effect.stage is RestartLiveMicStage || effect.stage is ReconnectPhoneStage)) {
+              effect = RunStage(_livenessRecoveryStage(currentEnvironment));
+            }
+          }
+          final value = await _execute(effect);
           if (transition.effects[i] is CheckPhonePermission) {
             if (value != true) {
               return CaptureDispatchOutcome.completed(state: _state, result: false);
@@ -1686,6 +1736,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       CallStateChanged() => _reduceCall(state, env),
       MicInterruptionChanged() => _reduceMicInterruption(state, event),
       NativeMicStalled() => _reduceMicStalled(state),
+      CaptureLivenessFailure() => _reduceLivenessFailure(state, event, env),
       AppForegrounded() => _reduceAppForegrounded(state),
       SocketClosed() => CaptureTransition(state, [RunStage(SocketClosedStage(closeCode: event.closeCode))]),
       SocketConnected() => CaptureTransition(state, const [RunStage(SocketConnectedStage())]),
@@ -2239,9 +2290,7 @@ CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironmen
         const [],
       ),
     _ when env.policyMuted && state.connectedDevice != null && !state.phoneOwns && !state.callActive =>
-      CaptureTransition(state, const [
-        PolicyWrite(false),
-      ]),
+      CaptureTransition(state, const [PolicyWrite(false)]),
     _ => CaptureTransition(state, const []),
   };
 }
@@ -2654,9 +2703,50 @@ CaptureTransition _reduceMicInterruption(CaptureCoordinatorState state, MicInter
   ]);
 }
 
+bool _livenessFailureIsCurrent(CaptureCoordinatorState state, CaptureLivenessFailure event, CaptureEnvironment env) {
+  if (state.phase != CapturePhase.phoneLive ||
+      state.micInterrupted ||
+      state.active?.sessionKey != event.sessionKey ||
+      env.appSuspended ||
+      event.observationEpoch != env.livenessEpoch ||
+      event.gapStartedAt.isAfter(event.observedAt)) {
+    return false;
+  }
+  final suspendedAt = env.appSuspendedAt;
+  final resumedAt = env.appResumedAt;
+  if (suspendedAt != null &&
+      !suspendedAt.isAfter(event.observedAt) &&
+      (resumedAt == null || !resumedAt.isBefore(event.gapStartedAt))) {
+    return false;
+  }
+  // Keepalive or a previous recovery may have restored readiness while this
+  // observation waited in the queue or its WAL write was in flight.
+  if (event.reason == CaptureLivenessReason.socketDown && env.socketConnected && env.transcriptReady) {
+    return false;
+  }
+  return true;
+}
+
+CaptureStage _livenessRecoveryStage(CaptureEnvironment env) =>
+    env.socketConnected && env.transcriptReady ? const RestartLiveMicStage() : const ReconnectPhoneStage();
+
+CaptureTransition _reduceLivenessFailure(
+    CaptureCoordinatorState state, CaptureLivenessFailure event, CaptureEnvironment env) {
+  if (!_livenessFailureIsCurrent(state, event, env)) {
+    return CaptureTransition(state, const []);
+  }
+  return CaptureTransition(state, [
+    const RunStage(FlushPhoneFramesStage()),
+    const WalFinalize(),
+    RunStage(_livenessRecoveryStage(env)),
+  ]);
+}
+
 CaptureTransition _reduceMicStalled(CaptureCoordinatorState state) {
   return switch (state.phase) {
     CapturePhase.phoneLive when !state.micInterrupted => CaptureTransition(state, const [
+        RunStage(FlushPhoneFramesStage()),
+        WalFinalize(),
         RunStage(RestartLiveMicStage()),
       ]),
     CapturePhase.phoneBatchLive when !state.micInterrupted => CaptureTransition(state, const [

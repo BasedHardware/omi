@@ -91,6 +91,30 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert outcome['outcome'].value == 'success'
 
 
+def test_colliding_absolute_timestamps_from_distinct_sources_keep_both_segments(pipeline, tmp_path):
+    """Two sources can independently compute the same capture_start + vad_offset;
+    the second must not silently overwrite the first's exported audio (#20686)."""
+    module, store = pipeline
+    first = tmp_path / '1700000000.wav'
+    second = tmp_path / '1700000001.wav'
+    module.AudioSegment.silent(duration=4000).export(first, format='wav')
+    module.AudioSegment.silent(duration=4000).export(second, format='wav')
+
+    def vad_for(path, *a, **kw):
+        return [{'start': 1, 'end': 3}] if path == str(first) else [{'start': 0, 'end': 4}]
+
+    module.vad_is_empty = vad_for
+    paths = set()
+    module.retrieve_vad_segments(str(first), paths, [])
+    module.retrieve_vad_segments(str(second), paths, [])
+
+    assert len(paths) == 2
+    stems = sorted(Path(p).stem for p in paths)
+    assert stems == ['1700000001.0', 'dup1_1700000001.0']
+    durations = sorted(round(module.AudioSegment.from_wav(p).duration_seconds) for p in paths)
+    assert durations == [2, 4]
+
+
 @pytest.mark.parametrize('empty_words', [True, False])
 def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_words):
     module, store = pipeline
@@ -239,6 +263,9 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
         )
     retry_events = [r.getMessage() for r in caplog.records if 'sync_transcription_empty_retry' in r.getMessage()]
     expected = ['started', {'words': 'recovered', 'empty': 'still_empty'}.get(second_pass)]
+    if second_pass == 'words':
+        # A recovered segment must confirm persistence with durable_recovered.
+        expected.append('durable_recovered')
     if expected[1] is None:
         expected.pop()
         assert outcome['phase'] == 'provider_call' and outcome['exception_type'] == 'RuntimeError'

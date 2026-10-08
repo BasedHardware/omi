@@ -389,3 +389,9 @@ tests/unit/test_speaker_learning_round2.py::test_legacy_admission_bounds_candida
 # The SDK client graph is the cost, not a sleep or a network call. Measured 0.35-0.45s CPU
 # in the isolated-file runner (2026-10-06).
 tests/unit/test_shaped_agent.py::test_notes_transport_is_owned_per_worker_loop
+# First sync journey test in the file pays the utils.sync.pipeline import under file
+# isolation. Measured 0.38s CPU quiet and 0.62s during pre-push (2026-10-07).
+tests/unit/test_mobile_client_journeys.py::test_sync_visible_conversation_accepts_conversation_finalization_once
+# First live speaker-collapse test in the file pays the routers.listen.speakers
+# import under file isolation. Measured 0.44s CPU during pre-push (2026-10-07).
+tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_without_changing_speaker_maps

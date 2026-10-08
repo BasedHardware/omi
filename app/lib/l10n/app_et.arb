@@ -3194,7 +3194,6 @@
     "prerecordedTranscript": "Eelsalvestatud",
     "pendantRecordingSyncBlocked": "Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.",
     "pendantFullSyncBlocked": "Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.",
-    "conversationsNotCapturedCount": "Salvestamata ({count})",
     "transcriptionNoAudio": "Transkriptsioon ei saa heli",
     "chatBlockTask": "Ülesanne",
     "chatBlockGoal": "Eesmärk",
@@ -3851,5 +3850,6 @@
     "onboardingRatingPromptTitle": "Kuni ootad, kas Omi kasutamine on meeldiv olnud?",
     "onboardingRatingPromptBody": "5 tärni aitavad meid tõesti palju ❤️",
     "onboardingRatingPromptYes": "Jah, tahan teid toetada!",
-    "onboardingRatingPromptNo": "Pigem mitte"
+    "onboardingRatingPromptNo": "Pigem mitte",
+    "partialRecording": "Osaline salvestus"
 }

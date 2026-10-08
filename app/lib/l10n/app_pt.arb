@@ -3229,7 +3229,6 @@
     "prerecordedTranscript": "Pré-gravado",
     "pendantRecordingSyncBlocked": "O Pendant ainda está gravando, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.",
     "pendantFullSyncBlocked": "O armazenamento do Pendant está cheio e ele ainda está no modo de gravação, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.",
-    "conversationsNotCapturedCount": "Não capturado ({count})",
     "transcriptionNoAudio": "A transcrição não está recebendo áudio",
     "chatBlockTask": "Tarefa",
     "chatBlockGoal": "Meta",
@@ -3886,5 +3885,6 @@
     "onboardingRatingPromptTitle": "Enquanto você espera, o Omi tem sido legal de usar?",
     "onboardingRatingPromptBody": "Avaliar com 5 estrelas nos ajuda muito ❤️",
     "onboardingRatingPromptYes": "Sim, quero apoiar vocês!",
-    "onboardingRatingPromptNo": "Nem tanto"
+    "onboardingRatingPromptNo": "Nem tanto",
+    "partialRecording": "Gravação parcial"
 }

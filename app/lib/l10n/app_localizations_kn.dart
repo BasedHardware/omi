@@ -9952,11 +9952,6 @@ class AppLocalizationsKn extends AppLocalizations {
       'Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'ದಾಖಲಾಗಿಲ್ಲ ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್';
   }
@@ -12489,4 +12484,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'ಅಷ್ಟಾಗಿ ಇಲ್ಲ';
+
+  @override
+  String get partialRecording => 'ಭಾಗಶಃ ಧ್ವನಿಮುದ್ರಣ';
 }

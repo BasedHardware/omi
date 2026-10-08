@@ -107,3 +107,133 @@ async def test_memory_retrieval_records_dependency_failure_when_the_tool_raises(
         'failure',
     )
     assert attempt.issue_class == 'dependency_unavailable'
+
+
+def _journey_sample(name, labels):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value(name, labels) or 0
+
+
+def _accepted_labels(client_kind):
+    return {'journey': 'conversation_finalization', 'client_kind': client_kind, 'app_build': 'unknown'}
+
+
+def _terminal_labels(client_kind, outcome):
+    return {**_accepted_labels(client_kind), 'outcome': outcome}
+
+
+def _journeys_stubbed() -> bool:
+    import sys
+
+    import utils.observability as obs
+
+    if not getattr(obs, '__path__', None):
+        return True
+    journeys = sys.modules.get('utils.observability.journeys')
+    if journeys is None:
+        return True
+    # A stub harness ModuleType exposes only the attributes its file set;
+    # the real module exposes the full contract. Probe two names from
+    # different consumers.
+    if not hasattr(journeys, 'record_journey_accepted') or not hasattr(journeys, 'ClientJourneyAttempt'):
+        return True
+    return False
+
+
+def _run_sync_reprocess(monkeypatch, row, conversation, processed):
+    from unittest.mock import MagicMock
+
+    if _journeys_stubbed():
+        pytest.skip(
+            'utils.observability.journeys is stubbed in this worker (the '
+            'sync_v2 behavioral harness shares the process), so the sync '
+            'journey counters cannot be observed'
+        )
+    from utils.sync import pipeline
+
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args, **_kwargs: row)
+    monkeypatch.setattr(pipeline, 'deserialize_conversation', lambda _data: conversation)
+    monkeypatch.setattr(pipeline, 'process_conversation', MagicMock(return_value=processed))
+    monkeypatch.setattr(pipeline, 'submit_with_context', MagicMock())
+    pipeline._reprocess_conversation_after_update('uid-1', row['id'], 'en')
+
+
+def test_sync_visible_conversation_accepts_conversation_finalization_once(monkeypatch):
+    from types import SimpleNamespace
+
+    row = {'id': 'conv-visible', 'status': 'completed', 'sync_relevance': 'keep'}
+    conversation = SimpleNamespace(discarded=False, client_platform='ios', source='omi', language='en')
+    processed = SimpleNamespace(discarded=False)
+    before_accepted = _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_ios'))
+    before_success = _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_ios', 'success'))
+
+    _run_sync_reprocess(monkeypatch, row, conversation, processed)
+
+    assert _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_ios')) == before_accepted + 1
+    assert (
+        _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_ios', 'success'))
+        == before_success + 1
+    )
+
+    row['relevance_decision'] = {'trigger': 'sync_update', 'verdict': 'keep'}
+    _run_sync_reprocess(monkeypatch, row, conversation, processed)
+
+    assert _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_ios')) == before_accepted + 1
+    assert (
+        _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_ios', 'success'))
+        == before_success + 1
+    )
+
+
+def test_sync_discarded_conversation_terminals_cancelled_without_accept(monkeypatch):
+    from types import SimpleNamespace
+
+    row = {'id': 'conv-discarded', 'status': 'completed', 'sync_relevance': 'keep'}
+    conversation = SimpleNamespace(discarded=False, client_platform='android', source='omi', language='en')
+    processed = SimpleNamespace(discarded=True)
+    before_accepted = _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_android'))
+    before_cancelled = _journey_sample(
+        'omi_client_journey_terminal_total', _terminal_labels('mobile_android', 'cancelled')
+    )
+
+    _run_sync_reprocess(monkeypatch, row, conversation, processed)
+
+    assert _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_android')) == before_accepted
+    assert (
+        _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_android', 'cancelled'))
+        == before_cancelled + 1
+    )
+
+    row['relevance_decision'] = {'trigger': 'sync_update', 'verdict': 'discard'}
+    conversation.discarded = True
+    _run_sync_reprocess(monkeypatch, row, conversation, processed)
+
+    assert _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_android')) == before_accepted
+    assert (
+        _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_android', 'cancelled'))
+        == before_cancelled + 1
+    )
+
+
+def test_sync_discarded_to_visible_promotion_accepts_once(monkeypatch):
+    from types import SimpleNamespace
+
+    row = {
+        'id': 'conv-promoted',
+        'status': 'completed',
+        'sync_relevance': 'keep',
+        'relevance_decision': {'trigger': 'sync_update', 'verdict': 'discard'},
+    }
+    conversation = SimpleNamespace(discarded=True, client_platform='ios', source='omi', language='en')
+    processed = SimpleNamespace(discarded=False)
+    before_accepted = _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_ios'))
+    before_success = _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_ios', 'success'))
+
+    _run_sync_reprocess(monkeypatch, row, conversation, processed)
+
+    assert _journey_sample('omi_client_journey_accepted_total', _accepted_labels('mobile_ios')) == before_accepted + 1
+    assert (
+        _journey_sample('omi_client_journey_terminal_total', _terminal_labels('mobile_ios', 'success'))
+        == before_success + 1
+    )

@@ -3236,7 +3236,6 @@
     "prerecordedTranscript": "Forudoptaget",
     "pendantRecordingSyncBlocked": "Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.",
     "pendantFullSyncBlocked": "Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.",
-    "conversationsNotCapturedCount": "Ikke optaget ({count})",
     "transcriptionNoAudio": "Transskription modtager ikke lyd",
     "chatBlockTask": "Opgave",
     "chatBlockGoal": "Mål",
@@ -3893,5 +3892,6 @@
     "onboardingRatingPromptTitle": "Mens du venter, har Omi været rar at bruge?",
     "onboardingRatingPromptBody": "5 stjerner hjælper os virkelig meget ❤️",
     "onboardingRatingPromptYes": "Ja, jeg vil gerne støtte jer!",
-    "onboardingRatingPromptNo": "Ikke rigtig"
+    "onboardingRatingPromptNo": "Ikke rigtig",
+    "partialRecording": "Delvis optagelse"
 }

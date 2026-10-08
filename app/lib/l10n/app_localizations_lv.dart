@@ -9947,11 +9947,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Nav ierakstīts ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name balss profils';
   }
@@ -12480,4 +12475,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingRatingPromptNo => 'Ne gluži';
+
+  @override
+  String get partialRecording => 'Daļējs ieraksts';
 }

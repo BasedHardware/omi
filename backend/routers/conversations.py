@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversation_scan as conversation_scan_db
@@ -1535,6 +1535,7 @@ def _assign_manual_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    time_range=None,
 ):
     if assign_type not in {'is_user', 'person_id'}:
         raise HTTPException(status_code=400, detail='Invalid assign type')
@@ -1553,6 +1554,7 @@ def _assign_manual_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
             background_tasks=background_tasks,
+            **({"time_range": time_range} if time_range is not None else {}),
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1613,7 +1615,13 @@ def set_assignee_conversation_speaker(
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
+    start: Annotated[
+        Optional[float], Query(description="Range start in conversation-offset seconds (inclusive)")
+    ] = None,
+    end: Annotated[Optional[float], Query(description="Range end in conversation-offset seconds (exclusive)")] = None,
 ):
+    if (start is None) != (end is None):
+        raise HTTPException(status_code=422, detail="Supply both start and end for a speaker assignment range")
     return _assign_manual_speaker(
         conversation_id,
         assign_type,
@@ -1623,6 +1631,7 @@ def set_assignee_conversation_speaker(
         speaker_id=speaker_id,
         segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
+        time_range=(start, end) if start is not None else None,
     )
 
 

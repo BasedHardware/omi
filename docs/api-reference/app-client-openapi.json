@@ -7805,6 +7805,22 @@
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
           },
+          "capture_coverage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "incomplete",
+                  "mapped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Coverage"
+          },
           "capture_group": {
             "anyOf": [
               {
@@ -8988,6 +9004,22 @@
             ],
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
+          },
+          "capture_coverage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "incomplete",
+                  "mapped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Coverage"
           },
           "capture_group": {
             "anyOf": [
@@ -43443,6 +43475,42 @@
               "default": true,
               "title": "Use For Speech Training",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Range start in conversation-offset seconds (inclusive)",
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Range start in conversation-offset seconds (inclusive)",
+              "title": "Start"
+            }
+          },
+          {
+            "description": "Range end in conversation-offset seconds (exclusive)",
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Range end in conversation-offset seconds (exclusive)",
+              "title": "End"
             }
           },
           {
