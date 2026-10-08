@@ -8,7 +8,6 @@ from contextvars import ContextVar
 
 from config.dream_agent import mode
 from database.dream_store import mark_dirty
-from models.candidate import CandidateRecord
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -35,8 +34,11 @@ def after_write(collection: str):
                     ids = [result] if isinstance(result, str) else result if isinstance(result, list) else ids
                 if collection == 'memory_items' and isinstance(result, str):
                     ids = [result]
-                if collection == 'candidates' and isinstance(result, CandidateRecord):
-                    ids = [result.candidate_id]
+                if collection == 'candidates':
+                    from models.candidate import CandidateRecord
+
+                    if isinstance(result, CandidateRecord):
+                        ids = [result.candidate_id]
                 notify(uid, [(collection, value) for value in ids])
             return result
 
