@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -40,6 +41,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 import 'journeys/support/hermetic_boot.dart';
+import 'support/native_host_harness.dart';
 import 'visual_audit/fakes.dart';
 import 'visual_audit/screen_frame_fixtures.dart';
 import '../test/providers/guided_voice_controller_test.dart' show FakeVoiceIO;
@@ -70,6 +72,23 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
+import 'package:omi/firebase_options_local.dart' as local_firebase;
+import 'package:omi/mobile/native_ui/ios_native_main_navigation.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/locale_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/services.dart';
 part 'native_advanced_host_cases.dart';
 part 'native_remaining_host_cases.dart';
 
@@ -83,67 +102,44 @@ class _NativePhoneOwner extends PhoneCallProvider {
   }
 }
 
-int? nativeViewId(WidgetTester tester, Finder finder) {
-  RenderUiKitView? view;
-  void visit(RenderObject object) {
-    if (object is RenderUiKitView) view = object;
-    object.visitChildren(visit);
-  }
-
-  visit(tester.renderObject(finder));
-  return view?.viewController.id;
-}
+/// The owners the real HomePage reads beyond [JourneyHermeticBoot.pumpPage]'s, with no BLE or
+/// background sync behind them (as in test/widgets/home_announcement_timer_test.dart).
+List<SingleChildWidget> _homeShellProviders() => [
+      ChangeNotifierProvider(create: (_) => AppearanceProvider()),
+      ChangeNotifierProvider(create: (_) => AuthenticationProvider(initializeListeners: false)),
+      ChangeNotifierProvider(create: (_) => CaptureProvider(localSegmentStore: LocalSegmentStore.disabled())),
+      ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
+      ChangeNotifierProvider(
+          create: (_) => DeviceProvider(
+              bleDiagnosticsLoader: (_) async => throw StateError('fixture: BLE diagnostics unused'),
+              findDeviceRunner: (_) async => false)),
+      ChangeNotifierProvider(create: (_) => AnnouncementProvider()),
+      ChangeNotifierProvider(create: (_) => ActionItemsProvider()),
+      ChangeNotifierProvider(create: (_) => SyncProvider(startBackgroundSync: false)),
+      ChangeNotifierProvider(create: (_) => TaskIntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => PhoneCallProvider.forTesting()),
+      ChangeNotifierProvider(create: (_) => GoalsProvider()),
+      ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
+          create: (_) => AddAppProvider(),
+          update: (_, app, previous) => (previous?..setAppProvider(app)) ?? (AddAppProvider()..setAppProvider(app))),
+      ChangeNotifierProvider(
+          create: (_) =>
+              UserProvider(privateCloudSyncFetcher: () async => false, privateCloudSyncSetter: (_) async => true)),
+      ChangeNotifierProvider(create: (_) => MemoriesProvider()),
+      ChangeNotifierProvider(create: (_) => PeopleProvider()),
+      ChangeNotifierProvider(create: (_) => LocaleProvider()),
+      ChangeNotifierProvider(
+          create: (_) => SpeakerTagPromptsProvider(
+              fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()))),
+    ];
 
 /// Exercises the actual Flutter platform view, UIKit containment and SwiftUI renderer.
 /// Run on Simulator with OMI_APP_PROFILE=local_dev and OMI_IOS_SWIFTUI=true.
-void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  Future<List<int>> captureScreenshot(String name) async {
-    const port = int.fromEnvironment('NATIVE_UI_SCREENSHOT_PORT');
-    if (port != 0) {
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
-      try {
-        final request = await client.getUrl(Uri.http('127.0.0.1:$port', '/capture', {'name': name}));
-        final response = await request.close().timeout(const Duration(seconds: 20));
-        expect(response.statusCode, 200, reason: 'The Simulator display capture must finish on this screen');
-        await response.drain<void>();
-      } finally {
-        client.close(force: true);
-      }
-    }
-    return binding.takeScreenshot(name);
-  }
+void main() => runNativeHostSuite(_registerNativeHostCases);
 
-  Future<void> checkNativeHost(WidgetTester tester, String screenshot) async {
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pump(const Duration(seconds: 2));
-    final native = find.byType(UiKitView);
-    expect(native, findsOneWidget);
-    expect(tester.getRect(native).height, greaterThan(550));
-    // Platform-view creation is asynchronous on the first native route. Pumping
-    // virtual frames alone does not wait for UIKit's real creation reply.
-    int? id;
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (id == null && DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      await tester.pump();
-      id = nativeViewId(tester, native);
-    }
-    expect(id, isNotNull, reason: 'The real UIKit view must finish creating');
-    await MethodChannel('com.omi.native_ui/surface/$id')
-        .invokeMethod<void>('update', tester.widget<UiKitView>(native).creationParams);
-    await Future<void>.delayed(const Duration(seconds: 2));
-    await tester.pump();
-    final received =
-        await MethodChannel('com.omi.native_ui/surface/$id').invokeMapMethod<String, Object?>('debugPresentation');
-    final projected = tester.widget<UiKitView>(native).creationParams as Map;
-    expect(
-        (received!['toolbar'] as List).map((row) => row['id']), (projected['toolbar'] as List).map((row) => row['id']),
-        reason: 'The UIKit owner must receive the current navigation projection');
-    expect(tester.takeException(), isNull);
-    expect(await captureScreenshot(screenshot), isNotEmpty);
-  }
-
+void _registerNativeHostCases(NativeHostCheck checkNativeHost) {
+  final binding = IntegrationTestWidgetsFlutterBinding.instance;
+  const captureScreenshot = captureNativeHostScreenshot;
   if (!const bool.fromEnvironment('NATIVE_UI_ADVANCED_ONLY') &&
       !const bool.fromEnvironment('NATIVE_UI_REMAINING_ONLY')) {
     testWidgets('native conversation detail retains its player across summary, transcript and search', (tester) async {
@@ -827,6 +823,132 @@ void main() {
     expect(await captureScreenshot('native-form-in-flutter-host'), isNotEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('a snapshot Swift rejects restores the complete Flutter surface, never a blank view', (tester) async {
+    await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+    addTearDown(JourneyHermeticBoot.stop);
+    addTearDown(() => IosNativeSurface.debugCorruptSnapshotForTest = false);
+    Widget form(String draft) => nativeHostApp(Scaffold(
+            body: IosNativeSurface(
+                title: 'Edit Task',
+                fallback: const Center(child: Text('Complete Flutter editor')),
+                sections: [
+              NativeSection('editor', [NativeRow('draft', 'Description', kind: 'text', value: draft, action: (_) {})])
+            ],
+                toolbar: [
+              NativeRow('save', 'Save', action: (_) {})
+            ])));
+    Future<void> expectFallback(String text, String screenshot) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (find.text(text).evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      }
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text(text), findsOneWidget);
+      expect(find.byType(UiKitView), findsNothing, reason: 'No native view, blank or not, remains');
+      expect(tester.takeException(), isNull);
+      expect(await captureScreenshot(screenshot), isNotEmpty);
+    }
+
+    // Swift's factory refuses an unsupported creation snapshot, and its view says so on every update.
+    for (final viewType in ['com.omi.native_ui/surface', 'com.omi.native_ui/home']) {
+      await tester.pumpWidget(nativeHostApp(Scaffold(
+          body: UiKitView(
+              viewType: viewType,
+              creationParams: const {'version': 2, 'revision': 0},
+              creationParamsCodec: const StandardMessageCodec()))));
+      int? id;
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (id == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+        id = nativeViewId(tester, find.byType(UiKitView));
+      }
+      expect(id, isNotNull, reason: viewType);
+      final rejected = MethodChannel('$viewType/$id');
+      await expectLater(rejected.invokeMethod<void>('update', const {'version': 1}),
+          throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'invalid_native_snapshot')));
+      expect(await rejected.invokeMethod<Object?>('invalidate'), isNull);
+      await expectLater(rejected.invokeMethod<void>('debugPresentation'), throwsA(isA<MissingPluginException>()));
+      if (viewType.endsWith('surface')) expect(await rejected.invokeMethod<Object?>('captureImage'), isNull);
+    }
+
+    // A refused creation snapshot: the surface renders its complete Flutter fallback.
+    IosNativeSurface.debugCorruptSnapshotForTest = true;
+    await tester.pumpWidget(form('Review the native iOS screens'));
+    await expectFallback('Complete Flutter editor', 'real-native-rejected-creation-fallback');
+
+    // A refused later update, after the native view rendered: the same complete fallback.
+    IosNativeSurface.debugCorruptSnapshotForTest = false;
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(form('Review the native iOS screens'));
+    await checkNativeHost(tester, 'real-native-form-before-rejection');
+    expect(nativeProjectedRow(tester, 'draft').value, 'Review the native iOS screens');
+    expect(nativeProjectedRow(tester, 'save').title, 'Save');
+    IosNativeSurface.debugCorruptSnapshotForTest = true;
+    await tester.pumpWidget(form('Review the corrected native iOS screens'));
+    await expectFallback('Complete Flutter editor', 'real-native-rejected-update-fallback');
+
+    // Native Home falls back to its classic Flutter Home in the same way.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(nativeHostApp(Scaffold(
+        body: IosNativeHome(
+            requestInitialLoad: false,
+            loadRecaps: () async => (ok: true, items: <DailySummary>[]),
+            fallback: const Center(child: Text('Classic Flutter Home'))))));
+    await expectFallback('Classic Flutter Home', 'real-native-rejected-home-fallback');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('a Home Swift rejects restores the complete classic shell, never an endless spinner', (tester) async {
+    expect(await supportsIosSwiftUi(), isTrue, reason: 'The shell starts native, so only the rejection restores it');
+    await JourneyHermeticBoot.start(extraPrefs: {
+      'appearanceMode': 'dark',
+      'onboardingCompleted': true,
+      'permissionsCompleted': true,
+      'aiConsentGiven': true,
+    });
+    addTearDown(JourneyHermeticBoot.stop);
+    try {
+      ServiceManager.instance();
+    } on Exception {
+      // The real DeviceProvider subscribes to the process-wide services; create them once.
+      await ServiceManager.init();
+    }
+    // HomePage listens to the notification service, which needs a Firebase app: the local_dev
+    // placeholder project, as main.dart starts it, with no messaging token requested.
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(options: local_firebase.DefaultFirebaseOptions.currentPlatform);
+    }
+    IosNativeSurface.debugCorruptSnapshotForTest = true;
+    addTearDown(() => IosNativeSurface.debugCorruptSnapshotForTest = false);
+    await JourneyHermeticBoot.pumpPage(tester, page: const HomePage(), providers: _homeShellProviders());
+
+    // HomePage mounts its native shell, Swift refuses the Home snapshot, and the shell's onRejected
+    // restores the classic shell: its tab switcher and conversation list, with no native view left.
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while ((find.byType(HomeTabSwitcher).evaluate().isEmpty || find.byType(UiKitView).evaluate().isNotEmpty) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+    }
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(IosNativeMainShell), findsNothing);
+    expect(find.byType(HomeTabSwitcher), findsOneWidget);
+    expect(find.byType(ConversationsPage), findsOneWidget);
+    expect(find.byType(UiKitView), findsNothing, reason: 'No native view, blank or not, remains');
+    expect(find.byType(OmiSpinner), findsNothing, reason: 'A refused Home never stays on the shell spinner');
+    expect(tester.takeException(), isNull);
+    expect(await captureScreenshot('real-native-rejected-home-shell-fallback'), isNotEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    // HomePage's prewarm and announcement timers end with it.
+    await tester.pump(const Duration(seconds: 3));
     expect(tester.takeException(), isNull);
   });
 }

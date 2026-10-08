@@ -2,7 +2,35 @@ part of 'page.dart';
 
 extension _NativeConversationDetail on ConversationDetailPageState {
   void _nativePlaybackChanged() {
-    if (mounted && iosSwiftUiEnabled) _nativeRebuild(() {});
+    if (mounted && _nativeDetail) _nativeRebuild(() {});
+  }
+
+  /// A native presentation this page needs is unavailable: the complete classic page takes over,
+  /// with its own title field, search field, summary editor and menu.
+  void _restoreClassicDetail() {
+    if (mounted && !_nativeDetailRestored) _nativeRebuild(() => _nativeDetailRestored = true);
+  }
+
+  /// The native summary editor is unavailable: the classic page takes over and opens its in-place
+  /// editor on [selection]. The request lasts only for the frame that mounts that editor.
+  void _editSummaryClassically(ConversationSummarySelection selection) {
+    if (!mounted) return;
+    _nativeRebuild(() {
+      _nativeDetailRestored = true;
+      _classicSummaryEdit = selection;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _classicSummaryEdit = null);
+  }
+
+  /// Opens the classic page's More menu where its button sits.
+  void _showClassicDetailMenu(ConversationDetailProvider provider) {
+    final width = MediaQuery.sizeOf(context).width;
+    final top = MediaQuery.paddingOf(context).top + (kToolbarHeight - kOmiMinTapTarget) / 2;
+    final left = Directionality.of(context) == TextDirection.rtl ? 0.0 : width - kOmiMinTapTarget;
+    unawaited(showPullDownMenu(
+        context: context,
+        items: _menuItems(context, provider),
+        position: Rect.fromLTWH(left, top, kOmiMinTapTarget, kOmiMinTapTarget)));
   }
 
   void _acceptNativeSections(String id, List<NativeSection> sections) {
@@ -35,7 +63,12 @@ extension _NativeConversationDetail on ConversationDetailPageState {
       NativeRow('cancel', context.l10n.cancel),
       NativeRow('save', context.l10n.save, symbol: 'checkmark')
     ]);
-    if (result == null) return true;
+    if (result == null) {
+      // No native editor: the classic page's title field takes the rename instead.
+      if (!mounted) return true;
+      _restoreClassicDetail();
+      return false;
+    }
     final text = result.values['rename_title'];
     if (!mounted ||
         result.action != 'save' ||
@@ -71,8 +104,17 @@ extension _NativeConversationDetail on ConversationDetailPageState {
             destructive: item.isDestructive),
       NativeRow('cancel', context.l10n.cancel),
     ]);
-    if (!mounted || result?.action == null || provider.conversationOrNull?.id != conversationId) return;
-    final index = int.tryParse(result!.action!.replaceFirst('detail_menu_', ''));
+    if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+    if (result == null) {
+      // No native menu: the complete page takes over and opens its own.
+      _restoreClassicDetail();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && provider.conversationOrNull?.id == conversationId) _showClassicDetailMenu(provider);
+      });
+      return;
+    }
+    if (result.action == null) return;
+    final index = int.tryParse(result.action!.replaceFirst('detail_menu_', ''));
     if (index == null || index < 0 || index >= items.length) return;
     final item = items[index];
     if (item.title == context.l10n.search) {
@@ -85,11 +127,14 @@ extension _NativeConversationDetail on ConversationDetailPageState {
         NativeRow('cancel', context.l10n.cancel),
         NativeRow('search', context.l10n.search)
       ]);
-      if (mounted &&
-          provider.conversationOrNull?.id == conversationId &&
-          query?.action == 'search' &&
-          query?.values['query'] is String) {
-        _onSearchChanged(query!.values['query'] as String);
+      if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+      if (query == null) {
+        // No native search editor: the complete page opens its search field instead.
+        _restoreClassicDetail();
+        _nativeRebuild(() => _isSearching = true);
+        _searchFocusNode.requestFocus();
+      } else if (query.action == 'search' && query.values['query'] is String) {
+        _onSearchChanged(query.values['query'] as String);
       }
     } else {
       item.onTap?.call();
@@ -125,7 +170,7 @@ extension _NativeConversationDetail on ConversationDetailPageState {
 
   Widget _nativeDetailSurface(
       ConversationDetailProvider provider, ServerConversation conversation, bool hasBar, Widget classic) {
-    if (!iosSwiftUiEnabled) return classic;
+    if (!_nativeDetail) return classic;
     // Oversized editors retain the complete existing surface until its larger input contract is migrated.
     if (provider.getSummarySelection().content.characters.length > 10000 ||
         conversation.structured.title.characters.length > 10000) {
@@ -299,6 +344,7 @@ extension _NativeConversationDetail on ConversationDetailPageState {
                         child: SummaryTab(
                             key: ValueKey('native-summary-owner:${conversation.id}'),
                             onNativePresentation: (sections) => _acceptNativeSections('summary', sections),
+                            onNativeUnavailable: _editSummaryClassically,
                             onNativeInteraction: () {
                               if (mounted) _nativeRebuild(() => _reviewInterrupted = true);
                             })),

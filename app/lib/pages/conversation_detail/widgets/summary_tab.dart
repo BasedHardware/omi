@@ -36,6 +36,14 @@ class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
   final ValueChanged<List<NativeSection>>? onNativePresentation;
   final VoidCallback? onNativeInteraction;
+
+  /// Restores the complete classic page, which then edits the selection in place, when the native
+  /// summary editor is unavailable.
+  final ValueChanged<ConversationSummarySelection>? onNativeUnavailable;
+
+  /// Classic only: a selection handed over by an unavailable native editor, whose in-place editor
+  /// opens once without counting another start.
+  final ConversationSummarySelection? editRequest;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -45,6 +53,8 @@ class SummaryTab extends StatefulWidget {
       this.reviewEnabled = false,
       this.onNativePresentation,
       this.onNativeInteraction,
+      this.onNativeUnavailable,
+      this.editRequest,
       this.searchQuery = '',
       this.currentResultIndex = -1,
       this.onTapWhenSearchEmpty});
@@ -143,6 +153,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                editRequest: widget.editRequest,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
                                 canStartEditing: () {

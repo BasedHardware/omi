@@ -30,6 +30,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+import 'ios_native_surface.dart';
 import 'native_conversation_projection.dart';
 import 'native_read_session.dart';
 
@@ -43,6 +44,7 @@ Future<bool> supportsIosSwiftUi() async {
 }
 
 /// Stage one: SwiftUI renders the library; the current services still own every read and action.
+/// A snapshot Swift refuses, or a view without a renderer, restores the classic Home for good.
 class IosNativeHome extends StatefulWidget {
   const IosNativeHome(
       {super.key,
@@ -50,11 +52,20 @@ class IosNativeHome extends StatefulWidget {
       this.loadRecaps,
       this.header = const [],
       this.footer = const [],
-      this.alerts = const []});
+      this.alerts = const [],
+      this.fallback,
+      this.onRejected});
 
   final bool requestInitialLoad;
   final RecentRecapsLoader? loadRecaps;
   final List<NativeHomeAction> header, footer, alerts;
+
+  /// The Flutter Home shown once Swift refuses a snapshot; defaults to the classic conversation list.
+  /// The route remembers the rejection, so a later Home in it starts here as well.
+  final Widget? fallback;
+
+  /// Lets an owner that presents more than Home, such as the native shell, restore its classic shell.
+  final VoidCallback? onRejected;
 
   @override
   State<IosNativeHome> createState() => IosNativeHomeState();
@@ -73,10 +84,15 @@ class IosNativeHomeState extends State<IosNativeHome> {
   int _revision = 0;
   int _viewGeneration = 0;
   bool _updateScheduled = false;
+  bool _rejected = false;
+
+  static const _rejection = 'omi.native_ui.home_rejected';
 
   @override
   void initState() {
     super.initState();
+    // This route's renderer already refused a Home: start on the fallback, which owns the reads.
+    _rejected = PageStorage.maybeOf(context)?.readState(context, identifier: _rejection) == true;
     _conversations = context.read<ConversationProvider>();
     _recordings = context.read<LocalRecordingsProvider>();
     final owner = AuthService.instance.captureSessionSnapshot();
@@ -91,6 +107,12 @@ class IosNativeHomeState extends State<IosNativeHome> {
         if (mounted) setState(() {});
       }
     });
+    if (_rejected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onRejected?.call();
+      });
+      return;
+    }
     if (widget.requestInitialLoad) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _session.active) _conversations.getInitialConversations();
@@ -163,7 +185,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
     ];
     final l10n = context.l10n;
     return {
-      'version': 1,
+      'version': nativeSnapshotVersion,
       'nativeDetail': true,
       'revision': _revision++,
       'appearance': context.read<AppearanceProvider>().mode.name,
@@ -278,10 +300,24 @@ class IosNativeHomeState extends State<IosNativeHome> {
     if (!mounted || channel == null) return;
     try {
       await channel.invokeMethod<void>(_session.active ? 'update' : 'invalidate', _session.active ? _snapshot() : null);
+    } on PlatformException catch (error) {
+      // Swift refused the snapshot, whatever its revision: never leave a blank native Home.
+      if (error.code != 'invalid_native_snapshot') rethrow;
+      _reject();
     } on MissingPluginException {
-      // A disposed platform view removes its native handler before an in-flight update arrives.
-      if (mounted && identical(channel, _channel)) rethrow;
+      // A disposed platform view removes its native handler before an in-flight update arrives;
+      // the current view without one has no renderer.
+      if (mounted && identical(channel, _channel)) _reject();
     }
+  }
+
+  void _reject() {
+    if (_rejected || !mounted) return;
+    _rejected = true;
+    PageStorage.maybeOf(context)?.writeState(context, true, identifier: _rejection);
+    _invalidate();
+    setState(() {});
+    widget.onRejected?.call();
   }
 
   void _invalidate() {
@@ -373,7 +409,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
   }
 
   void _created(int id, int generation) {
-    if (!mounted || !_session.active || generation != _viewGeneration) {
+    if (!mounted || !_session.active || _rejected || generation != _viewGeneration) {
       unawaited(_invalidateChannel(MethodChannel('com.omi.native_ui/home/$id')));
       return;
     }
@@ -384,6 +420,10 @@ class IosNativeHomeState extends State<IosNativeHome> {
 
   @override
   Widget build(BuildContext context) {
+    if (_rejected) {
+      return widget.fallback ??
+          ConversationsPage(requestInitialLoad: widget.requestInitialLoad, loadRecaps: widget.loadRecaps);
+    }
     context.watch<AppearanceProvider>();
     _scheduleUpdate();
     if (!_session.active) return const Center(child: OmiSpinner());

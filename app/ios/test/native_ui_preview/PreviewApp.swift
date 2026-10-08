@@ -364,6 +364,29 @@ final class PreviewHarness: ObservableObject {
                 ["id": "groups", "title": "", "footer": "", "rows": [navigation("device", "Device", "antenna.radiowaves.left.and.right"), navigation("integrations", "Integrations", "point.3.connected.trianglepath.dotted", "BETA")]],
             ]
         }
+        if ProcessInfo.processInfo.arguments.contains("rows") {
+            func row(_ id: String, _ title: String, _ kind: String, symbol: String? = nil, destructive: Bool = false,
+                     value: Any? = nil, options: [String] = []) -> [String: Any] {
+                var result: [String: Any] = ["id": id, "title": title, "kind": kind, "subtitle": "", "enabled": true,
+                    "destructive": destructive, "options": options.map { ["id": $0, "title": $0.capitalized] }]
+                if let symbol { result["symbol"] = symbol }
+                if let value { result["value"] = value }
+                return result
+            }
+            surfaceRaw["title"] = "Device"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [
+                ["id": "status", "title": "Status", "footer": "", "rows": [
+                    row("label_plain", "Firmware 3.0.1", "label"),
+                    row("label_symbol", "Bluetooth connected", "label", symbol: "antenna.radiowaves.left.and.right"),
+                    row("label_warning", "Pairing lost", "label", symbol: "exclamationmark.triangle", destructive: true),
+                ]],
+                ["id": "tasks", "title": "Tasks", "footer": "", "rows": [
+                    row("task_static", "Water the plants", "task", value: false, options: ["delete"]),
+                    row("task_open", "Review the native screens", "task", value: false, options: ["open", "delete"]),
+                ]],
+            ]
+        }
         if ProcessInfo.processInfo.arguments.contains("chat") {
             surfaceRaw["title"] = "Ask Omi"
             surfaceRaw["searchEnabled"] = false

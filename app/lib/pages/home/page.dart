@@ -166,6 +166,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final _nativeHomeKey = GlobalKey<IosNativeHomeState>();
   final _nativeRecordKey = GlobalKey<HomeRecordButtonState>();
   late final Future<bool> _nativeSupport = supportsIosSwiftUi();
+
+  /// Swift refused the native Home, so the complete classic shell presents every tab instead.
+  bool _nativeHomeRejected = false;
+  void _restoreClassicShell() => setState(() => _nativeHomeRejected = true);
   // Keep the IndexedStack slots stable, but defer constructing non-selected
   // tabs until the user visits them. Once created, a tab remains in the stack
   // so its scroll position and other state are preserved.
@@ -251,8 +255,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _scrollToTop(int pageIndex) {
     switch (pageIndex) {
       case HomeProvider.homeTab:
-        if (iosSwiftUiEnabled && Platform.isIOS) {
-          _nativeHomeKey.currentState?.scrollToTop();
+        final native = iosSwiftUiEnabled && Platform.isIOS ? _nativeHomeKey.currentState : null;
+        if (native != null) {
+          native.scrollToTop();
         } else {
           _homeContentPageKey.currentState?.scrollToTop();
         }
@@ -881,7 +886,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
               ),
             );
-            if (!iosSwiftUiEnabled || !Platform.isIOS) return classic;
+            if (!iosSwiftUiEnabled || !Platform.isIOS || _nativeHomeRejected) return classic;
             return FutureBuilder<bool>(
                 future: _nativeSupport,
                 builder: (context, support) {

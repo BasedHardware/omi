@@ -24,6 +24,9 @@ extension _NativeHomePresentation on _HomePageState {
         listenable: wedge,
         builder: (context, _) => IosNativeHome(
               key: _nativeHomeKey,
+              // A refused Home restores the complete classic shell, which keeps every Home control.
+              fallback: const Center(child: OmiSpinner()),
+              onRejected: _restoreClassicShell,
               header: [
                 NativeHomeAction(
                     'device', deviceLabel, device.isCharging ? 'battery.100percent.bolt' : 'battery.75percent',

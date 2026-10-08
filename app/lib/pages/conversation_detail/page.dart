@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -166,6 +167,18 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   void _nativeRebuild(VoidCallback update) => setState(update);
 
+  /// A native presentation this page needs was unavailable, so the complete classic page took over.
+  bool _nativeDetailRestored = false;
+
+  /// Only where native presentation can run (the iOS preview, or the debug test host): Android built
+  /// with the flag stays on the classic page and its default behaviour.
+  bool get _nativeDetail =>
+      (iosSwiftUiEnabled && Platform.isIOS || IosNativeSurface.debugNativeHostForTest) && !_nativeDetailRestored;
+
+  /// The summary selection an unavailable native editor handed to the classic one, for the frame that
+  /// mounts it.
+  ConversationSummarySelection? _classicSummaryEdit;
+
   // Search functionality
   bool _isSearching = false;
   String _searchQuery = '';
@@ -203,7 +216,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     } else if (selectedTab == ConversationTab.summary) {
       final summarySelection = provider.getSummarySelection();
       if (summarySelection.content.isNotEmpty) {
-        final content = iosSwiftUiEnabled
+        final content = _nativeDetail
             ? nativeRichText(summarySelection.content.decodeString).map(nativeRichBlockText).join('\n')
             : summarySelection.content.decodeString;
         count += countIn(content.toLowerCase());
@@ -604,7 +617,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         _copyContent(context, provider.conversation.id, null);
         break;
       case 'rename':
-        if (iosSwiftUiEnabled && await _renameNative(provider)) {
+        if (_nativeDetail && await _renameNative(provider)) {
           break;
         }
         final controller = provider.titleController;
@@ -1054,7 +1067,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   void _onSearchChanged(String value) {
     setState(() {
-      if (iosSwiftUiEnabled) _isSearching = value.isNotEmpty;
+      if (_nativeDetail) _isSearching = value.isNotEmpty;
       _searchQuery = value;
       _updateSearchResults();
       if (value.isNotEmpty) {
@@ -1167,6 +1180,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                             controller: _controller,
                             children: [
                               SummaryTab(
+                                editRequest: _classicSummaryEdit,
                                 reviewEnabled: !widget.isFromOnboarding &&
                                     widget.initialSeekStart == null &&
                                     selectedTab == ConversationTab.summary &&

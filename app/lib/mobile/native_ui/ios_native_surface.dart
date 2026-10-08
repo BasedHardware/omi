@@ -17,6 +17,18 @@ import 'native_navigation_chrome.dart';
 
 typedef NativeAction = FutureOr<void> Function(Object? value);
 
+/// The preview flag, or the debug-only hermetic test host ([IosNativeSurface.debugNativeHostForTest]).
+/// Release and profile builds reduce this to [iosSwiftUiEnabled].
+bool get nativePresentationEnabled => iosSwiftUiEnabled || IosNativeSurface.debugNativeHostForTest;
+
+/// [supportsIosSwiftUi], or true on the debug-only hermetic test host. Flag-off and Android builds
+/// answer false without touching a channel.
+Future<bool> supportsNativePresentation() async =>
+    IosNativeSurface.debugNativeHostForTest || await supportsIosSwiftUi();
+
+/// The snapshot version Swift decodes; a debug host test may publish an unsupported one on purpose.
+int get nativeSnapshotVersion => kDebugMode && IosNativeSurface._debugCorruptSnapshot ? 2 : 1;
+
 /// Captures the currently visible native presentation for an explicit share action.
 /// No image is cached here; the existing share owner retains its file and privacy lifecycle.
 class NativeSurfaceController {
@@ -339,6 +351,8 @@ class NativeReader {
 }
 
 /// Shared native list/form renderer. Each page supplies its existing callbacks and provider state.
+/// A snapshot Swift refuses, or a view without a renderer, restores [fallback] for good: the State
+/// never retries, and its route keeps a later surface with the same [title] on the fallback too.
 class IosNativeSurface extends StatefulWidget {
   const IosNativeSurface({
     super.key,
@@ -362,7 +376,33 @@ class IosNativeSurface extends StatefulWidget {
     this.reader,
     this.controller,
     this.navigation,
+    this.loadingLabel,
   });
+
+  /// Debug-only: while set, every native snapshot (surfaces and Home) carries an unsupported version,
+  /// so a host test proves that Swift's rejection restores the complete Flutter presentation.
+  static bool get debugCorruptSnapshotForTest => kDebugMode && _debugCorruptSnapshot;
+  static set debugCorruptSnapshotForTest(bool value) {
+    assert(kDebugMode, 'debugCorruptSnapshotForTest is a debug-only seam');
+    _debugCorruptSnapshot = value;
+  }
+
+  static bool _debugCorruptSnapshot = false;
+
+  /// Debug-only: hermetic widget tests treat the host as a supported iOS renderer, so surfaces and
+  /// presentations exercise their channel contracts against mocked channels.
+  static bool get debugNativeHostForTest => kDebugMode && _debugNativeHost;
+  static set debugNativeHostForTest(bool value) {
+    assert(kDebugMode, 'debugNativeHostForTest is a debug-only seam');
+    _debugNativeHost = value;
+  }
+
+  static bool _debugNativeHost = false;
+
+  /// The rows the mounted surface [state] dispatches, in projection order, including those its
+  /// [NativeNavigationChrome] adds, so a host test looks a row up exactly as Swift's command would.
+  @visibleForTesting
+  static List<NativeRow> debugDispatchRows(State<IosNativeSurface> state) => (state as _IosNativeSurfaceState)._rows;
 
   final NativeSurfaceController? controller;
 
@@ -372,6 +412,9 @@ class IosNativeSurface extends StatefulWidget {
   final NativeReader? reader;
   final String title, empty, searchValue, searchPlaceholder;
   final String? errorMessage;
+
+  /// Names what is loading; defaults to the generic loading copy.
+  final String? loadingLabel;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
@@ -387,25 +430,49 @@ class IosNativeSurface extends StatefulWidget {
   State<IosNativeSurface> createState() => _IosNativeSurfaceState();
 }
 
+/// Route-scoped memory of Swift's rejections. A parent that swaps between its classic and native
+/// trees (a selection mode, for example) mounts a new surface; the marker keeps that surface on its
+/// fallback instead of retrying a refused snapshot. Page storage belongs to the enclosing route, so
+/// the marker is released with the route.
+bool _rejectionMarked(BuildContext context, String title) =>
+    PageStorage.maybeOf(context)?.readState(context, identifier: ('omi.native_ui.rejected', title)) == true;
+
+void _markRejection(BuildContext context, String title) =>
+    PageStorage.maybeOf(context)?.writeState(context, true, identifier: ('omi.native_ui.rejected', title));
+
 class _IosNativeSurfaceState extends State<IosNativeSurface> {
-  late final Future<bool> _supported = supportsIosSwiftUi();
+  late final Future<bool> _supported = supportsNativePresentation();
   late final NativeReadSession _session;
   StreamSubscription<int>? _auth;
   MethodChannel? _channel;
   int _revision = 0;
   bool _scheduled = false;
+
+  /// Swift refused a snapshot, or the current view has no renderer. The complete Flutter surface
+  /// then stays for this State's lifetime (and, through the route marker, for its successors).
+  bool _rejected = false;
   List<NativeSection> get _sections => [...?NativeNavigationChrome.of(context)?.sections, ...widget.sections];
   List<NativeRow> get _toolbar => [...?NativeNavigationChrome.of(context)?.toolbar, ...widget.toolbar];
   Widget _fallback() => NativeNavigationChrome.of(context)?.wrapFallback?.call(widget.fallback) ?? widget.fallback;
+
+  /// Every row this surface validates and dispatches, navigation chrome included.
+  List<NativeRow> get _rows => [
+        ..._toolbar,
+        ..._sections.expand((section) => section.rows),
+        ...?widget.chat?.actions,
+        ...?widget.reader?.actions,
+        if (widget.navigation != null) widget.navigation!,
+      ];
 
   @override
   void initState() {
     super.initState();
     widget.controller?._capture = _captureImage;
-    if (!iosSwiftUiEnabled) {
+    if (!nativePresentationEnabled) {
       _session = NativeReadSession(isCurrent: () => false);
       return;
     }
+    _rejected = _rejectionMarked(context, widget.title);
     final owner = AuthService.instance.captureSessionSnapshot();
     var publicOwnerValid = true;
     final publicSurface = widget.publicSurface;
@@ -440,7 +507,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
   }
 
   Map<String, Object?> _snapshot() => {
-        'version': 1,
+        'version': nativeSnapshotVersion,
         'revision': _revision++,
         'title': widget.title,
         'largeTitle': widget.largeTitle,
@@ -458,7 +525,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'refreshEnabled': widget.onRefresh != null,
         'error': widget.errorMessage ?? context.l10n.connectionErrorDesc,
         'retry': context.l10n.retry,
-        'loadingLabel': context.l10n.loading,
+        'loadingLabel': widget.loadingLabel ?? context.l10n.loading,
         'chat': widget.chat?.projection,
         'reader': widget.reader?.projection,
         'navigation': widget.navigation?.projection,
@@ -468,13 +535,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     await dispatchNativeAction(
       call,
       isActive: () => _session.active && mounted,
-      rows: [
-        ..._toolbar,
-        ..._sections.expand((section) => section.rows),
-        ...?widget.chat?.actions,
-        ...?widget.reader?.actions,
-        if (widget.navigation != null) widget.navigation!,
-      ],
+      rows: _rows,
       refresh: widget.onRefresh,
       search: widget.search,
     );
@@ -500,9 +561,22 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         _session.active ? 'update' : 'invalidate',
         _session.active ? _snapshot() : null,
       );
+    } on PlatformException catch (error) {
+      // Swift refused the snapshot, whatever its revision: never leave a blank native view.
+      if (error.code != 'invalid_native_snapshot') rethrow;
+      _reject();
     } on MissingPluginException {
-      if (mounted && identical(channel, _channel)) rethrow;
+      // A replaced or detached view loses its handler first; only the current view has no renderer.
+      if (identical(channel, _channel)) _reject();
     }
+  }
+
+  void _reject() {
+    if (_rejected) return;
+    _rejected = true;
+    if (mounted) _markRejection(context, widget.title);
+    unawaited(_invalidate());
+    if (mounted) setState(() {});
   }
 
   Future<void> _invalidate() async {
@@ -519,14 +593,9 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      ..._toolbar,
-      ..._sections.expand((section) => section.rows),
-      ...?widget.chat?.actions,
-      ...?widget.reader?.actions,
-      if (widget.navigation != null) widget.navigation!,
-    ];
-    if (!iosSwiftUiEnabled ||
+    final rows = _rows;
+    if (!nativePresentationEnabled ||
+        _rejected ||
         widget.navigation != null &&
             (widget.navigation!.id != 'main_destination' ||
                 widget.navigation!.kind != 'segmented' ||
@@ -566,7 +635,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
           creationParamsCodec: const StandardMessageCodec(),
           onPlatformViewCreated: (id) {
             final channel = MethodChannel('com.omi.native_ui/surface/$id');
-            if (!mounted || !_session.active) {
+            if (!mounted || !_session.active || _rejected) {
               unawaited(_invalidateDetached(channel));
               return;
             }

@@ -228,6 +228,61 @@ final class PreviewUITests: XCTestCase {
         app.buttons["save"].tap()
         XCTAssertTrue(app.staticTexts["saved::true"].waitForExistence(timeout: 10))
     }
+    func testLabelRowRendersSymbol() {
+        let app = start(["surface", "rows"])
+        let symbol = app.images.matching(identifier: "label_symbol").firstMatch
+        XCTAssertTrue(symbol.waitForExistence(timeout: 10))
+        let row = app.staticTexts["label_symbol"]
+        XCTAssertEqual(row.label, "Bluetooth connected")
+        // The symbol leads the title inside its own row; a label without a symbol draws none.
+        XCTAssertTrue(row.frame.contains(CGPoint(x: symbol.frame.midX, y: symbol.frame.midY)))
+        XCTAssertLessThan(symbol.frame.minX - row.frame.minX, 40)
+        XCTAssertEqual(app.images.matching(identifier: "label_plain").count, 0)
+        let warning = app.images.matching(identifier: "label_warning").firstMatch
+        XCTAssertTrue(warning.exists)
+        let screenshot = app.screenshot().image
+        XCTAssertTrue(containsRed(screenshot, in: warning.frame), "A destructive label's symbol is red")
+        XCTAssertFalse(containsRed(screenshot, in: symbol.frame))
+        capture(app, "native-label-symbols")
+    }
+
+    func testTaskTitleWithoutOpenOptionSendsNothing() {
+        let app = start(["surface", "rows"])
+        let title = app.staticTexts["task_static"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        // Only the checkbox is a button when the owner offers no 'open'; an 'open' task's title is one too.
+        XCTAssertEqual(app.buttons.matching(identifier: "task_static").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "task_open").count, 2)
+        title.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture")
+        app.buttons["task_static"].tap()
+        XCTAssertTrue(app.staticTexts["task_static:true"].waitForExistence(timeout: 5))
+        title.press(forDuration: 0.8)
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(app.staticTexts["task_static:delete"].waitForExistence(timeout: 5))
+        app.buttons.matching(identifier: "task_open").element(boundBy: 1).tap()
+        XCTAssertTrue(app.staticTexts["task_open:open"].waitForExistence(timeout: 5))
+    }
+
+    /// Whether any pixel inside [frame] (screen points) is a saturated red.
+    func containsRed(_ image: UIImage, in frame: CGRect) -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+        let scale = CGFloat(cgImage.width) / image.size.width
+        let pixels = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale,
+                            height: frame.height * scale).integral
+        guard let crop = cgImage.cropping(to: pixels) else { return false }
+        let width = crop.width, height = crop.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &data, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 0, to: data.count, by: 4).contains { index in
+            data[index] > 170 && data[index + 1] < 110 && data[index + 2] < 110
+        }
+    }
+
     func start(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = arguments

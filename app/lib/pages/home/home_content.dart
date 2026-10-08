@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -25,15 +26,16 @@ class HomeContentPage extends StatefulWidget {
 class HomeContentPageState extends State<HomeContentPage> {
   final GlobalKey<State<ConversationsPage>> _listKey = GlobalKey<State<ConversationsPage>>();
   final _nativeKey = GlobalKey<IosNativeHomeState>();
-  late final Future<bool> _nativeSupport = supportsIosSwiftUi();
+  late final Future<bool> _nativeSupport = supportsNativePresentation();
 
   void scrollToTop() {
-    if (_nativeKey.currentState != null) {
-      _nativeKey.currentState!.scrollToTop();
+    // The classic list is mounted on its own, or as the native Home's fallback after a rejection.
+    final list = _listKey.currentState;
+    if (list != null) {
+      (list as dynamic).scrollToTop();
       return;
     }
-    final list = _listKey.currentState;
-    if (list != null) (list as dynamic).scrollToTop();
+    _nativeKey.currentState?.scrollToTop();
   }
 
   @override
@@ -43,7 +45,7 @@ class HomeContentPageState extends State<HomeContentPage> {
       requestInitialLoad: widget.requestInitialLoad,
       loadRecaps: widget.loadRecaps,
     );
-    if (!iosSwiftUiEnabled) return classic;
+    if (!nativePresentationEnabled) return classic;
     return FutureBuilder<bool>(
       future: _nativeSupport,
       builder: (context, snapshot) {
@@ -54,6 +56,7 @@ class HomeContentPageState extends State<HomeContentPage> {
           key: _nativeKey,
           requestInitialLoad: widget.requestInitialLoad,
           loadRecaps: widget.loadRecaps,
+          fallback: classic,
         );
       },
     );

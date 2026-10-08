@@ -106,8 +106,13 @@ extension _NativeSummaryPresentation on _SummaryTabState {
       if (mounted) _nativeRebuild(() => _isEditing = false);
     }
     if (!mounted) return;
-    final text = result?.values['summary_content'];
-    if (result?.action == 'save' &&
+    if (result == null) {
+      // No native editor: the complete page takes over and continues this edit in place.
+      widget.onNativeUnavailable?.call(selection);
+      return;
+    }
+    final text = result.values['summary_content'];
+    if (result.action == 'save' &&
         text is String &&
         text != selection.content &&
         provider.conversationOrNull?.id == conversationId &&

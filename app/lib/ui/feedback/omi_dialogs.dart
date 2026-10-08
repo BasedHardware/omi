@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
@@ -5,7 +6,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
-import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
@@ -260,7 +260,9 @@ Future<OmiConfirmResult> showOmiConfirmMenu(
   bool offerOptOut = false,
   String? optOutLabel,
 }) async {
-  if (iosSwiftUiEnabled) {
+  // Only the iOS preview swaps the anchored menu for its system confirmation; Android keeps it. Release
+  // builds reduce this to the flag on iOS; the hermetic test host only lifts the flag, never the platform.
+  if (nativePresentationEnabled && Platform.isIOS) {
     if (offerOptOut) {
       return showOmiConfirmWithOptOut(context,
           title: title, message: message, confirmLabel: confirmLabel, destructive: true, optOutLabel: optOutLabel);

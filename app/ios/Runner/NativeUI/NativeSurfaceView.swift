@@ -300,12 +300,16 @@ struct NativeSurfaceView: View {
                         Image(systemName: row.value?.bool == true ? "checkmark.circle.fill" : "circle")
                             .font(.title2).frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.title).accessibilityAddTraits(row.value?.bool == true ? .isSelected : [])
-                    Button { Task { await state.send(row.id, value: "open") } } label: { label(row) }
-                        .contextMenu {
-                            ForEach(row.options) { option in
-                                Button(option.title) { Task { await state.send(row.id, value: option.id) } }
-                            }
+                    // The title opens the task only when its owner offers 'open'; otherwise it is static text.
+                    Group {
+                        if row.options.contains(where: { $0.id == "open" }) {
+                            Button { Task { await state.send(row.id, value: "open") } } label: { label(row) }
+                        } else { label(row) }
+                    }.contextMenu {
+                        ForEach(row.options) { option in
+                            Button(option.title) { Task { await state.send(row.id, value: option.id) } }
                         }
+                    }
                 }.buttonStyle(.plain)
             case "choice":
                 if row.optionSearch != nil {
@@ -387,7 +391,12 @@ struct NativeSurfaceView: View {
                 NativeTextRow(row: row, state: state)
             case "keypad":
                 NativeKeypadRow(row: row, state: state)
-            case "label": label(row).textSelection(.enabled)
+            case "label":
+                if let symbol = row.symbol {
+                    Label { label(row) } icon: {
+                        Image(systemName: symbol).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                    }.textSelection(.enabled)
+                } else { label(row).textSelection(.enabled) }
             default: action(row, compact: compact)
             }
         }

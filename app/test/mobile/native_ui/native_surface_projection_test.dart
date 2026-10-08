@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_settings.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/components/omi_settings.dart';
+
+import 'native_test_host.dart';
 
 void main() {
   test('settings projection keeps values, destructive actions and mutation ownership', () async {
@@ -137,6 +141,55 @@ void main() {
           false);
     }
   });
+  test('Device Settings icons map to SF Symbols available since iOS 14', () {
+    final symbols = {
+      FontAwesomeIcons.handPointer: 'hand.tap',
+      FontAwesomeIcons.lightbulb: 'lightbulb',
+      FontAwesomeIcons.download: 'arrow.down.circle',
+      FontAwesomeIcons.rotateLeft: 'arrow.counterclockwise',
+      FontAwesomeIcons.sdCard: 'sdcard',
+      FontAwesomeIcons.stethoscope: 'stethoscope',
+      FontAwesomeIcons.linkSlash: 'link',
+      FontAwesomeIcons.ban: 'nosign',
+      FontAwesomeIcons.graduationCap: 'graduationcap',
+      FontAwesomeIcons.camera: 'camera',
+      FontAwesomeIcons.gears: 'gearshape.2',
+      FontAwesomeIcons.hashtag: 'number',
+      FontAwesomeIcons.industry: 'building.2',
+      FontAwesomeIcons.fingerprint: 'touchid',
+      FontAwesomeIcons.barcode: 'barcode',
+    };
+    final rows = nativeSettingsSections([
+      OmiSettingsGroup(children: [
+        for (final (index, icon) in symbols.keys.indexed)
+          OmiSettingsRow(title: 'Row $index', leading: FaIcon(icon), onTap: () {}),
+      ])
+    ])!
+        .single
+        .rows;
+    expect(rows.map((row) => row.symbol), symbols.values);
+  });
+
+  testWidgets('loadingLabel reaches the snapshot; the generic loading copy stays the default', (tester) async {
+    final host = NativeTestHost.install();
+    Future<Map> snapshot({String? loadingLabel}) async {
+      await tester.pumpWidget(NativeTestHost.app(IosNativeSurface(
+          key: UniqueKey(),
+          title: 'Export',
+          loading: true,
+          loadingLabel: loadingLabel,
+          fallback: const SizedBox(),
+          sections: const [])));
+      await NativeTestHost.settle(tester);
+      return tester.widget<UiKitView>(find.byType(UiKitView)).creationParams as Map;
+    }
+
+    expect((await snapshot(loadingLabel: 'Exporting conversations'))['loadingLabel'], 'Exporting conversations');
+    final update = host.calls.lastWhere((call) => call.$2.method == 'update').$2;
+    expect((update.arguments as Map)['loadingLabel'], 'Exporting conversations');
+    expect((await snapshot())['loadingLabel'], lookupAppLocalizations(const Locale('en')).loading);
+  });
+
   test('nested settings groups keep unique identities', () {
     final groups = nativeSettingsSections([
       Column(children: [

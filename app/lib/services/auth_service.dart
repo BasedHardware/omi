@@ -124,11 +124,14 @@ class AuthService {
   /// logic against the gateway. The full-stack simulator lane does NOT use
   /// this: it signs in through real FirebaseAuth against the local Auth
   /// emulator. Debug-only and local_dev-profile-gated; assertions fail in
-  /// production-family builds instead of installing.
-  static void installLocalHarnessTokenGateway(AuthTokenGateway gateway) {
+  /// production-family builds instead of installing. Returns the gateway it
+  /// replaced, so a test can put it back when it ends.
+  static AuthTokenGateway installLocalHarnessTokenGateway(AuthTokenGateway gateway) {
     assert(kDebugMode, 'local-harness token gateway is a debug-only seam');
     assert(Env.profile == AppEnvironmentProfile.localDev, 'local-harness token gateway requires the local_dev profile');
+    final previous = _instance._tokenGateway;
     _instance._tokenGateway = gateway;
+    return previous;
   }
 
   static const int _maxRefreshAttempts = 3;

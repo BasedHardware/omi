@@ -11,9 +11,9 @@ final class NativeHomeViewFactory: NSObject, @preconcurrency FlutterPlatformView
     func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol { FlutterStandardMessageCodec.sharedInstance() }
 
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
-        guard #available(iOS 16.0, *), let args,
-              let snapshot = try? NativeHomeSnapshot.decode(args) else {
-            return UnavailableNativeHomeView()
+        guard #available(iOS 16.0, *) else { return UnavailableNativeHomeView() }
+        guard let args, let snapshot = try? NativeHomeSnapshot.decode(args) else {
+            return RejectedNativeHomeView(viewId: viewId, messenger: messenger)
         }
         return NativeHomePlatformView(frame: frame, viewId: viewId, snapshot: snapshot, messenger: messenger)
     }
@@ -22,6 +22,29 @@ final class NativeHomeViewFactory: NSObject, @preconcurrency FlutterPlatformView
 private final class UnavailableNativeHomeView: NSObject, FlutterPlatformView {
     private let content = UIView()
     func view() -> UIView { content }
+}
+
+/// A refused creation snapshot never becomes a blank Home: every update reports the rejection,
+/// so Dart restores the classic Flutter Home.
+@MainActor
+private final class RejectedNativeHomeView: NSObject, @preconcurrency FlutterPlatformView {
+    private let content = UIView()
+    private let channel: FlutterMethodChannel
+
+    init(viewId: Int64, messenger: FlutterBinaryMessenger) {
+        channel = FlutterMethodChannel(name: "com.omi.native_ui/home/\(viewId)", binaryMessenger: messenger)
+        super.init()
+        channel.setMethodCallHandler { call, result in
+            switch call.method {
+            case "update": result(FlutterError(code: "invalid_native_snapshot", message: nil, details: nil))
+            case "invalidate": result(nil)
+            default: result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    func view() -> UIView { content }
+    deinit { channel.setMethodCallHandler(nil) }
 }
 
 @available(iOS 16.0, *)
