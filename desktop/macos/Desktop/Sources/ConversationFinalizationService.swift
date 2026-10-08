@@ -153,6 +153,9 @@ actor ConversationFinalizationService {
         reason: .retry,
         meetingTreatmentEligible: outcome.meetingTreatmentEligible
       )
+    } catch is CancellationError {
+      // A stale owner's acknowledgement must not touch or notify the current owner's row.
+      return
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
     }
@@ -199,6 +202,9 @@ actor ConversationFinalizationService {
         reason: reason,
         meetingTreatmentEligible: meetingTreatmentEligible
       )
+    } catch is CancellationError {
+      // A stale owner's acknowledgement must not touch or notify the current owner's row.
+      return
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
     }
@@ -353,12 +359,7 @@ actor ConversationFinalizationService {
     let response = try await apiClient.createConversationFromSegments(request)
     if response.status == "deleted" {
       // A terminal deletion ack resolves this exact upload; never hydrate or retry it.
-      do {
-        try await TranscriptionStorage.shared.deleteSession(id: sessionId, expectedGeneration: uploadGeneration)
-      } catch is CancellationError {
-        // The old owner's outbox can resolve on its next retry; do not mark a new owner's row failed.
-        return false
-      }
+      try await TranscriptionStorage.shared.deleteSession(id: sessionId, expectedGeneration: uploadGeneration)
       return false
     }
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
