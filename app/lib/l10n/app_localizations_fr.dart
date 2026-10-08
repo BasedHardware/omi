@@ -12539,16 +12539,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personnalisation de votre expérience';
 
   @override
-  String get onboardingRatingPromptTitle => 'Pendant que vous patientez, Omi vous plaît-il ?';
+  String get onboardingRatingPromptTitle => 'Vous aimez Omi ?';
 
   @override
-  String get onboardingRatingPromptBody => 'Une note de 5 étoiles nous aide vraiment beaucoup ❤️';
+  String get onboardingRatingPromptYes => 'Oui';
 
   @override
-  String get onboardingRatingPromptYes => 'Oui, je veux vous soutenir !';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pas vraiment';
+  String get onboardingRatingPromptNo => 'Non';
 
   @override
   String get partialRecording => 'Enregistrement partiel';
