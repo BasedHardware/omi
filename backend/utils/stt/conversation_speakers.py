@@ -292,7 +292,11 @@ def resolve_conversation_speakers(
             match_scores.record_failure(None, reason='malformed_doc')
         if identities_of(cluster):
             continue
-        evidence = sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
+        evidence = (
+            (score_seconds[index] or 0.0)
+            if embedding_seconds is not None
+            else sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
+        )
         vector = centroid(cluster)
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue

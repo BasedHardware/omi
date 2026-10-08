@@ -3597,3 +3597,27 @@ intervals in the existing ring before embedding. Overlaps and repeats count
 once; successful extraction reserves its intervals. Pending metadata and task
 concurrency are bounded. The five-second live decision floor and verification
 thresholds remain unchanged, as does WAL's separate eligibility policy.
+
+### Finished capture identity
+
+Span resolution can use a verified subset of segments while other segments
+lack placement. Unplaced segments abstain; inconsistent inventories, overlaps,
+known coverage holes and raced blobs still refuse globally. Identity eligibility
+uses actual distinct embedded duration independently of optional score logging.
+Version-1 caches remain readable for grouping; entries without duration metadata
+claim no owner evidence until verified audio supplies it.
+
+After a pusher connection finishes its private-cloud uploads, one process-owned
+sequential retry handles at most eight conversations (five seconds per call).
+It changes only transcript identity and speaker resolution on completed,
+unlocked pendant/WAL rows. The commit compares the read document revision and
+reapplies manual authority; intervening edits defeat it. It performs no notes,
+task or lifecycle replay, and desktop/phone channel paths remain excluded.
+
+`capture_evidence.reason=missing_source_position` refers to absent/unusable
+client source-frame receipts, not absence of backend capture windows. Flutter's
+`CAPTURE_EVIDENCE_V1_DARK_WRITE` compile-time define defaults off; source-frame
+receipts require an app build with that define and supported WAL frames. Listen
+and pusher must not synthesize client capture roots or frame ordinals. The
+existing `AUDIO_TIMELINE_SPANS` producer and `LIVE_SPEAKER_SPAN_RESOLUTION`
+consumer flags permit identity placement independently of that dark receipt.

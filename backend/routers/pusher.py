@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
+from utils.conversations.speaker_resolution import refresh_completed_speaker_identity
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from utils.pusher_protocol import (
     BUFFERED_AUDIO_MAX_BYTES,
@@ -252,6 +253,7 @@ async def _websocket_util_trigger(
         # Their chunks can never be referenced, played or cleaned up again, so we
         # stop uploading rather than leaving more orphans in the bucket (#11742).
         deleted_conversations: set[str] = set()
+        identity_refreshed: set[str] = set()
 
         def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
@@ -346,6 +348,8 @@ async def _websocket_util_trigger(
                         )
                         if applied:
                             schedule_person_voice_learning_retry(uid, conv_id)
+                            if len(identity_refreshed) < 128:
+                                identity_refreshed.add(conv_id)
                             # Rebuild the conversation playback artifact if a stamped one
                             # went stale. No stamp (the live-conversation common case) → no-op.
                             if is_audio_merge_dispatch_enabled():
@@ -441,6 +445,16 @@ async def _websocket_util_trigger(
 
             for conv_id in conv_ids_to_flush:
                 await _flush_batch(conv_id)
+
+        # All chunks and manifests from this socket are now authoritative.
+        # A process-owned, sequential bounded task survives listen disconnect;
+        # it never replays processing or adds a queue/worker.
+        async def retry_completed_identities():
+            for conv_id in sorted(identity_refreshed)[:8]:
+                await run_blocking(storage_executor, refresh_completed_speaker_identity, uid, conv_id)
+
+        if identity_refreshed:
+            start_background_task(retry_completed_identities(), name='speaker_identity_late_audio')
 
     async def process_speaker_sample_queue() -> None:
         """Background task that processes speaker sample extraction requests."""

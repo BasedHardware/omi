@@ -820,7 +820,7 @@ def _apply_receipt_overlay(conversation: Conversation, receipt: Mapping[str, Any
     return matched
 
 
-def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
+def resolve_speakers_for_processing(uid: str, conversation: Any, *, budget_seconds: Optional[float] = None) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     if not isinstance(conversation, Conversation) or not conversation.transcript_segments:
         return False
@@ -847,7 +847,13 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
                     type(error).__name__,
                 )
         if resolution_enabled():
-            _resolve(uid, conversation, receipt=receipt, deadline=began + _budget_seconds())
+            _resolve(
+                uid,
+                conversation,
+                receipt=receipt,
+                deadline=began
+                + (min(_budget_seconds(), budget_seconds) if budget_seconds is not None else _budget_seconds()),
+            )
     except Exception as error:
         record_fallback(
             component='other',
@@ -880,6 +886,37 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
         elif receipt_read:
             receipt_applied = True  # A successful read confirmed there is no manual receipt.
     return receipt_applied
+
+
+def refresh_completed_speaker_identity(uid: str, conversation_id: str) -> bool:
+    """One late-audio retry, bounded by the ordinary resolver budget and a row CAS.
+
+    Desktop admission remains unchanged (item E); channel-authored identities
+    are not mixed down for this pendant/WAL repair. No LLM or processing replay.
+    """
+    try:
+        raw = conversations_db.get_conversation(uid, conversation_id)
+        if (
+            not raw
+            or raw.get('status') != 'completed'
+            or raw.get('deleted')
+            or raw.get('discarded')
+            or raw.get('is_locked')
+            or raw.get('source') in ('desktop', 'phone')
+            or not raw.get('private_cloud_sync_enabled')
+            or raw.get('updated_at') is None
+            or (raw.get('speaker_resolution') or {}).get('status') == 'resolved'
+        ):
+            return False
+        conversation = Conversation(**raw)
+        if not resolve_speakers_for_processing(uid, conversation, budget_seconds=5.0):
+            return False
+        return conversations_db.persist_speaker_resolution_if_current(
+            uid, conversation.model_dump(), expected_updated_at=raw['updated_at']
+        )
+    except Exception as error:
+        logger.warning('event=speaker_identity_refresh outcome=failed exception_type=%s', type(error).__name__)
+        return False
 
 
 def _resolution_reason(placement_reasons: List[str]) -> str:
@@ -1020,7 +1057,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
                 inventory_files = dumped_files
                 mapping = placement_mapping(dumped_files)
                 index = prepare_audio_coverage(dumped_files, deadline=deadline, max_spans=MAX_PLACEMENT_SPANS)
-            for segment in embeddable:
+            for segment in segments:
                 if time.monotonic() >= deadline:
                     _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
                     return
@@ -1067,7 +1104,7 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
             _without_resolution(conversation, 'unaligned_audio', reason=refusal)
             return
 
-    clip_seconds: Optional[Dict[str, float]] = {} if match_scores.enabled() else None
+    clip_seconds: Dict[str, float] = {}
     cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), clip_seconds)
     if not spans_on and any(key.startswith(CAPTURE_SPAN_KEY_PREFIX) for key in cache):
         _without_resolution(conversation, 'unaligned_audio', reason='capture_span')
@@ -1132,20 +1169,43 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         return True
 
     pending = [s for s in segments if needs_embedding(s)]
+    abstained = set()
     if spans_on:
-        for segment in pending:
-            if segment.id is None:
-                _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
-                return
-            placement = placements.get(segment.id)
-            if placement is None or placement.window is None:
-                _without_resolution(
-                    conversation,
-                    'unaligned_audio',
-                    reason=placement.reason if placement is not None else 'unplaced',
-                    force_unavailable=True,
-                )
-                return
+        # One missing provider window does not invalidate other proven windows.
+        # It must never borrow the nearest voice or a bare legacy cache entry.
+        # Manifest contradictions and known coverage holes still refuse globally.
+        if (
+            index.ambiguity
+            or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())
+            or any(
+                s.audio_capture_start is not None
+                and s.audio_capture_end is not None
+                and not index.covers(s.audio_capture_start, s.audio_capture_end)
+                for s in segments
+            )
+        ):
+            _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
+            return
+
+        def historical_cache(segment):
+            scope = segment.speaker_id_scope or ''
+            return (
+                segment.audio_capture_start is None
+                and segment.audio_capture_end is None
+                and (scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:'))
+                and segment.id in cache
+                and not needs_embedding(segment)
+            )
+
+        abstained = {
+            s.id
+            for s in segments
+            if s.id and (s.id not in placements or placements[s.id].window is None) and not historical_cache(s)
+        }
+        pending = [s for s in pending if s.id not in abstained and s.id is not None]
+        if abstained and not pending and not any(s.id not in abstained and s.id in cache for s in segments):
+            _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
+            return
     else:
         own_scope = f'conversation:{conversation.id}'
         origin = _started_at(conversation)
@@ -1201,25 +1261,47 @@ def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any]
         vectors = {
             segment.id: cache[keys[segment.id]][1]
             for segment in segments
-            if segment.id in keys and keys[segment.id] in cache
+            if segment.id in keys and keys[segment.id] in cache and segment.id not in abstained
         }
     else:
         vectors = {sid: vector for sid, (_, vector) in cache.items()}
-    score_durations = None
-    try:
-        score_durations = (
-            {s.id: clip_seconds[keys[s.id]] for s in segments if s.id in keys and keys[s.id] in clip_seconds}
-            if spans_on and keys is not None and clip_seconds is not None
-            else ({} if spans_on else clip_seconds)
-        )
-    except Exception:
-        match_scores.record_failure(logger, reason='malformed_doc')
+    # Evidence duration is identity policy, independent of score instrumentation.
+    # Older v1 entries remain useful for grouping; without clip metadata they
+    # contribute no claimed owner evidence until new verified audio is embedded.
+    score_durations = {}
+    covered_windows = []
+    for segment in segments:
+        sid = segment.id
+        if sid not in vectors:
+            continue
+        key = keys.get(sid, sid) if keys is not None else sid
+        seconds = clip_seconds.get(key, 0.0)
+        if not isinstance(seconds, (float, int)) or not math.isfinite(seconds) or seconds < 0:
+            seconds = 0.0
+        seconds = min(seconds, _duration(segment), MAX_CLIP_SECONDS)
+        if spans_on and sid in placements and placements[sid].window is not None:
+            low, high = placements[sid].window
+            if high - low > MAX_CLIP_SECONDS:
+                center = (low + high) / 2
+                low, high = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
+            fresh = [(low, high)]
+            for used_low, used_high in covered_windows:
+                fresh = [
+                    part
+                    for a, b in fresh
+                    for part in ((a, min(b, used_low)), (max(a, used_high), b))
+                    if part[1] > part[0]
+                ]
+            seconds = min(seconds, sum(b - a for a, b in fresh))
+            covered_windows.append((low, high))
+        score_durations[sid] = seconds
     resolution = resolve_conversation_speakers(
         segments,
         vectors,
         manual_speakers=_manual_speakers(receipt),
         voiceprints=load_voiceprints_for_resolution(uid),
         embedding_seconds=score_durations,
+        abstained_segment_ids=abstained,
     )
     if resolution is None:
         reason, fields = _no_embeddings_diagnostics(

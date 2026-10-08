@@ -653,7 +653,7 @@ def test_span_resolution_mixed_sync_and_capture_scopes_resolve(env, stage_overri
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
 
 
-def test_span_resolution_refuses_before_any_embedding_when_a_required_segment_is_unplaceable(env, monkeypatch):
+def test_span_resolution_abstains_for_unplaceable_segment_and_embeds_verified_subset(env, monkeypatch):
     _span_flags(monkeypatch)
     _, diarizer = env
     plan = [0, 1] * 4
@@ -664,8 +664,9 @@ def test_span_resolution_refuses_before_any_embedding_when_a_required_segment_is
 
     stage.resolve_speakers_for_processing('u1', conversation)
 
-    assert diarizer.calls == 0
+    assert diarizer.calls == len(plan) - 1
     assert conversation.speaker_resolution.status == 'unavailable'
+    assert conversation.transcript_segments[3].speaker_id == 3
 
 
 def test_span_resolution_refuses_when_the_manifest_has_an_uncovered_hole(env, monkeypatch):
@@ -1016,7 +1017,7 @@ def test_span_on_resolved_own_scope_with_lost_endpoint_or_cache_is_unavailable(e
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert conversation.speaker_resolution.status == 'unavailable'
-    assert diarizer.calls == calls_after_on
+    assert diarizer.calls == calls_after_on + (len(plan) - 1 if lost == 'endpoint_and_cache' else 0)
 
 
 def _span_manifest(origin, spans, *, file_id='af1'):
