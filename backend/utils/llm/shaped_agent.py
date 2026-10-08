@@ -11,14 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 
-logger = logging.getLogger(__name__)
 FLAG = 'OMI_SHAPED_AGENT_MODE'
 COHORT_UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
 SHARED_CONTRACT = (
@@ -116,16 +114,3 @@ async def run_loop(
             messages.extend(turn.messages)
             messages.extend(await execute_tools(turn.tool_calls))
     raise AssertionError('Unreachable loop exit')
-
-
-def serve_notes(uid: str | None, old: Callable[[], Any], new: Callable[[], Any]) -> Any:
-    route = route_for_uid(uid)
-    if route == 'new':
-        return new()
-    result = old()
-    if route == 'shadow':
-        try:
-            new()
-        except Exception as error:
-            logger.warning('Shaped notes shadow failed error_type=%s', type(error).__name__)
-    return result

@@ -2933,7 +2933,7 @@ environments:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: cohort
+            value: 'on'
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
@@ -3186,7 +3186,7 @@ environments:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: cohort
+            value: 'on'
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
@@ -3676,7 +3676,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_SHAPED_AGENT_MODE:
-              value: cohort
+              value: 'on'
               category: rollout
             SONIOX_ORDERED_FINALIZE:
               value: 'false'
@@ -4005,6 +4005,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE:
+              value: 'on'
+              category: rollout
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry

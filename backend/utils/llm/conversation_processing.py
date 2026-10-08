@@ -4,10 +4,9 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from importlib import import_module
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -21,22 +20,15 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import (
     ActionItemsExtraction,
-    RichStructuredExtraction,
     StructuredExtraction,
 )
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
-from utils.conversations.meeting_participants import MeetingRoster
-
-if TYPE_CHECKING:
-    from utils.conversations.episode_evidence import EvidenceItem
 
 from utils.llm.conversation_notes_prompts import (
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_note_density,
 )
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
@@ -48,18 +40,14 @@ from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
-from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
-from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
-from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
+from utils.llm.meeting_notes_rich_prompts import screen_frames_message
+from utils.llm.meeting_notes_presentation import sanitize_conversation_note_presentation
 from utils.llm.meeting_notes_validation import (
-    enforce_structured_presentation_contract,
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
-    validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
-from utils.llm.notes_observability import current_run, observe_notes
-from utils.llm.shaped_agent import Budget, Mount, Turn, run_loop, serve_notes
+from utils.llm.shaped_agent import Budget, Mount, Turn, run_loop, route_for_uid
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
@@ -91,7 +79,6 @@ CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACT
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
 GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
 TRANSCRIPT_STRUCTURE_CACHE_KEY = 'omi-transcript-structure-v1'
-CONVERSATION_NOTES_CACHE_KEY = 'omi-conversation-notes-v1'
 ACTION_ITEMS_CACHE_KEY = 'omi-extract-actions-v1'
 APP_RESULT_CACHE_NAMESPACE = 'omi-app-result-v1'
 GPT56_CACHE_MINIMUM_TOKENS = EXPLICIT_CACHE_MINIMUM_TOKENS
@@ -177,7 +164,7 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 def _gpt56_explicit_cache_enabled() -> bool:
     # The route half stays local so this module's gateway seam remains patchable;
     # the kill-switch half is owned once, in prompt_cache, for every caller.
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
+    return should_route_features_through_gateway() and explicit_cache_switch_enabled() and not has_byok_keys()
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -1163,14 +1150,11 @@ def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
     uid: Optional[str] = None,
-    legacy_writer: Optional[Callable[[], Structured]] = None,
     **kwargs: Any,
 ) -> Structured:
-    return serve_notes(
-        uid,
-        legacy_writer or (lambda: _get_conversation_notes_legacy(prefix, **kwargs)),
-        lambda: _get_shaped_conversation_notes(prefix, **kwargs),
-    )
+    if route_for_uid(uid) != 'new':
+        raise RuntimeError('Shaped notes disabled; restore the previous image for legacy serving')
+    return _get_shaped_conversation_notes(prefix, **kwargs)
 
 
 def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
@@ -1225,7 +1209,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
     # A one-turn mount cannot buy the legacy presentation revision call.
-    enforce_structured_presentation_contract(structured, prefix.transcript_segment_ids, safe_fallback=True)
+    sanitize_conversation_note_presentation(structured, prefix.transcript_segment_ids)
     now = datetime.now(timezone.utc)
     try:
         user_tz = ZoneInfo(kwargs['tz']) if kwargs['tz'] else timezone.utc
@@ -1239,280 +1223,6 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
         event.duration = min(event.duration, 180)
         event.created = False
     structured.overview = render_sections_markdown(structured.sections) or structured.overview
-    return structured
-
-
-@observe_notes
-def _get_conversation_notes_legacy(
-    prefix: ConversationPromptPrefix,
-    *,
-    started_at: datetime,
-    language_code: str,
-    output_language_code: Optional[str],
-    tz: str,
-    task_intelligence_capture: bool,
-    existing_action_items: Optional[List[Dict[str, Any]]] = None,
-    trusted_wake_word_markers: bool = False,
-    meeting_context: Optional[str] = None,
-    rich_context_enabled: bool = False,
-    roster: Optional[MeetingRoster] = None,
-    screen_frames: Sequence[NotesFrameImage] = (),
-    episode_evidence: Optional[Sequence["EvidenceItem"]] = None,
-    episode_finished_at: Optional[datetime] = None,
-) -> Structured:
-    """Generate notes using unchanged legacy/rich prompts or admitted episode evidence."""
-    episode_mode = episode_evidence is not None
-    original_screen_frames = screen_frames
-    run = current_run()
-    if episode_mode and len(prefix.context.encode('utf-8')) > 240000:
-        # Very long speech follows the existing rich path, without episode metadata overhead.
-        episode_mode = False
-        if run is not None:
-            run.arm = 'baseline_long'
-            run.violations.add('long_input_baseline')
-        import_module('utils.observability.fallback').record_fallback(
-            component='conversation_notes',
-            from_mode='episode_notes',
-            to_mode='baseline_long',
-            reason='local_heal',
-            outcome='degraded',
-        )
-    if not episode_mode and (
-        not prefix.context.strip() or not (prefix.has_usable_content or (rich_context_enabled and screen_frames))
-    ):
-        return Structured()
-
-    response_language = output_language_code or language_code
-    current_time = datetime.now(timezone.utc)
-    try:
-        user_tz = ZoneInfo(tz) if tz else timezone.utc
-    except Exception:
-        logger.warning('Invalid timezone %r for conversation notes; falling back to UTC', tz)
-        user_tz = timezone.utc
-    started_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(user_tz)
-    current_local = current_time.astimezone(user_tz)
-    episode_settings = import_module('config.episode_writer').episode_writer_settings() if episode_mode else None
-    if run is not None and episode_settings is not None:
-        run.configure_episode(episode_settings)
-    rich_mode = rich_context_enabled or episode_mode
-    notes_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
-    density = conversation_note_density(notes_word_count, rich_mode)
-
-    existing_lines: List[str] = []
-    for item in existing_action_items or []:
-        if item.get('completed'):
-            continue
-        task_id = item.get('id')
-        label = f'ID {task_id}: ' if task_id else ''
-        existing_lines.append(f'- {label}{item.get("description", "")}')
-    existing_context = '\n'.join(existing_lines) or 'None supplied.'
-
-    extraction_parser = PydanticOutputParser(
-        pydantic_object=(
-            import_module('models.episode_extraction').EpisodeStructuredExtraction
-            if episode_mode and episode_settings.claims
-            else RichStructuredExtraction if rich_mode else StructuredExtraction
-        )
-    )
-    if episode_mode:
-        static_instructions = import_module('utils.llm.episode_notes_prompts').episode_static_instructions(
-            extraction_parser.get_format_instructions(),
-            _conversation_notes_static_instructions,
-            include_claims=episode_settings.claims,
-        )
-    elif rich_mode:
-        static_instructions = rich_static_instructions(
-            extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
-        )
-    else:
-        static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
-    wake_word_rules = ''
-    if episode_mode:
-        if any(item.wake_word_invocation for item in episode_evidence or ()):
-            wake_word_rules = import_module('utils.llm.episode_notes_prompts').EPISODE_WAKE_WORD_RULES
-    elif trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
-        wake_word_rules = WAKE_WORD_PROMPT_RULES
-    volatile_kwargs = dict(
-        response_language=response_language,
-        density=density,
-        task_intelligence_capture=task_intelligence_capture,
-        existing_context=existing_context,
-        started_local_iso=started_local.replace(tzinfo=None).isoformat(),
-        current_local_iso=current_local.replace(tzinfo=None).isoformat(),
-        tz_label=tz or 'UTC',
-        conversation_context=prefix.context,
-        wake_word_rules=wake_word_rules,
-    )
-    evidence_items = list(episode_evidence or ()) + (
-        import_module('utils.conversations.episode_evidence').open_task_evidence(existing_action_items or [])
-        if episode_mode
-        else []
-    )
-    if episode_mode:
-        evidence_items = import_module('utils.llm.episode_writer').prepare_episode_evidence(
-            evidence_items,
-            episode_settings,
-            started_at=started_at.isoformat(),
-            finished_at=episode_finished_at.isoformat() if episode_finished_at else None,
-            run=run,
-            model_factory=lambda: import_module('utils.llm.episode_writer').bind_episode_effort(
-                get_llm('conv_structure', request_timeout=episode_settings.selection_timeout, max_retries=0),
-                episode_settings.selection_effort,
-            ),
-        )
-        episode_settings, writer_deadline = import_module('utils.llm.episode_writer').episode_runtime_settings(
-            evidence_items, episode_settings, run
-        )
-        if screen_frames and episode_settings.selection != 'compact':
-            selected_refs = {item.source_ref for item in evidence_items if item.source_kind == 'screen_frame'}
-            screen_frames = tuple(frame for frame in screen_frames if frame.frame_id in selected_refs)
-        volatile_instructions = import_module('utils.llm.episode_notes_prompts').episode_volatile_instructions(
-            **{
-                key: value
-                for key, value in volatile_kwargs.items()
-                if key not in {'existing_context', 'conversation_context'}
-            },
-            evidence_block=import_module('utils.conversations.episode_evidence').render_episode_evidence(
-                evidence_items
-            ),
-            capture_finished_local_iso=import_module('utils.llm.episode_writer').episode_finish_local_iso(
-                episode_finished_at, user_tz
-            ),
-        )
-    elif rich_mode:
-        volatile_instructions = rich_volatile_instructions(
-            legacy_volatile=_conversation_notes_volatile_instructions,
-            meeting_context=meeting_context,
-            **volatile_kwargs,
-        )
-    else:
-        volatile_instructions = _conversation_notes_volatile_instructions(**volatile_kwargs)
-    # BYOK is excluded: a BYOK key can route conv_structure off GPT-5.6, where
-    # prompt_cache_breakpoint is not a valid content part. Anthropic rejects it
-    # (system.0.prompt_cache_breakpoint: Extra inputs are not permitted) and
-    # _get_structured maps that 400 to HTTP 500.
-    explicit_cache_enabled = (
-        shared_conversation_cache_supported() and explicit_cache_switch_enabled() and not has_byok_keys()
-    )
-    cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
-    messages = [
-        _gpt56_cacheable_system_message(static_instructions, cache_enabled=cache_enabled, formatted=True),
-        HumanMessage(content=volatile_instructions),
-    ]
-    if rich_mode and screen_frames:
-        messages.append(screen_frames_message(screen_frames, episode_mode=episode_mode))
-    cache_key = CONVERSATION_NOTES_CACHE_KEY if cache_enabled else None
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
-    if episode_mode and import_module('utils.llm.episode_writer').episode_budget_exceeded(
-        messages, episode_settings, run
-    ):
-        # The public notes function is the shaped dispatcher and is not wrapped.
-        return import_module('utils.llm.episode_writer').baseline_budget_fallback(
-            getattr(_get_conversation_notes_legacy, '__wrapped__'), run, prefix, locals()
-        )
-    model = get_llm(
-        'conv_structure',
-        cache_key=cache_key,
-        prompt_cache_options=cache_options,
-        request_timeout=writer_deadline if episode_mode else CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
-        **({'max_retries': 0} if episode_mode else {}),
-    )
-    if episode_mode:
-        model = import_module('utils.llm.episode_writer').bind_episode_effort(model, episode_settings.effort)
-    run = current_run()
-    if episode_mode:
-        response, episode_settings = import_module('utils.llm.episode_writer').invoke_episode_writer(
-            model,
-            messages,
-            episode_settings,
-            run,
-            deadline=writer_deadline,
-            fallback_factory=lambda timeout: import_module('utils.llm.episode_writer').episode_retry_model(
-                get_llm, cache_key, cache_options, timeout
-            ),
-        )
-    else:
-        response = run.invoke(model, messages) if run else model.invoke(messages)
-    raw_response = _content_str(response)
-    episode_presentation_violations = set()
-    if episode_mode:
-        structured, episode_presentation_violations = import_module(
-            'utils.llm.episode_notes_validation'
-        ).parse_episode_response(raw_response, extraction_parser)
-        episode_presentation_violations |= import_module('utils.llm.episode_notes_validation').sanitize_episode_ids(
-            structured
-        )
-    else:
-        structured = extraction_parser.parse(raw_response).to_structured()
-    if rich_mode and not episode_mode:
-        validate_rich_meeting_notes(
-            structured,
-            transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
-            roster=roster,
-            has_background_context=bool(meeting_context and meeting_context.strip()),
-            background_body=meeting_context or '',
-        )
-
-    if not episode_mode:
-        structured = enforce_conversation_note_presentation(
-            structured,
-            raw_response=raw_response,
-            model=run.instrument(model) if run else model,
-            messages=messages,
-            extraction_parser=extraction_parser,
-            transcript_segment_ids=prefix.transcript_segment_ids,
-            post_parse_validator=(
-                lambda value: (
-                    validate_rich_meeting_notes(
-                        value,
-                        transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
-                        roster=roster,
-                        has_background_context=bool(meeting_context and meeting_context.strip()),
-                        background_body=meeting_context or '',
-                    )
-                    if rich_mode and not episode_mode
-                    else None
-                )
-            ),
-        )
-
-    if episode_mode:
-        structured = import_module('utils.llm.episode_notes_validation').repair_episode_note(
-            structured,
-            evidence=evidence_items,
-            model=model,
-            messages=messages,
-            parser=extraction_parser,
-            raw_response=raw_response,
-            content_str=_content_str,
-            transcript_segment_ids=prefix.transcript_segment_ids,
-            initial_violations=episode_presentation_violations,
-            run=run,
-            repair_budget=writer_deadline,
-            claims_enabled=episode_settings.claims,
-            retry_model_factory=lambda timeout: import_module('utils.llm.episode_writer').episode_retry_model(
-                get_llm, cache_key, cache_options, timeout, episode_settings.effort
-            ),
-        )
-
-    for action_item in structured.action_items:
-        if action_item.created_at is None:
-            action_item.created_at = current_time
-    _normalize_action_item_due_dates(
-        structured.action_items,
-        user_tz=user_tz,
-        now=current_time,
-        log_past_due_clears=True,
-    )
-    for event in structured.events:
-        event.duration = min(event.duration, 180)
-        event.created = False
-    projected_overview = render_sections_markdown(structured.sections)
-    if projected_overview:
-        if episode_mode and episode_settings.claims:
-            # Overview is a projection; section claims already cover the same prose.
-            structured.note_claims = [claim for claim in structured.note_claims or [] if claim.target != '/overview']
-        structured.overview = projected_overview
     return structured
 
 
@@ -1802,7 +1512,9 @@ def get_app_result(
 Name: {app.name}
 Description: {app.description}
 Task: {app.memory_prompt}'''
-        explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+        explicit_cache_enabled = (
+            shared_conversation_cache_supported() and explicit_cache_switch_enabled() and not has_byok_keys()
+        )
         cache_enabled = explicit_cache_enabled and has_cacheable_prefix(instructions)
         model = get_llm(
             'conv_app_result',
@@ -1830,13 +1542,13 @@ Task: {app.memory_prompt}'''
     # this feature off GPT-5.6, where a typed cache field is not a valid content part.
     marked_key, marked_messages = (
         marked_prefix_request(APP_RESULT_CACHE_NAMESPACE, app_framing, app_conversation_block)
-        if explicit_cache_enabled and not has_byok_keys()
+        if explicit_cache_enabled
         else (None, None)
     )
     # The None/legacy split keys on gateway mode (like get_transcript_structure) so
     # gateway-on requests never fall back to a legacy implicit routing key.
     cache_key = marked_key or (None if gateway_mode_enabled else 'omi-app-result')
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled and not has_byok_keys() else None
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     response = app_result_llm.invoke(marked_messages or prompt)
     content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))

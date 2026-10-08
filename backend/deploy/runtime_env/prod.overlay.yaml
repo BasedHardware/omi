@@ -79,7 +79,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -325,7 +325,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -554,7 +554,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: 'cohort'
+            value: 'on'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
@@ -724,6 +724,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}

@@ -6,11 +6,12 @@ from contextlib import asynccontextmanager, nullcontext
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import google.auth.credentials  # noqa: F401
 import httpx
 import pytest
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
@@ -18,9 +19,11 @@ from models.conversation import ExternalIntegrationCreateConversation
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from testing.import_isolation import stub_modules
+from utils import byok
 from utils.conversations import process_conversation as pc
 from utils.conversations.meeting_context import merge_meeting_contexts, store_meeting_context, stored_meeting_context
 from utils.llm import conversation_processing as notes
+from utils.llm import clients
 from utils.llm import shaped_agent as shaped
 from utils.llm import shaped_notes_transport
 from utils.llm.conversation_processing import notes_mount
@@ -71,75 +74,6 @@ def test_flag_modes(monkeypatch, mode, uid, expected):
 def test_bucket_stable_across_requests(monkeypatch, bucket):
     uid = uid_in_bucket(monkeypatch, bucket)
     assert {shaped.route_for_uid(uid) for _ in range(30)} == {bucket}
-
-
-@pytest.mark.parametrize('route', ['off', 'cohort', 'shadow', 'old', 'on'])
-def test_notes_routing_calls_real_entrypoint(monkeypatch, route):
-    uid = shaped.COHORT_UID
-    if route in ('shadow', 'old'):
-        uid = uid_in_bucket(monkeypatch, route)
-    else:
-        monkeypatch.setenv(shaped.FLAG, route)
-    calls = []
-    old, new = object(), object()
-    monkeypatch.setattr(notes, '_get_conversation_notes_legacy', lambda *a, **k: calls.append('old') or old)
-    monkeypatch.setattr(notes, '_get_shaped_conversation_notes', lambda *a, **k: calls.append('new') or new)
-    result = notes.get_conversation_notes(object(), uid=uid)
-    assert result is (new if route in ('cohort', 'on') else old)
-    assert calls == (['new'] if route in ('cohort', 'on') else ['old', 'new'] if route == 'shadow' else ['old'])
-
-
-@pytest.mark.parametrize('route', ['off', 'cohort', 'shadow', 'old', 'on'])
-def test_chat_routing_and_shadow_sink(monkeypatch, route):
-    uid = shaped.COHORT_UID
-    if route in ('shadow', 'old'):
-        uid = uid_in_bucket(monkeypatch, route)
-    else:
-        monkeypatch.setenv(shaped.FLAG, route)
-    calls, background = [], []
-    served = []
-    callback = object()
-
-    async def old(*args):
-        calls.append('old')
-        assert args[4] is callback
-        args[5].append('old bytes')
-        return 'old status'
-
-    async def new(*args, shadow=False):
-        calls.append('new')
-        if shadow:
-            assert args[4] is not callback
-            assert args[5] is not served
-            assert args[3] == {}
-            await args[4].put_data('shadow must never escape')
-        args[5].append('new bytes')
-        return 'new status'
-
-    monkeypatch.setattr(agentic, '_run_openai_agent_stream', old)
-    monkeypatch.setattr(agentic, '_run_shaped_chat_stream', new)
-    monkeypatch.setattr(agentic, 'start_background_task', lambda coro, **kw: background.append(coro))
-
-    async def run():
-        result = await agentic._run_routed_chat_stream('prompt', [], [], {}, callback, served, None, {'user_id': uid})
-        for coro in background:
-            await coro
-        return result
-
-    result = asyncio.run(run())
-    assert result == ('new status' if route in ('cohort', 'on') else 'old status')
-    assert served == (['new bytes'] if route in ('cohort', 'on') else ['old bytes'])
-    assert sorted(calls) == (['new'] if route in ('cohort', 'on') else ['new', 'old'] if route == 'shadow' else ['old'])
-
-
-def test_notes_shadow_failure_never_replaces_old(monkeypatch):
-    uid = uid_in_bucket(monkeypatch, 'shadow')
-    old = object()
-
-    def fail():
-        raise ValueError('provider error')
-
-    assert shaped.serve_notes(uid, lambda: old, fail) is old
 
 
 def test_empty_mount_and_notes_chat_isolation():
@@ -199,53 +133,6 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
     )
     packet = json.loads(observed.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
     assert packet['expected_calendar'] is None and packet['observed_screen_listing']
-
-
-@pytest.mark.parametrize('mode', [None, 'off', 'invalid'])
-def test_notes_off_provider_bytes_match_legacy(monkeypatch, mode):
-    if mode:
-        monkeypatch.setenv(shaped.FLAG, mode)
-    captured = []
-
-    class FrozenDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return cls(2026, 10, 1, tzinfo=timezone.utc)
-
-    class Model:
-        def invoke(self, messages):
-            captured.append(
-                json.dumps([m.model_dump() if hasattr(m, 'model_dump') else m for m in messages], default=str)
-            )
-            return SimpleNamespace(
-                content=json.dumps(
-                    {
-                        'title': 'Old title',
-                        'overview': 'Old bytes',
-                        'emoji': '🧠',
-                        'category': 'work',
-                        'sections': [],
-                        'action_items': [],
-                        'events': [],
-                    }
-                )
-            )
-
-    monkeypatch.setattr(notes, 'datetime', FrozenDatetime)
-    monkeypatch.setattr(notes, 'get_llm', lambda *a, **k: Model())
-    monkeypatch.setattr(notes, '_get_shaped_conversation_notes', lambda *a, **k: pytest.fail('new path called'))
-    prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nWe agreed to test this.')
-    kwargs = dict(
-        started_at=FrozenDatetime.now(),
-        language_code='en',
-        output_language_code='en',
-        tz='UTC',
-        task_intelligence_capture=False,
-    )
-    old = notes._get_conversation_notes_legacy(prefix, **kwargs)
-    served = notes.get_conversation_notes(prefix, uid=shaped.COHORT_UID, **kwargs)
-    assert old.model_dump_json() == served.model_dump_json()
-    assert captured[0].encode() == captured[1].encode()
 
 
 @pytest.mark.parametrize(
@@ -309,7 +196,6 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
 
     monkeypatch.setattr(notes, 'isolated_notes_model', isolated_fake)
     monkeypatch.setattr(notes, 'shared_conversation_cache_supported', lambda: False)
-    monkeypatch.setattr(notes, '_get_conversation_notes_legacy', lambda *a, **k: pytest.fail('old writer called'))
     prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nThis is unique evidence.')
     result = notes.get_conversation_notes(
         prefix,
@@ -326,8 +212,7 @@ def test_notes_on_uses_one_schema_turn(monkeypatch):
     assert 'prompt_cache_breakpoint' not in captured[0][0]['content'][0]
 
 
-@pytest.mark.parametrize('shadow', [False, True])
-def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
+def test_chat_real_shared_loop_with_tools(monkeypatch):
     captured, invocations = [], []
     count = 0
 
@@ -365,28 +250,25 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
             [{'role': 'user', 'content': 'Find something'}],
             [schema],
             {'lookup': Tool()},
-            agentic._ShadowCallback() if shadow else agentic.AsyncStreamingCallback(),
+            agentic.AsyncStreamingCallback(),
             response,
             agentic.AgentSafetyGuard(),
             {'user_id': 'test'},
-            shadow=shadow,
         )
 
     assert asyncio.run(run()) is None
     assert response == ['Finished']
     assert count == 2
-    assert len(invocations) == (0 if shadow else 1)
+    assert len(invocations) == 1
     assert captured[1][-1]['role'] == 'tool'
-    assert 'suppressed' in captured[1][-1]['content'] if shadow else 'Retrieved evidence' in captured[1][-1]['content']
+    assert 'Retrieved evidence' in captured[1][-1]['content']
     assert 'OLD CHAT PROMPT' not in str(captured)
     assert 'Find something' not in str(captured[0][0])
     assert 'prompt_cache_breakpoint' in captured[0][0]['content'][0]
 
 
-@pytest.mark.parametrize(
-    'mode,opt_in,new_path', [(None, True, False), ('off', True, False), ('on', True, True), ('on', False, False)]
-)
-def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_in, new_path):
+@pytest.mark.parametrize('mode,opt_in,new_path', [('on', True, True), ('on', False, False), ('off', False, False)])
+def test_execute_chat_stream_mount_wiring_and_stateless_bytes(monkeypatch, mode, opt_in, new_path):
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', lambda *a, **k: 'Original prompt bytes')
@@ -428,11 +310,9 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     forbidden.assert_not_awaited()
 
 
-@pytest.mark.parametrize('mode,expected', [('off', 'old'), ('on', 'new'), ('shadow', 'old')])
-def test_legacy_notes_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
-    uid = uid_in_bucket(monkeypatch, 'shadow') if mode == 'shadow' else 'test'
-    if mode != 'shadow':
-        monkeypatch.setenv(shaped.FLAG, mode)
+def test_legacy_notes_configuration_cannot_bypass_shaped_mode(monkeypatch):
+    uid, expected = 'test', 'new'
+    monkeypatch.setenv(shaped.FLAG, 'on')
     monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: False)
     monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda c: False)
@@ -453,7 +333,7 @@ def test_legacy_notes_configuration_obeys_shaped_mode(monkeypatch, mode, expecte
     )
     result, discarded = pc._get_structured(uid, 'en', conversation)
     assert not discarded and result.title == expected
-    assert calls == (['old', 'new'] if mode == 'shadow' else [expected])
+    assert calls == [expected]
 
 
 @pytest.mark.parametrize('opt_in', [False, True])
@@ -473,42 +353,6 @@ def test_graph_only_enables_explicit_proof_mount(monkeypatch, opt_in):
 
     assert asyncio.run(run()) == [None]
     assert received == [opt_in]
-
-
-def test_flag_off_chat_provider_bytes_match_legacy(monkeypatch):
-    requests = []
-
-    class Model:
-        def bind(self, **kwargs):
-            return self
-
-        async def astream(self, messages):
-            requests.append(json.dumps(messages, ensure_ascii=False).encode())
-            yield SimpleNamespace(
-                content='Same streamed bytes\n', tool_calls=[], tool_call_chunks=[], additional_kwargs={}
-            )
-
-    monkeypatch.setattr(agentic, 'get_llm', lambda *a, **k: Model())
-    monkeypatch.setattr(agentic, '_run_shaped_chat_stream', AsyncMock(side_effect=AssertionError('new called')))
-
-    async def run(runner):
-        response = []
-        await runner(
-            'Legacy system bytes',
-            [{'role': 'user', 'content': 'Hello'}],
-            [],
-            {},
-            agentic.AsyncStreamingCallback(),
-            response,
-            agentic.AgentSafetyGuard(),
-            {'user_id': shaped.COHORT_UID},
-        )
-        return ''.join(response).encode()
-
-    old = asyncio.run(run(agentic._run_openai_agent_stream))
-    served = asyncio.run(run(agentic._run_routed_chat_stream))
-    assert old == served == b'Same streamed bytes\n'
-    assert requests[0] == requests[1]
 
 
 def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
@@ -547,6 +391,73 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
     assert loops[0] is not loops[1]
     assert len(transports) == 2 and all(transport.is_closed for transport in transports)
     assert cached.root_async_client is original_client and not original_client.is_closed()
+
+
+def test_anthropic_only_byok_notes_preserve_transport_and_omit_cache_hints(monkeypatch):
+    monkeypatch.setenv(shaped.FLAG, 'on')
+    monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(clients, '_anthropic_chat_cache', {})
+    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+    token = byok._byok_ctx.set({'anthropic': 'fake-anthropic-key'})
+    transports, loops, requests = [], [], []
+    real_client = httpx.AsyncClient
+    content = json.dumps(
+        {
+            'title': 'BYOK note',
+            'overview': 'Grounded note',
+            'emoji': '🧠',
+            'category': 'work',
+            'sections': [],
+            'action_items': [],
+            'events': [],
+        }
+    )
+
+    async def respond(request):
+        loops.append(asyncio.get_running_loop())
+        requests.append(json.loads(request.content))
+        assert request.headers['x-api-key'] == 'fake-anthropic-key'
+        return httpx.Response(
+            200,
+            json={
+                'id': 'message',
+                'type': 'message',
+                'role': 'assistant',
+                'model': 'claude-test',
+                'content': [{'type': 'text', 'text': content}],
+                'stop_reason': 'end_turn',
+                'usage': {'input_tokens': 1, 'output_tokens': 1},
+            },
+        )
+
+    def transport_factory():
+        transport = real_client(transport=httpx.MockTransport(respond))
+        transports.append(transport)
+        return transport
+
+    monkeypatch.setattr(shaped_notes_transport, 'httpx', SimpleNamespace(AsyncClient=transport_factory))
+    try:
+        cached = clients.get_llm('conv_structure', request_timeout=notes.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+        assert isinstance(cached, ChatAnthropic)
+        original_client = cached._async_client
+        prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nThis is unique evidence.')
+        for _ in range(2):
+            result = notes.get_conversation_notes(
+                prefix,
+                uid='anyone',
+                started_at=datetime.now(timezone.utc),
+                language_code='en',
+                tz='UTC',
+                task_intelligence_capture=False,
+            )
+            assert result.title == 'BYOK note'
+        assert len(requests) == 2 and loops[0] is not loops[1]
+        assert 'prompt_cache_breakpoint' not in json.dumps(requests)
+        assert 'prompt_cache_options' not in json.dumps(requests)
+        assert all(transport.is_closed for transport in transports)
+        assert cached._async_client is original_client and not original_client.is_closed()
+    finally:
+        byok._byok_ctx.reset(token)
 
 
 @pytest.mark.parametrize('round_trip', [False, True])
@@ -600,3 +511,33 @@ def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch
     assert [p['name'] for p in packet['expected_calendar']['participants']] == ['Expected Alice', 'Shared Sam']
     assert [p['name'] for p in packet['observed_screen_listing']['participants']] == ['Observed Bob', 'Shared Sam']
     assert packet['speaker_map'] == {'0': None}
+
+
+@pytest.mark.parametrize('mode', ['off', 'invalid', 'cohort'])
+def test_disabled_notes_and_chat_never_invoke_models(monkeypatch, mode):
+    monkeypatch.setenv(shaped.FLAG, mode)
+    notes_writer = Mock()
+    chat_writer = AsyncMock()
+    monkeypatch.setattr(notes, '_get_shaped_conversation_notes', notes_writer)
+    monkeypatch.setattr(agentic, '_run_shaped_chat_stream', chat_writer)
+    with pytest.raises(RuntimeError, match='previous image'):
+        notes.get_conversation_notes(object(), uid='outside-cohort')
+    with pytest.raises(RuntimeError, match='previous image'):
+        asyncio.run(agentic._run_routed_chat_stream('', [], [], {}, None, [], None, {'user_id': 'outside-cohort'}))
+    notes_writer.assert_not_called()
+    chat_writer.assert_not_awaited()
+
+
+def test_on_dispatches_only_shaped_notes_and_chat(monkeypatch):
+    monkeypatch.setenv(shaped.FLAG, 'on')
+    expected = object()
+    notes_writer = Mock(return_value=expected)
+    chat_writer = AsyncMock(return_value='new status')
+    monkeypatch.setattr(notes, '_get_shaped_conversation_notes', notes_writer)
+    monkeypatch.setattr(agentic, '_run_shaped_chat_stream', chat_writer)
+    assert notes.get_conversation_notes(object(), uid='anyone') is expected
+    assert (
+        asyncio.run(agentic._run_routed_chat_stream('', [], [], {}, None, [], None, {'user_id': 'anyone'}))
+        == 'new status'
+    )
+    assert notes_writer.call_count == chat_writer.await_count == 1

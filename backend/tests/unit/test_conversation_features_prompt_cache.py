@@ -22,9 +22,12 @@ These tests pin the request shape and the prompt bytes, not the wording.
 """
 
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from models.structured import Structured
+from utils import byok as byok_module
 from pydantic import BaseModel
 
 import pytest
@@ -32,6 +35,7 @@ import pytest
 from routers import desktop_chat
 from utils.llm import chat as chat_module
 from utils.llm import conversation_processing as conv_proc
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.model_config import LUNA_MODEL
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
@@ -79,7 +83,7 @@ def _run_app_result(memory_prompt=LONG_TASK, *, byok=False, gateway=True, explic
     with (
         patch.object(conv_proc, 'get_llm', side_effect=_get_llm),
         patch.object(conv_proc, 'should_route_features_through_gateway', lambda: gateway),
-        patch.object(conv_proc, '_gpt56_explicit_cache_enabled', lambda: explicit),
+        patch.object(conv_proc, 'explicit_cache_switch_enabled', lambda: explicit),
         patch.object(conv_proc, 'has_byok_keys', lambda: byok),
     ):
         conv_proc.get_app_result('a real transcript', [], _app(memory_prompt), language_code=language_code)
@@ -420,3 +424,71 @@ def test_the_gateway_prices_each_new_shape_the_way_we_expect():
         )
         is False
     )
+
+
+@pytest.mark.parametrize('byok', [False, True])
+@pytest.mark.parametrize('reprocess', [False, True])
+def test_transcript_structure_byok_omits_cache_hints(monkeypatch, byok, reprocess):
+    """Exercise both real prompt builders under the gateway route with request-local keys."""
+    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(conv_proc, '_has_gpt56_cacheable_static_prefix', lambda text: True)
+    monkeypatch.setattr(conv_proc, '_should_run_conversation_structure_shadow', lambda *a: False)
+    chain = MagicMock()
+    chain.invoke.return_value = Structured()
+    chain.__or__.return_value = chain
+    prompt = MagicMock()
+    prompt.__or__.return_value = chain
+    prompt_cls = MagicMock()
+    prompt_cls.from_messages.return_value = prompt
+    monkeypatch.setattr(conv_proc, 'ChatPromptTemplate', prompt_cls)
+    model_factory = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(conv_proc, 'get_llm', model_factory)
+    monkeypatch.setattr(conv_proc, '_build_conversation_context', lambda *a, **k: 'Transcript evidence')
+    token = byok_module._byok_ctx.set({'anthropic': 'sk-ant-test-not-real'} if byok else None)
+    try:
+        assert conv_proc._gpt56_explicit_cache_enabled() is (not byok)
+        kwargs = dict(
+            transcript='Conversation evidence',
+            started_at=datetime(2026, 10, 8, tzinfo=timezone.utc),
+            language_code='en',
+            tz='UTC',
+        )
+        if reprocess:
+            conv_proc.get_reprocess_transcript_structure(**kwargs)
+        else:
+            conv_proc.get_transcript_structure(**kwargs, uid='test')
+    finally:
+        byok_module._byok_ctx.reset(token)
+    messages = prompt_cls.from_messages.call_args.args[0]
+    assert ('prompt_cache_breakpoint' in str(messages)) is (not byok and not reprocess)
+    assert model_factory.call_args.kwargs['prompt_cache_options'] == (None if byok else EXPLICIT_CACHE_OPTIONS)
+    if byok:
+        assert model_factory.call_args.kwargs['cache_key'] is None
+
+
+@pytest.mark.parametrize('byok', [False, True])
+def test_shared_prefix_app_summary_preserves_byok_cache_exclusion(monkeypatch, byok):
+    captured = {}
+    model = MagicMock()
+    model.invoke.side_effect = lambda messages: captured.update(messages=messages) or SimpleNamespace(content='summary')
+    factory = MagicMock(return_value=model)
+    monkeypatch.setattr(conv_proc, 'get_llm', factory)
+    # This predicate also admits a direct OpenAI route; it cannot be replaced by
+    # the gateway-only choke point without changing behavior.
+    monkeypatch.setattr(conv_proc, 'shared_conversation_cache_supported', lambda: True)
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.delenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    token = byok_module._byok_ctx.set({'anthropic': 'sk-ant-test-not-real'} if byok else None)
+    try:
+        conv_proc.get_app_result(
+            'Transcript evidence',
+            [],
+            _app(LONG_TASK),
+            prompt_prefix=ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nTranscript evidence'),
+        )
+    finally:
+        byok_module._byok_ctx.reset(token)
+    assert ('prompt_cache_breakpoint' in str(captured['messages'])) is (not byok)
+    assert factory.call_args.kwargs['prompt_cache_options'] == (None if byok else EXPLICIT_CACHE_OPTIONS)
+    assert bool(factory.call_args.kwargs['cache_key']) is (not byok)

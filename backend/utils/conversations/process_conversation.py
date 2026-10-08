@@ -503,7 +503,6 @@ def _get_structured(
                         structured = get_conversation_notes(
                             prefix,
                             uid=uid,
-                            legacy_writer=None if _conversation_notes_v2_enabled() else legacy_audio_notes,
                             started_at=started_at,
                             language_code=language_code,
                             output_language_code=user_language,
@@ -750,7 +749,6 @@ def _get_structured(
                 structured = get_conversation_notes(
                     prefix,
                     uid=uid,
-                    legacy_writer=None if _conversation_notes_v2_enabled() else legacy_transcript_notes,
                     started_at=conv_started_at,
                     language_code=language_code,
                     output_language_code=user_language,

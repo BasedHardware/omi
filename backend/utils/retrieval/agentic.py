@@ -84,7 +84,7 @@ from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
-from utils.executors import run_blocking, db_executor, start_background_task
+from utils.executors import run_blocking, db_executor
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.prompt_cache import gpt56_explicit_cache_enabled, EXPLICIT_CACHE_OPTIONS
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
@@ -1439,8 +1439,6 @@ async def _run_shaped_chat_stream(
     full_response,
     safety_guard,
     configurable,
-    *,
-    shadow=False,
 ) -> Optional[str]:
     mount = chat_mount(tool_schemas)
     cache_enabled = gpt56_explicit_cache_enabled()
@@ -1492,17 +1490,6 @@ async def _run_shaped_chat_stream(
             return Turn(value=''.join(text_parts), tool_calls=tuple(calls), messages=(assistant,))
 
         async def execute_tools(calls):
-            if shadow:
-                # All shadow tool effects, including device callbacks and read-side
-                # persistence, are simulated. No user-owned config is mutated.
-                return [
-                    {
-                        'role': 'tool',
-                        'tool_call_id': call['id'],
-                        'content': 'Shadow evaluation: tool execution suppressed.',
-                    }
-                    for call in calls
-                ]
             results = await _execute_independent_tool_calls(
                 list(calls),
                 name_of=lambda c: c['name'],
@@ -1529,25 +1516,12 @@ async def _run_shaped_chat_stream(
     except TimeoutError:
         raise
     except Exception as error:
-        if shadow:
-            logger.warning('Shaped chat shadow failed error_type=%s', type(error).__name__)
-            return 'shadow_failure'
         await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
         await _put_outcome_text(callback, full_response, AGENT_STREAM_FAILURE_MESSAGE)
         await callback.end()
         return f'provider_{type(error).__name__}'
     finally:
         reset_usage_context(usage_token)
-
-
-class _ShadowCallback:
-    """No queue, SSE sink, persistence sink, or device delivery channel."""
-
-    async def put_data(self, text):
-        pass
-
-    async def end(self):
-        pass
 
 
 async def _run_routed_chat_stream(
@@ -1560,26 +1534,11 @@ async def _run_routed_chat_stream(
     safety_guard,
     configurable,
 ) -> Optional[str]:
-    route = route_for_uid(configurable['user_id'])
-    args = (system_prompt, messages, tool_schemas, tool_registry, callback, full_response, safety_guard, configurable)
-    if route == 'new':
-        return await _run_shaped_chat_stream(*args)
-    if route == 'shadow':
-        start_background_task(
-            _run_shaped_chat_stream(
-                system_prompt,
-                list(messages),
-                tool_schemas,
-                {},
-                _ShadowCallback(),
-                [],
-                AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000),
-                {key: configurable.get(key) for key in ('user_id', 'chat_scope', 'shaped_selected_app')},
-                shadow=True,
-            ),
-            name='shaped-chat-shadow',
-        )
-    return await _run_openai_agent_stream(*args)
+    if route_for_uid(configurable['user_id']) != 'new':
+        raise RuntimeError('Shaped chat disabled; restore the previous image for legacy serving')
+    return await _run_shaped_chat_stream(
+        system_prompt, messages, tool_schemas, tool_registry, callback, full_response, safety_guard, configurable
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1927,7 +1886,7 @@ user chose not to send; acknowledge that rather than retrying.
 
     # Live path is always the OpenAI-compatible runner (gateway Luna or direct OpenAI).
     agent_runner = _run_openai_agent_stream
-    if shaped_invocation and route_for_uid(uid) != 'old':
+    if shaped_invocation:
         configurable['shaped_selected_app'] = (
             {
                 'name': app.name,

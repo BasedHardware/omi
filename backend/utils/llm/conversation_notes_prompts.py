@@ -90,14 +90,6 @@ EVENTS AND CONSISTENCY
 {format_instructions}'''
 
 
-def conversation_note_density(word_count: int, rich: bool) -> str:
-    if word_count < 500:
-        return f'Use 1-2 sections; target ~{95 if rich else 80} words across the entire note.'
-    if word_count < 2500:
-        return f'Use 2-4 sections; target ~{240 if rich else 200} words across the entire note.'
-    return f'Use 4-6 sections; target ~{480 if rich else 400} words across the entire note.'
-
-
 def conversation_notes_volatile_instructions(
     *,
     response_language: str,

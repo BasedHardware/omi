@@ -201,7 +201,7 @@ env:
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
-    value: "cohort"
+    value: "on"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
