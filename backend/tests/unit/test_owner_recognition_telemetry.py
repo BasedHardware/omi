@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import json
 import logging
+import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -432,7 +433,9 @@ def test_reader_rejects_unbounded_windows_and_formats_rates():
         opener=lambda _endpoint, _promql: body,
     )
     assert rendered.startswith('endpoint=http://prometheus.example window=5m')
-    assert 'http://prometheus.example' in rates.query_url('http://prometheus.example/', 'up')
+    built = urllib.parse.urlsplit(rates.query_url('http://prometheus.example/', 'up'))
+    assert (built.scheme, built.netloc, built.path) == ('http', 'prometheus.example', '/api/v1/query')
+    assert urllib.parse.parse_qs(built.query) == {'query': ['up']}
 
 
 def test_owner_identified_share_alert_is_in_both_exports():
