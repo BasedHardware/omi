@@ -72,6 +72,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
               snapshot.sections.allSatisfy({ $0.reorderable != true && $0.collapsible != true }),
               snapshot.allRows.allSatisfy({ $0.indent == nil && ($0.swipeLeading ?? []).isEmpty
                   && ($0.swipeTrailing ?? []).isEmpty }) else { throw PresentationError.invalid }
+        // A graph needs its surface's camera and capture owner; a modal would echo no node selection.
+        guard !snapshot.allRows.contains(where: { $0.kind == "graph" }) else { throw PresentationError.invalid }
         var parent = root
         while let presented = parent.presentedViewController { parent = presented }
         guard parent.viewIfLoaded?.window != nil, !parent.isBeingDismissed else {

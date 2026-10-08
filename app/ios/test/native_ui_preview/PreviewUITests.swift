@@ -691,6 +691,163 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["chat_attach:file"].waitForExistence(timeout: 5))
         capture(app, "native-chat-attachment-menu")
     }
+    func testGraphFillTapsSelectNodesWhileCameraGesturesSendNothing() {
+        let app = start(["surface", "graph-fill"])
+        let graph = app.otherElements["graph_canvas"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 30))
+        let receipt = app.staticTexts["preview-last-action"]
+        // The fixed user node sits at the origin, the centre of the stage.
+        graph.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["graph_canvas:'me'"].waitForExistence(timeout: 15))
+        let ada = app.buttons["graph_canvas_node_ada"]
+        XCTAssertTrue(ada.waitForExistence(timeout: 10))
+        ada.tap()
+        XCTAssertTrue(app.staticTexts["graph_canvas:'ada'"].waitForExistence(timeout: 15))
+        wait(until: ada.isSelected, "The owner's selection reaches the node element")
+        capture(app, "native-graph-fill-selected")
+        graph.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: -170, dy: 0)).tap()
+        XCTAssertTrue(app.staticTexts["graph_canvas:''"].waitForExistence(timeout: 15))
+        wait(until: !ada.isSelected, "A background tap clears the selection")
+
+        let zoomElement = app.descendants(matching: .any)["graph_canvas_zoom"]
+        let zoom = zoomElement.value as? String
+        let position = ada.frame
+        graph.pinch(withScale: 1.8, velocity: 1)
+        graph.swipeLeft()
+        graph.rotate(0.5, withVelocity: 1)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(receipt.label, "graph_canvas:''", "Pinch, rotation and pan stay native")
+        XCTAssertNotEqual(zoomElement.value as? String, zoom)
+        XCTAssertNotEqual(ada.frame, position)
+        capture(app, "native-graph-fill-camera")
+    }
+
+    func testGraphFillKeepsLabelsAboveAndButtonsBelowAtLargeText() {
+        let app = start(["surface", "graph-fill", "large"])
+        let graph = app.otherElements["graph_canvas"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 30))
+        let hint = app.staticTexts["graph_hint"]
+        let proceed = app.buttons["graph_continue"]
+        XCTAssertTrue(hint.exists)
+        XCTAssertLessThanOrEqual(hint.frame.maxY, graph.frame.minY + 1)
+        XCTAssertGreaterThanOrEqual(proceed.frame.minY, graph.frame.maxY - 1)
+        XCTAssertGreaterThan(graph.frame.height, 100)
+        XCTAssertTrue(proceed.isHittable)
+        XCTAssertTrue(app.buttons["graph_back"].isHittable)
+        capture(app, "native-graph-fill-large-text")
+        proceed.tap()
+        XCTAssertTrue(app.staticTexts["graph_continue:"].waitForExistence(timeout: 15))
+    }
+
+    func testGraphFillListsNodesForVoiceOverWithAdjustableZoom() {
+        let app = start(["surface", "graph-fill"])
+        let graph = app.otherElements["graph_canvas"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 30))
+        XCTAssertEqual(graph.label, "Memory Graph")
+        for (id, label) in [("me", "You"), ("ada", "Ada"), ("paris", "Paris"), ("omi", "Omi"), ("pendant", "Pendant"),
+                            ("memory", "Memory")] {
+            let node = app.buttons["graph_canvas_node_\(id)"]
+            XCTAssertTrue(node.exists, id)
+            XCTAssertEqual(node.label, label)
+            XCTAssertFalse(node.isSelected)
+            XCTAssertTrue(graph.frame.contains(CGPoint(x: node.frame.midX, y: node.frame.midY)), id)
+        }
+        let zoom = app.descendants(matching: .any)["graph_canvas_zoom"]
+        XCTAssertTrue(zoom.exists)
+        XCTAssertEqual(zoom.label, "Memory Graph")
+        XCTAssertEqual(zoom.value as? String, "100%")
+        XCTAssertTrue(adjustable(zoom), "VoiceOver can adjust the graph's zoom")
+    }
+
+    func testGraphCardTapSendsNilAndTheListStillScrolls() {
+        let app = start(["surface", "graph-card"])
+        let card = app.buttons["graph_card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 30))
+        XCTAssertEqual(card.label, "Memory Graph")
+        XCTAssertGreaterThanOrEqual(card.frame.height, 139)
+        capture(app, "native-graph-card")
+        let top = card.frame.minY
+        card.swipeUp()
+        wait(until: !card.exists || card.frame.minY < top - 40, "A drag that starts on the card scrolls the list")
+        XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture")
+        app.swipeDown()
+        app.swipeDown()
+        wait(until: card.isHittable, "The card returns")
+        card.tap()
+        XCTAssertTrue(app.staticTexts["graph_card:nil"].waitForExistence(timeout: 15))
+    }
+
+    func testGraphPlaceholderPulsesThenRests() {
+        let app = start(["surface", "graph-placeholder"])
+        let graph = app.otherElements["graph_canvas"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 30))
+        XCTAssertTrue(app.descendants(matching: .any)["native-surface-loading"].waitForExistence(timeout: 10))
+        let skeleton = skeletonRegion(graph.frame)
+        var pulsed = false
+        for _ in 0..<4 where !pulsed {
+            let first = app.screenshot().image
+            Thread.sleep(forTimeInterval: 0.5)
+            pulsed = changedPixels(first, app.screenshot().image, in: skeleton) > 0
+        }
+        XCTAssertTrue(pulsed, "The skeleton pulses while loading")
+        capture(app, "native-graph-placeholder")
+        // Six pulses of 2 x 0.6 s (7.2 s), then it rests.
+        Thread.sleep(forTimeInterval: 8)
+        let rested = app.screenshot().image
+        Thread.sleep(forTimeInterval: 0.6)
+        XCTAssertEqual(changedPixels(rested, app.screenshot().image, in: skeleton), 0)
+    }
+
+    func testGraphPlaceholderIsStaticUnderReduceMotion() {
+        let app = start(["surface", "graph-placeholder", "reduce-motion"])
+        let graph = app.otherElements["graph_canvas"]
+        XCTAssertTrue(graph.waitForExistence(timeout: 30))
+        let skeleton = skeletonRegion(graph.frame)
+        for _ in 0..<3 {
+            let first = app.screenshot().image
+            Thread.sleep(forTimeInterval: 0.5)
+            XCTAssertEqual(changedPixels(first, app.screenshot().image, in: skeleton), 0)
+        }
+    }
+
+    /// The skeleton's left fifth, clear of the centred loading status.
+    func skeletonRegion(_ frame: CGRect) -> CGRect {
+        CGRect(x: frame.minX, y: frame.minY + frame.height * 0.2, width: frame.width * 0.22, height: frame.height * 0.6)
+    }
+
+    /// Pixels in [frame] (screen points) whose colour moved by more than a rounding step.
+    func changedPixels(_ first: UIImage, _ second: UIImage, in frame: CGRect) -> Int {
+        func pixels(_ image: UIImage) -> [UInt8] {
+            guard let cgImage = image.cgImage else { return [] }
+            let scale = CGFloat(cgImage.width) / image.size.width
+            let crop = CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale,
+                              height: frame.height * scale).integral
+            guard let region = cgImage.cropping(to: crop) else { return [] }
+            var data = [UInt8](repeating: 0, count: region.width * region.height * 4)
+            guard let context = CGContext(data: &data, width: region.width, height: region.height, bitsPerComponent: 8,
+                                          bytesPerRow: region.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return [] }
+            context.draw(region, in: CGRect(x: 0, y: 0, width: region.width, height: region.height))
+            return data
+        }
+        let a = pixels(first), b = pixels(second)
+        guard !a.isEmpty, a.count == b.count else { return -1 }
+        return stride(from: 0, to: a.count, by: 4).filter { index in
+            (0..<3).contains { abs(Int(a[index + $0]) - Int(b[index + $0])) > 4 }
+        }.count
+    }
+
+    /// Whether the element carries UIAccessibilityTraitAdjustable, as VoiceOver's swipe up/down needs.
+    func adjustable(_ element: XCUIElement) -> Bool {
+        element.elementType == .slider || element.debugDescription.contains("Adjustable")
+    }
+
+    func wait(until condition: @escaping @autoclosure () -> Bool, _ message: String, timeout: TimeInterval = 15) {
+        let predicate = NSPredicate { _, _ in condition() }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: timeout),
+                       .completed, message)
+    }
+
     func testNativeVoiceWaveformKeepsControlsReachableAtLargeText() {
         let app = start(["chat", "voice", "large"])
         XCTAssertTrue(app.buttons["chat_voice_stop"].waitForExistence(timeout: 10))
@@ -1020,5 +1177,69 @@ final class PreviewUITests: XCTestCase {
     private func assertChart(_ app: XCUIApplication, _ title: String) {
         let labelled = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title))
         XCTAssertTrue(labelled.allElementsBoundByIndex.contains { abs($0.frame.height - 200) <= 1 }, title)
+    }
+}
+
+/// Runs inside the test bundle, which compiles NativeGraphView.swift with the contract, so the
+/// row-scoped ImageRenderer capture is checked without launching the fixture.
+final class NativeGraphCaptureTests: XCTestCase {
+    private func graph(placeholder: Bool = false) throws -> NativeSurfaceRow.Graph {
+        // A hub and 39 spokes, all within the middle of a 390 x 600 frame.
+        let nodes: [[String: Any]] = (0..<40).map { index in
+            let user = index == 0
+            return ["id": "n\(index)", "label": "Node \(index)", "type": user ? "user" : "concept",
+                    "x": user ? 0.0 : Double(index * 37 % 200 - 100), "y": user ? 0.0 : Double(index * 53 % 300 - 150),
+                    "z": user ? 0.0 : Double(index * 71 % 400 - 200), "fixed": user]
+        }
+        let edges: [[String: Any]] = (1..<40).map { ["source": "n0", "target": "n\($0)", "label": $0 % 3 == 0 ? "knows" : ""] }
+        var row: [String: Any] = ["id": "graph", "title": "Memory Graph", "kind": "graph", "subtitle": "", "options": [],
+            "destructive": false, "enabled": true,
+            "graph": ["nodes": placeholder ? [] : nodes, "edges": placeholder ? [] : edges,
+                      "highlighted": placeholder ? [] : ["n0", "n3"], "zoom": 1.0, "interactive": !placeholder,
+                      "layout": "fill", "placeholder": placeholder, "accent": "#1A2B3C"]]
+        if !placeholder { row["value"] = "n0" }
+        let snapshot = try NativeSurfaceSnapshot.decode(["version": 1, "revision": 0, "title": "Memory Graph",
+            "appearance": "dark", "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "",
+            "sections": [["id": "graph", "title": "", "footer": "", "rows": [row]]], "toolbar": [],
+            "searchEnabled": false, "searchValue": "", "searchPlaceholder": "", "refreshEnabled": false,
+            "error": "Error", "retry": "Retry", "loadingLabel": "Loading"])
+        return try XCTUnwrap(snapshot.fillGraphRow?.graph)
+    }
+
+    @MainActor
+    func testRowCaptureIsPNGWithinSixteenMegapixelsAndSixteenMegabytes() throws {
+        let graph = try graph()
+        let camera = NativeGraphCamera(zoom: graph.zoom)
+        let phone = try XCTUnwrap(NativeGraphCapture.png(graph, camera: camera, size: CGSize(width: 390, height: 600),
+                                                         colorScheme: .dark))
+        XCTAssertEqual(Array(phone.prefix(8)), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let image = try XCTUnwrap(UIImage(data: phone)?.cgImage)
+        XCTAssertEqual(image.width, 1170, "A phone-sized graph renders at 3x")
+        XCTAssertEqual(image.height, 1800)
+        XCTAssertGreaterThan(alpha(image, x: image.width / 2, y: image.height / 2), 0, "The user node is drawn at the centre")
+        XCTAssertEqual(alpha(image, x: 2, y: 2), 0, "Like the Flutter capture, the background stays transparent")
+
+        for size in [CGSize(width: 4000, height: 9000), CGSize(width: 3333.3, height: 4800.7)] {
+            let data = try XCTUnwrap(NativeGraphCapture.png(graph, camera: camera, size: size, colorScheme: .light))
+            XCTAssertLessThanOrEqual(data.count, 16 * 1024 * 1024)
+            let large = try XCTUnwrap(UIImage(data: data)?.cgImage)
+            XCTAssertLessThanOrEqual(large.width * large.height, 16_000_000, "\(size)")
+            XCTAssertGreaterThan(large.width * large.height, 15_000_000, "\(size) is scaled down, not dropped")
+        }
+        XCTAssertNil(NativeGraphCapture.png(try self.graph(placeholder: true), camera: camera,
+                                            size: CGSize(width: 390, height: 600), colorScheme: .dark))
+        for size in [CGSize.zero, CGSize(width: 390, height: 0), CGSize(width: CGFloat.infinity, height: 10),
+                     CGSize(width: CGFloat.nan, height: 10)] {
+            XCTAssertNil(NativeGraphCapture.png(graph, camera: camera, size: size, colorScheme: .dark), "\(size)")
+        }
+    }
+
+    private func alpha(_ image: CGImage, x: Int, y: Int) -> UInt8 {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        guard let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return 0 }
+        context.draw(image, in: CGRect(x: -x, y: y - image.height + 1, width: image.width, height: image.height))
+        return pixel[3]
     }
 }

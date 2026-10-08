@@ -238,6 +238,7 @@ struct NativeSurfaceTests {
         input.removeValue(forKey: "chat")
         input["bottomBar"] = [link]
         rejects(input)
+        try graphContract()
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
 
@@ -613,6 +614,177 @@ struct NativeSurfaceTests {
         input["sections"] = section(chart)
         let usage = try NativeSurfaceSnapshot.decode(input)
         precondition(usage.sections[0].rows[0].chartStyle == nil)
+    }
+
+    /// Knowledge-graph rows follow the same rules as native_graph.dart and IosNativeSurface.
+    static func graphContract() throws {
+        let base: [String: Any] = ["version": 1, "revision": 0, "title": "Memory Graph", "appearance": "dark",
+            "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "", "toolbar": [],
+            "searchEnabled": false, "searchValue": "", "searchPlaceholder": "", "refreshEnabled": false,
+            "error": "Error", "retry": "Retry", "loadingLabel": "Loading"]
+        func node(_ id: String, _ type: String = "concept", x: Double = 1, y: Double = 1, z: Double = 1,
+                  fixed: Bool = false, label: String = "Node") -> [String: Any] {
+            ["id": id, "label": label, "type": type, "x": x, "y": y, "z": z, "fixed": fixed]
+        }
+        func edge(_ source: String, _ target: String, _ label: String = "") -> [String: Any] {
+            ["source": source, "target": target, "label": label]
+        }
+        let nodes = [node("me", "user", x: 0, y: 0, z: 0, fixed: true, label: "You"), node("ada", "person"),
+                     node("paris", "place", x: 120, y: -120, z: 300)]
+        let edges = [edge("me", "ada", "knows"), edge("ada", "paris")]
+        let fill: [String: Any] = ["nodes": nodes, "edges": edges, "highlighted": [], "zoom": 1.0, "interactive": true,
+                                   "layout": "fill", "placeholder": false, "accent": "#1A2B3C"]
+        var card = fill
+        card["layout"] = "card"; card["height"] = 140.0; card["interactive"] = false
+        var placeholder = fill
+        placeholder["nodes"] = []; placeholder["edges"] = []; placeholder["interactive"] = false; placeholder["placeholder"] = true
+        func with(_ graph: [String: Any], _ key: String, _ value: Any) -> [String: Any] {
+            var copy = graph
+            copy[key] = value
+            return copy
+        }
+        func row(_ id: String, _ kind: String) -> [String: Any] {
+            ["id": id, "title": id, "kind": kind, "subtitle": "", "options": [], "destructive": false, "enabled": true]
+        }
+        func graphRow(_ graph: [String: Any]?, value: Any? = "", id: String = "graph", kind: String = "graph") -> [String: Any] {
+            var result = row(id, kind)
+            if let graph { result["graph"] = graph }
+            if let value { result["value"] = value }
+            return result
+        }
+        func surface(_ rows: [[String: Any]], _ change: (inout [String: Any]) -> Void = { _ in }) -> [String: Any] {
+            var result = base
+            result["sections"] = [["id": "graph", "title": "", "footer": "", "rows": rows]]
+            change(&result)
+            return result
+        }
+        func single(_ graph: [String: Any], value: Any? = "") -> [String: Any] { surface([graphRow(graph, value: value)]) }
+
+        let stage = try NativeSurfaceSnapshot.decode(surface([row("hint", "label"), graphRow(fill), row("retry", "button")]) {
+            var menu = row("share", "menu")
+            menu["options"] = [["id": "png", "title": "Image"]]
+            $0["toolbar"] = [menu]
+        })
+        precondition(stage.fillGraphRow?.id == "graph" && stage.fillGraphRow?.graph?.nodes.count == 3)
+        precondition(stage.replacingValue(id: "graph", value: .text("ada")).sections[0].rows[1].graph == stage.fillGraphRow?.graph)
+        precondition(stage.withoutContent().fillGraphRow == nil)
+        var selected = with(fill, "highlighted", ["ada", "me"])
+        _ = try NativeSurfaceSnapshot.decode(single(selected, value: "ada"))
+        _ = try NativeSurfaceSnapshot.decode(single(card, value: nil))
+        _ = try NativeSurfaceSnapshot.decode(single(with(card, "highlighted", ["ada"]), value: nil))
+        _ = try NativeSurfaceSnapshot.decode(single(placeholder, value: nil))
+        _ = try NativeSurfaceSnapshot.decode(single(with(with(placeholder, "layout", "card"), "height", 140.0), value: nil))
+        let cards = try NativeSurfaceSnapshot.decode(surface([graphRow(card, value: nil), row("open", "navigation")]) {
+            $0["searchEnabled"] = true; $0["refreshEnabled"] = true
+        })
+        precondition(cards.fillGraphRow == nil)
+
+        // Counts, identities, labels, types and coordinates.
+        rejects(single(with(fill, "nodes", []), value: ""))
+        let many = (0..<1025).map { node("n\($0)") }
+        _ = try NativeSurfaceSnapshot.decode(single(with(with(fill, "nodes", Array(many.prefix(1024))), "edges", [])))
+        rejects(single(with(with(fill, "nodes", many), "edges", [])))
+        let pairs = (0..<4097).map { edge("n\($0 % 64)", "n\(64 + $0 % 64)", "edge \($0)") }
+        let hundreds = with(fill, "nodes", Array(many.prefix(200)))
+        _ = try NativeSurfaceSnapshot.decode(single(with(hundreds, "edges", Array(pairs.prefix(4096)))))
+        rejects(single(with(hundreds, "edges", pairs)))
+        rejects(single(with(fill, "nodes", nodes + [node("ada")])))
+        rejects(single(with(fill, "nodes", nodes + [node("")])))
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "nodes", nodes + [node(String(repeating: "x", count: 256))])))
+        rejects(single(with(fill, "nodes", nodes + [node(String(repeating: "x", count: 257))])))
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "nodes", nodes + [node("long", label: String(repeating: "a", count: 256))])))
+        rejects(single(with(fill, "nodes", nodes + [node("long", label: String(repeating: "a", count: 257))])))
+        for type in ["user", "person", "place", "organization", "thing", "concept"] {
+            _ = try NativeSurfaceSnapshot.decode(single(with(fill, "nodes", nodes + [node("typed", type)])))
+        }
+        rejects(single(with(fill, "nodes", nodes + [node("typed", "event")])))
+        for value in [Double.nan, .infinity, 1e6 + 1, -1e6 - 1] {
+            rejects(single(with(fill, "nodes", nodes + [node("bad", x: value)])))
+            rejects(single(with(fill, "nodes", nodes + [node("bad", y: value)])))
+            rejects(single(with(fill, "nodes", nodes + [node("bad", z: value)])))
+        }
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "nodes", nodes + [node("far", x: 1e6, y: -1e6, z: 1e6)])))
+
+        // One fixed node: the user, at the origin.
+        rejects(single(with(fill, "nodes", nodes + [node("me2", "user", x: 0, y: 0, z: 0, fixed: true)])))
+        rejects(single(with(with(fill, "nodes", [node("me", "person", x: 0, y: 0, z: 0, fixed: true)]), "edges", [])))
+        rejects(single(with(with(fill, "nodes", [node("me", "user", x: 0, y: 1, z: 0, fixed: true)]), "edges", [])))
+
+        // Edges.
+        rejects(single(with(fill, "edges", edges + [edge("me", "ghost")])))
+        rejects(single(with(fill, "edges", edges + [edge("ghost", "me")])))
+        rejects(single(with(fill, "edges", edges + [edge("ada", "ada", "self")])))
+        rejects(single(with(fill, "edges", edges + [edge("me", "ada", "knows")])))
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "edges", edges + [edge("me", "ada", "met"), edge("ada", "me", "knows")])))
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "edges", edges + [edge("paris", "me", String(repeating: "e", count: 128))])))
+        rejects(single(with(fill, "edges", edges + [edge("paris", "me", String(repeating: "e", count: 129))])))
+
+        // Highlights and the selected value.
+        let six = (0..<6).map { node("h\($0)") }
+        let highlighted = with(with(fill, "nodes", six), "edges", [])
+        _ = try NativeSurfaceSnapshot.decode(single(with(highlighted, "highlighted", ["h0", "h1", "h2", "h3", "h4"]), value: "h0"))
+        rejects(single(with(highlighted, "highlighted", ["h0", "h1", "h2", "h3", "h4", "h5"]), value: "h0"))
+        rejects(single(with(fill, "highlighted", ["ada", "ghost"]), value: "ada"))
+        rejects(single(with(fill, "highlighted", ["ada", "ada"]), value: "ada"))
+        selected = with(fill, "highlighted", ["ada"])
+        rejects(single(selected, value: ""))
+        rejects(single(fill, value: "ghost"))
+        rejects(single(fill, value: nil))
+        rejects(single(fill, value: true))
+        rejects(single(card, value: ""))
+        rejects(single(placeholder, value: ""))
+
+        // Zoom, layout, height and accent.
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "zoom", 0.05)))
+        _ = try NativeSurfaceSnapshot.decode(single(with(fill, "zoom", 5.0)))
+        rejects(single(with(fill, "zoom", 0.049)))
+        rejects(single(with(fill, "zoom", 5.01)))
+        _ = try NativeSurfaceSnapshot.decode(single(with(card, "height", 100.0), value: nil))
+        _ = try NativeSurfaceSnapshot.decode(single(with(card, "height", 600.0), value: nil))
+        rejects(single(with(card, "height", 99.0), value: nil))
+        rejects(single(with(card, "height", 601.0), value: nil))
+        var heightless = card
+        heightless.removeValue(forKey: "height")
+        rejects(single(heightless, value: nil))
+        rejects(single(with(card, "interactive", true), value: ""))
+        rejects(single(with(fill, "height", 300.0)))
+        rejects(single(with(fill, "layout", "sheet")))
+        for accent in ["#1a2b3c", "#ABCDEF"] { _ = try NativeSurfaceSnapshot.decode(single(with(fill, "accent", accent))) }
+        for accent in ["1A2B3C", "#1A2B3", "#1A2B3CA", "#GGGGGG", "#1A2B3C\n", "＃１Ａ２Ｂ３Ｃ", ""] {
+            rejects(single(with(fill, "accent", accent)))
+        }
+
+        // A placeholder is empty and sends nothing.
+        rejects(single(with(placeholder, "nodes", nodes), value: nil))
+        rejects(single(with(placeholder, "edges", [edge("me", "ada")]), value: nil))
+        rejects(single(with(placeholder, "interactive", true), value: ""))
+        rejects(single(with(with(placeholder, "layout", "card"), "height", 99.0), value: nil))
+
+        // Kind and placement.
+        rejects(surface([graphRow(nil)]))
+        rejects(surface([graphRow(fill, value: nil, kind: "label")]))
+        rejects(surface([graphRow(fill), graphRow(fill, id: "second")]))
+        rejects(surface([graphRow(fill), graphRow(card, value: nil, id: "card")]))
+        rejects(surface([graphRow(fill), row("open", "navigation")]))
+        rejects(surface([graphRow(fill), graphRow(nil, value: true, kind: "toggle")]))
+        rejects(surface([graphRow(fill)]) { $0["searchEnabled"] = true })
+        rejects(surface([graphRow(fill)]) { $0["refreshEnabled"] = true })
+        rejects(surface([graphRow(fill)]) {
+            $0["chat"] = ["draft": "", "placeholder": "Ask", "followup": "", "streaming": false, "actions": []]
+        })
+        rejects(surface([graphRow(fill)]) { $0["reader"] = ["request": 0, "following": false, "footer": []] })
+        rejects(surface([graphRow(fill)]) {
+            $0["navigation"] = ["id": "main_destination", "title": "", "kind": "segmented", "subtitle": "", "value": "home",
+                "enabled": true, "destructive": false,
+                "options": ["home", "tasks", "memories", "apps", "settings"].map { ["id": $0, "title": $0] }]
+        })
+        rejects(surface([]) { $0["toolbar"] = [graphRow(card, value: nil)] })
+        // A fill graph is never a selection, a bottom bar or a sensitive surface.
+        rejects(surface([graphRow(fill), row("hint", "label")]) {
+            $0["selection"] = ["selected": [], "selectable": ["hint"]]
+        })
+        rejects(surface([graphRow(fill)]) { $0["bottomBar"] = [row("done", "button")] })
+        rejects(surface([graphRow(fill)]) { $0["sensitive"] = true })
     }
 
     static func rejects(_ input: Any) {

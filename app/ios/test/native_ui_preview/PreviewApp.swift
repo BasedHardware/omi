@@ -26,6 +26,7 @@ struct PreviewApp: App {
                     }
                 }
                 .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("large") ? .accessibility3 : .large)
+                .environment(\.nativeGraphReduceMotion, ProcessInfo.processInfo.arguments.contains("reduce-motion"))
                 .overlay(alignment: .top) {
                     if ProcessInfo.processInfo.arguments.contains("chrome") {
                         Text(harness.lastAction).font(.caption2).allowsHitTesting(false)
@@ -462,6 +463,24 @@ final class PreviewHarness: ObservableObject {
             }
             next["sections"] = sections
         }
+        if id == "graph_canvas" || id == "graph_card" {
+            // Distinguish a background tap ('') from a card tap (nil).
+            self.lastAction = "\(id):\(value.map { "'\($0)'" } ?? "nil")"
+        }
+        if id == "graph_canvas", let node = value as? String, var sections = next["sections"] as? [[String: Any]] {
+            // The fixture owner selects the tapped node, as the Dart graph controller does.
+            for index in sections.indices {
+                var rows = sections[index]["rows"] as! [[String: Any]]
+                for rowIndex in rows.indices where rows[rowIndex]["id"] as? String == id {
+                    var graph = rows[rowIndex]["graph"] as! [String: Any]
+                    graph["highlighted"] = node.isEmpty ? [] : [node]
+                    rows[rowIndex]["graph"] = graph
+                    rows[rowIndex]["value"] = node
+                }
+                sections[index]["rows"] = rows
+            }
+            next["sections"] = sections
+        }
         if id == "reset_key" {
             self.lastDraft = ""
             var sections = next["sections"] as! [[String: Any]]
@@ -686,6 +705,51 @@ final class PreviewHarness: ObservableObject {
                 ["id": "secret_value", "title": "API Key", "kind": "secret", "subtitle": "", "value": "omi_dev_iiiiiiiiiiiiiiii",
                  "options": [["id": "copy", "title": "Copy"]], "enabled": true, "destructive": false],
             ]]]
+        }
+        if ["graph-fill", "graph-card", "graph-placeholder"].contains(where: ProcessInfo.processInfo.arguments.contains) {
+            func row(_ id: String, _ title: String, _ kind: String) -> [String: Any] {
+                ["id": id, "title": title, "kind": kind, "subtitle": "", "options": [], "enabled": true, "destructive": false]
+            }
+            func node(_ id: String, _ label: String, _ type: String, _ x: Double, _ y: Double, _ z: Double) -> [String: Any] {
+                ["id": id, "label": label, "type": type, "x": x, "y": y, "z": z, "fixed": id == "me"]
+            }
+            let nodes = [node("me", "You", "user", 0, 0, 0), node("ada", "Ada", "person", -110, -150, 0),
+                         node("paris", "Paris", "place", 120, -120, 300), node("omi", "Omi", "organization", 130, 140, -400),
+                         node("pendant", "Pendant", "thing", -120, 150, 200), node("memory", "Memory", "concept", 0, -230, -600)]
+            let edges: [[String: Any]] = [["me", "ada", "knows"], ["me", "paris", "visited"], ["me", "omi", "works at"],
+                                          ["ada", "paris", ""], ["omi", "pendant", "makes"], ["me", "pendant", "wears"],
+                                          ["me", "memory", ""]].map { ["source": $0[0], "target": $0[1], "label": $0[2]] }
+            surfaceRaw["searchEnabled"] = false
+            var back = row("graph_back", "Back", "button"); back["symbol"] = "chevron.left"
+            var share = row("graph_share", "Share", "button"); share["symbol"] = "square.and.arrow.up"
+            surfaceRaw["toolbar"] = [back, share]
+            if ProcessInfo.processInfo.arguments.contains("graph-card") {
+                surfaceRaw["title"] = "Memories"
+                var card = row("graph_card", "Memory Graph", "graph")
+                card["graph"] = ["nodes": nodes, "edges": edges, "highlighted": [], "zoom": 0.6, "interactive": false,
+                                 "layout": "card", "height": 140.0, "placeholder": false, "accent": "#FFFFFF"]
+                surfaceRaw["sections"] = [["id": "mind_map", "title": "", "footer": "", "rows": [card]],
+                    ["id": "memories", "title": "Memories", "footer": "", "rows": (0..<30).map { index -> [String: Any] in
+                        row("memory_\(index)", "Memory \(index): the pendant syncs overnight", "navigation")
+                    }]]
+            } else {
+                surfaceRaw["title"] = "Memory Graph"
+                var canvas = row("graph_canvas", "Memory Graph", "graph")
+                if ProcessInfo.processInfo.arguments.contains("graph-placeholder") {
+                    surfaceRaw["loading"] = true
+                    surfaceRaw["loadingLabel"] = "Loading knowledge graph"
+                    canvas["graph"] = ["nodes": [], "edges": [], "highlighted": [], "zoom": 1.0, "interactive": false,
+                                       "layout": "fill", "placeholder": true, "accent": "#FFFFFF"]
+                } else {
+                    canvas["value"] = ""
+                    canvas["graph"] = ["nodes": nodes, "edges": edges, "highlighted": [], "zoom": 1.0, "interactive": true,
+                                       "layout": "fill", "placeholder": false, "accent": "#FFFFFF"]
+                }
+                surfaceRaw["sections"] = [["id": "graph", "title": "", "footer": "", "rows": [
+                    row("graph_hint", "Tap a node to see what connects to it.", "label"), canvas,
+                    row("graph_continue", "Continue", "button"),
+                ]]]
+            }
         }
         if ProcessInfo.processInfo.arguments.contains("light") { raw["appearance"] = "light" }
         else { raw["appearance"] = "dark" }

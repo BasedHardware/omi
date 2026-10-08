@@ -13,6 +13,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 import 'ios_native_home.dart';
 import 'ios_native_secret.dart';
+import 'native_graph.dart';
 import 'native_read_session.dart';
 import 'native_navigation_chrome.dart';
 
@@ -33,9 +34,11 @@ int get nativeSnapshotVersion => kDebugMode && IosNativeSurface._debugCorruptSna
 /// Captures the currently visible native presentation for an explicit share action.
 /// No image is cached here; the existing share owner retains its file and privacy lifecycle.
 class NativeSurfaceController {
-  Future<Uint8List?> Function()? _capture;
+  Future<Uint8List?> Function(String? target)? _capture;
 
-  Future<Uint8List?> captureImage() async => _capture?.call();
+  /// With a [target], renders only that graph row with its current native camera. The target must
+  /// be a current, valid, non-placeholder graph row; otherwise the result is null.
+  Future<Uint8List?> captureImage({String? target}) async => _capture?.call(target);
 }
 
 /// Normalize thumbnails already supplied by the existing image/file owner. Unsupported URLs
@@ -91,6 +94,7 @@ class NativeRow {
     this.swipeLeading = const [],
     this.swipeTrailing = const [],
     this.chartStyle,
+    this.graph,
     this.action,
     this.onVisible,
     this.onHidden,
@@ -123,6 +127,9 @@ class NativeRow {
   /// 'line' or 'bar' draws a categorical [kind] 'chart': point x is its index and its label names
   /// the category. Null keeps the existing quantitative line chart.
   final String? chartStyle;
+
+  /// Present exactly for kind 'graph'.
+  final NativeGraph? graph;
   final Object? value;
   final Map<String, String> options;
   final NativeAction? action, onVisible, onHidden;
@@ -156,6 +163,7 @@ class NativeRow {
         'swipeLeading': swipeLeading,
         'swipeTrailing': swipeTrailing,
         'chartStyle': chartStyle,
+        'graph': graph?.projection,
         'destructive': destructive,
         'enabled': enabled && action != null,
         'visibilityEnabled': onVisible != null,
@@ -254,6 +262,7 @@ class NativeRow {
             [...swipeLeading, ...swipeTrailing].any((id) => !options.containsKey(id)))) {
       return false;
     }
+    if ((kind == 'graph') != (graph != null) || graph?.valid == false) return false;
     return switch (kind) {
       'image' => value == null &&
           imageUri != null &&
@@ -289,6 +298,10 @@ class NativeRow {
           imageUri == null &&
           points.isEmpty &&
           blocks.isEmpty,
+      // An interactive graph holds '' or the selected node id; nothing is highlighted without one.
+      'graph' => graph!.interactive
+          ? value is String && (value == '' ? graph!.highlighted.isEmpty : graph!.nodeIds.contains(value as String))
+          : value == null,
       'label' ||
       'button' ||
       'navigation' ||
@@ -337,6 +350,9 @@ class NativeRow {
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
         'secret' => input == 'copy',
+        'graph' => graph?.interactive == true
+            ? input is String && (input.isEmpty || graph!.nodeIds.contains(input))
+            : input == null,
         _ => input == null,
       };
 }
@@ -623,7 +639,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       ];
 
   /// A secret row appears only once, in a section of a sensitive surface; a sensitive surface is
-  /// never public, chat, reader, navigation or a selection. Anything else keeps the complete Flutter surface.
+  /// never public, chat, reader, navigation, a selection or a fill graph. Anything else keeps the
+  /// complete Flutter surface.
   bool get _sensitiveValid {
     bool secret(NativeRow row) => row.kind == 'secret';
     final secrets = _sections.expand((section) => section.rows).where(secret).length;
@@ -641,7 +658,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
             widget.chat == null &&
             widget.reader == null &&
             widget.navigation == null &&
-            widget.selection == null;
+            widget.selection == null &&
+            !_sections.any((section) => section.rows.any((row) => row.graph?.layout == 'fill'));
   }
 
   /// A bottom bar, a selection and reorderable sections render in list mode only, and a selection
@@ -692,11 +710,25 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     }
   }
 
-  Future<Uint8List?> _captureImage() async {
+  Future<Uint8List?> _captureImage(String? target) async {
     if (widget.sensitive) return null;
     final channel = _channel;
     if (channel == null || !mounted || !_session.active) return null;
-    final image = await channel.invokeMethod<Uint8List>('captureImage');
+    if (target != null &&
+        !_sections
+            .expand((section) => section.rows)
+            .any((row) => row.id == target && row.kind == 'graph' && row.valid && row.graph?.placeholder == false)) {
+      return null;
+    }
+    final Uint8List? image;
+    try {
+      image = await channel.invokeMethod<Uint8List>('captureImage', target == null ? null : {'target': target});
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      // The view was torn down while the share owner waited; there is nothing to capture.
+      return null;
+    }
     if (!mounted || !_session.active || !identical(channel, _channel)) return null;
     return image != null && image.length <= 16 * 1024 * 1024 ? image : null;
   }
@@ -822,7 +854,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
           ...widget.bottomBar,
         ].any((row) => nativeHostRowKinds.contains(row.kind)) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
-        _sections.map((section) => section.id).toSet().length != _sections.length) {
+        _sections.map((section) => section.id).toSet().length != _sections.length ||
+        !_graphsValid) {
       unawaited(_invalidate());
       return _fallback();
     }
@@ -872,6 +905,28 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
               );
       },
     );
+  }
+
+  /// Graph rows render only in sections. A fill graph owns a non-scrolling stage: at most one per
+  /// snapshot, with no search, chat, reader, navigation, selection, bottom bar or refresh, and only
+  /// label and button rows around it. The toolbar is unrestricted. NativeSurfaceContract.swift
+  /// applies the same rules.
+  bool get _graphsValid {
+    final sectionRows = _sections.expand((section) => section.rows).toList();
+    if (_rows.where((row) => row.kind == 'graph').length != sectionRows.where((row) => row.kind == 'graph').length) {
+      return false;
+    }
+    final fills = sectionRows.where((row) => row.graph?.layout == 'fill').length;
+    if (fills > 1) return false;
+    return fills == 0 ||
+        widget.search == null &&
+            widget.onRefresh == null &&
+            widget.chat == null &&
+            widget.reader == null &&
+            widget.navigation == null &&
+            widget.selection == null &&
+            widget.bottomBar.isEmpty &&
+            sectionRows.every((row) => row.graph?.layout == 'fill' || row.kind == 'label' || row.kind == 'button');
   }
 
   Future<void> _invalidateDetached(MethodChannel channel) async {

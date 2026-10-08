@@ -82,6 +82,19 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                 case "captureImage":
                     // A one-time secret is never captured, whatever the caller asks.
                     if state.snapshot.sensitive == true { result(nil); return }
+                    // A row-scoped capture renders only that graph, at its last drawn size and current camera.
+                    if let arguments = call.arguments, !(arguments is NSNull) {
+                        guard state.valid, let container, let target = (arguments as? [String: Any])?["target"] as? String,
+                              let row = state.snapshot.sections.flatMap(\.rows).first(where: { $0.id == target }),
+                              let graph = row.graph, !graph.placeholder,
+                              let size = state.graphSizes[target] else { result(nil); return }
+                        let dark = state.snapshot.appearance == "system"
+                            ? container.traitCollection.userInterfaceStyle == .dark : state.snapshot.appearance == "dark"
+                        let data = NativeGraphCapture.png(graph, camera: state.graphCamera(for: row), size: size,
+                                                          colorScheme: dark ? .dark : .light)
+                        result(data.map { FlutterStandardTypedData(bytes: $0) })
+                        return
+                    }
                     guard state.valid, let container, container.window != nil else { result(nil); return }
                     let bounds = container.bounds
                     let scale = container.traitCollection.displayScale

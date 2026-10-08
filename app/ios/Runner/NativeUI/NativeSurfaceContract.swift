@@ -53,6 +53,61 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
     let swipeTrailing: [String]?
     /// "line" or "bar": a categorical chart whose point x is its index and whose label names it.
     let chartStyle: String?
+    /// A knowledge graph, present exactly for kind "graph". native_graph.dart applies the same rules;
+    /// lengths count UTF-16 units on both sides.
+    struct Graph: Decodable, Equatable {
+        struct Node: Decodable, Equatable, Identifiable {
+            let id: String; let label: String; let type: String
+            let x: Double; let y: Double; let z: Double; let fixed: Bool
+        }
+        struct Edge: Decodable, Equatable { let source: String; let target: String; let label: String }
+        let nodes: [Node]
+        let edges: [Edge]
+        let highlighted: [String]
+        let zoom: Double
+        let interactive: Bool
+        let layout: String
+        let height: Double?
+        let placeholder: Bool
+        let accent: String
+
+        static let nodeTypes: Set<String> = ["user", "person", "place", "organization", "thing", "concept"]
+
+        var valid: Bool {
+            let hex = Set("0123456789abcdefABCDEF".unicodeScalars)
+            let accentScalars = Array(accent.unicodeScalars)
+            guard accentScalars.count == 7, accentScalars[0] == "#", accentScalars.dropFirst().allSatisfy(hex.contains),
+                  zoom.isFinite, (0.05...5).contains(zoom) else { return false }
+            switch layout {
+            case "card":
+                guard let height, height.isFinite, (100...600).contains(height), !interactive else { return false }
+            case "fill":
+                guard height == nil else { return false }
+            default: return false
+            }
+            if placeholder { return nodes.isEmpty && edges.isEmpty && highlighted.isEmpty && !interactive }
+            guard (1...1024).contains(nodes.count), edges.count <= 4096 else { return false }
+            var ids = Set<String>()
+            var fixed = 0
+            for node in nodes {
+                guard (1...256).contains(node.id.utf16.count), ids.insert(node.id).inserted,
+                      node.label.utf16.count <= 256, Self.nodeTypes.contains(node.type),
+                      [node.x, node.y, node.z].allSatisfy({ $0.isFinite && abs($0) <= 1e6 }) else { return false }
+                if node.fixed {
+                    fixed += 1
+                    guard fixed == 1, node.type == "user", node.x == 0, node.y == 0, node.z == 0 else { return false }
+                }
+            }
+            var triples = Set<[String]>()
+            for edge in edges {
+                guard edge.source != edge.target, ids.contains(edge.source), ids.contains(edge.target),
+                      edge.label.utf16.count <= 128,
+                      triples.insert([edge.source, edge.target, edge.label]).inserted else { return false }
+            }
+            return highlighted.count <= 5 && Set(highlighted).count == highlighted.count && Set(highlighted).isSubset(of: ids)
+        }
+    }
+    let graph: Graph?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -63,7 +118,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
              visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
              indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing,
-             chartStyle: chartStyle)
+             chartStyle: chartStyle,
+             graph: graph)
     }
 
 
@@ -90,6 +146,12 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
             guard case let .text(text) = value else { return false }
             return (1...4096).contains(text.unicodeScalars.count)
                 && text.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
+        case "graph":
+            // An interactive graph holds "" or the selected node id; nothing is highlighted without one.
+            guard let graph else { return false }
+            guard graph.interactive else { return value == nil }
+            guard case let .text(text) = value else { return false }
+            return text.isEmpty ? graph.highlighted.isEmpty : graph.nodes.contains { $0.id == text }
         default: return value == nil
         }
     }
@@ -228,8 +290,9 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               snapshot.hostKindsOnlyInSections,
+              snapshot.hasValidGraphs,
               rows.allSatisfy({ row in
-                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret"].contains(row.kind)
+                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret", "graph"].contains(row.kind)
                       || NativeUICapabilities.compiledKinds.contains(row.kind))
                       && row.hasValidHostKind
                       && Set(row.options.map(\.id)).count == row.options.count
@@ -250,18 +313,20 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.points ?? []).allSatisfy { $0.x.isFinite && $0.y.isFinite }
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
+                      && (row.kind == "graph") == (row.graph != nil) && row.graph?.valid != false
               }),
               rows.allSatisfy({ $0.hasValidListInteractions }),
               snapshot.hasValidListInteractions else { throw ContractError.invalidSnapshot }
         // A one-time secret appears at most once, as a section row of a sensitive snapshot; a sensitive
-        // snapshot is never chat, reader, navigation or a selection. Dart applies the same rules before publishing.
+        // snapshot is never chat, reader, navigation, a selection or a fill graph. Dart applies the same
+        // rules before publishing.
         let secrets = snapshot.sections.flatMap(\.rows).filter { $0.kind == "secret" }
         let controls = snapshot.toolbar + (snapshot.chat?.actions ?? []) + (snapshot.reader?.actions ?? [])
             + (snapshot.navigation.map { [$0] } ?? []) + (snapshot.bottomBar ?? [])
         guard !controls.contains(where: { $0.kind == "secret" }), secrets.count <= 1,
               secrets.isEmpty || snapshot.sensitive == true,
               snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil
-                  && snapshot.selection == nil),
+                  && snapshot.selection == nil && snapshot.fillGraphRow == nil),
               secrets.allSatisfy(\.hasOnlySecretFields) else { throw ContractError.invalidSnapshot }
         return snapshot
     }
@@ -330,6 +395,26 @@ enum NativeUICapabilities {
     static var current: [String] {
         guard #available(iOS 16.0, *) else { return [] }
         return compiledKinds.sorted()
+    }
+}
+
+extension NativeSurfaceSnapshot {
+    /// The fill graph that owns this snapshot's stage, if any.
+    var fillGraphRow: NativeSurfaceRow? { sections.flatMap(\.rows).first { $0.graph?.layout == "fill" } }
+}
+
+private extension NativeSurfaceSnapshot {
+    /// Graph rows render only in sections. A fill graph owns a non-scrolling stage: at most one per
+    /// snapshot, with no search, chat, reader, navigation, selection, bottom bar or refresh, and only
+    /// label and button rows around it. The toolbar is unrestricted. ios_native_surface.dart applies the same rules.
+    var hasValidGraphs: Bool {
+        let sectionRows = sections.flatMap(\.rows)
+        guard allRows.filter({ $0.kind == "graph" }).count == sectionRows.filter({ $0.kind == "graph" }).count else { return false }
+        let fills = sectionRows.filter { $0.graph?.layout == "fill" }.count
+        guard fills <= 1 else { return false }
+        return fills == 0 || (!searchEnabled && !refreshEnabled && chat == nil && reader == nil && navigation == nil
+            && selection == nil && (bottomBar ?? []).isEmpty
+            && sectionRows.allSatisfy { $0.graph?.layout == "fill" || ["label", "button"].contains($0.kind) })
     }
 }
 

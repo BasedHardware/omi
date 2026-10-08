@@ -15,6 +15,10 @@
 		56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */; };
 		B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232D127408C8C64C5674E080 /* NativeReaderComponents.swift */; };
 		EC7A73E8ECA01E5E37D37F82 /* NativeListInteractions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */; };
+		02A93217FE28686B223535B8 /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */; };
+		2220E372D12AEA59EA92A516 /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */; };
+		4954043709421EBA7FF731A5 /* NativeSurfaceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */; };
+		3C7C1E7FCB8DEE113B6DB11E /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645CC78FE98DE80A5C3A3203 /* SafeFoundationSinks.swift */; };
 		6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D27B1031DDE8583F2CA747 /* PreviewUITests.swift */; };
 		67FEC9CAB30F258C23D08B31 /* PreviewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CDC6B151864D7EF2E98348 /* PreviewApp.swift */; };
 		769111CF47973A6347C4FE86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7D65CD2BBD03EF907D6979B /* Foundation.framework */; };
@@ -50,6 +54,7 @@
 		F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeSurfaceView.swift; path = "../../Runner/NativeUI/NativeSurfaceView.swift"; sourceTree = "<group>"; };
 		232D127408C8C64C5674E080 /* NativeReaderComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeReaderComponents.swift; path = ../../Runner/NativeUI/NativeReaderComponents.swift; sourceTree = "<group>"; };
 		59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeListInteractions.swift; path = ../../Runner/NativeUI/NativeListInteractions.swift; sourceTree = "<group>"; };
+		9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeGraphView.swift; path = ../../Runner/NativeUI/NativeGraphView.swift; sourceTree = "<group>"; };
 		F7D65CD2BBD03EF907D6979B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -90,6 +95,7 @@
 				F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */,
 				232D127408C8C64C5674E080 /* NativeReaderComponents.swift */,
 				59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */,
+				9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -210,6 +216,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */,
+				2220E372D12AEA59EA92A516 /* NativeGraphView.swift in Sources */,
+				4954043709421EBA7FF731A5 /* NativeSurfaceContract.swift in Sources */,
+				3C7C1E7FCB8DEE113B6DB11E /* SafeFoundationSinks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,6 +237,7 @@
 				56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */,
 				B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */,
 				EC7A73E8ECA01E5E37D37F82 /* NativeListInteractions.swift in Sources */,
+				02A93217FE28686B223535B8 /* NativeGraphView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

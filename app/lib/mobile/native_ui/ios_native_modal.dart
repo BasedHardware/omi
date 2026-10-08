@@ -68,8 +68,9 @@ Future<NativeModalResult?> showIosNativeModal(
   final rows = [...actions, ...sections.expand((section) => section.rows)];
   // The presenter echoes values back, so a one-time secret never enters it.
   if (rows.any((row) => row.kind == 'secret')) return null;
-  // An unrepresentable request keeps the caller's complete Flutter dialog.
-  if (rows.any((row) => !row.valid) ||
+  // An unrepresentable request keeps the caller's complete Flutter dialog. A graph needs its surface's
+  // camera and capture owner, so NativeModalPresenter refuses graph rows too.
+  if (rows.any((row) => !row.valid || row.kind == 'graph') ||
       // Host-drawn rows belong to surface lists; a presentation never carries them.
       rows.any((row) => nativeHostRowKinds.contains(row.kind)) ||
       rows.map((row) => row.id).toSet().length != rows.length) {

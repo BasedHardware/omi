@@ -27,6 +27,8 @@
 		54B82DB38A045FC9F129AAD3 /* NativeHomeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */; };
 		5D9C31BF05A42EBBD84A417D /* NativeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */; };
 		C7A93FEF080556311DEA1478 /* NativeHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */; };
+		F52476C32CDEE9F1E9ACAEB8 /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA16A0644C7DD23E8D3C45BB /* NativeGraphView.swift */; };
+		C966F943361C8A8608513E3C /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA16A0644C7DD23E8D3C45BB /* NativeGraphView.swift */; };
 		CD51D64B482D31A12E53D31F /* NativeHomePlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */; };
 		DE135B6BD088236D7566D3D6 /* NativeHomeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */; };
 		A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
@@ -273,6 +275,7 @@
 		5F8DA6EA972F5A4BE94DF8BB /* NativeGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGlass.swift; sourceTree = "<group>"; };
 		1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomePlatformView.swift; sourceTree = "<group>"; };
 		8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomeView.swift; sourceTree = "<group>"; };
+		AA16A0644C7DD23E8D3C45BB /* NativeGraphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeGraphView.swift; sourceTree = "<group>"; };
 		C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeHomeContract.swift; sourceTree = "<group>"; };
 		A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeFoundationSinks.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
@@ -470,6 +473,7 @@
 				C30502500F1FEEE9F314A28F /* NativeHomeContract.swift */,
 				1974929E2AD7E5E9C10675F1 /* NativeHomePlatformView.swift */,
 				8217A8E2A03DC81B1F9C32CF /* NativeHomeView.swift */,
+				AA16A0644C7DD23E8D3C45BB /* NativeGraphView.swift */,
 			);
 			name = NativeUI;
 			path = NativeUI;
@@ -1142,6 +1146,7 @@
 				54B82DB38A045FC9F129AAD3 /* NativeHomeContract.swift in Sources */,
 				3231DB770E215E8822E8BCD2 /* NativeHomePlatformView.swift in Sources */,
 				5D9C31BF05A42EBBD84A417D /* NativeHomeView.swift in Sources */,
+				F52476C32CDEE9F1E9ACAEB8 /* NativeGraphView.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */,
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
@@ -1222,6 +1227,7 @@
 				DE135B6BD088236D7566D3D6 /* NativeHomeContract.swift in Sources */,
 				CD51D64B482D31A12E53D31F /* NativeHomePlatformView.swift in Sources */,
 				C7A93FEF080556311DEA1478 /* NativeHomeView.swift in Sources */,
+				C966F943361C8A8608513E3C /* NativeGraphView.swift in Sources */,
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
 				A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */,
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,

@@ -17,6 +17,12 @@ final class NativeSurfaceState: ObservableObject {
     /// pending, and a refused command reverts to the owner's snapshot.
     @Published private(set) var optimisticSelection: Set<String>?
     @Published private(set) var optimisticOrders: [String: [String]] = [:]
+    /// Each graph row's native camera. It resets when the row's sorted node-id set changes and is
+    /// never sent to Dart.
+    @Published private(set) var graphCameras: [String: NativeGraphCamera] = [:]
+    /// The size each graph row was last drawn at, for a row-scoped capture.
+    private(set) var graphSizes: [String: CGSize] = [:]
+    private var graphNodeIds: [String: [String]] = [:]
     private var pendingEdits: Set<String> = []
     private var failedEdits: Set<String> = []
     /// Counts refused selections and orders, so an action that waited on one never acts on a state the user did not see.
@@ -37,6 +43,7 @@ final class NativeSurfaceState: ObservableObject {
         self.snapshot = snapshot
         self.perform = perform
         _ = revision.accept(snapshot.revision)
+        retainGraphCameras(snapshot)
     }
 
     func update(_ snapshot: NativeSurfaceSnapshot) {
@@ -61,6 +68,7 @@ final class NativeSurfaceState: ObservableObject {
         let sending = pending.union(startingListCommands)
         if !sending.contains("_selection") { optimisticSelection = nil }
         optimisticOrders = optimisticOrders.filter { sending.contains("_reorder:\($0.key)") }
+        retainGraphCameras(snapshot)
         self.snapshot = snapshot
     }
 
@@ -75,7 +83,36 @@ final class NativeSurfaceState: ObservableObject {
         startingListCommands.removeAll()
         sentDraft = nil
         finishEditWaiters()
+        graphCameras.removeAll()
+        graphSizes.removeAll()
+        graphNodeIds.removeAll()
         snapshot = snapshot.withoutContent()
+    }
+
+    func graphCamera(for row: NativeSurfaceRow) -> NativeGraphCamera {
+        graphCameras[row.id] ?? NativeGraphCamera(zoom: row.graph?.zoom ?? 1)
+    }
+
+    func setGraphCamera(_ camera: NativeGraphCamera, for id: String) {
+        guard valid, graphNodeIds[id] != nil, camera.zoom.isFinite else { return }
+        graphCameras[id] = camera
+    }
+
+    func setGraphSize(_ size: CGSize, for id: String) {
+        guard valid, graphNodeIds[id] != nil else { return }
+        graphSizes[id] = size
+    }
+
+    private func retainGraphCameras(_ snapshot: NativeSurfaceSnapshot) {
+        var nodeIds: [String: [String]] = [:]
+        for row in snapshot.sections.flatMap(\.rows) {
+            if let graph = row.graph { nodeIds[row.id] = graph.nodes.map(\.id).sorted() }
+        }
+        let previous = graphNodeIds
+        graphNodeIds = nodeIds
+        graphSizes = graphSizes.filter { nodeIds[$0.key] != nil }
+        let cameras = graphCameras.filter { nodeIds[$0.key] != nil && nodeIds[$0.key] == previous[$0.key] }
+        if cameras != graphCameras { graphCameras = cameras }
     }
 
     func send(_ id: String, value: Any? = nil) async {
@@ -285,7 +322,9 @@ struct NativeSurfaceView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let reader = state.snapshot.reader {
+        if let stage = state.snapshot.fillGraphRow {
+            graphStage(stage)
+        } else if let reader = state.snapshot.reader {
             if state.snapshot.searchEnabled {
                 readerView(reader).searchable(text: $search, prompt: state.snapshot.searchPlaceholder)
                     .onChange(of: search) { value in Task { await state.send("_search", value: value) } }
@@ -529,6 +568,21 @@ struct NativeSurfaceView: View {
                 NativeZoomImage(row: row)
             case "text":
                 NativeTextRow(row: row, state: state)
+            case "graph":
+                // Only cards reach a list; a fill graph owns the stage instead.
+                if let graph = row.graph {
+                    Button { Task { await state.send(row.id) } } label: {
+                        NativeGraphView(row: row, graph: graph, camera: .constant(state.graphCamera(for: row)),
+                                        resized: { size in state.setGraphSize(size, for: row.id) })
+                        .frame(height: CGFloat(graph.height ?? 0))
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.footnote).foregroundStyle(.tertiary).padding(10).accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel(row.title)
+                        .listRowInsets(EdgeInsets())
+                }
             case "keypad":
                 NativeKeypadRow(row: row, state: state)
             case "secret":
@@ -546,6 +600,73 @@ struct NativeSurfaceView: View {
         }
         .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user", "secret", "shortcuts_link"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
+    }
+
+    /// A fill graph's non-scrolling stage: label rows in snapshot order, the graph filling the rest
+    /// with its loading, failed and empty status on top, then button rows as glass buttons.
+    private func graphStage(_ graphRow: NativeSurfaceRow) -> some View {
+        let rows = state.snapshot.sections.flatMap(\.rows)
+        let buttons = rows.filter { $0.kind == "button" }
+        return VStack(spacing: 12) {
+            ForEach(rows.filter { $0.kind == "label" }) { row in
+                rowView(row).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
+                    .onAppear { stageRowAppeared(row) }
+            }
+            if let graph = graphRow.graph {
+                NativeGraphView(row: graphRow, graph: graph, camera: Binding(get: { state.graphCamera(for: graphRow) },
+                                                                          set: { state.setGraphCamera($0, for: graphRow.id) }),
+                                stage: true,
+                                select: graphSelection(graphRow, graph),
+                                resized: { size in state.setGraphSize(size, for: graphRow.id) })
+                .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
+                .layoutPriority(-1)
+                .overlay { graphStatus(graph) }
+            }
+            if !buttons.isEmpty {
+                NativeGlassControls {
+                    VStack(spacing: 8) {
+                        ForEach(buttons) { row in
+                            Button(role: row.destructive ? .destructive : nil) { Task { await state.send(row.id) } } label: {
+                                Group {
+                                    if let symbol = row.symbol { Label(row.title, systemImage: symbol) } else { Text(row.title) }
+                                }.frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .modifier(NativeGlassButtonStyle())
+                            .disabled(!row.enabled || state.pending.contains(row.id))
+                            .accessibilityIdentifier(row.id)
+                            .onAppear { stageRowAppeared(row) }
+                        }
+                    }
+                }.padding(.horizontal, 20)
+            }
+        }.padding(.vertical, 12)
+    }
+
+    /// Stage rows report visibility as list rows do.
+    private func stageRowAppeared(_ row: NativeSurfaceRow) {
+        if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
+    }
+
+    /// An interactive graph sends a tapped node id, or "" for the background; otherwise nothing.
+    private func graphSelection(_ row: NativeSurfaceRow, _ graph: NativeSurfaceRow.Graph) -> ((String) -> Void)? {
+        guard graph.interactive, row.enabled else { return nil }
+        return { id in Task { await state.send(row.id, value: id) } }
+    }
+
+    /// A placeholder that is neither loading nor failed shows the surface's empty copy.
+    @ViewBuilder private func graphStatus(_ graph: NativeSurfaceRow.Graph) -> some View {
+        if state.snapshot.loading {
+            graphStatusCard { ProgressView(state.snapshot.loadingLabel).accessibilityIdentifier("native-surface-loading") }
+        } else if state.snapshot.failed || state.actionFailed {
+            graphStatusCard { Text(state.snapshot.error).accessibilityIdentifier("native-surface-error") }
+        } else if graph.placeholder && !state.snapshot.empty.isEmpty {
+            graphStatusCard { Text(state.snapshot.empty).accessibilityIdentifier("native-surface-empty") }
+        }
+    }
+
+    private func graphStatusCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content().multilineTextAlignment(.center).padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).padding(20)
     }
 
     private func readerView(_ projection: NativeSurfaceSnapshot.Reader) -> some View {
