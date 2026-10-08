@@ -34,12 +34,6 @@ def test_live_loads_stored_embedding_and_resolved_name_without_audio(profile_sou
         SimpleNamespace(request=SimpleNamespace(uid='u'), persistence=_Persistence(), has_speech_profile=has_audio)
     )
     asyncio.run(matcher._load_profiles())
-    if not has_audio:
-        # Excluded profiles are never read; the runtime owns un-gating via the
-        # stored-embedding availability probe (a6b439f809).
-        assert matcher.person_embeddings == {}
-        profile_sources.assert_not_called()
-        return
     owner = matcher.person_embeddings[speakers.USER_SELF_PERSON_ID]
     assert owner['name'] == 'David'
     np.testing.assert_array_equal(owner['embedding'], [[1.0, 0.0]])
@@ -74,14 +68,15 @@ def test_live_audio_recovery_keeps_resolved_owner_name(profile_sources, monkeypa
     monkeypatch.setattr(speakers, 'get_profile_audio_if_exists', lambda uid: 'fake.wav')
     monkeypatch.setattr(speakers, '_read_file', lambda path: b'synthetic')
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]]))
-    save = Mock()
-    monkeypatch.setattr(speakers.user_db, 'set_user_speaker_embedding', save)
+    save = Mock(return_value=True)
+    monkeypatch.setattr(speakers.user_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
+    monkeypatch.setattr(speakers.user_db, 'recover_user_speaker_embedding', save)
     matcher = speakers.SpeakerMatcher(
         SimpleNamespace(request=SimpleNamespace(uid='u'), persistence=_Persistence(), has_speech_profile=True)
     )
     asyncio.run(matcher._load_profiles())
     assert matcher.person_embeddings[speakers.USER_SELF_PERSON_ID]['name'] == 'David'
-    save.assert_called_once_with('u', [1.0, 0.0])
+    save.assert_called_once_with('u', [1.0, 0.0], expected_updated_at=None)
 
 
 @pytest.fixture(autouse=True)

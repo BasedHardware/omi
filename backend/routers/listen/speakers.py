@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import time
 from collections import deque
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
@@ -27,6 +28,7 @@ from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
 from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
+from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
     SPEAKER_MATCH_MAX_CLIPS,
@@ -116,6 +118,8 @@ class SpeakerMatcher:
         # resolve_owner_name(); used for display and as a veto, never as voice-match evidence.
         self.owner_name: Optional[str] = None
         self._owner_name_resolved = False
+        self._profile_retry_after = 0.0
+        self._owner_load_failed = False
 
     async def refresh_for_conversation(
         self,
@@ -126,6 +130,9 @@ class SpeakerMatcher:
     ) -> None:
         async with self._profile_lock:
             if self._profile_conversation_id == conversation_id:
+                if self._owner_load_failed and time.monotonic() >= self._profile_retry_after:
+                    self._profile_retry_after = time.monotonic() + 30.0
+                    await self._load_profiles()
                 return
             # Automatic continuity has no receipt/training authority. Only a
             # still-current provider stream and an unchanged owner print qualify.
@@ -207,32 +214,39 @@ class SpeakerMatcher:
             return bool(self._named_speakers_allowed)
 
     async def _load_profiles(self) -> None:
-        if self.host.has_speech_profile:
+        eligible = (
+            getattr(self.host.request, 'include_speech_profile', True)
+            and not getattr(self.host.request, 'onboarding_mode', False)
+            and not getattr(self.host, 'is_multi_channel', False)
+            and not getattr(self.host, 'use_custom_stt', False)
+        )
+        self._owner_load_failed = False
+        self._profile_retry_after = time.monotonic() + 30.0
+        if eligible:
             try:
-                embedding = await self.host.persistence.call(user_db.get_user_speaker_embedding, self.host.request.uid)
-                if embedding:
+                vector = await run_blocking(
+                    sync_executor,
+                    load_owner_embedding,
+                    self.host.request.uid,
+                    users=user_db,
+                    allow_audio_repair=self.host.has_speech_profile,
+                    audio_loader=get_profile_audio_if_exists,
+                    read_file=_read_file,
+                    extractor=extract_embedding_from_bytes,
+                )
+                if vector is not None:
+                    self.host.has_speech_profile = True
                     self.person_embeddings[USER_SELF_PERSON_ID] = {
-                        'embedding': np.array(embedding, dtype=np.float32).reshape(1, -1),
+                        'embedding': vector,
                         'name': await self.resolve_owner_name() or 'The User',
                     }
                 else:
-                    path = await run_blocking(storage_executor, get_profile_audio_if_exists, self.host.request.uid)
-                    if path:
-                        profile = await run_blocking(storage_executor, _read_file, path)
-                        result = await run_blocking(
-                            sync_executor, cast(Any, extract_embedding_from_bytes), profile, 'speech_profile.wav'
-                        )
-                        del profile
-                        self.person_embeddings[USER_SELF_PERSON_ID] = {
-                            'embedding': result,
-                            'name': await self.resolve_owner_name() or 'The User',
-                        }
-                        await self.host.persistence.call(
-                            user_db.set_user_speaker_embedding, self.host.request.uid, result.flatten().tolist()
-                        )
-                    else:
+                    self._owner_load_failed = True
+                    self.person_embeddings.pop(USER_SELF_PERSON_ID, None)
+                    if self.host.has_speech_profile:
                         logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
             except Exception as error:
+                self._owner_load_failed = True
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:
             if not await self.named_speakers_allowed():
@@ -246,10 +260,13 @@ class SpeakerMatcher:
                 vector: Optional[Any] = None
                 if verified_samples:
                     if stored:
-                        vector = np.array(stored, dtype=np.float32).reshape(1, -1)
+                        vector = validated_embedding(stored)
                     else:
                         vector = await self._recover_person_embedding(person)
-                if vector is not None:
+                if vector is not None and (
+                    USER_SELF_PERSON_ID not in self.person_embeddings
+                    or vector.size == self.person_embeddings[USER_SELF_PERSON_ID]['embedding'].size
+                ):
                     self.person_embeddings[person['id']] = {
                         'embedding': vector,
                         'name': person['name'],
@@ -274,6 +291,8 @@ class SpeakerMatcher:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
+                if self._profile_conversation_id is not None and self._owner_load_failed:
+                    await self.refresh_for_conversation(self._profile_conversation_id)
                 if not state.active:
                     break
                 continue
@@ -563,6 +582,7 @@ class SpeakerMatcher:
             distances = {
                 person_id: compare_embeddings(centroid, value['embedding'])
                 for person_id, value in self.person_embeddings.items()
+                if validated_embedding(value.get('embedding')) is not None and value['embedding'].size == centroid.size
             }
             self._voice_distances[speaker_id] = distances
             self._voice_decisions[speaker_id] = select_speaker_match(distances)

@@ -3621,3 +3621,13 @@ receipts require an app build with that define and supported WAL frames. Listen
 and pusher must not synthesize client capture roots or frame ordinals. The
 existing `AUDIO_TIMELINE_SPANS` producer and `LIVE_SPEAKER_SPAN_RESOLUTION`
 consumer flags permit identity placement independently of that dark receipt.
+
+Owner acquisition is plan-independent and shared by listen, sync/backfill and
+finished-conversation resolution. Validate vectors before comparison; failures
+reading names, entitlements or paid people cannot erase a loaded owner. Legacy
+enrollment-audio recovery publishes only while the existing owner timestamp
+and missing vector remain unchanged, with account deletion fenced in the same
+transaction. It never learns from an automatic recognition decision. Live
+requests that explicitly exclude a profile, onboarding and channel-authored
+capture remain excluded. Eligible sockets retain the bounded matcher loop so
+a later confirmed profile can be observed on rotation or a bounded load retry.

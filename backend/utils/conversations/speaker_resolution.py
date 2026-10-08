@@ -72,6 +72,7 @@ from utils.stt.conversation_speakers import (
     significant_capture_speaker_ids,
     unit_voice_vector,
 )
+from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.speaker_permissions import named_speaker_prompts_allowed
@@ -180,9 +181,12 @@ def _manifest_span_load(audio_file: Any) -> int:
 
 def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
-    owner = users_db.get_user_speaker_embedding(uid)
-    if owner:
-        prints[OWNER_IDENTITY] = np.asarray(owner, dtype=np.float32)
+    try:
+        owner = load_owner_embedding(uid, users=users_db)
+        if owner is not None:
+            prints[OWNER_IDENTITY] = owner.reshape(-1)
+    except Exception as error:
+        logger.warning('event=speaker_resolution_owner_profile outcome=failed exception_type=%s', type(error).__name__)
     # Owner recognition is plan-independent: an entitlement read failure fails
     # closed for person prints only, never for the owner's own voiceprint.
     try:
@@ -192,10 +196,21 @@ def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
         return prints
     if not named_allowed:
         return prints
-    for person in users_db.get_people(uid) or []:
-        embedding = usable_person_voiceprint(person)
-        if embedding and person.get('id'):
-            prints[person['id']] = np.asarray(embedding, dtype=np.float32)
+    try:
+        people = users_db.get_people(uid)
+    except Exception as error:
+        logger.warning(
+            'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
+        )
+        return prints
+    for person in people or []:
+        embedding = validated_embedding(usable_person_voiceprint(person))
+        if (
+            embedding is not None
+            and person.get('id')
+            and (OWNER_IDENTITY not in prints or embedding.size == prints[OWNER_IDENTITY].size)
+        ):
+            prints[person['id']] = embedding.reshape(-1)
     return prints
 
 
