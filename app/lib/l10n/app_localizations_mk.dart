@@ -12522,4 +12522,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Оваа датотека е преголема за увезување.';
+
+  @override
+  String get importUnsupportedFileType => 'Овој тип на датотека не може да се увезе.';
 }

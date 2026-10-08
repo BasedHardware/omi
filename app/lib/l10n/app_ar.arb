@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "ملفات النصوص",
     "importTranscriptFilesDescription": "اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها",
     "importTooManyAttempts": "عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.",
-    "importFileTooLarge": "هذا الملف كبير جدًا بحيث لا يمكن استيراده."
+    "importFileTooLarge": "هذا الملف كبير جدًا بحيث لا يمكن استيراده.",
+    "importUnsupportedFileType": "لا يمكن استيراد هذا النوع من الملفات."
 }

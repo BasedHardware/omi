@@ -12507,4 +12507,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Този файл е твърде голям за импортиране.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлове от този тип не могат да бъдат импортирани.';
 }

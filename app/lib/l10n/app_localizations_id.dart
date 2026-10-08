@@ -12475,4 +12475,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'File ini terlalu besar untuk diimpor.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis file ini tidak dapat diimpor.';
 }

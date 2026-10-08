@@ -11412,5 +11412,6 @@
     "importTranscriptFiles": "Файлы стэнаграм",
     "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
     "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",
-    "importFileTooLarge": "Гэты файл занадта вялікі для імпарту."
+    "importFileTooLarge": "Гэты файл занадта вялікі для імпарту.",
+    "importUnsupportedFileType": "Файлы гэтага тыпу нельга імпартаваць."
 }

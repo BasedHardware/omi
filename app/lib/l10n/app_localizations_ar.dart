@@ -12391,4 +12391,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'هذا الملف كبير جدًا بحيث لا يمكن استيراده.';
+
+  @override
+  String get importUnsupportedFileType => 'لا يمكن استيراد هذا النوع من الملفات.';
 }

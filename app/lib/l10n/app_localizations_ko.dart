@@ -12275,4 +12275,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get importFileTooLarge => '이 파일은 너무 커서 가져올 수 없습니다.';
+
+  @override
+  String get importUnsupportedFileType => '이 파일 형식은 가져올 수 없습니다.';
 }

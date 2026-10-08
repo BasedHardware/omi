@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "Soubory přepisů",
     "importTranscriptFilesDescription": "Vyberte přepisy SRT, VTT nebo TXT, nebo jejich ZIP",
     "importTooManyAttempts": "Právě probíhá příliš mnoho importů. Zkuste to později.",
-    "importFileTooLarge": "Tento soubor je příliš velký na import."
+    "importFileTooLarge": "Tento soubor je příliš velký na import.",
+    "importUnsupportedFileType": "Tento typ souboru nelze importovat."
 }

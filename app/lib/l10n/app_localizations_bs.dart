@@ -12491,4 +12491,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Ova datoteka je prevelika za uvoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ova vrsta datoteke se ne može uvesti.';
 }

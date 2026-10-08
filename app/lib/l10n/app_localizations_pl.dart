@@ -12501,4 +12501,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Ten plik jest zbyt duży, aby go zaimportować.';
+
+  @override
+  String get importUnsupportedFileType => 'Nie można zaimportować pliku tego typu.';
 }

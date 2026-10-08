@@ -12456,4 +12456,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'See fail on importimiseks liiga suur.';
+
+  @override
+  String get importUnsupportedFileType => 'Seda failitüüpi ei saa importida.';
 }

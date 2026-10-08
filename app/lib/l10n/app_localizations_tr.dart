@@ -12475,4 +12475,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Bu dosya içe aktarmak için çok büyük.';
+
+  @override
+  String get importUnsupportedFileType => 'Bu dosya türü içe aktarılamaz.';
 }

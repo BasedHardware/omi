@@ -14903,5 +14903,9 @@
     "importFileTooLarge": "This file is too large to import.",
     "@importFileTooLarge": {
         "description": "Error when the selected import file is over the upload size limit"
+    },
+    "importUnsupportedFileType": "This file type can't be imported.",
+    "@importUnsupportedFileType": {
+        "description": "Error when the file picked for an import has an extension the importer does not accept"
     }
 }

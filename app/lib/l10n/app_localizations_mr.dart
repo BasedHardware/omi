@@ -12469,4 +12469,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'ही फाइल आयात करण्यासाठी खूप मोठी आहे.';
+
+  @override
+  String get importUnsupportedFileType => 'या प्रकारची फाइल आयात करता येत नाही.';
 }

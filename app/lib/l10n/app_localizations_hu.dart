@@ -12511,4 +12511,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Ez a fájl túl nagy az importáláshoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ez a fájltípus nem importálható.';
 }

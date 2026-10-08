@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "Transkripciju faili",
     "importTranscriptFilesDescription": "Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām",
     "importTooManyAttempts": "Pašlaik ir pārāk daudz importēšanu. Mēģiniet vēlreiz vēlāk.",
-    "importFileTooLarge": "Šis fails ir pārāk liels importēšanai."
+    "importFileTooLarge": "Šis fails ir pārāk liels importēšanai.",
+    "importUnsupportedFileType": "Šāda veida failu nevar importēt."
 }

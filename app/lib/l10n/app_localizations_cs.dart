@@ -12466,4 +12466,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Tento soubor je příliš velký na import.';
+
+  @override
+  String get importUnsupportedFileType => 'Tento typ souboru nelze importovat.';
 }

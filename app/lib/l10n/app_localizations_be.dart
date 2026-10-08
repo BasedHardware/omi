@@ -12494,4 +12494,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Гэты файл занадта вялікі для імпарту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы гэтага тыпу нельга імпартаваць.';
 }

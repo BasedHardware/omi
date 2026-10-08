@@ -12493,4 +12493,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Fail ini terlalu besar untuk diimport.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis fail ini tidak boleh diimport.';
 }

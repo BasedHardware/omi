@@ -12457,4 +12457,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Tệp này quá lớn để nhập dữ liệu.';
+
+  @override
+  String get importUnsupportedFileType => 'Không thể nhập loại tệp này.';
 }

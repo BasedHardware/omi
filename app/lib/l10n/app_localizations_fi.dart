@@ -12466,4 +12466,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Tämä tiedosto on liian suuri tuotavaksi.';
+
+  @override
+  String get importUnsupportedFileType => 'Tämän tyyppistä tiedostoa ei voi tuoda.';
 }

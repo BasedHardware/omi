@@ -12462,4 +12462,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'এই ফাইলটি আমদানি করার জন্য অনেক বড়।';
+
+  @override
+  String get importUnsupportedFileType => 'এই ধরনের ফাইল আমদানি করা যায় না।';
 }

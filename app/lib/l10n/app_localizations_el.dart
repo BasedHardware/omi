@@ -12543,4 +12543,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή.';
+
+  @override
+  String get importUnsupportedFileType => 'Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί.';
 }

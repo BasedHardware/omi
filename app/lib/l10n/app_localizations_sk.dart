@@ -12458,4 +12458,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Tento súbor je príliš veľký na import.';
+
+  @override
+  String get importUnsupportedFileType => 'Tento typ súboru nie je možné importovať.';
 }

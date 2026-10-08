@@ -12484,4 +12484,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Šis failas per didelis, kad būtų importuotas.';
+
+  @override
+  String get importUnsupportedFileType => 'Šio tipo failo importuoti negalima.';
 }

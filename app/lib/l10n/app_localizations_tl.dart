@@ -12563,4 +12563,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Masyadong malaki ang file na ito para i-import.';
+
+  @override
+  String get importUnsupportedFileType => 'Hindi ma-import ang ganitong uri ng file.';
 }

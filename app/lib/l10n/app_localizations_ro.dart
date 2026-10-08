@@ -12517,4 +12517,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Acest fișier este prea mare pentru a fi importat.';
+
+  @override
+  String get importUnsupportedFileType => 'Acest tip de fișier nu poate fi importat.';
 }

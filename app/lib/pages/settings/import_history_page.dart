@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:path/path.dart' as p;
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
@@ -38,6 +39,32 @@ String importStartFailureMessage(AppLocalizations l10n, ImportStartResult result
   if (result.tooLarge || status == 413) return l10n.importFileTooLarge;
   if (status != null && status >= 400 && status < 500 && detail != null) return detail;
   return l10n.failedToStartImport;
+}
+
+/// Import extensions the iOS picker cannot filter by. iOS has no system file type for
+/// them, so file_picker's [FileType.custom] resolves each to a dynamic `dyn.` type and
+/// drops it, which leaves such a file unselectable. WebVTT, text and ZIP have system types.
+const iosUntypedImportExtensions = {'srt'};
+
+/// How an import's file picker opens. Where iOS would drop one of [allowedExtensions]
+/// ([iosUntypedImportExtensions]), the picker shows every file and [isImportableFile]
+/// checks the choice instead; otherwise it filters by [allowedExtensions].
+({FileType type, List<String>? allowedExtensions}) importPickerOptions(
+  List<String> allowedExtensions, {
+  required bool isIOS,
+}) {
+  if (isIOS && allowedExtensions.any(iosUntypedImportExtensions.contains)) {
+    return (type: FileType.any, allowedExtensions: null);
+  }
+  return (type: FileType.custom, allowedExtensions: allowedExtensions);
+}
+
+/// Whether [fileName] ends in one of [allowedExtensions], case aside. Every pick is
+/// checked: a picker showing every file, or a provider that ignores the filter, can
+/// return anything. A name that is only an extension (".srt") has none, as on the server.
+bool isImportableFile(String fileName, List<String> allowedExtensions) {
+  final extension = p.extension(fileName).toLowerCase();
+  return extension.length > 1 && allowedExtensions.contains(extension.substring(1));
 }
 
 /// The icon an import-history row shows for a job's importer, or null for the
@@ -177,7 +204,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       setState(() => _isUploading = true);
 
       Logger.debug('Opening file picker for $analyticsSource import…');
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: allowedExtensions);
+      final picker = importPickerOptions(allowedExtensions, isIOS: Platform.isIOS);
+      final result = await FilePicker.platform.pickFiles(
+        type: picker.type,
+        allowedExtensions: picker.allowedExtensions,
+      );
 
       if (result == null || result.files.isEmpty) {
         Logger.debug('User cancelled file picker');
@@ -187,7 +218,17 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         return;
       }
 
-      final filePath = result.files.single.path;
+      final picked = result.files.single;
+      if (!isImportableFile(picked.name, allowedExtensions)) {
+        Logger.debug('Picked file is not an importable type');
+        if (mounted) {
+          setState(() => _isUploading = false);
+          OmiFeedback.error(context, context.l10n.importUnsupportedFileType);
+        }
+        return;
+      }
+
+      final filePath = picked.path;
       Logger.debug('Selected file path: $filePath');
 
       if (filePath == null) {

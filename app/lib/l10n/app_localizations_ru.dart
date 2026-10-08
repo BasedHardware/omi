@@ -12505,4 +12505,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Этот файл слишком большой для импорта.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы этого типа нельзя импортировать.';
 }

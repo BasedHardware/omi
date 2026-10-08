@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
@@ -111,6 +113,51 @@ void main() {
 
   test('the transcript picker accepts exactly the formats the server imports', () {
     expect(transcriptImportExtensions, ['zip', 'srt', 'vtt', 'txt']);
+  });
+
+  group('importPickerOptions', () {
+    test('on iOS the transcript picker shows every file, since iOS cannot filter by .srt', () {
+      // file_picker 8.3.2 drops an extension whose iOS type is dynamic (`dyn.`), and `srt` has
+      // no system type, so a filtered picker would leave a standalone .srt unselectable.
+      final options = importPickerOptions(transcriptImportExtensions, isIOS: true);
+
+      expect(options.type, FileType.any);
+      expect(options.allowedExtensions, isNull);
+    });
+
+    test('elsewhere the transcript picker filters by the importable extensions', () {
+      final options = importPickerOptions(transcriptImportExtensions, isIOS: false);
+
+      expect(options.type, FileType.custom);
+      expect(options.allowedExtensions, transcriptImportExtensions);
+    });
+
+    test('a picker whose extensions iOS can filter by keeps filtering there', () {
+      final options = importPickerOptions(const ['zip'], isIOS: true);
+
+      expect(options.type, FileType.custom);
+      expect(options.allowedExtensions, ['zip']);
+    });
+  });
+
+  group('isImportableFile', () {
+    test('accepts each importable extension, in any case', () {
+      for (final name in ['call.srt', 'call.SRT', 'notes.txt', 'meeting.Vtt', 'export.zip', 'a.b.srt']) {
+        expect(isImportableFile(name, transcriptImportExtensions), isTrue, reason: name);
+      }
+    });
+
+    test('refuses any other file, which a picker showing every file can return', () {
+      for (final name in ['movie.mp4', 'call.srt.mp4', 'srt', 'notes', '.srt', 'call.', '']) {
+        expect(isImportableFile(name, transcriptImportExtensions), isFalse, reason: name);
+      }
+    });
+
+    test('refusing an unsupported pick has its own message', () {
+      final l10n = lookupAppLocalizations(const Locale('en'));
+
+      expect(l10n.importUnsupportedFileType, "This file type can't be imported.");
+    });
   });
 
   test('import history shows the Limitless logo only on Limitless jobs', () {

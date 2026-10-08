@@ -3890,5 +3890,6 @@
     "importTranscriptFiles": "Fichiers de transcription",
     "importTranscriptFilesDescription": "Sélectionnez des transcriptions SRT, VTT ou TXT, ou un ZIP les contenant",
     "importTooManyAttempts": "Trop d'importations en ce moment. Réessayez plus tard.",
-    "importFileTooLarge": "Ce fichier est trop volumineux pour être importé."
+    "importFileTooLarge": "Ce fichier est trop volumineux pour être importé.",
+    "importUnsupportedFileType": "Ce type de fichier ne peut pas être importé."
 }

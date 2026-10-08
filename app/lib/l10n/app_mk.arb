@@ -11412,5 +11412,6 @@
     "importTranscriptFiles": "Датотеки со транскрипти",
     "importTranscriptFilesDescription": "Изберете SRT, VTT или TXT транскрипти или ZIP со нив",
     "importTooManyAttempts": "Моментално има премногу увезувања. Обидете се повторно подоцна.",
-    "importFileTooLarge": "Оваа датотека е преголема за увезување."
+    "importFileTooLarge": "Оваа датотека е преголема за увезување.",
+    "importUnsupportedFileType": "Овој тип на датотека не може да се увезе."
 }

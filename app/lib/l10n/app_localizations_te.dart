@@ -12514,4 +12514,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.';
+
+  @override
+  String get importUnsupportedFileType => 'ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.';
 }

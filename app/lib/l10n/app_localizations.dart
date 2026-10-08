@@ -22322,6 +22322,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This file is too large to import.'**
   String get importFileTooLarge;
+
+  /// Error when the file picked for an import has an extension the importer does not accept
+  ///
+  /// In en, this message translates to:
+  /// **'This file type can\'t be imported.'**
+  String get importUnsupportedFileType;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

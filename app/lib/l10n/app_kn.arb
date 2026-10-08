@@ -11412,5 +11412,6 @@
     "importTranscriptFiles": "ಪ್ರತಿಲೇಖನ ಫೈಲ್‌ಗಳು",
     "importTranscriptFilesDescription": "SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ",
     "importTooManyAttempts": "ಈಗ ತುಂಬಾ ಹೆಚ್ಚು ಆಮದುಗಳು ನಡೆಯುತ್ತಿವೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "importFileTooLarge": "ಈ ಫೈಲ್ ಆಮದು ಮಾಡಲು ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ."
+    "importFileTooLarge": "ಈ ಫೈಲ್ ಆಮದು ಮಾಡಲು ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ.",
+    "importUnsupportedFileType": "ಈ ಪ್ರಕಾರದ ಫೈಲ್ ಅನ್ನು ಆಮದು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ."
 }

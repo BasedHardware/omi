@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "Transkriptionsfiler",
     "importTranscriptFilesDescription": "Välj SRT-, VTT- eller TXT-transkriptioner eller en ZIP med dem",
     "importTooManyAttempts": "För många importer just nu. Försök igen senare.",
-    "importFileTooLarge": "Den här filen är för stor för att importeras."
+    "importFileTooLarge": "Den här filen är för stor för att importeras.",
+    "importUnsupportedFileType": "Den här filtypen kan inte importeras."
 }

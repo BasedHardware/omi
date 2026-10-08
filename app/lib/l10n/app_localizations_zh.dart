@@ -12250,4 +12250,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importFileTooLarge => '此文件过大，无法导入。';
+
+  @override
+  String get importUnsupportedFileType => '无法导入此类型的文件。';
 }

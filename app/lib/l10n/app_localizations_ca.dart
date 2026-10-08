@@ -12532,4 +12532,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Aquest fitxer és massa gran per importar-lo.';
+
+  @override
+  String get importUnsupportedFileType => 'Aquest tipus de fitxer no es pot importar.';
 }

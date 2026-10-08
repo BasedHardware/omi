@@ -12490,4 +12490,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Цей файл завеликий для імпорту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файли цього типу не можна імпортувати.';
 }

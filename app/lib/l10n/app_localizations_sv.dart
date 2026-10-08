@@ -12467,4 +12467,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'Den här filen är för stor för att importeras.';
+
+  @override
+  String get importUnsupportedFileType => 'Den här filtypen kan inte importeras.';
 }

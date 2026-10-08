@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "Transcriptiebestanden",
     "importTranscriptFilesDescription": "Selecteer SRT-, VTT- of TXT-transcripties, of een ZIP met deze bestanden",
     "importTooManyAttempts": "Te veel imports op dit moment. Probeer het later opnieuw.",
-    "importFileTooLarge": "Dit bestand is te groot om te importeren."
+    "importFileTooLarge": "Dit bestand is te groot om te importeren.",
+    "importUnsupportedFileType": "Dit bestandstype kan niet worden geïmporteerd."
 }

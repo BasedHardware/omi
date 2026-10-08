@@ -12499,4 +12499,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'ಈ ಫೈಲ್ ಆಮದು ಮಾಡಲು ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ.';
+
+  @override
+  String get importUnsupportedFileType => 'ಈ ಪ್ರಕಾರದ ಫೈಲ್ ಅನ್ನು ಆಮದು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 }

@@ -3855,5 +3855,6 @@
     "importTranscriptFiles": "Файли розшифровок",
     "importTranscriptFilesDescription": "Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними",
     "importTooManyAttempts": "Зараз забагато імпортів. Спробуйте пізніше.",
-    "importFileTooLarge": "Цей файл завеликий для імпорту."
+    "importFileTooLarge": "Цей файл завеликий для імпорту.",
+    "importUnsupportedFileType": "Файли цього типу не можна імпортувати."
 }

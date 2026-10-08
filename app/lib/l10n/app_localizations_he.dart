@@ -12371,4 +12371,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'הקובץ גדול מדי לייבוא.';
+
+  @override
+  String get importUnsupportedFileType => 'לא ניתן לייבא סוג קובץ זה.';
 }

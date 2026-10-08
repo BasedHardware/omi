@@ -12460,4 +12460,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'این فایل برای وارد کردن بیش از حد بزرگ است.';
+
+  @override
+  String get importUnsupportedFileType => 'این نوع فایل را نمی‌توان وارد کرد.';
 }

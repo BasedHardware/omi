@@ -12547,4 +12547,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get importFileTooLarge => 'இந்தக் கோப்பு இறக்குமதி செய்ய மிகவும் பெரியது.';
+
+  @override
+  String get importUnsupportedFileType => 'இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது.';
 }

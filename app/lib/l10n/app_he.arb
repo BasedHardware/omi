@@ -11412,5 +11412,6 @@
     "importTranscriptFiles": "קובצי תמלול",
     "importTranscriptFilesDescription": "בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם",
     "importTooManyAttempts": "יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.",
-    "importFileTooLarge": "הקובץ גדול מדי לייבוא."
+    "importFileTooLarge": "הקובץ גדול מדי לייבוא.",
+    "importUnsupportedFileType": "לא ניתן לייבא סוג קובץ זה."
 }
