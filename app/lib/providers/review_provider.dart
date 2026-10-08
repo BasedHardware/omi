@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'package:just_audio/just_audio.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/review.dart' as api;
@@ -16,7 +17,7 @@ import 'package:omi/utils/logger.dart';
 typedef ReviewItemsLoader = Future<ApiResult<ReviewItemsResponse>> Function();
 typedef ReviewAnswerSender = Future<ApiResult<int>> Function(ReviewItem item, ReviewAnswer answer);
 typedef ReviewClipLoader = Future<ApiResult<Uint8List>> Function(SpeakerItem speaker);
-typedef ReleaseChannelReporter = Future<ApiResult<void>> Function(String channel);
+typedef ReleaseChannelReporter = Future<ApiResult<void>> Function(String channel, {int? appBuild});
 typedef ReviewProjectsLoader = Future<ApiResult<List<EntityRef>>> Function();
 typedef ConversationEntitiesLoader = Future<ApiResult<List<EntityRef>>> Function(String conversationId);
 
@@ -42,8 +43,10 @@ class ReviewProvider extends ChangeNotifier {
     bool Function()? isEligible,
     ReleaseChannelReporter? reportChannel,
     String Function()? releaseChannel,
+    Future<int?> Function()? appBuild,
   })  : _reportChannel = reportChannel ?? api.putReleaseChannel,
         _releaseChannel = releaseChannel ?? _defaultReleaseChannel,
+        _appBuild = appBuild ?? _defaultAppBuild,
         _isEligible = isEligible ?? _defaultEligible,
         _loadItems = loadItems ?? api.getReviewItems,
         _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
@@ -55,6 +58,7 @@ class ReviewProvider extends ChangeNotifier {
   final bool Function() _isEligible;
   final ReleaseChannelReporter _reportChannel;
   final String Function() _releaseChannel;
+  final Future<int?> Function() _appBuild;
   bool _channelReported = false;
   final ReviewItemsLoader _loadItems;
   final ReviewAnswerSender _sendAnswer;
@@ -103,7 +107,7 @@ class ReviewProvider extends ChangeNotifier {
   Future<void> reportReleaseChannel() async {
     if (_channelReported) return;
     _channelReported = true;
-    final result = await _reportChannel(_releaseChannel());
+    final result = await _reportChannel(_releaseChannel(), appBuild: await _appBuild());
     if (result case ApiFailure(:final problem)) Logger.debug('release channel not recorded: $problem');
   }
 
@@ -246,6 +250,14 @@ class ReviewProvider extends ChangeNotifier {
           await file.delete();
         } catch (_) {}
       }
+    }
+  }
+
+  static Future<int?> _defaultAppBuild() async {
+    try {
+      return int.tryParse((await PackageInfo.fromPlatform()).buildNumber);
+    } catch (_) {
+      return null;
     }
   }
 

@@ -124,7 +124,7 @@ Uint8List _clip() => Uint8List.fromList(List<int>.filled(44 + 3200, 0));
 
 ReviewProvider _review({List<ReviewItem>? items}) => ReviewProvider(
       isEligible: () => true,
-      reportChannel: (_) async => const ApiSuccess<void>(null),
+      reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
       loadItems: () async => ApiSuccess(ReviewItemsResponse(
         items: items ?? [_speakerItem, _taskItem, _samePersonItem],
         remainingToday: items?.length ?? 3,

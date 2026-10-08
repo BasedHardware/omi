@@ -85,11 +85,11 @@ Future<ApiResult<List<EntityRef>>> getProjectEntities() => executeApi(
 
 /// Tells the backend which release channel this install is on, so early features can follow
 /// TestFlight without trusting the client for anything else. 404 while the backend has it off.
-Future<ApiResult<void>> putReleaseChannel(String channel) => executeApi<void>(
+Future<ApiResult<void>> putReleaseChannel(String channel, {int? appBuild}) => executeApi<void>(
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/users/release-channel',
         method: 'PUT',
-        body: jsonEncode({'release_channel': channel}),
+        body: jsonEncode({'release_channel': channel, if (appBuild != null) 'app_build': appBuild}),
       ),
       decode: (_) {},
     );
