@@ -451,10 +451,13 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
     def copy_segment(segment, source):
         copied = copy.deepcopy(segment)
-        if copied.get('speaker_id') != OMI_SPEAKER_ID_SENTINEL:
+        speaker_id = copied.get('speaker_id')
+        if isinstance(speaker_id, int) and speaker_id != OMI_SPEAKER_ID_SENTINEL:
             if not copied.get('speaker_id_scope'):
-                copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{copied.get('speaker_id')}"
-            if reallocate:
+                # Unidentified legacy inputs cannot establish a new voice scope.
+                if source.get('id'):
+                    copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{speaker_id}"
+            if reallocate and copied.get('speaker_id_scope'):
                 allocator.assign(copied)
         return copied
 
