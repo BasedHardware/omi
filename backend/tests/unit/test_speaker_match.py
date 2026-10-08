@@ -132,7 +132,7 @@ def _live_matcher(monkeypatch, clip_embeddings):
         state=SimpleNamespace(audio_ring_buffer=_AudioRingBuffer(), speaker_map_dirty=False),
         limits=SimpleNamespace(speaker_id_min_audio=2.0),
         request=SimpleNamespace(sample_rate=16000),
-        emit_speaker_suggestion=lambda *args: emitted.append(args),
+        emit_speaker_suggestion=lambda *args, **kwargs: emitted.append(args),
     )
     matcher = speakers_mod.SpeakerMatcher(host)
     matcher.person_embeddings = {

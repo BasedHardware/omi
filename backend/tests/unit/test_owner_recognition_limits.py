@@ -54,9 +54,11 @@ def test_rollover_retires_locks_without_old_work_touching_new_voice(monkeypatch)
         await entered.wait()
         matcher.clear()
         matcher.person_embeddings['user'] = {'embedding': owner, 'name': 'User'}
-        await matcher.match(1, _segment('new', 6, 5))
+        new = asyncio.create_task(matcher.match(1, _segment('new', 6, 5)))
+        await asyncio.sleep(0)
+        assert not matcher.speaker_to_person
         release.set()
-        await old
+        await asyncio.gather(old, new)
         assert matcher.speaker_to_person[1] == ('user', 'User')
         assert matcher._voice_segments[1] == 'new'
         assert len(matcher._speaker_locks) == 1

@@ -53,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 MAX_SPEAKER_VOICES = 128
+MAX_VOICE_EMBEDDING_ATTEMPTS = 12
+MAX_SOCKET_EMBEDDING_ATTEMPTS = 256
 MAX_OWNER_FAILED_LOADS = 8
 MAX_OWNER_PROFILE_RETRIES = 7
 MAX_OWNER_AUDIO_REPAIRS = 3
@@ -86,6 +88,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'rejected',
         'manual_decision',
         'voice_capacity',
+        'embedding_budget',
     }
 )
 
@@ -125,8 +128,11 @@ class SpeakerMatcher:
         # Serialize evidence and decisions for each diarized speaker. Covered
         # intervals survive centroid eviction, but are pruned with the audio ring.
         self._speaker_locks: Dict[int, asyncio.Lock] = {}
+        self._lock_users: Dict[asyncio.Lock, int] = {}
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._pending_audio: Dict[int, list[tuple[float, float]]] = {}
+        self._embedding_attempts: Dict[int, int] = {}
+        self._socket_embedding_attempts = 0
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
@@ -242,6 +248,8 @@ class SpeakerMatcher:
             ):
                 for voice, (_, _, centroid, evidence, covered) in candidates.items():
                     if voice not in self._voice_distances:
+                        if self._admit_voice(voice) is None:
+                            continue
                         self._voice_scopes[voice] = owner_carry_scope
                     if (
                         voice in self._voice_distances
@@ -375,6 +383,8 @@ class SpeakerMatcher:
                 self._owner_failed_loads += 1
         self._profile_retry_after = time.monotonic() + min(480.0, 30.0 * 2 ** max(0, self._owner_failed_loads - 1))
         if owner_only:
+            if not self._owner_load_failed and USER_SELF_PERSON_ID in self.person_embeddings:
+                await self._reevaluate_loaded_owner()
             # Paid people and entitlement were loaded by the conversation refresh.
             # Owner outages must not turn their projection into a polling loop.
             return
@@ -405,6 +415,50 @@ class SpeakerMatcher:
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
             return
+
+    async def _reevaluate_loaded_owner(self) -> None:
+        """A taught/recovered owner can use retained evidence after model quota exhaustion."""
+        generation, conversation_id = self._generation, self._profile_conversation_id
+        if not self._voice_centroids:
+            return
+        receipt: Mapping[str, Any] = {}
+        if conversation_id:
+            try:
+                receipt = await self.host.persistence.call(
+                    conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
+                )
+            except Exception:
+                return
+        if generation != self._generation or conversation_id != self._profile_conversation_id:
+            return
+        rejected = manual_rejected_speakers(receipt)
+        for voice, centroid in self._voice_centroids.items():
+            if voice in rejected or self._manual_voice_decision(receipt, voice) is not None:
+                continue
+            evidence = self.speaker_evidence.get(voice, ())
+            if sum(seconds for _, seconds in evidence) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
+                continue
+            centroid = mean_embedding([vector for vector, _ in evidence])
+            self._voice_centroids[voice] = centroid
+            distances = {}
+            for person_id, value in self.person_embeddings.items():
+                vector = validated_embedding(value.get('embedding'))
+                if vector is not None and vector.size == centroid.size:
+                    distances[person_id] = compare_embeddings(centroid, vector)
+            self._voice_distances[voice] = distances
+            self._voice_decisions[voice] = select_speaker_match(distances)
+        automatic = {
+            v: d
+            for v, d in self._voice_decisions.items()
+            if v not in rejected and self._manual_voice_decision(receipt, v) is None
+        }
+        decisions = arbitrate_owner_matches(
+            {v: self._voice_distances[v] for v in automatic},
+            automatic,
+            owner_reserved=manual_owner_reserved(receipt),
+            voice_groups=self._provider_epoch_voice_groups(),
+        )
+        self._publish_decisions(decisions, rejected)
 
     async def load_and_run(self) -> None:
         state = self.host.state
@@ -450,6 +504,9 @@ class SpeakerMatcher:
 
     def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
         if speaker_id in self._voice_decisions and self._voice_scopes.get(speaker_id) == scope:
+            previous_segment = self._voice_segments.get(speaker_id)
+            if previous_segment and previous_segment not in self.segment_assignments:
+                self.segment_identity_status.pop(previous_segment, None)
             self._voice_segments[speaker_id] = segment_id
         if self.collapse_monitor.observe(speaker_id, scope, segment_id):
             self._record_collapse()
@@ -518,24 +575,40 @@ class SpeakerMatcher:
             return 'already_mapped'
         return None
 
+    def _admit_voice(self, speaker_id: int) -> Optional[asyncio.Lock]:
+        if (speaker_id not in self._embedding_attempts and len(self._embedding_attempts) >= MAX_SPEAKER_VOICES) or (
+            speaker_id not in self._speaker_locks and len(self._speaker_locks) >= MAX_SPEAKER_VOICES
+        ):
+            self._record_exit('voice_capacity', speaker_id)
+            return None
+        self._embedding_attempts.setdefault(speaker_id, 0)
+        return self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
+
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
         conversation_id = self._profile_conversation_id
         if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
             self._record_exit('stale_generation', speaker_id)
             return
         generation = self._generation
-        if speaker_id not in self._speaker_locks and len(self._speaker_locks) >= MAX_SPEAKER_VOICES:
-            self._record_exit('voice_capacity', speaker_id)
+        lock = self._admit_voice(speaker_id)
+        if lock is None:
             return
-        lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
-        async with lock:
-            drop_reason = self._drop_reason(generation, conversation_id, speaker_id)
-            if drop_reason is not None:
-                if drop_reason == 'already_mapped':
-                    await self._drop_rejected_mapping(speaker_id, segment, generation, conversation_id)
-                self._record_exit(drop_reason, speaker_id)
-                return
-            await self._match_unmapped(speaker_id, segment, generation, conversation_id)
+        self._lock_users[lock] = self._lock_users.get(lock, 0) + 1
+        try:
+            async with lock:
+                drop_reason = self._drop_reason(generation, conversation_id, speaker_id)
+                if drop_reason is not None:
+                    if drop_reason == 'already_mapped':
+                        await self._drop_rejected_mapping(speaker_id, segment, generation, conversation_id)
+                    self._record_exit(drop_reason, speaker_id)
+                    return
+                await self._match_unmapped(speaker_id, segment, generation, conversation_id)
+        finally:
+            self._lock_users[lock] -= 1
+            if self._lock_users[lock] == 0:
+                del self._lock_users[lock]
+                if generation != self._generation and self._speaker_locks.get(speaker_id) is lock:
+                    del self._speaker_locks[speaker_id]
 
     async def _drop_rejected_mapping(
         self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
@@ -688,6 +761,16 @@ class SpeakerMatcher:
             if clip_seconds < needed:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
+            if (
+                self._embedding_attempts[speaker_id] >= MAX_VOICE_EMBEDDING_ATTEMPTS
+                or self._socket_embedding_attempts >= MAX_SOCKET_EMBEDDING_ATTEMPTS
+            ):
+                self._record_exit('embedding_budget', speaker_id)
+                return
+            # Reserve before awaiting; failures consume a token too. Socket-wide
+            # counters survive conversation/profile refresh, preventing budget resets.
+            self._embedding_attempts[speaker_id] += 1
+            self._socket_embedding_attempts += 1
             samples = np.frombuffer(pcm, dtype=np.int16)
             buffer = io.BytesIO()
             container = av.open(buffer, mode='w', format='wav')
@@ -979,9 +1062,12 @@ class SpeakerMatcher:
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self._profile_conversation_id = None
         self._named_speakers_allowed = None
-        # Tasks retain their old lock locally. Generation checks after every
-        # await prevent them from publishing into the new lock inventory.
-        self._speaker_locks.clear()
+        # Retire idle locks now, held/waited locks only after their last user
+        # finishes. New-generation work for that voice stays serialized; every
+        # old-generation await still fences publication into the new inventory.
+        self._speaker_locks = {
+            voice: lock for voice, lock in self._speaker_locks.items() if self._lock_users.get(lock, 0)
+        }
         self._covered_audio.clear()
         self._pending_audio.clear()
         self.person_embeddings.clear()
