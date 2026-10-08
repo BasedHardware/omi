@@ -205,9 +205,6 @@ gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
 
-gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
-gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)
-
 gateway_serving_mod = _stub_module("utils.llm.gateway_serving")
 
 # --- langchain core stubs ---

@@ -1,6 +1,7 @@
 """Thin adapter over canonical apply/read services for the universal MemoryService."""
 
 from __future__ import annotations
+from database.dream_dirty import after_write
 
 import copy
 import hashlib
@@ -150,7 +151,6 @@ _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
 
 def mint_direct_user_write_authority() -> object:
     """Mint the in-process capability held by authenticated user routes.
-
     The returned object carries no user data and is intentionally checked by
     identity.  Internal integration and extraction callers cannot opt into
     the direct-user ledger seam by setting a payload field.
@@ -213,7 +213,6 @@ class CanonicalMemoryNotFoundError(ValueError):
 
 class ConversationReplacementConflictError(RuntimeError):
     """Conversation source replacement exhausted its bounded conflict retries.
-
     Subclasses :class:`RuntimeError` so pre-existing callers keep their
     ``except RuntimeError`` contract. Callers that can retry the operation —
     cascade delete, merge — get a typed signal instead of an opaque 500
@@ -1859,6 +1858,7 @@ def _resolve_duplicate_add_row(
     return None
 
 
+@after_write('memory_items')
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
