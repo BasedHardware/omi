@@ -8,6 +8,7 @@ one-name calendar guard), the screenshot-equivalent sanitize path, and
 `get_app_result` stripping.
 """
 
+import contextlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -194,9 +195,25 @@ def _joined_prompt(messages) -> str:
 
 
 def _poisoned_notes_model(captured):
+    captured['response'] = SimpleNamespace(content='''{
+                  "title":"Speaker 0 Examines Ultra-Thin Flush Design",
+                  "overview":"Speaker 0 said the flush is about 9mm.",
+                  "emoji":"🔧",
+                  "category":"work",
+                  "sections":[],
+                  "action_items":[],
+                  "events":[]
+                }''')
+
     class Model:
-        def invoke(self, messages):
+        model_name = 'gpt-6-luna'
+
+        def invoke(self, messages, *args, **kwargs):
             captured['messages'] = messages
+            return captured['response']
+
+        async def ainvoke(self, messages, *args, **kwargs):
+            return self.invoke(messages)
             return SimpleNamespace(content='''{
                   "title":"Speaker 0 Examines Ultra-Thin Flush Design",
                   "overview":"Speaker 0 said the flush is about 9mm.",
@@ -236,10 +253,18 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     assert 'Speaker 0' not in prefix.context
 
     captured: dict = {}
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: _poisoned_notes_model(captured))
+
+    @contextlib.asynccontextmanager
+    async def _passthrough_isolation(model):
+        yield model
+
+    monkeypatch.setattr(conversation_processing, 'isolated_notes_model', _passthrough_isolation)
     monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
     structured = conversation_processing.get_conversation_notes(
         prefix,
+        uid='anyone',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         language_code='en',
         output_language_code='en',

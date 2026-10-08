@@ -20,8 +20,6 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
-from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
-
 
 def model_supports_explicit_cache(model: Any) -> bool:
     """Check the resolved model, unwrapping bindings and dev shadow clients.
@@ -30,6 +28,8 @@ def model_supports_explicit_cache(model: Any) -> bool:
     a gateway client's model_name is an auto-lane ID, not the provider model.
     Unknown identities fail closed; injected clients use their concrete name.
     """
+    from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
+
     seen: set[int] = set()
     while model is not None and id(model) not in seen:
         seen.add(id(model))

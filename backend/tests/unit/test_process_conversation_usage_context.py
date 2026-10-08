@@ -1317,9 +1317,10 @@ def test_all_callsites_use_get_llm():
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Episode retry factory plus the shaped notes mount.
+    # Legacy notes writer and its episode retry factory were deleted with the
+    # shaped go-live; the remaining count is the shaped mount's callsites.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 23, f"Expected 23 total get_llm() callsites, got {total}"
+    assert total == 20, f"Expected 20 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

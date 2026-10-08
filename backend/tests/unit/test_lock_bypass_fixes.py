@@ -142,6 +142,7 @@ _stubs = [
     'langchain_core.prompts',
     'langchain_core.runnables',
     'langchain_core.tools',
+    'langchain_core.exceptions',
     'langchain_google_genai',
     'langchain_openai',
     'openai',
@@ -182,6 +183,9 @@ _stubs = [
     'utils.llm.memories',
     'utils.llm.chat',
     'utils.llm.usage_tracker',
+    'utils.llm.conversation_processing',
+    'utils.llm.shaped_agent',
+    'utils.llm.shaped_notes_transport',
     'websockets',
 ]
 for mod_name in _stubs:
