@@ -72,7 +72,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
     final installed = _isAppInstalled != false;
     return IosNativeSurface(
       title: l10n.appleWatchSetup,
-      loading: _isLoading,
+      loading: _isLoading || _isChecking,
       loadingLabel: l10n.checkingAppleWatch,
       fallback: OmiSheetScaffold(child: _classic(context)),
       toolbar: [

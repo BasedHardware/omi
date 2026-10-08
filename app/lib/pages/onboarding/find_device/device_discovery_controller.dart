@@ -327,8 +327,9 @@ class DeviceDiscoveryController {
       return;
     }
 
-    // The native alert keeps the single "I Understand" with the same opt-out toggle; null keeps the
-    // acknowledge-only card below.
+    // The native alert keeps "I Understand" with the same opt-out toggle. NativeModalPresenter
+    // refuses a toolbar without an enabled cancel row, so Cancel closes it without persisting the
+    // opt-out; null keeps the acknowledge-only card below.
     final l10n = _context.l10n;
     final native = !nativePresentationEnabled
         ? null
@@ -336,7 +337,10 @@ class DeviceDiscoveryController {
             _context,
             title: device.getFirmwareWarningTitle(),
             dismissible: false,
-            actions: [NativeRow('acknowledge', l10n.iUnderstand)],
+            actions: [
+              NativeRow('cancel', l10n.cancel, symbol: 'xmark'),
+              NativeRow('acknowledge', l10n.iUnderstand),
+            ],
             sections: [
               NativeSection('firmware_warning', [
                 NativeRow('message', warningMessage, kind: 'label'),

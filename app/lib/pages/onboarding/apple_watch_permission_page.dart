@@ -37,6 +37,8 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
     final l10n = context.l10n;
     return IosNativeSurface(
       title: l10n.appleWatchSetup,
+      // Swift draws a disabled row without progress, so the status row carries the classic spinner.
+      loading: _working,
       fallback: _classic(context),
       toolbar: [
         NativeRow('watch_permission_back', l10n.back,

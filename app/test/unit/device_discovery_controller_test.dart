@@ -383,8 +383,12 @@ void main() {
 
         expect(presented.single['dismissible'], isFalse);
         final snapshot = presented.single['snapshot'] as Map;
-        expect((snapshot['toolbar'] as List).map((row) => row['title']), [_l10n.iUnderstand],
-            reason: 'Acknowledge-only, as the classic card');
+        final toolbar = (snapshot['toolbar'] as List).cast<Map>();
+        expect(toolbar.map((row) => row['title']), [_l10n.cancel, _l10n.iUnderstand]);
+        // NativeModalPresenter.present refuses a toolbar of non-buttons or without an enabled cancel row.
+        expect(toolbar.every((row) => row['kind'] == 'button'), isTrue);
+        expect(
+            toolbar.where((row) => row['id'] == presented.single['cancelId'] && row['enabled'] == true), hasLength(1));
         expect(SharedPreferencesUtil().getBool(prefKey), persisted);
       });
     }

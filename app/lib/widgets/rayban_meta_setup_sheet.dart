@@ -130,7 +130,7 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
     final busy = [_SetupStep.loading, _SetupStep.ready, _SetupStep.waitingForMetaAi].contains(_step);
     return IosNativeSurface(
       title: l10n.connectRayBanMeta,
-      loading: busy,
+      loading: busy || _working,
       fallback: OmiSheetScaffold(child: _classic(context)),
       toolbar: [
         NativeRow('rayban_setup_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
