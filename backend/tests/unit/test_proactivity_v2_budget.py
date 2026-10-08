@@ -189,3 +189,43 @@ def test_future_unpriced_paid_plan_uses_lowest_known_cap(monkeypatch):
     assert daily_cap('plus') == (66666, True)
     with pytest.raises(ProactivityDenied, match='unknown_plan'):
         daily_cap('unrecognized')
+
+
+def test_budget_reservation_and_settlement_structured_logging(store, caplog):
+    authority = money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW)
+    item = claim(store, producer='conversation_mentor_v2')
+    with caplog.at_level('INFO'):
+        reservation = reserve(authority, item, amount=2000)
+        assert authority.settle(reservation=reservation, event=event(reservation, cost=1250))
+
+    assert (
+        'proactivity_v2_budget_reserved producer=conversation_mentor_v2 day=2026-10-03 reserved_micro_usd=2000 policy_version=1'
+        in caplog.text
+    )
+    assert (
+        'proactivity_v2_budget_settled producer=conversation_mentor_v2 priced_micro_usd=1250 result=True policy_version=1'
+        in caplog.text
+    )
+
+    for record in caplog.records:
+        if 'proactivity_v2_budget_' in record.getMessage():
+            msg = record.getMessage()
+            assert 'uid=' not in msg
+            assert item['item_id'] not in msg
+            assert reservation.call_id not in msg
+            assert 'synthetic' not in msg
+            assert 'prompt' not in msg
+
+
+def test_budget_invariant_failure_logging(store, caplog):
+    authority = money.BudgetAuthority(firestore_client=store, redis_client=Redis(), clock=lambda: NOW)
+    item = claim(store, producer='commitment_followup')
+    with caplog.at_level('INFO'):
+        first = reserve(authority, item, amount=2000)
+        assert not authority.settle(reservation=first, event=event(first, cost=2001))
+
+    assert (
+        'proactivity_v2_budget_settled producer=commitment_followup priced_micro_usd=2001 result=False policy_version=1'
+        in caplog.text
+    )
+    assert 'proactivity_v2_budget_invariant_failed producer=commitment_followup reason=over_reserved' in caplog.text
