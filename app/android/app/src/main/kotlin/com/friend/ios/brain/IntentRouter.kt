@@ -170,6 +170,18 @@ class IntentRouter(private val context: Context) {
                 else "ambiguous between ${top.key} and ${ranked[1].key}"
             return Decision(top.key, margin, true, false, ranked[1].key, ms, why)
         }
+
+        // A confident no_action winner is still a decline, and this has to be
+        // decided here rather than by the margin gate above. The gate only fires on
+        // ambiguity between candidates, so "out of domain" won by a wide margin used
+        // to fall straight through to the return below with declined = false, and
+        // Dart's actionFor() handed the literal "no_action" sentinel back as an
+        // executable action. Emitting a sentinel as an action is worse than any
+        // accuracy miss, because the caller cannot tell it apart from a real action.
+        if (top.key == NO_ACTION) {
+            return Decision(NO_ACTION, margin, true, false, ranked[1].key, ms, "out of domain")
+        }
+
         return Decision(top.key, margin, false, false, ranked[1].key, ms, "")
     }
 

@@ -301,4 +301,3 @@ pnpm-workspace.yaml
 # a modelPath rather than reading an asset), so this follows that convention.
 # Fetch with app/scripts/fetch_local_brain_model.sh.
 app/android/app/src/main/assets/minilm.tflite
-
