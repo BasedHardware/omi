@@ -96,6 +96,7 @@ NOT_SAVED = 'could not be saved'
 UNEXPECTED_ERROR = 'unexpected error'
 # Files already imported are skipped as duplicates on the retry this asks for.
 INTERRUPTED_ERROR = 'The import was interrupted. Please try again.'
+UNEXPECTED_IMPORT_ERROR = 'There was an error importing your transcripts. Please try again.'
 
 
 class TranscriptFileSkipped(Exception):
@@ -1093,7 +1094,8 @@ class _Settlement:
     before it starts, when nothing else would ever record the job's end. So each side
     claims the settlement inside its pool thread, as its write begins, and only the first
     claim writes: a final write that began is never overwritten by "interrupted", and one
-    cancelled while still queued leaves the claim to the interruption.
+    cancelled while still queued leaves the claim to the interruption. A write that raises
+    settled nothing, so it gives the claim back for the failure that follows it.
     """
 
     def __init__(self) -> None:
@@ -1106,7 +1108,26 @@ class _Settlement:
             if self._claimed:
                 return None
             self._claimed = True
-        return write(*args)
+        try:
+            return write(*args)
+        except BaseException:
+            with self._lock:
+                self._claimed = False
+            raise
+
+
+async def _settle_failure(settlement: _Settlement, uid: str, job_id: str, message: str) -> None:
+    """Record the import's failure, even when a shutdown cancels the task while that write is queued.
+
+    The cancel can remove the queued write from the db pool before it begins; it is then
+    queued again, once, before the cancel goes on. A write that already began owns the
+    settlement, so the second attempt writes nothing.
+    """
+    try:
+        await run_blocking(db_executor, settlement.run, _fail, uid, job_id, message)
+    except asyncio.CancelledError:
+        await run_blocking(db_executor, settlement.run, _fail, uid, job_id, message)
+        raise
 
 
 def _compressed_transcript_bytes(uid: str, segments: List[Any]) -> int:
@@ -1288,12 +1309,12 @@ async def process_transcript_import(
         # one the cancel removed from the pool's queue never claimed it, so this does.
         await run_blocking(db_executor, settlement.run, _fail, uid, job_id, INTERRUPTED_ERROR)
         raise
+    # A cancel while these failures are written is not caught by the CancelledError
+    # handler above (it is raised inside a sibling clause); _settle_failure covers it.
     except TranscriptImportError as exc:
-        await run_blocking(db_executor, _fail, uid, job_id, str(exc))
+        await _settle_failure(settlement, uid, job_id, str(exc))
     except Exception as exc:
         logger.error('transcript import job failed job_id=%s error_class=%s', job_id, type(exc).__name__)
-        await run_blocking(
-            db_executor, _fail, uid, job_id, 'There was an error importing your transcripts. Please try again.'
-        )
+        await _settle_failure(settlement, uid, job_id, UNEXPECTED_IMPORT_ERROR)
     finally:
         await run_blocking(storage_executor, _release_upload, job_id, upload_path, upload)

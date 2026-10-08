@@ -1645,6 +1645,76 @@ def test_a_shutdown_while_the_final_write_is_still_queued_fails_the_job(tmp_path
     assert not path.exists(), 'the staged upload is removed once the job has its final status'
 
 
+@pytest.mark.parametrize(
+    ('failure', 'message'),
+    [
+        pytest.param(None, 'The upload is not a valid ZIP archive.', id='refused-upload'),
+        pytest.param(RuntimeError('boom'), tf.UNEXPECTED_IMPORT_ERROR, id='unexpected-error'),
+    ],
+)
+def test_a_shutdown_while_a_failure_write_is_still_queued_still_fails_the_job(
+    tmp_path, job, monkeypatch, failure, message
+):
+    """A cancel raised while an except clause awaits its failure write skips the CancelledError clause.
+
+    The queued failure write must still land, rather than leave the job processing.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    monkeypatch.setattr(tf, 'db_executor', pool)
+    occupied, release = threading.Event(), threading.Event()
+    open_upload = tf._open_upload
+
+    def occupied_then_open(*args, **kwargs):
+        # Another request takes the pool's only thread before the failure write is queued.
+        pool.submit(lambda: (occupied.set(), release.wait(5)))
+        occupied.wait(5)
+        if failure is not None:
+            raise failure
+        return open_upload(*args, **kwargs)
+
+    monkeypatch.setattr(tf, '_open_upload', occupied_then_open)
+    path = tmp_path / 'export.zip'
+    path.write_bytes(b'not a zip at all')
+
+    async def main():
+        task = asyncio.create_task(
+            tf.process_transcript_import('job-1', UID, str(path), original_filename='export.zip')
+        )
+        while not (occupied.is_set() and pool._work_queue.qsize() == 1):
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.sleep(0.05)
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    try:
+        asyncio.run(main())
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+
+    assert job.final_status_writes() == [job.final()]
+    assert (job.final()['status'], job.final()['error']) == (ImportJobStatus.failed.value, message)
+    assert not path.exists()
+
+
+def test_a_final_write_that_raises_is_still_followed_by_a_failure(tmp_path, job, monkeypatch):
+    """A raising write settled nothing: the generic failure after it is still recorded."""
+    update_unless_cancelled = tf.import_jobs_db.update_import_job_unless_cancelled
+
+    def completed_write_fails(job_id, fields):
+        if fields.get('status') == ImportJobStatus.completed.value:
+            raise RuntimeError('firestore down')
+        return update_unless_cancelled(job_id, fields)
+
+    monkeypatch.setattr(tf.import_jobs_db, 'update_import_job_unless_cancelled', completed_write_fails)
+
+    _run(tmp_path, 'export.zip', _zip({'a.srt': SRT}))
+
+    assert (job.final()['status'], job.final()['error']) == (ImportJobStatus.failed.value, tf.UNEXPECTED_IMPORT_ERROR)
+
+
 def test_the_final_write_and_the_interruption_claim_the_settlement_once():
     """Whichever begins first in its pool thread writes; the other does nothing."""
     settlement = tf._Settlement()
