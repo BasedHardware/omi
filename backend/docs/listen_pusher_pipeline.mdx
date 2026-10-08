@@ -3600,14 +3600,26 @@ A same-provider-stream rollover retains an accepted automatic owner match only
 when its provider scope and loaded owner voiceprint remain unchanged. Donor
 locks, deletion, manual decisions and owner rejection prevent adoption. This
 state stays in the listen matcher; it never creates a manual receipt or
-training authorization. Reconnects and provider stream reconstructions start a
+training authorization. After the donor/profile awaits, restore evidence and
+jointly arbitrate against every current voice, withdrawing any automatic owner
+published during those awaits when it is now contended. A current receipt read
+and generation/scope fences precede synchronous publication. Reconnects and provider stream reconstructions start a
 new scope and must establish acoustic evidence again.
 
 Live identity consumes positioned provider fragments, accumulating distinct
 intervals in the existing ring before embedding. Overlaps and repeats count
-once; successful extraction reserves its intervals. Pending metadata and task
-concurrency are bounded. The five-second live decision floor and verification
-thresholds remain unchanged, as does WAL's separate eligibility policy.
+once; successful extraction reserves its intervals. Account for the clip that
+the three-entry evidence deque will evict before gating the next extraction.
+A rejected voice can then reach another five-second decision on later clean audio.
+
+Each socket admits at most 128 voice ids, with at most 128 pending intervals per
+voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
+Failures consume attempts; quotas survive conversation/profile refresh. All
+associated automatic voice state shares admission. Rollover prunes idle locks;
+held/waited locks retire only after their last user finishes. Generation checks
+prevent old work from publishing. Live unknown/ambiguous remains an abstention
+when capacity is exhausted. The five-second decision floor, physical 0.5-second
+floor and verification thresholds remain unchanged, as does WAL eligibility.
 
 ### Finished capture identity
 
@@ -3618,8 +3630,23 @@ uses actual distinct embedded duration independently of optional score logging.
 Version-1 caches remain readable for grouping; entries without duration metadata
 claim no owner evidence until verified audio supplies it.
 
-After a pusher connection finishes its private-cloud uploads, one process-owned
-sequential retry handles at most eight conversations (five seconds per call).
+New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
+under the same encrypted, deletion-owned audio prefix. New readers prefer it,
+then fall back to `speaker-embeddings.v1.enc`. Legacy objects stay untouched and
+readable. Old pusher reads only the legacy filename: it cannot consume a new
+short-evidence vector, or overwrite the new cache during reprocessing. This
+is cache-policy isolation, not a retrofit of the old image's independent matching
+behavior; old pusher still lacks the partial/late repair improvements.
+
+After pusher finishes its private-cloud uploads, process-wide admission allows
+at most two submitted/running late batches, without a waiting queue. Each scans
+at most 128 conversation snapshots and selects at most eight eligible rows.
+Selection follows eligibility, so ineligible early rows do not consume the eight
+passes. The snapshot is reused for the revision CAS. Each pass has a five-second
+advisory elapsed budget and at most 24 model attempts, including failures; no
+late pass repairs enrollment audio. Cancellation of an async waiter cannot free
+admission while its storage thread is still running. SDK/network timeouts are
+not a hard five-second deadline. Admission refusal/shutdown can lose this retry.
 It changes only transcript identity and speaker resolution on completed,
 unlocked pendant/WAL rows. The commit compares the read document revision and
 reapplies manual authority; intervening edits defeat it. It performs no notes,
@@ -3642,12 +3669,20 @@ transaction. It never learns from an automatic recognition decision. Live
 requests that explicitly exclude a profile, onboarding and channel-authored
 capture remain excluded. Eligible sockets retain the bounded matcher loop so
 a later confirmed profile can be observed on rotation or a bounded load retry.
+Failed acquisition checks its monotonic deadline on both dequeue and idle paths.
+Per socket, at most eight failed loads and seven owner-only retries are allowed,
+with 30/60/120/240/480-second capped backoff; enrollment-audio repair has a separate
+three-attempt ceiling and 30/120/480-second backoff. Owner retries never reload
+paid people or entitlement. These counters survive rollover. A newly acquired
+owner rechecks retained verified evidence against current prints and receipts,
+without requesting more embeddings when the voice quota is already spent.
 
 Short-fragment inheritance is bound to `(speaker_id_scope, speaker_id)`.
 Acoustically contradicted provider voices cannot assign an unembedded short
 reply by majority; automatic identity on such a reply is withdrawn. Manual
-receipt authority still wins. Nearest-fragment fallback cannot cross a known
-source scope. Manual merge reallocates automatic-only sources through the
+receipt authority still wins. A short distinct provider voice without its own
+compatible scoped votes stays unknown, even beside a known owner in the same
+scope; temporal proximity never supplies identity evidence. Manual merge reallocates automatic-only sources through the
 existing allocator, retaining absolute capture positions. Sources containing
 manual authority retain their numeric ids; full cross-source receipt migration
 remains outside this patch and is a merge residual.
@@ -3680,3 +3715,20 @@ to preserve channel-authored identity and the free-desktop processing boundary.
 Participant grouping marked `resolved` does not by itself suppress the late
 identity retry: only a resolved row already containing an owner label is skipped.
 A completed owner miss can therefore use newly available audio/profile evidence.
+
+`omi_owner_identity_repair_total{outcome}` counts only successful late identity
+CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+observe ordinary finalization again. The existing conversation counter/share
+remain first-finalization snapshots. Metric failure cannot change a committed
+repair into a reported storage failure.
+
+Owner work has lifetime socket bounds: seven retry owner reads, at most three
+recovery-state reads, three two-document repair transactions, three lost-CAS
+owner rereads, and seven retained-evidence receipt reads. This is at most 26
+additional logical document reads per socket, or 50 when every repair transaction
+uses all five Firestore transaction attempts. Normal per-conversation profile,
+people/projection, entitlement and name reads are separate. The bounded owner
+work does not replenish after a session-hour. Live audio adds at most 256 model
+attempts plus three owner-enrollment repairs per socket (existing paid-person
+repair is separate). Late audio adds at most 192 model attempts per admitted
+batch and zero enrollment repairs, with at most two batches per process.

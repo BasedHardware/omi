@@ -117,3 +117,12 @@ def test_new_short_evidence_cache_is_invisible_to_old_pusher_on_reprocess(env, m
             old_result is None or not old_result.voice_identities
         ), 'old pusher must not see the new short-evidence vector'
     assert len(calls) == 1, 'new consumer can reuse its unknown voice without publishing it to old pusher'
+
+    # The new writer neither overwrites nor invalidates an existing v1 object.
+    legacy_path = 'audio/u1/c1/speaker-embeddings.v1.enc'
+    legacy_bytes = stage.encode_cache({'legacy': (6.0, owner)})
+    blobs[legacy_path] = legacy_bytes
+    assert legacy['download_speaker_embedding_cache']('u1', 'c1') == legacy_bytes
+    assert storage.download_owner_evidence_cache('u1', 'c1') != legacy_bytes
+    del blobs[f'audio/u1/c1/{storage.OWNER_EVIDENCE_CACHE_NAME}']
+    assert storage.download_owner_evidence_cache('u1', 'c1') == legacy_bytes
