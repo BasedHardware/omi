@@ -195,18 +195,8 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
     );
   }
 
+  /// The one checklist source shared by the native and classic presentations.
   List<String> _steps(BuildContext context) {
-    final l10n = context.l10n;
-    return [
-      l10n.onboardingSetupStepWorkspace,
-      l10n.onboardingSetupStepLanguage,
-      l10n.onboardingSetupStepMemory,
-      l10n.onboardingSetupStepDevices,
-      l10n.onboardingSetupStepPersonalize,
-    ];
-  }
-
-  Widget _buildClassic(BuildContext context) {
     final l10n = context.l10n;
     final steps = [
       l10n.onboardingSetupStepWorkspace,
@@ -216,6 +206,12 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
       l10n.onboardingSetupStepPersonalize,
     ];
     assert(steps.length == OnboardingSetupPage.stepCount);
+    return steps;
+  }
+
+  Widget _buildClassic(BuildContext context) {
+    final l10n = context.l10n;
+    final steps = _steps(context);
     return Container(
       key: const Key('onboarding_setup_page'),
       color: OmiColors.surface0,
