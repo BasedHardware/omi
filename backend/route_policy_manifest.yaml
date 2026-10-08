@@ -34,11 +34,7 @@ routes:
     path: /v2/sync-backfill-sequencer/wake
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
@@ -57,11 +53,7 @@ routes:
     path: /v2/dream-agent/sweep
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
@@ -80,11 +72,7 @@ routes:
     path: /v2/sync-backfill-sequencer/sweep
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
@@ -1277,11 +1265,7 @@ routes:
     path: /v1/conversations/shared/chat
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: public_shared_conversation_chat
@@ -1748,11 +1732,7 @@ routes:
     path: /v1/users/account-deletion-wipes/run
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
@@ -1770,11 +1750,7 @@ routes:
     path: /v1/commitment-followup-jobs/run
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
@@ -1792,11 +1768,7 @@ routes:
     path: /v1/conversation-finalization-jobs/run
     policy:
       review_status: reviewed
-      auth:
-        mechanisms:
-          - service_oidc
-        placement: dependency
-        scopes: []
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
       byok: not_applicable
       rate_limit:
         policy_name: none
