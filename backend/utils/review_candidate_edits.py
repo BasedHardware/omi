@@ -10,6 +10,8 @@ def edited_candidate(candidate: CandidateRecord, edits: dict) -> CandidateRecord
         raise CandidateConflictError('Review edits require a task-create candidate')
     if not set(edits) <= {'edited_description', 'due_at', 'workstream_id'}:
         raise CandidateConflictError('Unsupported task edits')
+    if not isinstance(candidate.task_change, TaskCreatePayload):
+        raise CandidateConflictError('Review edits require a task-create payload')
     payload = candidate.task_change.model_dump(mode='python')
     if 'edited_description' in edits:
         description = (edits['edited_description'] or '').strip()

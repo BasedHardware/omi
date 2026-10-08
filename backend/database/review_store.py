@@ -90,7 +90,7 @@ def list_proposals(uid: str) -> list[dict]:
         user(uid).collection('review_proposals'), {'status': 'pending'}, field_filter_factory=FieldFilter
     )
     return [
-        decode_doc(uid, s.to_dict()) for s in query.order_by('created_at', direction='DESCENDING').limit(100).stream()
+        require_doc(uid, s.to_dict()) for s in query.order_by('created_at', direction='DESCENDING').limit(100).stream()
     ]
 
 
@@ -170,6 +170,8 @@ def release_failed_answer(uid: str, item_id: str) -> None:
     @firestore.transactional
     def release(tx):
         data = decode_doc(uid, ref.get(transaction=tx).to_dict())
+        if data is None:
+            return
         budget_ref = user(uid).collection('review_attention').document(data['day'])
         budget = budget_ref.get(transaction=tx).to_dict() or {}
         if data.get('state') == 'applying':
@@ -220,3 +222,10 @@ def decode_doc(uid: str, data: dict | None) -> dict | None:
         )
         for key, value in data.items()
     }
+
+
+def require_doc(uid: str, data: dict | None) -> dict:
+    decoded = decode_doc(uid, data)
+    if decoded is None:
+        raise ReviewNotFound('Review document not found')
+    return decoded

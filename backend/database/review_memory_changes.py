@@ -35,7 +35,7 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
         raw = ref.get(transaction=tx).to_dict()
         blocked = marker.get(transaction=tx).exists
         if raw:
-            data = store.decode_doc(uid, raw)
+            data = store.require_doc(uid, raw)
             if data['edit_key'] != edit_key or data['memory_edit'] != edit.model_dump():
                 raise store.ReviewConflict('Change identity conflict')
             return data
@@ -94,7 +94,7 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
 
     @firestore.transactional
     def reserve(tx):
-        current = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
+        current = store.require_doc(uid, ref.get(transaction=tx).to_dict())
         if current.get('phase') not in {'applied', desired}:
             raise store.ReviewConflict('Memory change is in progress')
         if current['phase'] == 'applied' and current['change']['undone'] == undone:
@@ -145,7 +145,7 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
 
     @firestore.transactional
     def finish(tx):
-        latest = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
+        latest = store.require_doc(uid, ref.get(transaction=tx).to_dict())
         if latest['revision'] != current['revision'] or latest['phase'] not in {desired, 'applied'}:
             raise store.ReviewConflict('Memory change is in progress')
         tx.update(ref, store.encode_doc(uid, {'phase': 'applied', 'active_memory_id': memory_id, 'change': change}))

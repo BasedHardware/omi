@@ -316,7 +316,7 @@ def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = 
         if not snap.exists or snap.to_dict()['created_at'] < now - WINDOW:
             raise store.ReviewConflict('Invalid change cursor')
         query = query.start_after(snap)
-    rows = [store.decode_doc(uid, s.to_dict()) for s in query.limit(31).stream()]
+    rows = [store.require_doc(uid, s.to_dict()) for s in query.limit(31).stream()]
     return ReviewChangesResponse(
         changes=[_wire(row) for row in rows[:30] if row.get('phase', 'applied') == 'applied'],
         next_cursor=rows[29]['change']['change_id'] if len(rows) > 30 else None,

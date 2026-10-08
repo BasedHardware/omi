@@ -121,7 +121,7 @@ def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set
             if exc.status_code not in {402, 404}:
                 raise
             continue
-        if row is None or row.user_review is False or row.is_locked:
+        if row.user_review is False or row.is_locked:
             continue
         if row.subject_entity_id not in entity_ids:
             continue
@@ -206,6 +206,8 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
         elif edge.get('target_id') in identities:
             other = edge.get('source_id')
         else:
+            continue
+        if not isinstance(other, str):
             continue
         try:
             ref = entity_ref(uid, other)

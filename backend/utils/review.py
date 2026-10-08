@@ -101,7 +101,7 @@ def _task_item(uid: str, candidate) -> ReviewItem:
         segments = conversation.get('transcript_segments') or []
         segment = next((s for s in segments if s.get('id') in (ref.transcript_segment_ids or [])), None)
         quote = one_line(segment.get('text')) if segment else None
-        if quote:
+        if quote and segment is not None:
             evidence = ReviewEvidence(
                 quote=quote,
                 speaker_label=f"Speaker {segment.get('speaker_id', 0)}",
@@ -192,6 +192,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
         elif item.speaker:
             prompt = SpeakerTagPrompt.model_validate(state['source'])
             payload = answer.speaker
+            if payload is None:
+                raise store.ReviewConflict('Speaker answer required')
             choice = (
                 SpeakerTagPromptAnswer.me
                 if payload.is_me
@@ -218,6 +220,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
             if generation != state['source']['account_generation']:
                 raise store.ReviewConflict('Candidate generation changed')
             payload = answer.task
+            if payload is None:
+                raise store.ReviewConflict('Task answer required')
             if payload.decision == 'accept':
                 edits = {
                     key: value
@@ -225,18 +229,18 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
                     if key in {'edited_description', 'due_at', 'workstream_id'}
                     and (key != 'edited_description' or value is not None)
                 }
-                candidate_service.accept_candidate(
-                    uid,
-                    item.task.candidate_id,
-                    account_generation=generation,
-                    **({'review_edits': edits} if edits else {}),
-                )
+                if edits:
+                    candidate_service.accept_candidate(
+                        uid, item.task.candidate_id, account_generation=generation, review_edits=edits
+                    )
+                else:
+                    candidate_service.accept_candidate(uid, item.task.candidate_id, account_generation=generation)
             else:
                 candidate_service.reject_candidate(
                     uid, item.task.candidate_id, reason=payload.dismiss_reason, account_generation=generation
                 )
             applied = True
-        elif item.same_person and answer.same_person.decision == 'yes':
+        elif item.same_person and answer.same_person and answer.same_person.decision == 'yes':
             from utils.entity_pages import resolve_entity
 
             left = resolve_entity(uid, item.same_person.left.entity_id)
@@ -265,6 +269,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
         elif item.spelling:
             from utils.entity_pages import save_user_fact
 
+            if answer.spelling is None:
+                raise store.ReviewConflict('Spelling answer required')
             value = answer.spelling.value.strip()
             if not value or (not item.spelling.allow_custom and value not in item.spelling.options):
                 raise store.ReviewConflict('Spelling is not an allowed option')
