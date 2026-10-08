@@ -729,11 +729,16 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    if provider_ref.provider == 'openai' and provider_ref.model == 'gpt-6-luna':
+    mapped_gemini_effort: str | None = None
+    if (
+        route.lane_id.startswith('omi:auto:desktop-vertex-')
+        and provider_ref.provider == 'openai'
+        and provider_ref.model == 'gpt-6-luna'
+    ):
         thinking = provider_request.get('google')
         thinking = thinking.get('thinking_config') if isinstance(thinking, Mapping) else None
         if isinstance(thinking, Mapping):
-            provider_request['reasoning_effort'] = _gemini_thinking_effort_for_luna(thinking)
+            mapped_gemini_effort = _gemini_thinking_effort_for_luna(thinking)
     if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
@@ -756,6 +761,8 @@ def _provider_request(
             for message in provider_request['messages']
         ]
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
+    if mapped_gemini_effort is not None:
+        provider_request['reasoning_effort'] = mapped_gemini_effort
     return provider_request
 
 
@@ -767,9 +774,9 @@ def _sanitize_openai_chat_completions_request(
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    The dedicated ``gpt-6-luna`` route keeps mapped Gemini reasoning effort but
-    drops unsupported ``top_p`` and ``stop``. Temperature must stay at the model
-    default (1).
+    Desktop Gemini fallbacks reapply their mapped effort after this sanitizer;
+    other gpt-6-luna routes retain their route-specific effort and tool policy.
+    Temperature must stay at the model default (1).
     """
     if provider_ref.provider != 'openai':
         return
@@ -783,7 +790,7 @@ def _sanitize_openai_chat_completions_request(
                 LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param=param).inc()
 
     tools = provider_request.get('tools')
-    if tools and model != 'gpt-6-luna':
+    if tools:
         effort = provider_request.get('reasoning_effort')
         if effort not in (None, 'none'):
             provider_request['reasoning_effort'] = 'none'
