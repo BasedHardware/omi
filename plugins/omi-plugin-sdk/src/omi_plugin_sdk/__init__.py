@@ -17,7 +17,7 @@ from omi_plugin_sdk.models import (
     Structured,
     TranscriptSegment,
 )
-from omi_plugin_sdk.webhook_signing import verify_signature
+from omi_plugin_sdk.webhook_signing import verify_request, verify_signature
 
 __all__ = [
     "ActionItem",
@@ -35,5 +35,6 @@ __all__ = [
     "Section",
     "Structured",
     "TranscriptSegment",
+    "verify_request",
     "verify_signature",
 ]

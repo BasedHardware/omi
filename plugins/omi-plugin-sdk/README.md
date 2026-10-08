@@ -45,5 +45,43 @@ async def conversation_created(request: Request, uid: str):
 `verify_signature` checks the HMAC over `"<t>.<uid>." + body`, rejects timestamps more than
 five minutes away from now (`tolerance_seconds`), and accepts either secret during a rotation.
 
-The SDK owns Omi webhook payload models and this verifier. App-specific OAuth state,
+Verifying a chat-tool call (see [Verify every tool call](https://docs.omi.me/doc/developer/apps/ChatTools#verify-every-tool-call)).
+Chat-tool calls are signed with the same per-app secret, but with the request-bound `v2`
+scheme, so they need the method, path and query as well as the body:
+
+```python
+import json
+
+from fastapi import FastAPI, HTTPException, Request
+
+from omi_plugin_sdk import verify_request
+
+app = FastAPI()
+
+
+@app.post("/tools/like_tweet")
+async def like_tweet(request: Request):
+    body = await request.body()  # raw bytes: parse only after verifying
+    if not verify_request(
+        request.headers,
+        body,
+        OMI_SIGNING_SECRET,
+        method=request.method,
+        path=request.url.path,  # the public path, if a proxy in front rewrites it
+        query=request.query_params.multi_items(),
+    ):
+        raise HTTPException(status_code=401, detail="Invalid Omi signature")
+    call = json.loads(body)  # a GET tool reads request.query_params instead
+    uid = call["uid"]  # only now is uid trustworthy
+    ...
+```
+
+`verify_request` checks the HMAC over the method, path, query, body, `X-Omi-Delivery` and
+`X-Omi-Event`, so a captured call cannot be replayed with other arguments, against another tool's
+path or with another method; the same five-minute window and rotation rules apply. To reject an
+exact replay inside the window, remember `X-Omi-Delivery` values for five minutes and refuse
+repeats. `canonical_query`, `canonical_path` and `compute_request_signature` in
+`omi_plugin_sdk.webhook_signing` let you build a signed request to test your own endpoint.
+
+The SDK owns Omi webhook payload models and these verifiers. App-specific OAuth state,
 persisted settings, provider clients, and business logic stay inside each app.

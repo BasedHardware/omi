@@ -29,7 +29,7 @@ from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
-from database.webhook_signing import get_app_webhook_signing_db, note_signing_unavailable
+from database.webhook_signing import active_app_signing_secrets
 from database.webhook_health import (
     ACTION_DISABLE,
     ACTION_REDIRECT_NOT_FOLLOWED,
@@ -94,23 +94,6 @@ _RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
 def _delivery_failure_is_retryable(status_code: int) -> bool:
     """Whether a non-2xx webhook response leaves the finalization job retryable."""
     return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
-
-
-async def _load_app_signing_secrets(app_id: str) -> list[str]:
-    """Secrets that sign this app's deliveries right now; empty means the app has none.
-
-    The lookup is cached in Redis (see database/webhook_signing.py). A store that cannot be read
-    raises WebhookSigningUnavailable, reported once per app per window, and the caller holds the
-    delivery as it would behind an open circuit breaker rather than sending it unsigned.
-    """
-    try:
-        record = await run_blocking(db_executor, get_app_webhook_signing_db, app_id)
-    except WebhookSigningUnavailable:
-        raise
-    except Exception as exc:
-        await run_blocking(db_executor, note_signing_unavailable, 'other', app_id)
-        raise WebhookSigningUnavailable('other', app_id) from exc
-    return record.active() if record else []
 
 
 def _drop_exhausted_delivery(app_id: str, reason: str) -> None:
@@ -318,7 +301,7 @@ async def trigger_external_integrations(
             return
 
         try:
-            signing_secrets = await _load_app_signing_secrets(app.id)
+            signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         except WebhookSigningUnavailable as e:
             # Our store, not the developer's endpoint: hold it exactly like an open circuit breaker.
             journey_attempt.fail('dependency_unavailable')
@@ -721,7 +704,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         try:
-            signing_secrets = await _load_app_signing_secrets(app.id)
+            signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         except WebhookSigningUnavailable as e:
             logger.error(f'trigger_realtime_audio_bytes: delivery held for {app.id}: {e}')
             return
@@ -823,7 +806,7 @@ async def _async_trigger_realtime_integrations(
             return
 
         try:
-            signing_secrets = await _load_app_signing_secrets(app.id)
+            signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         except WebhookSigningUnavailable as e:
             journey_attempt.fail('dependency_unavailable')
             logger.error(f'trigger_realtime_integrations: delivery held for {app.id}: {e}')

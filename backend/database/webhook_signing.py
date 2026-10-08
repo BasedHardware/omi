@@ -227,6 +227,24 @@ def get_app_webhook_signing_db(app_id: str, *, firestore_client: Any | None = No
     return _decode(record, app_id)
 
 
+def active_app_signing_secrets(app_id: str) -> list[str]:
+    """Secrets that sign the app's outbound requests right now, current first; empty means no secret.
+
+    Shared by the app's webhook deliveries (``utils/app_integrations.py``) and its chat-tool calls
+    (``utils/retrieval/tools/app_tools.py``). A store that cannot be read raises
+    ``WebhookSigningUnavailable``, reported once per app per window, and the caller holds the
+    request rather than sending it unsigned. Blocking; call it through ``run_blocking``.
+    """
+    try:
+        record = get_app_webhook_signing_db(app_id)
+    except WebhookSigningUnavailable:
+        raise
+    except Exception as exc:
+        note_signing_unavailable('other', app_id)
+        raise WebhookSigningUnavailable('other', app_id) from exc
+    return record.active() if record else []
+
+
 def set_app_webhook_signing_db(
     app_id: str, secrets: WebhookSigningSecrets, *, firestore_client: Any | None = None
 ) -> None:
