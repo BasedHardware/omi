@@ -535,6 +535,16 @@ export class AgentRuntimeKernel extends KernelSessions {
    * The relay turns it on when a connected client declares it can render the
    * approval card.
    */
+  /** True while the run is parked behind a device tool approval card: the
+   *  person's turn, which no adapter or shell watchdog may count as a stall. */
+  isRunWaitingOnUser(runId: string): boolean {
+    try {
+      return this.runStatus(runId) === "waiting_approval";
+    } catch {
+      return false;
+    }
+  }
+
   setDesktopToolApprovalsEnabled(enabled: boolean): void {
     this.desktopToolApprovalsEnabled = enabled;
   }

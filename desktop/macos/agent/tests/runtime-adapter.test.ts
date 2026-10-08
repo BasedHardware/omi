@@ -472,6 +472,71 @@ describe("AcpRuntimeAdapter bindings", () => {
     ]);
   });
 
+  it("does not cancel an external ACP attempt while its run waits on the person", async () => {
+    vi.useFakeTimers();
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    let waitingOnUser = true;
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "hermes",
+      command: "/usr/local/bin/hermes acp",
+      envCommandName: "OMI_HERMES_ADAPTER_COMMAND",
+      noProgressTimeoutMs: 1_000,
+      isRunWaitingOnUser: (runId) => runId === "run-1" && waitingOnUser,
+    });
+    const requests: Array<any> = [];
+    proc.stdin.on("data", (chunk) => {
+      for (const line of chunk.toString().trim().split("\n")) {
+        if (!line) continue;
+        const request = JSON.parse(line);
+        requests.push(request);
+        if (request.method === "initialize") {
+          proc.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: { protocolVersion: 1 },
+          }) + "\n");
+        }
+      }
+    });
+
+    const execution = adapter.executeAttempt({
+      sessionId: "omi-session",
+      ownerId: "owner-1",
+      requestId: "request-1",
+      clientId: "client-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+      binding: {
+        sessionId: "omi-session",
+        adapterId: "hermes",
+        adapterNativeSessionId: "native-hermes-session",
+        resumeFidelity: "native",
+        cwd: "/tmp/work",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "ask",
+      tools: [],
+    }, () => {}, new AbortController().signal);
+    let settled = false;
+    execution.then(() => { settled = true; }, () => { settled = true; });
+
+    // Well past the adapter's own timeout: a parked approval is the person's wait.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(settled).toBe(false);
+    expect(requests.map((request) => request.method)).not.toContain("session/cancel");
+
+    // The card closes; the clock restarts from here and covers only the adapter's silence.
+    waitingOnUser = false;
+    const rejection = expect(execution).rejects.toThrow("hermes produced no progress for 1 seconds");
+    await vi.advanceTimersByTimeAsync(1_200);
+    await rejection;
+    expect(requests).toContainEqual(expect.objectContaining({
+      method: "session/cancel",
+      params: { sessionId: "native-hermes-session" },
+    }));
+  });
+
   it("cancels external ACP attempts that produce no recognized progress", async () => {
     vi.useFakeTimers();
     const proc = createMockProcess();

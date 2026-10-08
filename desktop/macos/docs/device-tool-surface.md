@@ -154,7 +154,8 @@ wins over a local answer in flight. The card never runs anything itself; the
 only path to the tool is the kernel's resolution.
 
 A card waiting on the person is not a stall. The chat turn's `StallDetector`
-pauses while a card for its session is pending (`setWaitingOnUser`): the tool
+pauses while a card for the session the turn resolved is pending
+(`setWaitingOnUser`), whichever surface sent the turn: the tool
 row reads "Waiting for your approval", the "taking longer than usual" banner
 stays down, and the 90 s no-progress abort that interrupts the bridge cannot
 fire; when the card closes, the clocks restart from that moment. The composer's

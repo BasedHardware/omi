@@ -8,6 +8,9 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+ToolApprovals.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DesktopToolApprovalCard.swift
   - desktop/macos/Desktop/Sources/Automation/DesktopAutomationToolApprovalActions.swift
+  # The chat turn's stall detector pauses while a card waits on the person.
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+ToolApprovalWait.swift
 preconditions:
   - signed_in
   - onboarding_completed
@@ -59,10 +62,14 @@ steps:
     do: "Ask for a direct list_message_chats call with limit 3 the same way. Press Allow Once. The card reads 'Allowed once', the app log shows one 'Executing tool: list_message_chats' line, and the ledger shows one row with one dispatched_at_ms and one completed_at_ms. A bundle without Full Disk Access sees the tool fail inside Messages access, which the model reports; that is a permission fact, not an approval one."
 
   - id: S7
-    name: Expiry closes an unanswered card
-    do: "Ask for a direct list_mail_messages call with limit 1 and leave the card alone for 180 s. The card reads 'Expired, not run', the model is told the approval was not granted, and the ledger row is failed. Nothing runs."
+    name: Waiting on the person is not a stall
+    do: "While a card is pending, past 20 s the tool row reads 'Waiting for your approval' with no 'taking longer than usual' banner, past 90 s the turn is still alive (the app log has no 'tool no-progress guard fired' line), and the composer's stop button still cancels the run with the card reading 'Cancelled, not run'."
 
   - id: S8
+    name: Expiry closes an unanswered card
+    do: "Ask for a direct list_mail_messages call with limit 1 and leave the card alone for 180 s. The card reads 'Expired, not run', the model is told the approval expired, and the ledger row is failed with error_code approval_expired and no dispatched_at_ms. Nothing runs."
+
+  - id: S9
     name: Logs clean
     log.expect:
       forbid:
