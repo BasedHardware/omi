@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_asset_image.dart';
+import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart'
+    show nativePlaybackMaximum, nativeWaveformPoints;
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -12,6 +17,8 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:omi/ui/ui.dart';
+
+part 'wal_item_detail_native.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -27,12 +34,22 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   bool _isProcessingWaveform = false;
   SyncProvider? _syncProvider;
 
+  /// The native page has scheduled its one pop after the WAL left device storage.
+  bool _leavingTransferred = false;
+
+  /// The bundled device artwork for the native info sheet, once copied; never user data.
+  String? _nativeDeviceImage;
+
   /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
   bool get _needsTransfer => widget.wal.storage == WalStorage.sdcard || widget.wal.storage == WalStorage.flashPage;
 
   @override
   void initState() {
     super.initState();
+    if (nativePresentationEnabled) {
+      unawaited(nativeAssetImageUri(DeviceUtils.getDeviceImagePath(deviceName: widget.wal.deviceModel))
+          .then((uri) => _nativeDeviceImage = uri));
+    }
     if (!_needsTransfer) {
       _generateWaveform();
     }
@@ -95,7 +112,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.recordingDetails),
@@ -111,6 +128,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       backgroundColor: OmiColors.surface0,
       body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
+    return nativePresentationEnabled ? _nativeDetail(classic) : classic;
   }
 
   String _formatTransferEta(int seconds) => OmiDuration.compact(seconds, context.l10n);
@@ -460,7 +478,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
       if (mounted) {
         _showConfirm(context.l10n.transferCompleteMessage);
-        Navigator.of(context).pop();
+        // The native page may already have popped once the WAL left the device; never pop twice.
+        if (!_leavingTransferred) Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {

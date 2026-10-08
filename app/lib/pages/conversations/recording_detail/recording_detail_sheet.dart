@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -14,19 +16,61 @@ import 'package:omi/widgets/waveform_painter.dart';
 /// Floating bottom sheet for a batch/offline recording — playback (waveform +
 /// scrub + transport), the primary "Sync now" (transcribe → conversation)
 /// action, and share / details / delete. Replaces the old full-page detail.
-Future<void> showRecordingDetailSheet(BuildContext context, LocalRecording recording) {
+///
+/// [nativeContentForTest] builds the native content inside the Flutter sheet, so a hermetic test
+/// reaches the native wiring that only an iOS host with the flag would otherwise present.
+Future<void> showRecordingDetailSheet(BuildContext context, LocalRecording recording,
+    {@visibleForTesting bool nativeContentForTest = false}) {
   return showOmiSheet<void>(
     context: context,
     title: OmiDateFormat.of(context).date(recording.startedAt),
     padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-    builder: (_) => _RecordingDetailSheet(recording: recording),
+    builder: (_) => _RecordingDetailSheet(recording: recording, native: nativeContentForTest),
+    nativeBuilder: (_) => _RecordingDetailSheet(recording: recording, native: true),
   );
+}
+
+/// The most waveform bars a native playback slider carries.
+const nativeWaveformLimit = 200;
+
+/// A native playback slider's range in seconds: the longer of the player's and the file's
+/// duration, or null when neither is a usable length (the slider is then omitted).
+double? nativePlaybackMaximum(Duration player, int fileSeconds) {
+  final maximum = math.max(player.inMilliseconds / 1000, fileSeconds.toDouble());
+  return maximum.isFinite && maximum > 0 ? maximum : null;
+}
+
+/// At most [nativeWaveformLimit] bars over [seconds], each the loudest level of its span, scaled so
+/// the loudest bar is 1. Non-finite levels count as silence; only these levels cross the bridge,
+/// never the audio or its file.
+List<Map<String, Object>> nativeWaveformPoints(List<double>? levels, double seconds) {
+  if (levels == null || levels.isEmpty || !seconds.isFinite || seconds <= 0) return const [];
+  final clean = [for (final level in levels) level.isFinite ? level.abs() : 0.0];
+  final count = math.min(clean.length, nativeWaveformLimit);
+  final bars = [
+    for (var i = 0; i < count; i++)
+      clean
+          .sublist(i * clean.length ~/ count, math.max(i * clean.length ~/ count + 1, (i + 1) * clean.length ~/ count))
+          .reduce(math.max),
+  ];
+  final peak = bars.reduce(math.max);
+  return [
+    for (var i = 0; i < count; i++)
+      {
+        'x': (i + 0.5) / count * seconds,
+        'y': peak > 0 && peak.isFinite ? (bars[i] / peak).clamp(0.0, 1.0).toDouble() : 0.0,
+        'label': '',
+      },
+  ];
 }
 
 class _RecordingDetailSheet extends StatefulWidget {
   final LocalRecording recording;
 
-  const _RecordingDetailSheet({required this.recording});
+  /// Present the SwiftUI sheet, with the complete Flutter sheet as its fallback.
+  final bool native;
+
+  const _RecordingDetailSheet({required this.recording, this.native = false});
 
   @override
   State<_RecordingDetailSheet> createState() => _RecordingDetailSheetState();
@@ -100,7 +144,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
         final position = isPlaying ? provider.currentPosition : Duration.zero;
         final progress = isPlaying ? provider.playbackProgress.clamp(0.0, 1.0) : 0.0;
 
-        return Stack(
+        final classic = Stack(
           children: [
             SingleChildScrollView(
               child: Column(
@@ -191,8 +235,119 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
             if (provider.isPreparingShare) _preparingOverlay(context),
           ],
         );
+        if (!widget.native) return classic;
+        return _nativeSheet(
+          provider,
+          rec,
+          isPlaying: isPlaying,
+          canPlay: canPlay,
+          total: total,
+          position: position,
+          fallback: OmiSheetScaffold(
+            title: OmiDateFormat.of(context).date(rec.startedAt),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+            child: classic,
+          ),
+        );
       },
     );
+  }
+
+  /// The SwiftUI sheet: the same player, transport, process action and menu, all owned by
+  /// [LocalRecordingsProvider]. While a share is being prepared every action is disabled, as the
+  /// Flutter overlay blocks them.
+  Widget _nativeSheet(
+    LocalRecordingsProvider provider,
+    LocalRecording rec, {
+    required bool isPlaying,
+    required bool canPlay,
+    required Duration total,
+    required Duration position,
+    required Widget fallback,
+  }) {
+    final l10n = context.l10n;
+    final preparing = provider.isPreparingShare;
+    final maximum = nativePlaybackMaximum(isPlaying ? provider.totalDuration : Duration.zero, rec.seconds);
+    final seconds = (position.inMilliseconds / 1000).clamp(0.0, maximum ?? 0.0).toDouble();
+    final transport = canPlay && isPlaying && !preparing;
+    return IosNativeSurface(
+      title: OmiDateFormat.of(context).date(rec.startedAt),
+      loading: preparing,
+      loadingLabel: preparing ? l10n.preparingAudio : null,
+      fallback: fallback,
+      toolbar: [
+        NativeRow('rec_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('rec_more', l10n.moreOptions, kind: 'menu', symbol: 'ellipsis', enabled: !preparing, options: {
+          'share': l10n.shareRecording,
+          'info': l10n.recordingInfo,
+          if (!rec.isBusy) 'delete': l10n.delete,
+        }, action: (value) {
+          switch (value) {
+            case 'share':
+              provider.share(rec);
+            case 'info':
+              _showNativeFileDetails(rec);
+            case 'delete':
+              _confirmDelete(context, provider, rec);
+          }
+        }),
+      ],
+      sections: [
+        NativeSection('rec_player', [
+          NativeRow('rec_time', OmiDateFormat.of(context).time(rec.startedAt), kind: 'label'),
+          if (_loadingWaveform) NativeRow('rec_waveform_loading', l10n.loadingYourRecording, kind: 'label'),
+          if (maximum != null)
+            NativeRow('rec_position', l10n.recordings,
+                kind: 'slider',
+                value: seconds,
+                maximumValue: maximum,
+                subtitle: '${_fmt(position)} / ${OmiDuration.offset(maximum.round())}',
+                points: _loadingWaveform ? const [] : nativeWaveformPoints(_waveform, maximum),
+                enabled: transport,
+                action: (value) => provider.seekTo(Duration(milliseconds: ((value as num) * 1000).round()))),
+        ]),
+        NativeSection('rec_transport', [
+          NativeRow('rec_back10', l10n.skipBack10Seconds,
+              symbol: 'gobackward.10', enabled: transport, action: (_) => provider.skipBackward()),
+          NativeRow(
+            'rec_play',
+            isPlaying ? l10n.pause : l10n.play,
+            symbol: isPlaying ? 'pause.fill' : 'play.fill',
+            subtitle: provider.isProcessingAudio && isPlaying ? l10n.processing : '',
+            enabled: canPlay && !preparing,
+            action: (_) => provider.togglePlayback(rec),
+          ),
+          NativeRow('rec_fwd10', l10n.skipForward10Seconds,
+              symbol: 'goforward.10', enabled: transport, action: (_) => provider.skipForward()),
+        ]),
+        NativeSection('rec_actions', [
+          // The Flutter button shows its spinner while busy; the busy subtitle stands in for it.
+          NativeRow('rec_process', rec.isBusy ? l10n.syncStatusUploaded : l10n.processNow,
+              symbol: 'icloud.and.arrow.up',
+              subtitle: rec.isBusy ? l10n.processing : '',
+              enabled: !rec.isBusy && !preparing,
+              action: (_) => _handleTranscribe(provider, rec)),
+        ]),
+      ],
+    );
+  }
+
+  /// Recording info as a native sheet of labels; the Flutter dialog when it cannot be presented.
+  Future<void> _showNativeFileDetails(LocalRecording rec) async {
+    final l10n = context.l10n;
+    final result = await showIosNativeModal(context, title: l10n.recordingInfo, cancelId: 'close', actions: [
+      NativeRow('close', l10n.close),
+    ], sections: [
+      NativeSection('rec_info', [
+        NativeRow('rec_info_date', l10n.dateTimeLabel,
+            kind: 'label', subtitle: OmiDateFormat.of(context).dateTime(rec.startedAt)),
+        NativeRow('rec_info_duration', l10n.durationLabel,
+            kind: 'label', subtitle: OmiDuration.long(rec.seconds, l10n)),
+        NativeRow('rec_info_format', l10n.audioFormatLabel, kind: 'label', subtitle: rec.codec.toFormattedString()),
+        NativeRow('rec_info_size', l10n.estimatedSizeLabel, kind: 'label', subtitle: _formatBytes(rec.sizeBytes)),
+      ]),
+    ]);
+    if (result == null && mounted) _showFileDetailsDialog(context, rec);
   }
 
   static final TextStyle _timeStyle = OmiType.caption.copyWith(
