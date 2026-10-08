@@ -3620,15 +3620,14 @@ def store_conversation_photos(
     @firestore.transactional
     def _store(transaction) -> bool:
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not getattr(conversation_snapshot, 'exists', False):
+        raw = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+        if not raw or is_soft_deleted(raw):
             return False
-        level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
+        level = raw.get('data_protection_level', 'standard')
         for photo in photos:
             photo_id = photo.id or str(uuid.uuid4())
-            photo_ref = photos_ref.document(photo_id)
-            data = photo.model_dump()
-            data['id'] = photo_id
-            transaction.set(photo_ref, prepare_photo_for_write(data, uid, level))
+            data = {**photo.model_dump(), 'id': photo_id}
+            transaction.set(photos_ref.document(photo_id), prepare_photo_for_write(data, uid, level))
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
