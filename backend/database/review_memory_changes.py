@@ -12,6 +12,7 @@ from google.cloud import firestore
 from pydantic import BaseModel, Field
 
 from database import review_store as store
+from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange
 
 
@@ -55,11 +56,11 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
 
     data = prepare(store.client().transaction())
     if data['phase'] == 'applied':
-        return ReviewChange.model_validate(data['change'])
+        return parse_payload_strict(ReviewChange, data['change'], document_path=ref.path)
     # The source snapshot fences an intervening correction in canonical apply.
     from models.product_memory import MemoryItem
 
-    source = MemoryItem.model_validate(data['before'])
+    source = parse_payload_strict(MemoryItem, data['before'], document_path=ref.path + '/before')
     target_id = amend_fact(
         uid,
         edit.memory_id,
@@ -87,7 +88,7 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
 
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     if data['change']['undone'] == undone and data.get('phase') == 'applied':
-        return ReviewChange.model_validate(data['change'])
+        return parse_payload_strict(ReviewChange, data['change'], document_path=ref.path)
     desired = 'undo' if undone else 'redo'
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(data['edit_key']))
 
@@ -114,8 +115,8 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
 
     current, apply = reserve(store.client().transaction())
     if not apply:
-        return ReviewChange.model_validate(current['change'])
-    source = MemoryItem.model_validate(current['source'])
+        return parse_payload_strict(ReviewChange, current['change'], document_path=ref.path)
+    source = parse_payload_strict(MemoryItem, current['source'], document_path=ref.path + '/source')
     operation_id = str(uuid5(NAMESPACE_URL, f"{uid}:{change_id}:{current['revision']}:{desired}"))
     content = current['before']['content'] if undone else current['memory_edit']['content']
     try:
@@ -150,4 +151,4 @@ def set_memory_undone(uid: str, change_id: str, undone: bool, data: dict) -> Rev
         tx.update(ref, store.encode_doc(uid, {'phase': 'applied', 'active_memory_id': memory_id, 'change': change}))
 
     finish(store.client().transaction())
-    return ReviewChange.model_validate(change)
+    return parse_payload_strict(ReviewChange, change, document_path=ref.path)

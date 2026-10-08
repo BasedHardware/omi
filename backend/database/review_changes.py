@@ -15,6 +15,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import entities, memory_ledger, review_queries, review_store as store
+from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
 WINDOW = timedelta(days=30)
@@ -55,7 +56,11 @@ def _patch_value(value: dict):
 
 
 def _wire(data: dict) -> ReviewChange:
-    return ReviewChange.model_validate(data['change'])
+    return parse_payload_strict(
+        ReviewChange,
+        data['change'],
+        document_path='review_changes/' + store.safe_id(data['change'].get('change_id', 'unknown')),
+    )
 
 
 def agent_change_allowed(uid: str, edit_key: str) -> bool:
