@@ -23,6 +23,16 @@ from utils.translation_core.planner import fingerprint_text
 from utils.translation_core.providers import NllbTranslationProvider, TranslationProviderChain
 from utils.translation_core.quality import lexical_overlap, output_rejection_reason
 
+
+@pytest.fixture(scope='module', autouse=True)
+def _load_local_detector_profiles():
+    # Profile loading is setup; retain cold result caches for admission checks.
+    from utils.translation_language import detect_language_with_confidence, detection_cache
+
+    detect_language_with_confidence('A synthetic sentence initializes the local language detector.')
+    detection_cache.clear()
+
+
 # Authored here; no account transcripts or screenshot text.
 ENGLISH = (
     'Please try again.',
@@ -253,6 +263,12 @@ def test_decision_metrics_wire_existing_skip_counter_with_bounded_reasons():
     assert child._value.get() == before + 1
     metrics.decision('en', 'user supplied arbitrary decision', 'user supplied arbitrary reason')
     assert metrics._decisions.labels(target_lang='en', decision='other', reason='other')._value.get() >= 1
+
+
+def test_translation_metrics_keep_luna_provider_attribution():
+    metrics = PrometheusTranslationMetrics()
+    metrics.batch('luna', 'en', 2)
+    assert metrics._batch_size.labels(provider='luna')._sum.get() >= 2
 
 
 async def test_defer_never_poison_shared_cache_or_teach_foreign_prior():

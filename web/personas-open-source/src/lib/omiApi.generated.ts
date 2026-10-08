@@ -3958,11 +3958,6 @@ export interface RejectSpeakerRequest {
   segment_ids?: Array<string> | null;
 }
 
-export interface ReleaseChannel {
-  app_build?: number | null;
-  release_channel: "testflight" | "app_store" | "dev";
-}
-
 export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
@@ -6184,7 +6179,6 @@ export interface OmiApiSchemas {
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
   "RejectSpeakerRequest": RejectSpeakerRequest;
-  "ReleaseChannel": ReleaseChannel;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -10619,16 +10613,6 @@ export interface OmiApiPaths {
       operationId: "get_user_profile_endpoint_v1_users_profile_get";
       responses: {
         "200": UserProfileResponse;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/users/release-channel": {
-    put: {
-      operationId: "record_channel_v1_users_release_channel_put";
-      responses: {
-        "204": void;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19587,27 +19571,6 @@ export async function get_user_profile_endpoint_v1_users_profile_get(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function record_channel_v1_users_release_channel_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ReleaseChannel, init?: OmiApiClientInit): Promise<void> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/users/release-channel`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "PUT",
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return;
-}
-
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/stats/chat-messages`;
@@ -21224,4 +21187,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 490 client methods generated.
+// Total: 489 client methods generated.

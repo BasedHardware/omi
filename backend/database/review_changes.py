@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import entities, memory_ledger, review_queries, review_store as store
 from database.read_boundary import parse_payload_strict
-from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.review import ReviewChange, ReviewChangesResponse
 
 WINDOW = timedelta(days=30)
@@ -29,17 +28,7 @@ class _Unchanged(Exception):
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
     'people': {'name', 'aliases', 'organization', 'subtitle'},
-    'entity_pages': {'summary', 'updated_at'},
-    'conversations': {
-        'user_title',
-        'structured.title',
-        'structured',
-        'transcript_segments',
-        'transcript_segments_compressed',
-        'manual_speaker_assignments',
-        'client_processing',
-        *PROJECTION_FAMILY_FIELDS,
-    },
+    'conversations': {'user_title', 'structured.title', 'transcript_segments', 'manual_speaker_assignments'},
     'action_items': {'status', 'completed', 'completed_at'},
 }
 
@@ -48,7 +37,7 @@ class AgentEdit(BaseModel):
     """Internal writer input. Patch keys are constrained to supported reversible fields."""
 
     model_config = ConfigDict(extra='forbid')
-    collection: Literal['knowledge_nodes', 'people', 'conversations', 'action_items', 'entity_pages']
+    collection: Literal['knowledge_nodes', 'people', 'conversations', 'action_items']
     document_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     patch: dict
 
@@ -135,15 +124,7 @@ def record_agent_change(
         for edit, _, data in rows:
             if expected_documents is not None and data != expected_documents.get(edit.document_id):
                 raise store.ReviewConflict('Entity changed while preparing merge')
-            if data is None and edit.collection == 'entity_pages':
-                data = {}
-            if (
-                (not data and edit.collection != 'entity_pages')
-                or data.get('deleted')
-                or data.get('is_locked')
-                or data.get('is_dismissed')
-                or data.get('discarded')
-            ):
+            if not data or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
                 raise store.ReviewNotFound('Edit target not found')
             records.append(
                 {
@@ -168,11 +149,8 @@ def record_agent_change(
         result.update(journal)
 
         def write(transaction):
-            for edit, target, prior in rows:
-                if edit.collection == 'entity_pages' and prior is None:
-                    transaction.set(target, edit.patch)
-                else:
-                    transaction.update(target, edit.patch)
+            for edit, target, _ in rows:
+                transaction.update(target, edit.patch)
             transaction.set(ref, store.encode_doc(uid, journal))
 
         return {'mutations': mutations, 'projection_writer': write}
@@ -262,12 +240,6 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     now = now or datetime.now(timezone.utc)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
-    if data and data.get('memory_merge'):
-        if data['created_at'] < now - WINDOW:
-            raise store.ReviewNotFound('Change is outside the 30-day undo window')
-        from database.review_memory_merges import set_undone as set_merge_undone
-
-        return set_merge_undone(uid, change_id, undone, data)
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
@@ -290,13 +262,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         for edit in data['edits']:
             target = store.user(uid).collection(edit['collection']).document(edit['document_id'])
             current = target.get(transaction=tx).to_dict()
-            if (
-                current is None
-                or (not current and edit['collection'] != 'entity_pages')
-                or current.get('deleted')
-                or current.get('is_dismissed')
-                or current.get('discarded')
-            ):
+            if not current or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
                 raise store.ReviewConflict('Edit target no longer available')
             if any(_get(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')

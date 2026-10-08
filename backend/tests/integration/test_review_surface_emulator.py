@@ -95,6 +95,26 @@ def test_proposals_not_sure_retry_and_new_evidence(harness):
     assert client.post('/v1/review/items/spelling:1/answer', json={'not_sure': True}).json()['remaining_today'] == 1
 
 
+def test_new_evidence_enqueued_during_answer_stays_pending(harness):
+    client, uid, user, db = harness
+    enqueue(uid, version='v1')
+    assert client.get('/v1/review/items').json()['items'][0]['item_id'] == 'spelling:1'
+    state = store.begin_answer(uid, 'spelling:1', 'answer-v1', now=NOW)
+
+    refreshed = spelling()
+    refreshed.title = 'Confirm the updated spelling?'
+    enqueue(uid, item=refreshed, version='v2')
+    store.finish_answer(uid, 'spelling:1', applied=True, uncertain=False, offered_version=state['version'])
+
+    proposal = store.require_doc(
+        uid, user.collection('review_proposals').document(store.safe_id('spelling:1')).get().to_dict()
+    )
+    assert proposal['evidence_version'] == 'v2'
+    assert proposal['status'] == 'pending'
+    items = client.get('/v1/review/items').json()['items']
+    assert [(item['item_id'], item['title']) for item in items] == [('spelling:1', 'Confirm the updated spelling?')]
+
+
 def test_attention_budget_concurrency_and_day_rollover(harness):
     _, uid, _, _ = harness
     for i in range(5):
@@ -284,6 +304,112 @@ def test_entity_pages_projects_chips_and_cache(harness, monkeypatch):
     chips = client.get('/v1/conversations/c/entities').json()['entities']
     assert [ref['type'] for ref in chips] == ['organization', 'project', 'person']
     assert client.get('/v1/entities/missing/page').status_code == 404
+
+
+def _billed_read_total():
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS
+
+    return sum(sample.value for metric in FIRESTORE_BILLED_READS.collect() for sample in metric.samples)
+
+
+def test_entity_page_large_project_and_conversation_pages_stay_within_read_budget(harness):
+    client, uid, user, db = harness
+    # Document-read budget: each of these entity-page requests must stay at or
+    # below 250 billed-equivalent Firestore reads with 100 related source rows.
+    # This leaves headroom for auth-independent page metadata while catching
+    # duplicate per-task/per-conversation point reads.
+    read_bound = 250
+    user.collection('workstreams').document('project').set(
+        {'title': 'Launch', 'objective': 'Ship launch', 'status': 'open', 'account_generation': 3}
+    )
+    user.collection('knowledge_nodes').document('org').set(
+        {'id': 'org', 'node_type': 'organization', 'label': 'Partner'}
+    )
+    for index in range(100):
+        created_at = NOW - timedelta(seconds=index)
+        user.collection('action_items').document(f'task-{index:03}').set(
+            {
+                'description': f'Task {index}',
+                'status': 'active',
+                'completed': False,
+                'created_at': created_at,
+                'account_generation': 3,
+                'workstream_id': 'project',
+            }
+        )
+        user.collection('conversations').document(f'conversation-{index:03}').set(
+            {
+                'created_at': created_at,
+                'started_at': created_at,
+                'finished_at': created_at + timedelta(minutes=1),
+                'status': 'completed',
+                'discarded': False,
+                'data_protection_level': 'standard',
+                'structured': {'title': f'Meeting {index}'},
+                'entity_ids': ['project', 'org'],
+                'workstream_id': 'project',
+                'transcript_segments': [],
+            }
+        )
+
+    before = _billed_read_total()
+    project_page = client.get('/v1/entities/project/page')
+    project_reads = _billed_read_total() - before
+    assert project_page.status_code == 200, project_page.text
+    assert len(project_page.json()['open_tasks']) == 30
+    assert project_reads <= read_bound, f'project page used {project_reads} reads (budget {read_bound})'
+
+    before = _billed_read_total()
+    org_page = client.get('/v1/entities/org/page')
+    conversation_reads = _billed_read_total() - before
+    assert org_page.status_code == 200, org_page.text
+    assert len(org_page.json()['recent_conversations']) == 10
+    assert (
+        conversation_reads <= read_bound
+    ), f'entity page with 100 conversations used {conversation_reads} reads (budget {read_bound})'
+
+
+def test_entity_page_keeps_pending_canonical_facts_hidden(harness):
+    client, uid, user, db = harness
+    from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+    from models.product_memory import MemoryItem, MemoryItemStatus, MemorySubjectScope, MemoryTier, ProcessingState
+
+    _canonical_control(user, uid)
+    user.collection('knowledge_nodes').document('org').set(
+        {'id': 'org', 'node_type': 'organization', 'label': 'Partner'}
+    )
+    pending = MemoryItem(
+        memory_id='pending-fact',
+        uid=uid,
+        version=1,
+        tier=MemoryTier.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.pending,
+        content='Still being processed',
+        source_state=SourceState.active,
+        evidence=[
+            MemoryEvidence(
+                evidence_id='pending-source',
+                source_type='explicit_user',
+                source_id='pending-source',
+                source_version='1',
+                artifact_preservation=ArtifactPreservationState.not_applicable,
+            )
+        ],
+        sensitivity_labels=[],
+        visibility='private',
+        user_asserted=False,
+        captured_at=NOW,
+        updated_at=NOW,
+        expires_at=NOW + timedelta(days=30),
+        subject_entity_id='org',
+        subject_scope=MemorySubjectScope.third_party,
+    )
+    user.collection('memory_items').document(pending.memory_id).set(pending.model_dump(mode='json'))
+
+    page = client.get('/v1/entities/org/page')
+    assert page.status_code == 200, page.text
+    assert page.json()['facts'] == []
 
 
 def _canonical_control(user, uid):

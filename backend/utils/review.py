@@ -294,4 +294,4 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
     except LookupError as exc:
         store.release_failed_answer(uid, item_id)
         raise store.ReviewNotFound('Person not found') from exc
-    return store.finish_answer(uid, item_id, applied=applied, uncertain=uncertain)
+    return store.finish_answer(uid, item_id, applied=applied, uncertain=uncertain, offered_version=state['version'])

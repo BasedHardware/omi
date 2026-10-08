@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from database import review_store
 from database import conversations, action_items, users, candidates, screen_activity, dream_store
-from utils.entity_pages import resolve_entity, entity_facts
+from utils.entity_pages import _facts, resolve_entity
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from models.product_memory import MemoryAccessPolicy
@@ -94,7 +94,7 @@ def read_changes(uid, lease):
             identities.add(row['workstream_id'])
     for entity_id in sorted(identities)[:20]:
         node = resolve_entity(uid, entity_id)
-        facts, decisions, _ = entity_facts(uid, [node['entity_id']])
+        facts, decisions, _ = _facts(uid, [node['entity_id']], {})
         records['entity/' + entity_id] = {
             **node,
             'facts': [f.model_dump(mode='python') for f in facts],

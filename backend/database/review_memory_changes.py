@@ -19,7 +19,6 @@ from models.review import ReviewChange
 class MemoryEdit(BaseModel):
     memory_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     content: str = Field(min_length=1, max_length=2000)
-    duplicate_memory_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[^/]+$")
 
 
 def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_key: str) -> ReviewChange:
@@ -27,10 +26,6 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
     from utils.memory.knowledge_ledger import LedgerProvenance, amend_fact
 
-    if edit.duplicate_memory_id is not None:
-        from database.review_memory_merges import record_merge
-
-        return record_merge(uid, change, edit, edit_key)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change.change_id))
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key))
     current = read_canonical_memory_item(uid, edit.memory_id, db_client=store.client())

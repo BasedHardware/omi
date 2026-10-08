@@ -192,7 +192,8 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     monkeypatch.setattr(pc, 'track_usage', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(pc, '_conversation_notes_v2_enabled', lambda: True)
     monkeypatch.setattr(pc, '_meeting_notes_episode_evidence_enabled', lambda uid: False)
-    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
+    # Isolate the persisted meeting stamp from optional roster/background reads.
+    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, ()))
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
     monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **kwargs: None)
     notes = Mock(return_value=Structured(title='Project launch', overview='Launch next week; review on Friday.'))
