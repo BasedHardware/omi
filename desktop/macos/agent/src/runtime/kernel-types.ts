@@ -487,6 +487,15 @@ export interface AgentRuntimeKernelOptions {
   recoverRunInput?: KernelRunRecoveryPolicy;
   onToolCapabilityRejected?: (code: RunToolCapabilityRejectCode) => void;
   /**
+   * Temporary interim gate for the desktop tool approval flow. Until the
+   * Swift approval card ships, a connected client declares that it can render
+   * `approval_requested`; with no such client the relay keeps today's
+   * immediate `approval_required` rejection instead of parking a call nobody
+   * can answer. Default off. The Swift card PR flips the default and deletes
+   * this switch.
+   */
+  desktopToolApprovalsEnabled?: boolean;
+  /**
    * Canonical execution-profile repository. Production uses the immutable
    * SQLite profile reader; tests with synthetic adapters may inject an
    * equivalent authoritative repository instead of reviving legacy columns.
