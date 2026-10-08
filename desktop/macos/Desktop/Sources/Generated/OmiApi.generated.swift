@@ -5392,25 +5392,21 @@ public enum OmiAPI {
 
   public struct TaskWorkflowControl: Codable {
     public let accountGeneration: Int?
-    public let chatFirstUi: Bool?
     public let workflowMode: TaskWorkflowMode?
 
     private enum CodingKeys: String, CodingKey {
       case accountGeneration = "account_generation"
-      case chatFirstUi = "chat_first_ui"
       case workflowMode = "workflow_mode"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
-      chatFirstUi = try c.decodeIfPresent(Bool.self, forKey: .chatFirstUi)
       workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
     }
 
-    public init(accountGeneration: Int? = nil, chatFirstUi: Bool? = nil, workflowMode: TaskWorkflowMode? = nil) {
+    public init(accountGeneration: Int? = nil, workflowMode: TaskWorkflowMode? = nil) {
       self.accountGeneration = accountGeneration
-      self.chatFirstUi = chatFirstUi
       self.workflowMode = workflowMode
     }
   }
