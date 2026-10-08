@@ -350,7 +350,7 @@ def absorb_conversation(
             # when a mixed-protection absorb upgrades the survivor.
             payload['speaker_match_scores'] = firestore.DELETE_FIELD
         # The survivor transcript changed: a stored client projection described the old one.
-        conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
+        conversations_db.invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         if flatten:
             donor_update = dict(donor_update)
             marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})

@@ -9,6 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 
 from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
+from llm_gateway.gateway.dream_lanes import dream_lane_items
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -51,11 +52,19 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
         generated_route_overrides
     )
     desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
+    dream_lanes, dream_artifacts = dream_lane_items(desktop_lane_items, desktop_artifact_items)
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
     systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
     lanes = _parse_lanes(
-        [*generated_lane_items, *desktop_lane_items, *embedding_lane_items, *systemone_lane_items, *lane_items]
+        [
+            *generated_lane_items,
+            *desktop_lane_items,
+            *embedding_lane_items,
+            *systemone_lane_items,
+            *dream_lanes,
+            *lane_items,
+        ]
     )
     route_artifacts = _parse_route_artifacts(
         [
@@ -63,6 +72,7 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
             *desktop_artifact_items,
             *embedding_artifact_items,
             *systemone_artifact_items,
+            *dream_artifacts,
             *artifact_items,
         ],
         prod_mode=resolved_prod_mode,

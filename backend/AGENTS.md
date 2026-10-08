@@ -119,6 +119,8 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
+Dream queue drain runs inside the existing dev memory-maintenance runtime; default off. Admission, shadow CLI, caps and lease recovery: `docs/runbooks/dream-agent.md`.
+
 Cron jobs: notifications (`modal/job.py`), X sync (`modal/x_connector_sync_job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
 

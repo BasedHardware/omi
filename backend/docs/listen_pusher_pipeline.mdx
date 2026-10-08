@@ -12,6 +12,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true`
+combines encrypted per-user vocabulary spellings with existing live keyterms;
+Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses the
+existing terms with fallback telemetry. All defaults remain off. See
+[the dream runbook](runbooks/dream-agent.md).
+
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
 when its scheduled window makes continuity hydration unnecessary.

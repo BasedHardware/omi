@@ -170,6 +170,9 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off\|shadow\|merge) | backend | env | open | — | — | — | — | graduate | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` | Limit smart merge to listed UIDs; empty admits every user | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` | Opt-in smart-merge gap policy for proven same-recording live pairs: off keeps the legacy speech-gap gate (code default), shadow logs/meters the corrected wall-clock verdict without acting on it, on rescues legacy-skipped pairs by created_at/finished_at wall clock (unset/blank/unknown = off) | backend | env | open | {value: 'off', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | 2026-11-05 | dazheng |
+| `DREAM_AGENT_MODE` | off (default), shadow reports only, on applies to admitted cohort | backend | env | closed | — | — | — | — | pending | 2026-11-07 | dazheng |
+| `DREAM_AGENT_TESTFLIGHT_ENABLED` | Allow recorded TestFlight cohort; default false | backend | env | closed | — | — | — | — | pending | 2026-11-07 | dazheng |
+| `DREAM_AGENT_VOCABULARY_STT` | Feed dream vocabulary into live keyterms; default false; Soniox also requires SONIOX_CONTEXT_TERMS | backend | env | closed | — | — | — | — | pending | 2026-11-07 | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-23 | unowned |
 | `FREE_TIER_LOCAL_PROCESSING` | Enable on-device processing for eligible free users | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `FREE_TIER_LOCAL_PROCESSING_COHORT` | Admitted UIDs for free-tier local processing | backend | env | closed | declared | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend); valueFrom (backend-listen (chart), pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
@@ -326,6 +329,16 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `DREAM_AGENT_DAILY_USD` | Global daily reserved spend ceiling; default 20 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_EDITS_PER_PASS` | Per-pass edits including task proposals and vocabulary; default 10 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FEEDBACK_K` | Minimum distinct users per rotation epoch in feedback aggregates; default 20, minimum 2 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FEEDBACK_SALT` | Secret seed for weekly rotating distinct-user HMAC; unset prevents feedback storage | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_MAX_USD_PER_TOKEN` | Conservative cost ceiling per token; default 0.00001 USD | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_PASSES_PER_DAY` | Per-user UTC daily pass admissions including shadow and failure; default 2 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_TOKENS_PER_PASS` | Combined triage and reasoning token cap; default 24000 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_UID_ALLOWLIST` | Comma-separated explicit cohort UIDs; default empty | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_UNDO_MIN_SAMPLES` | Minimum per-type journal samples before demotion; default 10 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_UNDO_RATE` | Per-type automatic demotion threshold; default 0.2 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
 | `LISTEN_RECONNECT_BUDGET_PER_MIN` | Bound per-user and per-device listen websocket reconnect admissions per minute | backend | env | closed | 6 | 6 (backend-listen (chart), gke/backend-listen) | 6 (backend-listen (chart), gke/backend-listen) | — | keep | — | dazheng |
@@ -387,6 +400,19 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
+- `DREAM_AGENT_DAILY_USD` — Global daily reserved spend ceiling; default 20 (fail: closed)
+- `DREAM_AGENT_EDITS_PER_PASS` — Per-pass edits including task proposals and vocabulary; default 10 (fail: closed)
+- `DREAM_AGENT_FEEDBACK_K` — Minimum distinct users per rotation epoch in feedback aggregates; default 20, minimum 2 (fail: closed)
+- `DREAM_AGENT_FEEDBACK_SALT` — Secret seed for weekly rotating distinct-user HMAC; unset prevents feedback storage (fail: closed)
+- `DREAM_AGENT_MAX_USD_PER_TOKEN` — Conservative cost ceiling per token; default 0.00001 USD (fail: closed)
+- `DREAM_AGENT_MODE` — off (default), shadow reports only, on applies to admitted cohort (fail: closed)
+- `DREAM_AGENT_PASSES_PER_DAY` — Per-user UTC daily pass admissions including shadow and failure; default 2 (fail: closed)
+- `DREAM_AGENT_TESTFLIGHT_ENABLED` — Allow recorded TestFlight cohort; default false (fail: closed)
+- `DREAM_AGENT_TOKENS_PER_PASS` — Combined triage and reasoning token cap; default 24000 (fail: closed)
+- `DREAM_AGENT_UID_ALLOWLIST` — Comma-separated explicit cohort UIDs; default empty (fail: closed)
+- `DREAM_AGENT_UNDO_MIN_SAMPLES` — Minimum per-type journal samples before demotion; default 10 (fail: closed)
+- `DREAM_AGENT_UNDO_RATE` — Per-type automatic demotion threshold; default 0.2 (fail: closed)
+- `DREAM_AGENT_VOCABULARY_STT` — Feed dream vocabulary into live keyterms; default false; Soniox also requires SONIOX_CONTEXT_TERMS (fail: closed)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION` — Suppress cloud memory extraction for eligible free users (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION_COHORT` — Admitted UIDs for free-tier memory suppression (fail: closed)

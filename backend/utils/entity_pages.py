@@ -82,7 +82,7 @@ def project_refs(uid: str) -> list[EntityRef]:
     return result
 
 
-def _facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set[str]]:
+def entity_facts(uid: str, entity_ids: list[str]) -> tuple[list[Fact], list[Fact], set[str]]:
     from utils.memory.memory_service import MemoryService
 
     service = MemoryService(db_client=store.client())
@@ -225,7 +225,7 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
                 pass
         if organization is None:
             organization = next((r for r in related.values() if r.type == 'organization'), None)
-    facts, decisions, conversation_ids = _facts(uid, identities)
+    facts, decisions, conversation_ids = entity_facts(uid, identities)
     conversation_ids.update(node.get('conversation_ids', [])[:MAX_RELATED])
     open_tasks = []
     if node['type'] == 'project':

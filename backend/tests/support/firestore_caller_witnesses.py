@@ -741,7 +741,7 @@ def _run_entity_page(monkeypatch, capture):
         entity_pages, 'resolve_entity', lambda *a: {'entity_id': 'org', 'type': 'organization', 'name': 'Org'}
     )
     monkeypatch.setattr(entity_pages.knowledge_graph, 'get_knowledge_edges', lambda *a: [])
-    monkeypatch.setattr(entity_pages, '_facts', lambda *a: ([], [], set()))
+    monkeypatch.setattr(entity_pages, 'entity_facts', lambda *a: ([], [], set()))
     monkeypatch.setattr(
         entity_pages.store,
         'user',

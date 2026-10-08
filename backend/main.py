@@ -28,6 +28,7 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from routers import dream_cohort
 from routers import (
     review,
     proactivity,
@@ -318,6 +319,7 @@ app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
 app.include_router(review.router)
+app.include_router(dream_cohort.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
 

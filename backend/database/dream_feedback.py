@@ -1,0 +1,109 @@
+"""Privacy gate and epoch-scoped k-anonymous developer patterns, without uid."""
+
+import hashlib
+import hmac
+import json
+import os
+import re
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from google.cloud import firestore
+
+from database._client import get_firestore_client
+from models.dream_agent import Feedback
+
+
+def words(text):
+    return re.findall(r'\w+', text.casefold())
+
+
+def strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield str(key)
+            yield from strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from strings(item)
+
+
+def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
+    text = report.reproduction
+    output = words(text)
+    grams = {tuple(output[i : i + 4]) for i in range(max(0, len(output) - 3))}
+    # Also check across field boundaries: concatenation cannot evade the gate.
+    source = words(' '.join(strings(inputs)))
+    if any(tuple(source[i : i + 4]) in grams for i in range(max(0, len(source) - 3))):
+        raise ValueError('feedback_input_overlap')
+    names = [uid] if uid else []
+    for term in vocabulary:
+        names.extend([term['spelling'], *term.get('aliases', [])])
+    for name in names:
+        needle = words(name)
+        if needle and any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
+            raise ValueError('feedback_vocabulary_overlap')
+
+
+def store(uid, report: Feedback, inputs, vocabulary, *, now=None, firestore_client=None):
+    validate(report, inputs, vocabulary, uid=uid)
+    secret = os.getenv('DREAM_AGENT_FEEDBACK_SALT', '')
+    if len(secret) < 32:
+        raise ValueError('feedback_salt_unconfigured')
+    now = now or datetime.now(timezone.utc)
+    epoch = now.strftime('%G-W%V')
+    distinct = hmac.new(secret.encode(), f'{epoch}:{uid}'.encode(), hashlib.sha256).hexdigest()
+    pattern = hashlib.sha256(json.dumps([report.component, report.failure_class, report.severity]).encode()).hexdigest()
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    # uid never appears in the document path or stored payload.
+    database.collection('dream_feedback').document(str(uuid4())).set(
+        {
+            'epoch': epoch,
+            'distinct': distinct,
+            'pattern': pattern,
+            'created_at': now,
+            **report.model_dump(),
+        }
+    )
+
+
+def aggregate(rows, *, k=20):
+    groups = {}
+    for row in rows:
+        key = (row['epoch'], row['pattern'])
+        group = groups.setdefault(key, {'users': set(), 'reports': []})
+        group['users'].add(row['distinct'])
+        group['reports'].append(row)
+    result = []
+    for (epoch, _), group in groups.items():
+        if len(group['users']) < max(2, k):
+            continue
+        reports = group['reports']
+        result.append(
+            {
+                'epoch': epoch,
+                'component': reports[0]['component'],
+                'failure_class': reports[0]['failure_class'],
+                'severity': reports[0]['severity'],
+                'distinct_users': len(group['users']),
+                'count': sum(r['count'] for r in reports),
+                'mean_latency_ms': sum(r['latency_ms'] for r in reports) / len(reports),
+                'mean_error_rate': sum(r['error_rate'] for r in reports) / len(reports),
+            }
+        )
+    return result
+
+
+def read_patterns(*, k=20, firestore_client=None):
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    # Bound reads to the current rotation epoch, avoiding cross-epoch double counting.
+    epoch = datetime.now(timezone.utc).strftime('%G-W%V')
+    rows = (
+        database.collection('dream_feedback')
+        .where(filter=firestore.FieldFilter('epoch', '==', epoch))
+        .limit(10000)
+        .stream()
+    )
+    return aggregate([row.to_dict() for row in rows], k=k)

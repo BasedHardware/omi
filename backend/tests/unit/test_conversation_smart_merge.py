@@ -78,7 +78,7 @@ class World:
         self.invalidated = []
         monkeypatch.setattr(
             conversations_db,
-            '_invalidate_client_processing',
+            'invalidate_client_processing',
             lambda payload: self.invalidated.append('transcript_segments' in payload),
         )
         monkeypatch.setattr(smart_merge_db, 'find_preceding_conversations', self.preceding)

@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import entities, memory_ledger, review_queries, review_store as store
 from database.read_boundary import parse_payload_strict
+from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.review import ReviewChange, ReviewChangesResponse
 
 WINDOW = timedelta(days=30)
@@ -28,7 +29,16 @@ class _Unchanged(Exception):
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
     'people': {'name', 'aliases', 'organization', 'subtitle'},
-    'conversations': {'user_title', 'structured.title', 'transcript_segments', 'manual_speaker_assignments'},
+    'conversations': {
+        'user_title',
+        'structured.title',
+        'structured',
+        'transcript_segments',
+        'transcript_segments_compressed',
+        'manual_speaker_assignments',
+        'client_processing',
+        *PROJECTION_FAMILY_FIELDS,
+    },
     'action_items': {'status', 'completed', 'completed_at'},
 }
 
@@ -240,6 +250,12 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     now = now or datetime.now(timezone.utc)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
+    if data and data.get('memory_merge'):
+        if data['created_at'] < now - WINDOW:
+            raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        from database.review_memory_merges import set_undone as set_merge_undone
+
+        return set_merge_undone(uid, change_id, undone, data)
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
