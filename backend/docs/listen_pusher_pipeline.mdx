@@ -12,6 +12,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Production backend-listen and pusher both set `DREAM_AGENT_MODE=shadow` with the
+same David-only `DREAM_AGENT_UID_ALLOWLIST`. Their existing conversation/memory/task
+post-write hooks enqueue bounded ID references for the hourly backend-sync sweep.
+Shadow writes only admission state and encrypted reports; it does not alter live
+finalization, user records, questions or vocabulary. See [dream-agent](runbooks/dream-agent.md).
+
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true`
 combines encrypted per-user vocabulary spellings with existing live keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses the

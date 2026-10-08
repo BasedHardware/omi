@@ -281,6 +281,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:

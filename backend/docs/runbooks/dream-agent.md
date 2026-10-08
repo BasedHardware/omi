@@ -36,7 +36,7 @@ not-admitted and deadline counts. Off performs no Firestore reads.
 
 There is no dev Scheduler entry: dev shares prod Firestore. The existing dev
 `modal/memory_maintenance_job.py` also calls the bounded drain, but its dream mode
-remains off. Production writer settings cover backend-listen, backend,
+remains off. Production writer settings cover backend-listen, pusher (live finalization), backend,
 backend-sync, backend-sync-backfill and backend-integration so the existing
 post-write hooks actually enqueue the allowlisted cohort. Existing consolidation
 and daily-sweep jobs remain in place. Apply Scheduler declarations through the

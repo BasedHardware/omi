@@ -257,7 +257,7 @@ def test_prod_scheduler_and_writer_env_contract():
     manifest = load_yaml(ROOT / 'backend/deploy/runtime_env.yaml')
     allowlist = '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
     prod = manifest['environments']['prod']
-    writers = [prod['gke']['backend-listen'], *prod['cloud_run']['services'].values()]
+    writers = [prod['gke']['backend-listen'], prod['gke']['pusher'], *prod['cloud_run']['services'].values()]
     for service in writers:
         assert service['env']['DREAM_AGENT_MODE']['value'] == 'shadow'
         assert service['env']['DREAM_AGENT_UID_ALLOWLIST']['value'] == allowlist
