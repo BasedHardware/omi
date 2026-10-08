@@ -584,6 +584,16 @@ class LiveConversationController:
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
+        if rollover:
+            carried_ids: set[int] = set()
+            for key in carry.get('speakers') or {}:
+                try:
+                    carried_ids.add(int(key))
+                except (TypeError, ValueError):
+                    continue
+            note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
+            if note_carry is not None:
+                note_carry(carried_ids)
         await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)
 

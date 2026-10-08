@@ -77,7 +77,9 @@ async def test_exit_reasons_are_enumerated():
     assert SPEAKER_ID_EXIT_REASONS == frozenset(
         {
             'window_outside_buffer',
-            'too_short',
+            'segment_shorter_than_minimum',
+            'no_fresh_audio',
+            'window_shorter_than_minimum',
             'no_pcm',
             'stale_generation',
             'already_mapped',
@@ -93,7 +95,7 @@ async def test_exit_reasons_are_enumerated():
     [
         ('no_pcm', None, _queued(100.0, 103.0)),
         ('no_pcm', AudioRingBuffer(60.0, RATE), _queued(100.0, 103.0)),
-        ('too_short', _ring_with(), _queued(100.0, 103.0, duration=1.0)),
+        ('segment_shorter_than_minimum', _ring_with(), _queued(100.0, 103.0, duration=1.0)),
         ('window_outside_buffer', _ring_with(at=100.0), _queued(10.0, 13.0)),
         ('window_outside_buffer', _ring_with(at=100.0), _queued(200.0, 203.0)),
     ],
@@ -181,3 +183,26 @@ async def test_receipt_exits_count_and_log_one_bounded_reason(reason, monkeypatc
         assert 0 not in matcher.speaker_to_person
     else:
         assert matcher.speaker_to_person[0] == ('p1', 'Person')
+
+
+@pytest.mark.anyio
+async def test_embedded_audio_leaves_no_fresh_window(caplog):
+    # write()'s timestamp is the chunk end, so 10s ending at 110 covers 100–110.
+    matcher = SpeakerMatcher(_host(_ring_with(seconds=10.0, at=110.0)))
+    matcher._covered_audio[0] = [(100.0, 110.0)]
+    before = _counter('no_fresh_audio')
+    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+        await matcher.match(0, _queued(100.0, 110.0))
+    assert _counter('no_fresh_audio') == before + 1
+    assert any('speaker_id_exit reason=no_fresh_audio' in record.message for record in caplog.records)
+
+
+@pytest.mark.anyio
+async def test_clamped_window_shorter_than_minimum_is_its_own_reason(caplog):
+    """The segment is long enough, but the ring only retains a shorter slice of it."""
+    matcher = SpeakerMatcher(_host(_ring_with(seconds=1.0, at=101.0)))
+    before = _counter('window_shorter_than_minimum')
+    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+        await matcher.match(0, _queued(100.0, 104.0))
+    assert _counter('window_shorter_than_minimum') == before + 1
+    assert any('speaker_id_exit reason=window_shorter_than_minimum' in record.message for record in caplog.records)

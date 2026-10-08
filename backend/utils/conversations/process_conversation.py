@@ -122,6 +122,11 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.observability.owner_recognition import (
+    emit_finalized_owner_recognition,
+    lookup_owner_voiceprint,
+    owner_recognition_needs_profile,
+)
 from utils.metrics import (
     record_jit_first_open,
     record_lazy_desktop_deferral,
@@ -2840,6 +2845,9 @@ def process_conversation(
     """
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
+    prior_status = getattr(conversation, 'status', None)
+    prior_completed = prior_status in (ConversationStatus.completed, ConversationStatus.completed.value)
+    prior_discarded = bool(getattr(conversation, 'discarded', False))
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
@@ -3170,6 +3178,27 @@ def process_conversation(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
         )
         return conversation
+
+    # One owner-recognition observation per visible finalization. A reprocess of
+    # an already-visible row does not count again; telemetry must not fail the write.
+    try:
+        profile = None
+        if owner_recognition_needs_profile(conversation):
+            profile = lookup_owner_voiceprint(uid, read_embedding=users_db.get_user_speaker_embedding)
+        emit_finalized_owner_recognition(
+            conversation,
+            uid=uid,
+            is_reprocess=is_reprocess,
+            prior_completed=prior_completed,
+            prior_discarded=prior_discarded,
+            owner_profile_present=profile,
+        )
+    except Exception:
+        logger.warning(
+            'owner_recognition_outcome emit_failed uid=%s conversation=%s',
+            uid,
+            getattr(conversation, 'id', None),
+        )
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a
