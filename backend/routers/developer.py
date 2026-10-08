@@ -1452,7 +1452,6 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
         question,
         limit=request.limit,
         query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
     )
     conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
     if not conversation_ids:

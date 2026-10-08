@@ -72,47 +72,6 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
     )
 
 
-def is_meeting_receipt_reconciler_enabled() -> bool:
-    return os.getenv('MEETING_RECEIPT_RECONCILER_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
-def reconcile_meeting_receipts(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
-    """Seed audit receipts for historical meetings; never repair retired Chat intents."""
-    result = {'repaired': 0, 'backfilled': 0, 'skipped': 0, 'error': 0}
-    if not is_meeting_receipt_reconciler_enabled():
-        return result
-
-    try:
-        cursor = jobs_db.get_meeting_receipt_backfill_cursor(firestore_client=firestore_client)
-        sweep = jobs_db.get_meeting_receipt_backfill_candidates(
-            limit=limit,
-            resume_after_path=cursor.get('resume_after_path'),
-            firestore_client=firestore_client,
-        )
-        jobs_db.advance_meeting_receipt_backfill_cursor(
-            int(cursor.get('generation') or 0),
-            None if sweep['exhausted'] else sweep['resume_after_path'],
-            firestore_client=firestore_client,
-        )
-    except Exception:
-        logger.exception('meeting receipt backfill query failed')
-        result['error'] += 1
-        return result
-    for candidate in sweep['candidates']:
-        try:
-            receipt = record_finalized_meeting_receipt(
-                candidate['uid'], candidate['conversation'], firestore_client=firestore_client
-            )
-            if receipt is not None:
-                result['backfilled'] += 1
-            else:
-                result['skipped'] += 1
-        except Exception:
-            logger.exception('meeting receipt backfill failed')
-            result['error'] += 1
-    return result
-
-
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}

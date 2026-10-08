@@ -1689,12 +1689,10 @@ conflict atomically; a sweep cannot finalize an audio-bearing conversation
 that a live socket still owns.
 
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
-desktop kernel acknowledges its journal write, the materialization time. With
-`MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute
-finalization sweep re-drives receipts that are at least ten minutes old and
-still lack an intent ID. The same sweep pages through historical completed
-desktop meetings to seed missing receipts. The flag defaults off and is
-declared on both backend-listen and Cloud Run backend.
+desktop kernel acknowledges its journal write, the materialization time. The
+durable receipt projection remains on the finalization write path. The disabled
+historical receipt seeding reconciler has been removed from startup and the
+five-minute sweep.
 
 See [Listen finalization jobs](./listen_finalization_jobs.mdx) for configuration,
 replay, metrics, and the operational runbook.

@@ -146,7 +146,6 @@ from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
-from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
@@ -388,10 +387,6 @@ async def startup_event():
         run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
         name='startup_byok_abandonment_reconcile',
     )
-    start_background_task(
-        run_blocking(db_executor, _drain_meeting_receipts),
-        name='startup_meeting_receipt_reconcile',
-    )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
     start_background_task(
         proactive_message_dispatcher(),
@@ -465,16 +460,6 @@ def _drain_abandoned_byok_finalization_jobs():
         logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
 
 
-def _drain_meeting_receipts():
-    """Best-effort repair of missing meeting receipt intents and historical receipts."""
-    try:
-        result = reconcile_meeting_receipts()
-        if result.get('repaired') or result.get('backfilled'):
-            logger.info(f"Startup meeting-receipt reconciliation: {result}")
-    except Exception as e:
-        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
-
-
 def _listen_finalization_reconcile_interval_seconds() -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
     try:
@@ -514,12 +499,6 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
         except Exception as e:
             logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
-        try:
-            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
-            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
-                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
-        except Exception as e:
-            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
         try:
             await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
         except Exception as e:

@@ -171,7 +171,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
     assert 'MEMORY_MODE=' not in memory_env
-    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED' not in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
     rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
