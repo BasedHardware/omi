@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
+from database.firestore_read_metrics import FirestoreReadSite
 from utils.audio import AudioRingBuffer
 from utils.live_speaker_collapse import LiveSpeakerCollapseMonitor
 from utils.live_speaker_suggestions import reconcile_pinned_suggestion
@@ -156,26 +157,57 @@ class SpeakerMatcher:
                             decision,
                             self._voice_centroids[voice],
                             self.speaker_evidence[voice],
+                            self._covered_audio.get(voice, []),
                         )
             self.clear()
             self._profile_conversation_id = conversation_id
             if self.host.state.speaker_id_enabled:
                 await self._load_profiles()
+            if candidates:
+                try:
+                    donor = (
+                        await self.host.persistence.call(
+                            conversations_db.get_conversation,
+                            self.host.request.uid,
+                            donor['id'],
+                            read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+                        )
+                        or {}
+                    )
+                except Exception:
+                    donor = {}
+                receipt = donor.get('manual_speaker_assignments') or {}
             epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
             owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
             if (
-                owner is not None
+                owner_carry_scope is not None
+                and donor
+                and not any(donor.get(k) for k in ('deleted', 'discarded', 'is_locked'))
+                and owner is not None
                 and old_owner is not None
                 and np.array_equal(owner['embedding'], old_owner['embedding'])
                 and getattr(epoch, 'current_scope', None) == owner_carry_scope
             ):
-                for voice, (distances, decision, centroid, evidence) in candidates.items():
+                for voice, (_, _, centroid, evidence, covered) in candidates.items():
+                    if manual_owner_reserved(receipt) or self._manual_voice_decision(receipt, voice) is not None:
+                        continue
+                    if voice in manual_rejected_speakers(receipt):
+                        continue
+                    distances = {}
+                    for person_id, value in self.person_embeddings.items():
+                        vector = validated_embedding(value.get('embedding'))
+                        if vector is not None and vector.size == centroid.size:
+                            distances[person_id] = compare_embeddings(centroid, vector)
+                    decision = select_speaker_match(distances)
+                    if decision.person_id != USER_SELF_PERSON_ID:
+                        continue
                     self.speaker_to_person[voice] = (USER_SELF_PERSON_ID, owner['name'])
                     self.voice_identity_status[voice] = SpeakerIdentityStatus.user
                     self._voice_distances[voice] = distances
                     self._voice_decisions[voice] = decision
                     self._voice_centroids[voice] = centroid
                     self.speaker_evidence[voice] = evidence
+                    self._covered_audio[voice] = covered
                     self._voice_scopes[voice] = owner_carry_scope
                     self._voice_segments[voice] = ''
 
@@ -579,11 +611,11 @@ class SpeakerMatcher:
                 )
                 return
             centroid = mean_embedding([embedding for embedding, _ in evidence]) if len(evidence) > 1 else query
-            distances = {
-                person_id: compare_embeddings(centroid, value['embedding'])
-                for person_id, value in self.person_embeddings.items()
-                if validated_embedding(value.get('embedding')) is not None and value['embedding'].size == centroid.size
-            }
+            distances = {}
+            for person_id, value in self.person_embeddings.items():
+                vector = validated_embedding(value.get('embedding'))
+                if vector is not None and vector.size == centroid.size:
+                    distances[person_id] = compare_embeddings(centroid, vector)
             self._voice_distances[speaker_id] = distances
             self._voice_decisions[speaker_id] = select_speaker_match(distances)
             self._voice_segments[speaker_id] = segment['id']
