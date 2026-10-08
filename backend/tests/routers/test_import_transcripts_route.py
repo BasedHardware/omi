@@ -475,3 +475,20 @@ def test_the_route_declares_one_file_and_a_whole_request_limit():
 
     assert (limits.max_files, limits.max_fields) == (1, 0)
     assert limits.max_body_size == IMPORT_MAX_PART_SIZE + MULTIPART_OVERHEAD_BYTES
+
+
+@pytest.mark.parametrize(
+    'kwargs',
+    [
+        pytest.param({'data': {'file': 'x' * 5000}}, id='urlencoded'),
+        pytest.param({'content': b'x' * 5000, 'headers': {'Content-Type': 'text/plain'}}, id='plain-text'),
+    ],
+)
+def test_a_body_that_is_not_multipart_is_refused_before_it_is_read(staged, kwargs):
+    """The request limits apply to a multipart body, so the route reads no other kind before auth."""
+    create, _, _ = staged
+
+    response = _unauthenticated_client().post('/v1/import/transcripts', **kwargs)
+
+    assert response.status_code == 415
+    create.assert_not_called()

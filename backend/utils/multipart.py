@@ -29,6 +29,8 @@ MULTIPART_OVERHEAD_BYTES = 64 * 1024
 class MultipartLimits:
     """Whole-request limits for a multipart route, enforced while the body is parsed.
 
+    A route that declares them accepts only a multipart body (415 otherwise).
+
     The route parses the form before its dependencies (auth, rate limits) run, and the
     per-part cap bounds each part alone, so these bound what any request, signed in or
     not, can make the server read and spool: file parts, other fields, and total bytes.
@@ -74,6 +76,10 @@ class MultipartMaxPartSizeRoute(APIRoute):
         original_route_handler = super().get_route_handler()
 
         async def custom_route_handler(request: Request):
+            if self.multipart_limits is not None and not _is_multipart(request):
+                # The limits bound a multipart body; any other body would be read unbounded,
+                # and before auth, by the route's own form handling.
+                raise HTTPException(status_code=415, detail='Upload the file as multipart/form-data.')
             if self.multipart_max_part_size is not None and _is_multipart(request):
                 await parse_multipart_form(
                     request, max_part_size=self.multipart_max_part_size, limits=self.multipart_limits
