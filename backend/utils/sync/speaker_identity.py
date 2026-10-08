@@ -13,8 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import config.speaker_match_scores as match_scores
 import utils.stt.speaker_match as match_policy
 
-import numpy as np
-
 from config.speaker_prior import pinned_speaker_prior_enabled
 from database import users as users_db
 from database.auth import get_user_name

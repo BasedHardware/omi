@@ -2,11 +2,15 @@
 
 import asyncio
 from types import SimpleNamespace
+from datetime import datetime, timezone
 
 import numpy as np
 import pytest
 
 from routers.listen import speakers
+from database import users
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.stt import owner_profile
 from tests.unit.test_owner_speaker_profiles import _Persistence
 from utils.sync import speaker_identity as sync_identity
 from utils.conversations import speaker_resolution as stage
@@ -52,10 +56,6 @@ def test_resolution_failed_paid_people_read_retains_owner(monkeypatch):
 
 
 def test_owner_recovery_cas_enrollment_and_deletion_win(monkeypatch):
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-    from database import users
-    from datetime import datetime, timezone
-
     store = StrictFirestore()
     path = ('users', 'u')
     stamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -72,9 +72,6 @@ def test_owner_recovery_cas_enrollment_and_deletion_win(monkeypatch):
 
 @pytest.mark.parametrize('surface', ['sync', 'resolution'])
 def test_legacy_enrollment_audio_repair_reaches_all_consumers(monkeypatch, surface):
-    from utils.stt import owner_profile
-    from database import users
-
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
     monkeypatch.setattr(users, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
     monkeypatch.setattr(users, 'recover_user_speaker_embedding', lambda *a, **kw: True)
