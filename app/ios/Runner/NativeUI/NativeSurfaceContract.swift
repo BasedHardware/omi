@@ -341,8 +341,12 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         // snapshot is never chat, reader, navigation, a selection or a fill graph. Dart applies the same
         // rules before publishing.
         let secrets = snapshot.sections.flatMap(\.rows).filter { $0.kind == "secret" }
-        let controls = snapshot.toolbar + (snapshot.chat?.actions ?? []) + (snapshot.reader?.actions ?? [])
-            + (snapshot.navigation.map { [$0] } ?? []) + (snapshot.bottomBar ?? [])
+        // Built step by step: one long optional-concatenation expression is too slow to type-check.
+        var controls: [NativeSurfaceRow] = snapshot.toolbar
+        controls += snapshot.chat?.actions ?? []
+        controls += snapshot.reader?.actions ?? []
+        if let navigation = snapshot.navigation { controls.append(navigation) }
+        controls += snapshot.bottomBar ?? []
         guard !controls.contains(where: { $0.kind == "secret" }), secrets.count <= 1,
               secrets.isEmpty || snapshot.sensitive == true,
               snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil
