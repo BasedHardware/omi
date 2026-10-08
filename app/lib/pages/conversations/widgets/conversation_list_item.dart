@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
@@ -148,17 +150,43 @@ ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool 
       ConversationRowAction.delete => ConversationActionAction.delete,
     };
 
-Future<void> showConversationListRowActions(
-    BuildContext context, ConversationProvider provider, ServerConversation conversation,
-    {bool allowSelection = true}) async {
-  HapticFeedback.mediumImpact();
-  final action = await showConversationActionsSheet(
-    context,
-    conversation,
-    canSelect: allowSelection && provider.isConversationEligibleForMerge(conversation.id),
-  );
-  if (action == null || !context.mounted) return;
-  trackConversationAction(_rowActionAnalytics(action, conversation.starred), ConversationActionSurface.rowLongPress);
+/// The actions a conversation row offers, with exactly the conditions of [showConversationActionsSheet]:
+/// Star or Unstar, Recordings and Separate… for an event several devices recorded, Select when
+/// [allowSelection] and the row can join a merge, and Delete always.
+List<ConversationRowAction> conversationRowActions(ConversationProvider provider, ServerConversation conversation,
+        {bool allowSelection = true}) =>
+    [
+      ConversationRowAction.open,
+      ConversationRowAction.star,
+      ConversationRowAction.move,
+      ConversationRowAction.share,
+      if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
+        ConversationRowAction.recordings,
+        ConversationRowAction.separate,
+      ],
+      if (allowSelection && provider.isConversationEligibleForMerge(conversation.id)) ConversationRowAction.select,
+      ConversationRowAction.delete,
+    ];
+
+/// The label the row menu shows for [action].
+String conversationRowActionLabel(
+        AppLocalizations l10n, ServerConversation conversation, ConversationRowAction action) =>
+    switch (action) {
+      ConversationRowAction.open => l10n.open,
+      ConversationRowAction.star => conversation.starred ? l10n.unstarConversation : l10n.starConversation,
+      ConversationRowAction.move => l10n.moveToFolder,
+      ConversationRowAction.share => l10n.share,
+      ConversationRowAction.recordings => l10n.recordings,
+      ConversationRowAction.separate => l10n.captureRecordingSeparate,
+      ConversationRowAction.select => l10n.selectOption,
+      ConversationRowAction.delete => l10n.delete,
+    };
+
+/// Runs a chosen row action, with its analytics, from the Flutter sheet or a native row menu.
+Future<void> performConversationRowAction(
+    BuildContext context, ConversationProvider provider, ServerConversation conversation, ConversationRowAction action,
+    {required ConversationActionSurface surface}) async {
+  trackConversationAction(_rowActionAnalytics(action, conversation.starred), surface);
   switch (action) {
     case ConversationRowAction.open:
       await openConversationListRow(context, provider, conversation);
@@ -181,6 +209,91 @@ Future<void> showConversationListRowActions(
       await deleteConversationsWithUndo(context, [conversation]);
   }
 }
+
+Future<void> showConversationListRowActions(
+    BuildContext context, ConversationProvider provider, ServerConversation conversation,
+    {bool allowSelection = true}) async {
+  HapticFeedback.mediumImpact();
+  final action = await showConversationActionsSheet(
+    context,
+    conversation,
+    canSelect: allowSelection && provider.isConversationEligibleForMerge(conversation.id),
+  );
+  if (action == null || !context.mounted) return;
+  await performConversationRowAction(context, provider, conversation, action,
+      surface: ConversationActionSurface.rowLongPress);
+}
+
+/// Asks the server to summarize [conversation] again ("Summary failed · Retry") and applies the
+/// result to the list; a failure shows the error snackbar.
+Future<void> retryConversationSummary(BuildContext context, ServerConversation conversation,
+    {Future<ServerConversation?> Function(String conversationId)? reprocess}) async {
+  if (conversation.id == '0') return;
+  try {
+    final updated = await (reprocess ?? reProcessConversationServer)(conversation.id);
+    if (!context.mounted) return;
+    final provider = context.read<ConversationProvider>();
+    if (updated == null) {
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+      return;
+    }
+    provider.applyConversationReprocessResult(updated);
+  } catch (_) {
+    if (!context.mounted) return;
+    AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+  }
+}
+
+/// A conversation as a native list row: tapping opens it and its menu repeats the Flutter row menu,
+/// with Delete also on the trailing swipe. A locked row names no content and offers Open and Delete;
+/// a row being merged is disabled. [onRetrySummary] adds "Summary failed · Retry" when the server
+/// says a reprocess can succeed.
+NativeRow nativeConversationRow(
+  BuildContext context,
+  ConversationProvider provider,
+  ServerConversation conversation, {
+  required String id,
+  required int index,
+  bool allowSelection = true,
+  Future<void> Function()? onRetrySummary,
+}) {
+  final l10n = context.l10n;
+  final timestamp = OmiDateFormat.of(context).timestamp(conversation.startedAt ?? conversation.createdAt);
+  if (provider.isConversationMerging(conversation.id)) {
+    return NativeRow(id, conversation.isLocked ? l10n.conversations : conversationRowTitle(context, conversation),
+        kind: 'navigation', subtitle: l10n.mergingStatus, enabled: false);
+  }
+  final locked = conversation.isLocked;
+  final actions = locked
+      ? const [ConversationRowAction.open, ConversationRowAction.delete]
+      : conversationRowActions(provider, conversation, allowSelection: allowSelection);
+  final retry = onRetrySummary != null && conversation.showsSummaryRetry;
+  return NativeRow(
+    id,
+    locked ? l10n.conversations : conversationRowTitle(context, conversation),
+    kind: 'navigation',
+    symbol: !locked && conversation.starred ? 'star.fill' : null,
+    subtitle: retry ? '$timestamp · ${l10n.conversationSummaryFailed}' : timestamp,
+    options: {
+      for (final action in actions) action.name: conversationRowActionLabel(l10n, conversation, action),
+      if (retry) _retrySummaryOption: l10n.retry,
+    },
+    swipeTrailing: const ['delete'],
+    action: (value) async {
+      if (value == null) {
+        await openConversationListRow(context, provider, conversation, conversationIndex: index);
+      } else if (value == _retrySummaryOption) {
+        await onRetrySummary!();
+      } else {
+        await performConversationRowAction(
+            context, provider, conversation, ConversationRowAction.values.byName(value as String),
+            surface: ConversationActionSurface.rowLongPress);
+      }
+    },
+  );
+}
+
+const _retrySummaryOption = 'retry_summary';
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -249,18 +362,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
-      final updated = await reprocess(widget.conversation.id);
-      if (!mounted) return;
-      final provider = context.read<ConversationProvider>();
-      if (updated == null) {
-        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-        return;
-      }
-      provider.applyConversationReprocessResult(updated);
-    } catch (_) {
-      if (!mounted) return;
-      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+      await retryConversationSummary(context, widget.conversation, reprocess: widget.reprocess);
     } finally {
       if (mounted) setState(() => _reprocessing = false);
     }

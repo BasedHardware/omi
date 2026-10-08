@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/widgets/people_list.dart';
 import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -270,6 +272,9 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   /// In the People scope the search field filters the shared people list instead of searching.
   String _peopleQuery = '';
 
+  /// The native People scope's filter; the Flutter list keeps its own.
+  PeopleFilter _peopleFilter = PeopleFilter.all;
+
   ConversationDateQuery _dateQuery = const ConversationDateQuery(query: '');
   DateTime? _pickedStart;
   DateTime? _pickedEnd;
@@ -436,30 +441,82 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       context,
       initialStartDate: _activeStart,
       initialEndDate: _activeEnd,
-      onSelected: (start, end) {
-        if (!mounted) return;
-        if (start.year == end.year && start.month == end.month && start.day == end.day) {
-          routeToPage(context, DayConversationsPage(date: start));
-          return;
-        }
-        _debounce?.cancel();
-        _generation++;
-        final remaining = parseConversationDateQuery(_query.text).query;
-        _pickedStart = dayDateBounds(start).$1;
-        _pickedEnd = dayDateBounds(end).$2;
-        _query.text = remaining;
-        _query.selection = TextSelection.collapsed(offset: remaining.length);
-        _debounce?.cancel();
-        _dateQuery = parseConversationDateQuery(remaining);
-        setState(() {
-          _scope = null;
-          _searching = true;
-          _results = const _Results();
-        });
-        unawaited(_run());
-      },
+      onSelected: _applyDateRange,
       onClear: _clearDateFilter,
     );
+  }
+
+  /// A single day opens that day's conversations; a range filters the search.
+  void _applyDateRange(DateTime start, DateTime end) {
+    if (!mounted) return;
+    if (start.year == end.year && start.month == end.month && start.day == end.day) {
+      routeToPage(context, DayConversationsPage(date: start));
+      return;
+    }
+    _debounce?.cancel();
+    _generation++;
+    final remaining = parseConversationDateQuery(_query.text).query;
+    _pickedStart = dayDateBounds(start).$1;
+    _pickedEnd = dayDateBounds(end).$2;
+    _query.text = remaining;
+    _query.selection = TextSelection.collapsed(offset: remaining.length);
+    _debounce?.cancel();
+    _dateQuery = parseConversationDateQuery(remaining);
+    setState(() {
+      _scope = null;
+      _searching = true;
+      _results = const _Results();
+    });
+    unawaited(_run());
+  }
+
+  /// Native: start and end dates in a system sheet with Done, Remove Filter (when one is set) and
+  /// Cancel. Null (no native presentation) keeps the Flutter calendar.
+  Future<void> _pickDateNatively() async {
+    final l10n = context.l10n;
+    final now = DateTime.now();
+    // The Flutter calendar's bounds. A sheet cannot tie the end's minimum to an edited start, so a
+    // reversed range is swapped on Done instead.
+    final first = DateTime(2020);
+    DateTime bounded(DateTime date) => date.isBefore(first) ? first : (date.isAfter(now) ? now : date);
+    final initialStart = bounded(_activeStart ?? now);
+    final initialEnd = bounded(_activeEnd == null || _activeEnd!.isBefore(initialStart) ? initialStart : _activeEnd!);
+    final filtering = _activeStart != null;
+    final result = await showIosNativeModal(context, title: l10n.filterByDate, actions: [
+      NativeRow('cancel', l10n.cancel, symbol: 'xmark'),
+      NativeRow('apply', l10n.done),
+      if (filtering) NativeRow('clear', l10n.removeFilter, destructive: true),
+    ], sections: [
+      NativeSection('search_date_range', [
+        NativeRow('search_date_start', l10n.dateRangeStart,
+            kind: 'date',
+            value: '${initialStart.millisecondsSinceEpoch}',
+            minimumDate: '${first.millisecondsSinceEpoch}'),
+        NativeRow('search_date_end', l10n.dateRangeEnd,
+            kind: 'date',
+            value: '${initialEnd.millisecondsSinceEpoch}',
+            minimumDate: '${first.millisecondsSinceEpoch}'),
+      ]),
+    ]);
+    if (!mounted) return;
+    if (result == null) return _pickDate();
+    switch (result.action) {
+      case 'clear':
+        _clearDateFilter();
+      case 'apply':
+        DateTime day(String id) {
+          return bounded(DateTime.fromMillisecondsSinceEpoch(int.parse(result.values[id] as String)));
+        }
+        final start = day('search_date_start'), end = day('search_date_end');
+        end.isBefore(start) ? _applyDateRange(end, start) : _applyDateRange(start, end);
+    }
+  }
+
+  /// The active date filter, written as its chip writes it.
+  String _dateFilterLabel(OmiDateFormat dates) {
+    final start = _activeStart!, end = _activeEnd;
+    final sameDay = end == null || (end.year == start.year && end.month == start.month && end.day == start.day);
+    return sameDay ? dates.date(start) : '${dates.date(start)} – ${dates.date(end)}';
   }
 
   void _clearDateFilter() {
@@ -514,6 +571,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       // The shared PeopleProvider owns the list; tapping a person pushes the same Person page.
       _query.clear();
       _peopleQuery = '';
+      _peopleFilter = PeopleFilter.all;
       final people = context.read<PeopleProvider>();
       unawaited(people.people.isEmpty ? people.initialize() : people.refresh());
       setState(() => _loadingScope = false);
@@ -546,6 +604,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       if (_scope?.people == true) {
         _query.clear();
         _peopleQuery = '';
+        _peopleFilter = PeopleFilter.all;
       }
       _scope = null;
       _loadingScope = false;
@@ -625,7 +684,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
         ),
       ),
     );
-    if (_scope?.people == true) return classic;
+    if (!nativePresentationEnabled) return classic;
+    final scope = _scope;
     final overview = _overview;
     final folders = overview?.folders.isNotEmpty == true
         ? overview!.folders
@@ -634,35 +694,68 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               SearchFolderCount(id: folder.id, name: folder.name, icon: folder.icon, color: folder.color),
           ];
     final dates = OmiDateFormat.of(context);
-    final browsing = _query.text.trim().isEmpty;
+    final browsing = _query.text.trim().isEmpty && _activeStart == null;
+    final peopleScope = scope?.people == true;
+    final people = peopleScope ? context.watch<PeopleProvider>() : null;
+    final results = _results;
+    String count(int? value) => value == null ? '' : '$value';
     return IosNativeSurface(
-        title: _scope?.title ?? l10n.search,
+        title: scope?.title ?? l10n.search,
         fallback: classic,
-        loading: _searching || _loadingScope,
-        failed: !browsing && _results.partial,
-        empty: l10n.noResultsFound,
+        loading: people != null ? people.loading && people.people.isEmpty : _searching || _loadingScope,
+        failed: people != null
+            ? people.loadFailed && people.people.isEmpty
+            : scope == null && !browsing && !_searching && results.isEmpty && results.partial,
+        errorMessage: people != null ? l10n.somethingWentWrongTryAgain : l10n.searchPartialFailure,
+        empty: people != null
+            ? people.people.isEmpty
+                ? l10n.noPeopleYet
+                : l10n.noMatchingPeople
+            : scope != null
+                ? l10n.noConversationsYet
+                : l10n.noResultsFound,
         searchValue: _query.text,
-        searchPlaceholder: l10n.search,
+        searchPlaceholder: peopleScope ? l10n.peopleSearchPlaceholder : l10n.search,
         search: (value) {
           _query.text = value as String;
           _onChanged(value);
         },
-        onRefresh: (_) => _scope != null
-            ? _openScope(_scope!)
-            : browsing
-                ? _loadOverview()
-                : _run(),
+        onRefresh: (_) => people != null
+            ? people.people.isEmpty
+                ? people.initialize()
+                : people.refresh()
+            : scope != null
+                ? _openScope(scope)
+                : browsing
+                    ? _loadOverview()
+                    : _run(),
         toolbar: [
-          NativeRow('search_close', _scope == null ? l10n.close : l10n.back, symbol: 'chevron.left', action: (_) {
+          NativeRow('search_close', scope == null ? l10n.close : l10n.back, symbol: 'chevron.left', action: (_) {
             if (_scope == null) {
               Navigator.of(context).maybePop();
             } else {
               _closeScope();
             }
-          })
+          }),
+          NativeRow('search_date', l10n.filterByDate, symbol: 'calendar', action: (_) => _pickDateNatively()),
         ],
         sections: [
-          if (_scope != null)
+          if (_activeStart != null)
+            NativeSection('search_date_filter', [
+              NativeRow('search_date_filter_label', _dateFilterLabel(dates), kind: 'label'),
+              NativeRow('search_date_clear', l10n.removeFilter, destructive: true, action: (_) => _clearDateFilter()),
+            ]),
+          if (people != null)
+            ...nativePeopleSections(context, people, visiblePeople(people.people, _peopleQuery, _peopleFilter),
+                management: false,
+                filter: _peopleFilter,
+                query: _peopleQuery,
+                onFilterChanged: (filter) => setState(() => _peopleFilter = filter),
+                onClearSearch: () {
+                  _useRecent('');
+                  setState(() => _peopleFilter = PeopleFilter.all);
+                })
+          else if (scope != null)
             NativeSection('search_scope_results', [
               for (final (index, conversation) in _scopeConversations.indexed)
                 NativeRow(
@@ -673,34 +766,49 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
           else if (browsing) ...[
             NativeSection('search_browse', [
               NativeRow('search_starred', l10n.starred,
+                  subtitle: count(overview?.starred),
                   action: (_) => _openScope(_Scope(title: l10n.starred, starred: true))),
               for (final (index, folder) in folders.indexed)
                 NativeRow('search_folder_$index', folder.name,
                     kind: 'menu',
+                    subtitle: count(folder.count),
                     options: {'open': l10n.open, 'edit': l10n.edit},
                     action: (value) => value == 'open'
                         ? _openScope(_Scope(title: folder.name, folderId: folder.id))
                         : _editFolder(folder.id)),
-              NativeRow('search_recaps', l10n.recaps, action: (_) => routeToPage(context, const DailyRecapsPage())),
-              NativeRow('search_memories', l10n.memories, action: (_) => routeToPage(context, const MemoriesPage())),
+              NativeRow('search_recaps', l10n.recaps,
+                  subtitle: count(overview?.recaps), action: (_) => routeToPage(context, const DailyRecapsPage())),
+              NativeRow('search_memories', l10n.memories,
+                  subtitle: count(overview?.memories), action: (_) => routeToPage(context, const MemoriesPage())),
               NativeRow('search_people', l10n.people,
+                  subtitle: count(overview?.people),
                   action: (_) => _openScope(_Scope(title: l10n.people, people: true))),
               NativeRow('search_places', l10n.places,
+                  subtitle: count(overview?.places),
                   action: (_) => routeToPage(context,
                       ConversationMapPage(conversations: context.read<ConversationProvider>().displayedConversations))),
-              NativeRow('search_new_folder', l10n.newFolder, action: (_) async {
+              NativeRow('search_new_folder', l10n.newFolder, symbol: 'plus', action: (_) async {
                 if (await showCreateFolderBottomSheet(context) && mounted) await _loadOverview();
               }),
             ]),
-            NativeSection('search_recent', [
-              for (final (index, query) in _recent.indexed)
-                NativeRow('search_recent_$index', query, action: (_) => _useRecent(query))
-            ]),
+            NativeSection(
+                'search_recent',
+                [
+                  for (final (index, query) in _recent.indexed)
+                    NativeRow('search_recent_$index', query,
+                        symbol: 'clock.arrow.circlepath', action: (_) => _useRecent(query))
+                ],
+                title: _recent.isEmpty ? '' : l10n.recent),
           ] else ...[
+            if (results.partial && !results.isEmpty)
+              NativeSection('search_partial', [
+                NativeRow('search_partial_label', l10n.searchPartialFailure, kind: 'label'),
+                NativeRow('search_partial_retry', l10n.tryAgain, action: (_) => _run()),
+              ]),
             NativeSection(
                 'search_recaps_results',
                 [
-                  for (final (index, recap) in _results.recaps.indexed)
+                  for (final (index, recap) in results.recaps.indexed)
                     NativeRow('search_recap_$index', recap.headline,
                         subtitle: '${recapDateLabel(context, recap.date)} · ${recap.overview}', action: (_) {
                       _remember(_query.text);
@@ -711,18 +819,23 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             NativeSection(
                 'search_conversation_results',
                 [
-                  for (final (index, conversation) in _results.conversations.indexed)
+                  for (final (index, conversation) in results.conversations.indexed)
                     NativeRow('search_conversation_$index',
                         conversation.isLocked ? l10n.conversations : conversation.structured.title,
-                        subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                        subtitle: [
+                          dates.timestamp(conversation.startedAt ?? conversation.createdAt),
+                          if (!conversation.isLocked && conversation.matchSnippets.isNotEmpty)
+                            conversation.matchSnippets.first.text,
+                        ].join(' · '),
                         action: (_) => _openConversation(conversation))
                 ],
                 title: l10n.conversations),
             NativeSection(
                 'search_task_results',
                 [
-                  for (final (index, task) in _results.tasks.indexed)
-                    NativeRow('search_task_$index', task.description, action: (_) {
+                  for (final (index, task) in results.tasks.indexed)
+                    NativeRow('search_task_$index', task.description,
+                        symbol: task.completed ? 'checkmark.circle' : 'circle', action: (_) {
                       _remember(_query.text);
                       return showActionItemFormSheet(context, actionItem: task);
                     })
@@ -731,10 +844,10 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             NativeSection(
                 'search_memory_results',
                 [
-                  for (final (index, memory) in _results.memories.indexed)
+                  for (final (index, memory) in results.memories.indexed)
                     NativeRow('search_memory_$index', memory.content, action: (_) {
-                      _remember(_query.text);
-                      context.read<MemoriesProvider>().setSearchQuery(_query.text.trim());
+                      _remember(_searchedQuery);
+                      context.read<MemoriesProvider>().setSearchQuery(_searchedQuery);
                       return routeToPage(context, const MemoriesPage());
                     })
                 ],

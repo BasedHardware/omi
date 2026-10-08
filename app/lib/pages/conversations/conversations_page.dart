@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
+import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -81,6 +82,7 @@ typedef _ConversationPageSnapshot = ({
   int processingIdentitySignature,
   int recordingIdentitySignature,
   int pendingDeleteCount,
+  int nativeSignature,
 });
 
 int _identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
@@ -119,8 +121,9 @@ String conversationLoadMoreFilterKey({
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
-  LocalRecordingsProvider recordings,
-) {
+  LocalRecordingsProvider recordings, {
+  bool native = false,
+}) {
   return (
     conversations: conversations.conversations,
     groupedConversations: conversations.groupedConversations,
@@ -141,8 +144,18 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
     pendingDeleteCount: conversations.memoriesToDelete.length,
+    nativeSignature: native ? _nativeLibrarySignature(conversations) : 0,
   );
 }
+
+/// What a native library row shows beyond the list's identity: the selection, merges in flight and
+/// the mutable fields a row's title, subtitle and menu read. Flutter rows select these themselves.
+int _nativeLibrarySignature(ConversationProvider provider) => Object.hash(
+      Object.hashAllUnordered(provider.selectedConversationIds),
+      Object.hashAllUnordered(provider.mergingConversationIds),
+      Object.hashAll(provider.conversations.map((c) => Object.hash(c.id, c.starred, c.structured.title, c.status,
+          c.discarded, c.isLocked, c.summaryRetryable, c.captureGroup?.revision))),
+    );
 
 List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
@@ -390,7 +403,171 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       timer.cancel();
     }
     _scrollController.dispose();
+    // The native library shares Home's provider: selection mode never outlives its route. Leaving it
+    // notifies listeners, which must not happen while the tree is being finalized.
+    final provider = _nativeProvider;
+    if (provider != null) {
+      unawaited(Future.microtask(() {
+        if (provider.isSelectionModeActive) provider.exitSelectionMode();
+      }));
+    }
     super.dispose();
+  }
+
+  /// The provider the native library projected, kept so disposal can end its selection mode.
+  ConversationProvider? _nativeProvider;
+
+  /// Conversations whose "Summary failed · Retry" is running, so a second tap does not repeat it.
+  final Set<String> _retryingSummaries = {};
+
+  Widget _nativeLibrary(
+    BuildContext context,
+    ConversationProvider provider,
+    Widget fallback, {
+    required List<DateTime> mergedDates,
+    required Map<DateTime, List<LocalRecording>> recordingsByDate,
+    required Map<DateTime, ServerConversation> processingByDate,
+    required bool loading,
+    required ApiViewPhase apiPhase,
+  }) {
+    final l10n = context.l10n;
+    final dates = OmiDateFormat.of(context);
+    final denied = apiPhase == ApiViewPhase.authenticationRequired || apiPhase == ApiViewPhase.terminal;
+    final selecting = provider.isSelectionModeActive;
+    final projected = [
+      if (!denied)
+        for (final date in mergedDates) ...?provider.groupedConversations[date],
+    ];
+    String rowId(ServerConversation conversation) => 'library_conversation_${conversation.id}';
+    final eligible = {
+      for (final conversation in projected)
+        if (provider.isConversationEligibleForMerge(conversation.id)) rowId(conversation): conversation.id,
+    };
+    final count = provider.selectedConversationIds.length;
+
+    NativeRow conversationRow(ServerConversation conversation, int index) {
+      if (!selecting) {
+        return nativeConversationRow(context, provider, conversation,
+            id: rowId(conversation), index: index, onRetrySummary: () => _retrySummary(context, conversation));
+      }
+      final canSelect = eligible.containsKey(rowId(conversation));
+      return NativeRow(
+          rowId(conversation), conversation.isLocked ? l10n.conversations : conversationRowTitle(context, conversation),
+          kind: 'navigation',
+          subtitle: canSelect
+              ? dates.timestamp(conversation.startedAt ?? conversation.createdAt)
+              : l10n.conversationCannotBeMerged,
+          action: (_) => canSelect
+              ? provider.toggleConversationSelection(conversation.id)
+              : OmiFeedback.info(context, l10n.conversationCannotBeMerged));
+    }
+
+    return IosNativeSurface(
+        title: selecting ? l10n.selectedCount(count) : l10n.conversations,
+        fallback: fallback,
+        loading: loading,
+        failed: apiPhase == ApiViewPhase.error || denied,
+        empty: l10n.noConversationsYet,
+        onRefresh: (_) async {
+          context.read<CaptureProvider>().refreshInProgressConversations();
+          await Future.wait([provider.getInitialConversations(), context.read<LocalRecordingsProvider>().refresh()]);
+        },
+        toolbar: selecting
+            ? [NativeRow('library_cancel', l10n.cancel, symbol: 'xmark', action: (_) => provider.exitSelectionMode())]
+            : [
+                NativeRow('library_back', l10n.back,
+                    symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+                NativeRow('library_search', l10n.search,
+                    symbol: 'magnifyingglass', action: (_) => showGlobalSearch(context)),
+                if (eligible.isNotEmpty)
+                  NativeRow('library_select', l10n.selectOption,
+                      symbol: 'checkmark.circle', action: (_) => provider.enterSelectionMode()),
+              ],
+        selection: selecting
+            ? NativeSelection(
+                selectable: eligible.keys.toSet(),
+                selected: {
+                  for (final entry in eligible.entries)
+                    if (provider.selectedConversationIds.contains(entry.value)) entry.key,
+                },
+                action: (value) => _applyNativeSelection(provider, eligible, value as List<String>))
+            : null,
+        bottomBar: selecting
+            ? [
+                NativeRow('library_selected_count', l10n.selectedCount(count), kind: 'label'),
+                NativeRow('library_move', l10n.moveToFolder,
+                    symbol: 'folder', enabled: count > 0, action: (_) => moveSelectedConversationsToFolder(context)),
+                NativeRow('library_delete', l10n.delete,
+                    symbol: 'trash',
+                    destructive: true,
+                    enabled: count > 0,
+                    action: (_) => confirmAndDeleteSelectedConversations(context)),
+                NativeRow('library_merge', l10n.merge,
+                    symbol: 'arrow.triangle.merge',
+                    enabled: provider.canMerge,
+                    action: (_) => mergeSelectedConversations(context)),
+              ]
+            : const [],
+        sections: [
+          if (!denied) ...[
+            for (final date in mergedDates)
+              NativeSection(
+                  'library_${date.toIso8601String()}',
+                  [
+                    for (final (index, conversation)
+                        in (provider.groupedConversations[date] ?? <ServerConversation>[]).indexed)
+                      conversationRow(conversation, index),
+                    for (final recording in recordingsByDate[date] ?? <LocalRecording>[])
+                      NativeRow('library_recording_${recording.id}', l10n.recordings,
+                          subtitle: dates.timestamp(DateTime.fromMillisecondsSinceEpoch(recording.timerStart * 1000)),
+                          action: (_) => showRecordingDetailSheet(context, recording)),
+                    // The processing card keeps its Try again, and opens the processing page from there.
+                    if (processingByDate[date] case final processing?)
+                      NativeRow('library_processing_${processing.id}', l10n.processing,
+                          action: (_) => showOmiSheet<void>(
+                              context: context,
+                              builder: (_) => ProcessingConversationWidget(conversation: processing))),
+                  ],
+                  title: dates.dayHeader(date)),
+            if (provider.hasMoreConversations)
+              NativeSection('library_paging', [
+                NativeRow('library_more', l10n.showMore,
+                    enabled: !provider.isLoadingConversations,
+                    onVisible: (_) => _requestMoreIfNeeded(provider),
+                    action: (_) => _requestMoreIfNeeded(provider)),
+              ]),
+          ]
+        ]);
+  }
+
+  /// Applies Swift's desired selection: every projected, eligible row whose membership differs is toggled
+  /// once. Additions go first, so swapping the last selected row never leaves selection mode on the way.
+  void _applyNativeSelection(ConversationProvider provider, Map<String, String> eligible, List<String> desired) {
+    final wanted = {
+      for (final id in desired)
+        if (eligible[id] case final conversationId?) conversationId,
+    };
+    final current = provider.selectedConversationIds;
+    final added = [
+      for (final id in eligible.values)
+        if (wanted.contains(id) && !current.contains(id)) id
+    ];
+    final removed = [
+      for (final id in eligible.values)
+        if (!wanted.contains(id) && current.contains(id)) id
+    ];
+    for (final id in [...added, ...removed]) {
+      provider.toggleConversationSelection(id);
+    }
+  }
+
+  Future<void> _retrySummary(BuildContext context, ServerConversation conversation) async {
+    if (!_retryingSummaries.add(conversation.id)) return;
+    try {
+      await retryConversationSummary(context, conversation);
+    } finally {
+      _retryingSummaries.remove(conversation.id);
+    }
   }
 
   Widget _buildConversationShimmer() {
@@ -472,8 +649,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     Logger.debug('building conversations page');
     super.build(context);
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
-      selector: (_, conversationProvider, recordingsProvider) =>
-          _conversationPageSnapshot(conversationProvider, recordingsProvider),
+      selector: (_, conversationProvider, recordingsProvider) => _conversationPageSnapshot(
+          conversationProvider, recordingsProvider,
+          native: widget.nativeLibrary && nativePresentationEnabled),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
@@ -676,63 +854,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               Positioned.fill(child: classic),
               const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar())
             ]));
-        if (snapshot.isSelectionModeActive) return fallback;
-        final denied = apiPhase == ApiViewPhase.authenticationRequired || apiPhase == ApiViewPhase.terminal;
-        return IosNativeSurface(
-            title: l10n.conversations,
-            fallback: fallback,
+        if (!nativePresentationEnabled) return fallback;
+        _nativeProvider = convoProvider;
+        return _nativeLibrary(context, convoProvider, fallback,
+            mergedDates: mergedDates,
+            recordingsByDate: recordingsByDate,
+            processingByDate: processingByDate,
             loading: isShowingConversationSkeleton,
-            failed: apiPhase == ApiViewPhase.error || denied,
-            empty: l10n.noConversationsYet,
-            onRefresh: (_) async {
-              context.read<CaptureProvider>().refreshInProgressConversations();
-              await Future.wait(
-                  [convoProvider.getInitialConversations(), context.read<LocalRecordingsProvider>().refresh()]);
-            },
-            toolbar: [
-              NativeRow('library_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
-              NativeRow('library_search', l10n.search,
-                  symbol: 'magnifyingglass', action: (_) => showGlobalSearch(context)),
-            ],
-            sections: [
-              if (!denied) ...[
-                for (final date in mergedDates)
-                  NativeSection(
-                      'library_${date.toIso8601String()}',
-                      [
-                        for (final (index, conversation)
-                            in (convoProvider.groupedConversations[date] ?? <ServerConversation>[]).indexed)
-                          NativeRow('library_conversation_${conversation.id}',
-                              conversation.isLocked ? l10n.conversations : conversationRowTitle(context, conversation),
-                              subtitle:
-                                  OmiDateFormat.of(context).timestamp(conversation.startedAt ?? conversation.createdAt),
-                              kind: 'menu',
-                              options: {'open': l10n.open, 'actions': l10n.moreOptions},
-                              action: (value) => value == 'open'
-                                  ? openConversationListRow(context, convoProvider, conversation,
-                                      conversationIndex: index)
-                                  : showConversationListRowActions(context, convoProvider, conversation)),
-                        for (final recording in recordingsByDate[date] ?? <LocalRecording>[])
-                          NativeRow('library_recording_${recording.id}', l10n.recordings,
-                              subtitle: OmiDateFormat.of(context)
-                                  .timestamp(DateTime.fromMillisecondsSinceEpoch(recording.timerStart * 1000)),
-                              action: (_) => showRecordingDetailSheet(context, recording)),
-                        if (processingByDate[date] case final processing?)
-                          NativeRow('library_processing_${processing.id}', l10n.processing,
-                              action: (_) => showOmiSheet<void>(
-                                  context: context,
-                                  builder: (_) => ProcessingConversationWidget(conversation: processing))),
-                      ],
-                      title: OmiDateFormat.of(context).dayHeader(date)),
-                if (convoProvider.hasMoreConversations)
-                  NativeSection('library_paging', [
-                    NativeRow('library_more', l10n.showMore, enabled: !convoProvider.isLoadingConversations,
-                        action: (_) {
-                      _requestMoreIfNeeded(convoProvider);
-                    }),
-                  ]),
-              ]
-            ]);
+            apiPhase: apiPhase);
       },
     );
   }

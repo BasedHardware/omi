@@ -9,6 +9,27 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Confirms merging the selected conversations, marks them as merging, leaves selection mode and
+/// starts the merge in the background; the Flutter bar and the native bottom bar share it.
+Future<void> mergeSelectedConversations(BuildContext context) async {
+  final provider = context.read<ConversationProvider>();
+  HapticFeedback.mediumImpact();
+  final confirmed = await MergeConfirmationDialog.show(context, provider.selectedConversations);
+  if (confirmed && context.mounted) {
+    final idsToMerge = provider.markSelectedAsMergingAndExit();
+
+    final response = await provider.initiateConversationMerge(conversationIds: idsToMerge);
+
+    if (context.mounted) {
+      if (response != null) {
+        OmiFeedback.info(context, context.l10n.mergingInBackground);
+      } else {
+        OmiFeedback.error(context, context.l10n.failedToStartMerge);
+      }
+    }
+  }
+}
+
 class MergeActionBar extends StatefulWidget {
   const MergeActionBar({super.key});
 
@@ -109,7 +130,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                         label: context.l10n.merge,
                         icon: Icons.merge_rounded,
                         size: OmiButtonSize.compact,
-                        onPressed: canMerge ? () => _handleMerge(context, provider) : null,
+                        onPressed: canMerge ? () => mergeSelectedConversations(context) : null,
                       ),
                     ],
                   ),
@@ -120,23 +141,5 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
         );
       },
     );
-  }
-
-  Future<void> _handleMerge(BuildContext context, ConversationProvider provider) async {
-    HapticFeedback.mediumImpact();
-    final confirmed = await MergeConfirmationDialog.show(context, provider.selectedConversations);
-    if (confirmed && context.mounted) {
-      final idsToMerge = provider.markSelectedAsMergingAndExit();
-
-      final response = await provider.initiateConversationMerge(conversationIds: idsToMerge);
-
-      if (context.mounted) {
-        if (response != null) {
-          OmiFeedback.info(context, context.l10n.mergingInBackground);
-        } else {
-          OmiFeedback.error(context, context.l10n.failedToStartMerge);
-        }
-      }
-    }
   }
 }

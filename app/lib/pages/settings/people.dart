@@ -204,31 +204,6 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     final l10n = context.l10n;
     final voice = context.watch<SpeakerTagPromptsProvider>();
     final selecting = provider.selecting;
-    final filterLabels = {
-      PeopleFilter.all: l10n.filterAll,
-      PeopleFilter.lowConfidence: l10n.peopleFilterLowConfidence,
-      PeopleFilter.pinned: l10n.peopleFilterPinned,
-      PeopleFilter.needsVoice: l10n.peopleFilterNeedsVoice,
-      PeopleFilter.notHeard: l10n.peopleNotHeardYet,
-    };
-    final groups = <String, List<Person>>{};
-    final hasStats = visible.any((person) => person.conversationCount != null);
-    for (final person in visible) {
-      final group = person.pinned
-          ? 'pinned'
-          : hasStats && person.lastHeardAt == null
-              ? 'not_heard'
-              : 'recent';
-      (groups[group] ??= []).add(person);
-    }
-    for (final people in groups.values) {
-      people.sort((a, b) {
-        if (a.lastHeardAt != null && b.lastHeardAt != null) return b.lastHeardAt!.compareTo(a.lastHeardAt!);
-        if (a.lastHeardAt != null) return -1;
-        if (b.lastHeardAt != null) return 1;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
-    }
     return IosNativeSurface(
         title: selecting ? l10n.selectedCount(selected.length) : l10n.people,
         fallback: classic,
@@ -267,94 +242,11 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
           ],
         ],
         sections: [
-          NativeSection('people_filters', [
-            NativeRow('people_filter', l10n.filterAll,
-                kind: 'choice',
-                value: _filter.name,
-                options: {
-                  for (final entry in filterLabels.entries)
-                    entry.key.name:
-                        '${entry.value} · ${l10n.peopleCount(provider.people.where((p) => matchesPeopleFilter(p, entry.key)).length)}'
-                },
-                action: (value) => _changeFilter(PeopleFilter.values.byName(value as String)))
-          ]),
-          if (provider.statsTruncated)
-            NativeSection(
-                'people_stats', [NativeRow('people_stats_incomplete', l10n.peopleStatsIncomplete, kind: 'label')]),
-          if (!selecting &&
-              provider.cleanUpCandidates.length >= kCleanUpBannerMinimum &&
-              _filter == PeopleFilter.all &&
-              _query.trim().isEmpty)
-            NativeSection('people_review', [
-              NativeRow('people_cleanup', l10n.cleanUpTitle,
-                  subtitle: l10n.cleanUpLead(provider.cleanUpCandidates.length),
-                  kind: 'navigation',
-                  action: (_) => _openCleanUp())
-            ]),
-          for (final group in ['pinned', 'recent', 'not_heard'])
-            if (groups[group]?.isNotEmpty == true)
-              NativeSection(
-                  'people_$group',
-                  [
-                    for (final person in groups[group]!)
-                      NativeRow('person_${person.id}', person.name,
-                          kind: selecting ? 'toggle' : 'navigation',
-                          value: selecting ? provider.selectedIds.contains(person.id) : null,
-                          enabled: !selecting || !person.pinned,
-                          symbol: person.pinned ? 'pin.fill' : 'person.crop.circle',
-                          level: confidenceLevel(person.confidence),
-                          subtitle:
-                              '${confidenceLabel(context, person.confidence)} · ${personReasonLine(context, person)}',
-                          options: {
-                            'open': l10n.open,
-                            'pin': person.pinned ? l10n.unpinAction : l10n.pinAction,
-                            'why': l10n.whyConfidenceMenu(confidenceLabel(context, person.confidence)),
-                            if (!person.pinned) 'select': l10n.selectOption,
-                            'delete': l10n.delete
-                          }, action: (value) async {
-                        if (selecting) {
-                          provider.toggleSelected(person.id);
-                          return;
-                        }
-                        switch (value) {
-                          case 'pin':
-                            await togglePersonPinned(context, provider, person);
-                          case 'why':
-                            await showPersonConfidenceSheet(context, person);
-                          case 'select':
-                            provider.beginSelection(person.id);
-                          case 'delete':
-                            await confirmAndDeletePeople(context, provider, [person]);
-                          default:
-                            await routeToPage(context, PersonDetailPage(personId: person.id));
-                        }
-                      })
-                  ],
-                  title: group == 'pinned'
-                      ? l10n.peopleFilterPinned
-                      : group == 'not_heard'
-                          ? l10n.peopleNotHeardYet
-                          : hasStats
-                              ? l10n.peopleRecent
-                              : '',
-                  footer: selecting && group == 'pinned' ? l10n.selectAllSkipsPinned : ''),
-          if (selecting)
-            NativeSection('people_delete', [
-              NativeRow('people_delete_selected', l10n.delete,
-                  destructive: true,
-                  enabled: selected.isNotEmpty,
-                  action: (_) => confirmAndDeletePeople(context, provider, selected))
-            ]),
-          if (visible.isEmpty && !provider.loading && !provider.loadFailed)
-            NativeSection('people_empty', [
-              NativeRow('people_empty_label', provider.people.isEmpty ? l10n.noPeopleYet : l10n.noMatchingPeople,
-                  subtitle: provider.people.isEmpty ? l10n.createPersonHint : l10n.tryAdjustingFilter, kind: 'label'),
-              if (provider.people.isNotEmpty)
-                NativeRow('people_clear_search', l10n.clearSearch, action: (_) {
-                  _clearQuery();
-                  _changeFilter(PeopleFilter.all);
-                }),
-            ]),
+          ...nativePeopleSections(context, provider, visible,
+              management: true, filter: _filter, query: _query, onFilterChanged: _changeFilter, onClearSearch: () {
+            _clearQuery();
+            _changeFilter(PeopleFilter.all);
+          }, onCleanUp: _openCleanUp),
           if (!selecting)
             NativeSection(
                 'voice_settings',
@@ -379,4 +271,140 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                 title: l10n.voiceRecognitionSettings),
         ]);
   }
+}
+
+/// The People list as native sections, shared by Settings → People and the People scope of global
+/// search: the filter, the incomplete-stats note, the Pinned / Recent / Not Heard Yet groups and the
+/// no-match state. [management] (Settings) adds Select to each row's menu, the Clean Up banner
+/// ([onCleanUp]) and, while selecting, toggling rows and the delete action. Without it a row offers
+/// Open, Pin, Why and Delete, with Pin on the leading swipe and Delete on the trailing one.
+List<NativeSection> nativePeopleSections(
+  BuildContext context,
+  PeopleProvider provider,
+  List<Person> visible, {
+  required bool management,
+  PeopleFilter filter = PeopleFilter.all,
+  String query = '',
+  ValueChanged<PeopleFilter>? onFilterChanged,
+  VoidCallback? onClearSearch,
+  VoidCallback? onCleanUp,
+}) {
+  final l10n = context.l10n;
+  final selecting = management && provider.selecting;
+  final selected = visible.where((p) => !p.pinned && provider.selectedIds.contains(p.id)).toList();
+  final filterLabels = {
+    PeopleFilter.all: l10n.filterAll,
+    PeopleFilter.lowConfidence: l10n.peopleFilterLowConfidence,
+    PeopleFilter.pinned: l10n.peopleFilterPinned,
+    PeopleFilter.needsVoice: l10n.peopleFilterNeedsVoice,
+    PeopleFilter.notHeard: l10n.peopleNotHeardYet,
+  };
+  final groups = <String, List<Person>>{};
+  final hasStats = visible.any((person) => person.conversationCount != null);
+  for (final person in visible) {
+    final group = person.pinned
+        ? 'pinned'
+        : hasStats && person.lastHeardAt == null
+            ? 'not_heard'
+            : 'recent';
+    (groups[group] ??= []).add(person);
+  }
+  for (final people in groups.values) {
+    people.sort((a, b) {
+      if (a.lastHeardAt != null && b.lastHeardAt != null) return b.lastHeardAt!.compareTo(a.lastHeardAt!);
+      if (a.lastHeardAt != null) return -1;
+      if (b.lastHeardAt != null) return 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+  }
+  return [
+    if (onFilterChanged != null)
+      NativeSection('people_filters', [
+        NativeRow('people_filter', l10n.filterAll,
+            kind: 'choice',
+            value: filter.name,
+            options: {
+              for (final entry in filterLabels.entries)
+                entry.key.name:
+                    '${entry.value} · ${l10n.peopleCount(provider.people.where((p) => matchesPeopleFilter(p, entry.key)).length)}'
+            },
+            action: (value) => onFilterChanged(PeopleFilter.values.byName(value as String)))
+      ]),
+    if (provider.statsTruncated)
+      NativeSection('people_stats', [NativeRow('people_stats_incomplete', l10n.peopleStatsIncomplete, kind: 'label')]),
+    if (management &&
+        onCleanUp != null &&
+        !selecting &&
+        provider.cleanUpCandidates.length >= kCleanUpBannerMinimum &&
+        filter == PeopleFilter.all &&
+        query.trim().isEmpty)
+      NativeSection('people_review', [
+        NativeRow('people_cleanup', l10n.cleanUpTitle,
+            subtitle: l10n.cleanUpLead(provider.cleanUpCandidates.length),
+            kind: 'navigation',
+            action: (_) => onCleanUp())
+      ]),
+    for (final group in ['pinned', 'recent', 'not_heard'])
+      if (groups[group]?.isNotEmpty == true)
+        NativeSection(
+            'people_$group',
+            [
+              for (final person in groups[group]!)
+                NativeRow('person_${person.id}', person.name,
+                    kind: selecting ? 'toggle' : 'navigation',
+                    value: selecting ? provider.selectedIds.contains(person.id) : null,
+                    enabled: !selecting || !person.pinned,
+                    symbol: person.pinned ? 'pin.fill' : 'person.crop.circle',
+                    level: confidenceLevel(person.confidence),
+                    subtitle: '${confidenceLabel(context, person.confidence)} · ${personReasonLine(context, person)}',
+                    options: {
+                      'open': l10n.open,
+                      'pin': person.pinned ? l10n.unpinAction : l10n.pinAction,
+                      'why': l10n.whyConfidenceMenu(confidenceLabel(context, person.confidence)),
+                      if (management && !person.pinned) 'select': l10n.selectOption,
+                      'delete': l10n.delete
+                    },
+                    swipeLeading: management ? const [] : const ['pin'],
+                    swipeTrailing: management ? const [] : const ['delete'], action: (value) async {
+                  if (selecting) {
+                    provider.toggleSelected(person.id);
+                    return;
+                  }
+                  switch (value) {
+                    case 'pin':
+                      await togglePersonPinned(context, provider, person);
+                    case 'why':
+                      await showPersonConfidenceSheet(context, person);
+                    case 'select' when management:
+                      provider.beginSelection(person.id);
+                    case 'delete':
+                      await confirmAndDeletePeople(context, provider, [person]);
+                    default:
+                      await routeToPage(context, PersonDetailPage(personId: person.id));
+                  }
+                })
+            ],
+            title: group == 'pinned'
+                ? l10n.peopleFilterPinned
+                : group == 'not_heard'
+                    ? l10n.peopleNotHeardYet
+                    : hasStats
+                        ? l10n.peopleRecent
+                        : '',
+            footer: selecting && group == 'pinned' ? l10n.selectAllSkipsPinned : ''),
+    if (selecting)
+      NativeSection('people_delete', [
+        NativeRow('people_delete_selected', l10n.delete,
+            destructive: true,
+            enabled: selected.isNotEmpty,
+            action: (_) => confirmAndDeletePeople(context, provider, selected))
+      ]),
+    if (visible.isEmpty && !provider.loading && !provider.loadFailed)
+      NativeSection('people_empty', [
+        NativeRow('people_empty_label', provider.people.isEmpty ? l10n.noPeopleYet : l10n.noMatchingPeople,
+            subtitle: provider.people.isEmpty ? l10n.createPersonHint : l10n.tryAdjustingFilter, kind: 'label'),
+        if (provider.people.isNotEmpty && onClearSearch != null)
+          NativeRow('people_clear_search', l10n.clearSearch, action: (_) => onClearSearch()),
+      ]),
+  ];
 }
