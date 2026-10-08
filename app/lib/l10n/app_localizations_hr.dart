@@ -12486,4 +12486,201 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Djelomična snimka';
+
+  @override
+  String get reviewTitle => 'Pregled';
+
+  @override
+  String get reviewEntryTitle => 'Pitanja za vas';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Preostalo: $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Tko je ovo rekao?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Ista osoba kao „$name“?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Kako se ovo piše?';
+
+  @override
+  String get reviewPlayClip => 'Reproduciraj isječak';
+
+  @override
+  String get reviewStopClip => 'Zaustavi isječak';
+
+  @override
+  String get reviewOpenDetailsHint => 'Otvara detalje';
+
+  @override
+  String get reviewAnswerMe => 'Ja';
+
+  @override
+  String get reviewAnswerOther => 'Ostalo';
+
+  @override
+  String get reviewAddTask => 'Dodaj zadatak';
+
+  @override
+  String get reviewAnswerFailed => 'Odgovor nije moguće spremiti. Pokušajte ponovno.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Ovaj odgovor označava razgovora: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Nepoznati govornik';
+
+  @override
+  String get reviewNewPersonName => 'Njihovo ime';
+
+  @override
+  String get reviewSomeoneElse => 'Netko drugi…';
+
+  @override
+  String get reviewConfirm => 'Potvrdi';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Potvrdi $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Nisam siguran';
+
+  @override
+  String get reviewOpenConversation => 'Razgovor';
+
+  @override
+  String get reviewTaskField => 'Zadatak';
+
+  @override
+  String get reviewDue => 'Rok';
+
+  @override
+  String get reviewNoDate => 'Nema';
+
+  @override
+  String get reviewProject => 'Projekt';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Već učinjeno';
+
+  @override
+  String get reviewReasonNotMine => 'Nije moje';
+
+  @override
+  String get reviewReasonNotUseful => 'Nije korisno';
+
+  @override
+  String get reviewYesMerge => 'Da, spoji';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Razgovori: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Upiši';
+
+  @override
+  String get reviewLoadFailed => 'Vaša pitanja nije moguće učitati.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nema na što odgovoriti';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi će ovdje pitati samo kad vas zatreba.';
+
+  @override
+  String get reviewRecentChanges => 'Nedavne promjene';
+
+  @override
+  String get reviewChangesIntro => 'Što je Omi sam promijenio u posljednjih 30 dana. Poništite sve što izgleda krivo.';
+
+  @override
+  String get reviewChangeUndone => 'Poništeno. Omi to neće ponoviti sam.';
+
+  @override
+  String get reviewChangeFailed => 'Ovu promjenu nije moguće ažurirati. Pokušajte ponovno.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Nedavne promjene nije moguće učitati.';
+
+  @override
+  String get reviewNoChangesTitle => 'Još nema promjena';
+
+  @override
+  String get reviewNoChangesBody => 'Kad Omi sredi vaše bilješke, promjene će se pojaviti ovdje.';
+
+  @override
+  String get reviewShowMore => 'Prikaži više';
+
+  @override
+  String get entityKeptCurrent => 'Omi održava ažurnim';
+
+  @override
+  String get entityNotRight => 'Nije točno?';
+
+  @override
+  String get entityCorrectionTitle => 'Što nije točno?';
+
+  @override
+  String get entityCorrectionHint => 'Recite Omiju što treba ispraviti';
+
+  @override
+  String get entityCorrectionSaved => 'Hvala. Omi će to ispraviti.';
+
+  @override
+  String get entityCorrectionFailed => 'Ispravak nije moguće poslati. Pokušajte ponovno.';
+
+  @override
+  String get entityLoadFailed => 'Ovu stranicu nije moguće učitati.';
+
+  @override
+  String get entityProject => 'Projekt';
+
+  @override
+  String get entityProjects => 'Projekti';
+
+  @override
+  String get entityDecisions => 'Odluke';
+
+  @override
+  String get entityOpenTasks => 'Otvoreni zadaci';
+
+  @override
+  String get entityOpenThreads => 'Otvorene teme';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Čeka se $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Rok: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Što Omi zna';
+
+  @override
+  String get entityRecentConversations => 'Nedavni razgovori';
+
+  @override
+  String get tasksNoProject => 'Bez projekta';
+
+  @override
+  String get tasksGroupByProject => 'Grupiraj po projektu';
+
+  @override
+  String get tasksGroupByDate => 'Grupiraj po datumu';
 }
