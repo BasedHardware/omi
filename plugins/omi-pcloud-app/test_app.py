@@ -136,7 +136,7 @@ class TestPCloudAppHermetic(unittest.TestCase):
         mock_post.return_value = mock_resp
         mock_get_user_info.return_value = ({"email": "oauth_user@example.com"}, None)
 
-        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="csrf_state_123"))
+        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="csrf_state_123", error=None))
         loc = _get_redirect_location(res)
         self.assertIn("/setup/pcloud?uid=user_callback&status=connected", loc)
 
@@ -151,9 +151,39 @@ class TestPCloudAppHermetic(unittest.TestCase):
 
     def test_auth_pcloud_callback_invalid_state(self):
         """OAuth callback rejects invalid or expired state with 400 Bad Request."""
-        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="invalid_expired_state"))
+        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="invalid_expired_state", error=None))
         self.assertEqual(res.status_code, 400)
         self.assertIn("Invalid or Expired OAuth State", _get_body_text(res))
+
+    @patch("requests.post")
+    @patch.object(main.PCloudClient, "get_user_info")
+    def test_auth_pcloud_callback_direct_coroutine_sentinel_normalization(self, mock_get_user_info, mock_post):
+        """Direct coroutine invocation unwraps FastAPI Query default sentinel objects."""
+        db.store_oauth_state(state="csrf_state_sentinel", uid="user_sentinel", location_id=1)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "result": 0,
+            "access_token": "secret_access_token_sentinel",
+            "userid": 112233,
+            "locationid": 1,
+        }
+        mock_post.return_value = mock_resp
+        mock_get_user_info.return_value = ({"email": "sentinel@example.com"}, None)
+
+        # Simulate FastAPI's declarative Query(None) sentinel where hasattr(sentinel, 'default') is True
+        query_sentinel = MagicMock()
+        query_sentinel.default = None
+
+        res = asyncio.run(
+            main.auth_pcloud_callback(
+                code="auth_code_sentinel",
+                state="csrf_state_sentinel",
+                error=query_sentinel,
+            )
+        )
+        loc = _get_redirect_location(res)
+        self.assertIn("/setup/pcloud?uid=user_sentinel&status=connected", loc)
 
     @patch.object(main.PCloudClient, "logout")
     def test_disconnect(self, mock_logout):
