@@ -32,7 +32,7 @@ def processing(stack, monkeypatch):
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
-    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *_, **__: [])
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
     monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **_: None)
     monkeypatch.setattr(pc, 'decide_relevance', lambda **_: SimpleNamespace(discard=False, reason='kept'))
@@ -220,7 +220,6 @@ def test_discard_unchanged_and_episode_inputs_not_gathered(stack, processing, mo
         started_at=now, finished_at=now, source='desktop', transcript_segments=[], photos=[]
     )
     monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: episode_enabled)
-    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
     monkeypatch.setattr(processing, 'recovery_minimum_terminal_enabled', lambda: True)
     relevance = Mock(return_value=SimpleNamespace(discard=True, reason='empty', decided_by='rule'))
@@ -258,7 +257,6 @@ def test_episode_inputs_gathered_once_after_keep_decision(stack, processing, mon
     conversation = _blank_capture(stack)
     events = []
     monkeypatch.setattr(processing, '_meeting_notes_episode_evidence_enabled', lambda uid: True)
-    monkeypatch.setattr(processing, '_meeting_notes_screen_text_context_enabled', lambda: True)
     monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', lambda *a: ('', '', {}))
 
     def keep(**kwargs):

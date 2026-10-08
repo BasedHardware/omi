@@ -94,16 +94,13 @@ def test_unresolved_entitlement_is_not_cached(admission, failure):
 @pytest.fixture
 def pipeline(integration_harness, monkeypatch):  # noqa: F811
     app = integration_harness.app
-    monkeypatch.setenv('MENTOR_GATE_DEBOUNCE_ENABLED', 'false')
     app.get_mentor_notification_frequency.return_value = 3
     return app
 
 
-@pytest.mark.parametrize('debounce', [True, False])
-def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, debounce):
+def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch):
     """A free user consumes neither a gate evaluation nor any context/model work."""
     app = pipeline
-    monkeypatch.setenv('MENTOR_GATE_DEBOUNCE_ENABLED', str(debounce))
     for name, result in [
         ('read', None),
         ('read_authoritative', None),
@@ -122,11 +119,10 @@ def test_free_skip_precedes_all_model_and_context_calls(pipeline, monkeypatch, d
         call.assert_not_called()
     app.mentor_plan_allows_evaluation.assert_called_once_with('synthetic')
     app.mentor_gate_state.record.assert_not_called()
-    if debounce:
-        app.mentor_gate_state.release.assert_called_once_with('synthetic')
+    app.mentor_gate_state.release.assert_called_once_with('synthetic')
 
 
-def test_runtime_env_and_charts_enable_debounce_on_all_mentor_hosts():
+def test_runtime_env_and_charts_omit_graduated_debounce_flag():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
@@ -136,12 +132,11 @@ def test_runtime_env_and_charts_enable_debounce_on_all_mentor_hosts():
         hosts = [env['gke'][name]['env'] for name in ('pusher', 'backend-listen')]
         hosts.append(env['cloud_run']['services']['backend']['env'])
         for host in hosts:
-            assert host['MENTOR_GATE_DEBOUNCE_ENABLED']['value'] == 'true'
+            assert 'MENTOR_GATE_DEBOUNCE_ENABLED' not in host
             assert not {'MENTOR_GATE_MIN_NEW_WORDS', 'MENTOR_GATE_MIN_SECONDS', 'MENTOR_GATE_DAILY_CAP'} & host.keys()
         for name, suffix in [('pusher', 'pusher'), ('backend-listen', 'backend_listen')]:
             chart = yaml.load(
                 (root / f'charts/{name}/{stage}_omi_{suffix}_values.yaml').read_text(), Loader=yaml.CSafeLoader
             )
             values = {entry['name']: entry.get('value') for entry in chart['env']}
-            for flag in ('MENTOR_GATE_DEBOUNCE_ENABLED',):
-                assert values[flag] == env['gke'][name]['env'][flag]['value']
+            assert 'MENTOR_GATE_DEBOUNCE_ENABLED' not in values

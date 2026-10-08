@@ -327,6 +327,38 @@ def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypa
     assert result.content == 'byok-direct response'
 
 
+def test_byok_uses_user_key_direct_when_optional_gateway_is_off(monkeypatch):
+    byok = FakeChatModel(name='byok-direct', calls=[])
+    captured = {}
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(clients, 'get_byok_profile', lambda: None)
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-user-owned-openai' if provider == 'openai' else None,
+    )
+
+    def create_byok(model, provider, api_key, streaming, feature, **_kwargs):
+        captured.update(model=model, provider=provider, api_key=api_key, feature=feature)
+        return byok
+
+    def forbidden_gateway_or_shadow(*_args, **_kwargs):
+        raise AssertionError('direct BYOK must not use the managed gateway or its dev shadow')
+
+    monkeypatch.setattr(clients, '_create_byok_client', create_byok)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', forbidden_gateway_or_shadow)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', forbidden_gateway_or_shadow)
+
+    assert clients.get_llm('conv_discard') is byok
+    assert captured == {
+        'model': model_config.get_model('conv_discard'),
+        'provider': 'openai',
+        'api_key': 'sk-user-owned-openai',
+        'feature': 'conv_discard',
+    }
+
+
 def test_get_llm_uses_feature_profile_when_multiple_byok_keys_are_present(monkeypatch):
     legacy = FakeChatModel(name='byok-direct', calls=[])
     captured = {}

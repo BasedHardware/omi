@@ -516,20 +516,13 @@ class TestCacheRouting:
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
         assert result is not None
 
-    def test_legacy_openai_key_never_pairs_with_gemini_resolved_model(self, monkeypatch):
-        """A legacy OpenAI key must not be paired with a Gemini-resolved model.
-
-        'followup' resolves to a Gemini model in the BYOK QoS profile. When only a
-        legacy OpenAI key is present (no Gemini key), the fallback must select the
-        OpenAI-compatible fallback model — never hand the OpenAI credential to the
-        resolved Gemini model, which would be an incompatible model/provider
-        request at the provider.
-        """
+    def test_legacy_openai_key_uses_the_paid_luna_route(self, monkeypatch):
+        """A legacy OpenAI key must stay paired with an OpenAI-compatible model."""
         from utils.llm import clients
 
         create_client = MagicMock(return_value=MagicMock())
         monkeypatch.setattr(clients, '_create_byok_client', create_client)
-        # Only a legacy Gemini-resolved feature, but only an OpenAI key is attached.
+        # The managed feature is now Luna/OpenAI; only an OpenAI key is attached.
         monkeypatch.setattr(
             clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
         )
@@ -537,7 +530,7 @@ class TestCacheRouting:
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args
-        assert args[0] == 'gpt-4o-mini', f"model must be OpenAI fallback, got {args[0]}"
+        assert args[0] == clients.get_model('followup'), f"model must stay on the Luna route, got {args[0]}"
         assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
         assert args[2] == 'sk-legacy-openai'
 

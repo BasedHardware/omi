@@ -21,8 +21,6 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
-    'MEETING_NOTES_RICH_CONTEXT_ENABLED',
-    'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
 )
 
 # backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
@@ -76,8 +74,6 @@ def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
         for flag in (
             'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
             'CONVERSATION_OCR_CONTEXT_ENABLED',
-            'MEETING_NOTES_RICH_CONTEXT_ENABLED',
-            'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
             'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
         ):
             assert _value(env_maps[scope], flag) == 'true', f'{scope}:{flag}'

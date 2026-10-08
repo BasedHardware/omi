@@ -138,17 +138,9 @@ def test_gpt56_cache_keys_are_stable_versioned_and_never_include_request_content
     assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')
 
 
-def test_gpt56_explicit_cache_defaults_on_in_gateway_and_honors_kill_switch(monkeypatch):
+def test_gpt56_explicit_cache_follows_gateway_route(monkeypatch):
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
-    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
     assert conv_proc._gpt56_explicit_cache_enabled()
-
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
-    assert not conv_proc._gpt56_explicit_cache_enabled()
-
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
-    assert conv_proc._gpt56_explicit_cache_enabled()
-
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
     assert not conv_proc._gpt56_explicit_cache_enabled()
 
@@ -158,11 +150,9 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
 
     get_app_result has no cacheable static prefix. With the gateway on they must still pass cache_key=None: a legacy
     prompt_cache_key would opt these unique-prompt requests back into
-    implicit, billable cache writes. The explicit cache kill switch is set
-    below to verify the old fully-disabled behavior remains available.
+    implicit, billable cache writes.
     """
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
-    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
 
     captured: dict = {}
 
@@ -200,4 +190,4 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
         app.memory_prompt = 'memory prompt'
         conv_proc.get_app_result(transcript='Lunch meeting', photos=[], app=app, language_code='en')
         assert captured['cache_key'] is None
-        assert captured['prompt_cache_options'] is None
+        assert captured['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}

@@ -42,7 +42,6 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(notes_task_context_module, "find_similar_action_items", lambda *args, **kwargs: [])
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)

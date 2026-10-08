@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-continuity-preparation-selects-implicit-provider",
+  "violated_contract": "Preparing or reading a task's continuity must not create its immutable execution profile using an unrelated adapter default. Issue #20909 exposed Task Assistant credit errors: prepare_workstream_continuity created an ACP session even when the owner's selected provider was Omi AI, and the later creation profile could not replace that pinned Claude billing lane.",
+  "canonical_prevention": "Resolve the explicit current creation profile before task preparation or journal access. All shared workstream creation paths use the owner-scoped execution preference and managed Omi when none exists. Existing profiles remain immutable; recovery requires an explicit user action through the expected-generation, idle-only kernel migration transaction, preserving the canonical journal and never automatically resending a billing-rejected turn.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/control-tools.test.ts",
+    "desktop/macos/agent/tests/workstream-continuity.test.ts",
+    "desktop/macos/Desktop/Tests/TaskChatQueryTelemetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/workstream-continuity.ts",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/"
+  ],
+  "status": "open"
+}

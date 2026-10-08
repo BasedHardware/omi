@@ -262,6 +262,21 @@ def _qos_isolated_clients():
             'utils.llm.clients',
             os.path.join(str(BACKEND_DIR), 'utils', 'llm', 'clients.py'),
         )
+        gateway_clients = {}
+
+        def fake_gateway_client(lane_id, streaming=False, options=None, feature=None):
+            options = options or {}
+            cache_key = (lane_id, streaming, tuple(sorted((key, repr(value)) for key, value in options.items())))
+            if cache_key not in gateway_clients:
+                gateway_clients[cache_key] = _ChatOpenAI(
+                    model=lane_id,
+                    base_url='http://gateway.test/v1',
+                    streaming=streaming,
+                    **options,
+                )
+            return gateway_clients[cache_key]
+
+        clients.get_or_create_omi_gateway_llm = fake_gateway_client
         g = globals()
         for name in _CLIENTS_EXPORTS:
             g[name] = getattr(clients, name)
@@ -294,14 +309,19 @@ class TestModelQosProfiles:
         for profile_name, profile in MODEL_QOS_PROFILES.items():
             providers = {provider for _model, provider in profile.values()}
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
-            assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
+            if profile_name == 'byok':
+                assert 'openrouter' in providers, 'byok should retain OpenRouter for wrapped_analysis'
+                assert 'gemini' in providers, 'byok should retain user-paid Gemini routes'
+            else:
+                assert 'openrouter' not in providers, f'{profile_name} retains a paid OpenRouter route'
+                assert 'gemini' not in providers, f'{profile_name} retains a paid Gemini route'
         # OpenAI-based profiles must have OpenAI provider
         for name in ('premium', 'max', 'byok'):
             providers = {p for _m, p in MODEL_QOS_PROFILES[name].values()}
             assert 'openai' in providers, f'{name} missing OpenAI models'
-        # Premium profile must have Gemini provider
-        providers = {p for _m, p in MODEL_QOS_PROFILES['premium'].values()}
-        assert 'gemini' in providers, 'premium should have Gemini direct models'
+        for profile_name in ('premium', 'max'):
+            providers = {p for _m, p in MODEL_QOS_PROFILES[profile_name].values()}
+            assert not ({'gemini', 'openrouter'} & providers), f'{profile_name} must not use paid legacy routes'
 
     def test_all_profiles_use_the_authorized_two_tier_openai_map(self):
         luna_features = {
@@ -335,6 +355,14 @@ class TestModelQosProfiles:
             'file_chat_vision',
             'file_chat_documents',
             'chat_agent',
+            'session_titles',
+            'followup',
+            'onboarding',
+            'app_integration',
+            'trends',
+            'translation',
+            'screen_frame_judge',
+            'wrapped_analysis',
         }
         nano_features = {
             'conv_app_select',
@@ -350,28 +378,37 @@ class TestModelQosProfiles:
             **{feature: ('gpt-5-nano', 'openai') for feature in nano_features},
         }
 
-        for profile_name, profile in MODEL_QOS_PROFILES.items():
+        for profile_name in ('premium', 'max'):
+            profile = MODEL_QOS_PROFILES[profile_name]
             openai_routes = {feature: route for feature, route in profile.items() if route[1] == 'openai'}
             assert openai_routes == expected_openai, f'{profile_name} OpenAI routes differ from the two-tier map'
 
         premium = MODEL_QOS_PROFILES['premium']
-        assert premium['session_titles'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['followup'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
+        for feature in (
+            'session_titles',
+            'followup',
+            'onboarding',
+            'app_integration',
+            'trends',
+            'translation',
+            'screen_frame_judge',
+            'wrapped_analysis',
+        ):
+            assert premium[feature] == (LUNA_MODEL, 'openai')
         assert premium['chat_agent'] == (LUNA_MODEL, 'openai')
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
+        byok = MODEL_QOS_PROFILES['byok']
+        assert byok['followup'] == ('gemini-2.5-flash-lite', 'gemini')
+        assert byok['wrapped_analysis'] == ('gemini-3-flash-preview', 'openrouter')
+
     def test_max_profile_model_variants(self):
-        """Max profile is constrained to the two approved OpenAI text models."""
+        """Company-paid max profile is constrained to Luna, Nano, and Perplexity."""
         max_prof = MODEL_QOS_PROFILES['max']
         distinct_models = {model for model, _provider in max_prof.values()}
         expected = {
             LUNA_MODEL,
             'gpt-5-nano',
-            'gemini-2.5-flash-lite',
-            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct_models == expected
@@ -432,11 +469,13 @@ class TestGetLlm:
         llm2 = get_llm('conv_action_items')
         assert llm1 is llm2
 
-    def test_different_features_same_model_share_instance(self):
-        # Both use Luna in the two-tier premium profile.
+    def test_different_features_use_distinct_gateway_lanes(self):
+        # Gateway lane identity is feature-specific even when the upstream model matches.
         llm1 = get_llm('memories')
         llm2 = get_llm('goals')
-        assert llm1 is llm2
+        assert llm1 is not llm2
+        assert llm1.model_name == 'omi:auto:memories'
+        assert llm2.model_name == 'omi:auto:goals'
 
     def test_different_models_return_different_instances(self):
         llm1 = get_llm('memories')
@@ -469,10 +508,11 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
+        # Followup now uses Luna and supports OpenAI prompt-cache keys.
         llm_with_key = get_llm('followup', cache_key='omi-test-key')
         llm_without_key = get_llm('followup')
-        assert llm_with_key is llm_without_key
+        assert llm_with_key is not llm_without_key
+        assert getattr(llm_with_key, 'bound_kwargs', {}).get('prompt_cache_key') == 'omi-test-key'
 
     def test_new_features_return_clients(self):
         """New features should return valid LLM clients."""
@@ -645,18 +685,16 @@ class TestGetQosInfo:
         assert info['conv_action_items']['provider'] == 'openai'
         # persona_chat uses direct OpenAI API in both profiles
         assert info['persona_chat']['provider'] == 'openai'
-        # wrapped_analysis uses OpenRouter in both profiles
-        assert info['wrapped_analysis']['provider'] == 'openrouter'
-        # Gemini features use gemini provider
-        assert info['followup']['provider'] == 'gemini'
+        assert info['wrapped_analysis']['provider'] == 'openai'
+        assert info['followup']['provider'] == 'openai'
 
     def test_get_provider_matches_profile(self):
         """get_provider() returns the explicit provider from the profile."""
         assert get_provider('conv_action_items') == 'openai'
         assert get_provider('chat_agent') == 'openai'
         assert get_provider('web_search') == 'perplexity'
-        assert get_provider('wrapped_analysis') == 'openrouter'
-        assert get_provider('followup') == 'gemini'
+        assert get_provider('wrapped_analysis') == 'openai'
+        assert get_provider('followup') == 'openai'
 
 
 class TestPinnedFeatures:
@@ -687,11 +725,12 @@ class TestProviderClassification:
             assert prof['persona_chat'][1] == 'openai', f'{profile_name} persona_chat'
             assert prof['persona_chat_premium'][1] == 'openai', f'{profile_name} persona_chat_premium'
 
-    def test_wrapped_analysis_uses_openrouter_in_both_profiles(self):
-        """wrapped_analysis uses OpenRouter (gemini-3-flash-preview) in both profiles."""
+    def test_wrapped_analysis_uses_luna_for_paid_and_openrouter_for_byok(self):
+        """Paid wrapped_analysis uses Luna; the enrolled BYOK profile keeps OpenRouter."""
         for profile_name in ['max', 'premium']:
             prof = MODEL_QOS_PROFILES[profile_name]
-            assert prof['wrapped_analysis'][1] == 'openrouter', f'{profile_name} wrapped_analysis'
+            assert prof['wrapped_analysis'] == (LUNA_MODEL, 'openai'), f'{profile_name} wrapped_analysis'
+        assert MODEL_QOS_PROFILES['byok']['wrapped_analysis'] == ('gemini-3-flash-preview', 'openrouter')
 
     def test_conv_features_are_openai(self):
         max_prof = MODEL_QOS_PROFILES['max']
@@ -769,6 +808,27 @@ class TestProfileSelectionAtImportTime:
             cwd=str(BACKEND_DIR),
         )
         assert result.returncode == 0, f"invalid profile fallback test failed: {result.stderr}"
+
+    def test_byok_is_not_a_managed_profile(self):
+        """A legacy MODEL_QOS=byok must not route keyless paid requests to Gemini."""
+        import subprocess
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                '-c',
+                _clients_subprocess_script(
+                    "os.environ['MODEL_QOS'] = 'byok'\n"
+                    "from utils.llm.clients import _active_profile_name, get_model\n"
+                    "assert _active_profile_name == 'premium'\n"
+                    "assert get_model('followup') == 'gpt-6-luna'"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(BACKEND_DIR),
+        )
+        assert result.returncode == 0, f"byok managed-profile rejection failed: {result.stderr}"
 
 
 class TestExpandedCallsiteCoverage:
@@ -953,18 +1013,50 @@ class TestRuntimeProviderRouting:
         base_url = getattr(llm, 'openai_api_base', None) or ''
         assert 'openrouter' not in base_url
 
-    def test_gemini_feature_routes_correctly(self):
-        """Free-text features on gemini-2.5-flash-lite should route to Gemini (native SDK or fallback)."""
+    def test_former_gemini_feature_routes_to_gateway_luna(self):
+        """Paid followup no longer resolves or directly constructs a Gemini client."""
         llm = get_llm('followup')
-        if os.environ.get('GEMINI_API_KEY'):
-            from langchain_google_genai import ChatGoogleGenerativeAI
+        assert getattr(llm, 'model_name', None) == 'omi:auto:followup'
+        assert 'gemini' not in repr(getattr(llm, '_constructor_kwargs', {})).lower()
 
-            assert isinstance(
-                llm, ChatGoogleGenerativeAI
-            ), f'followup should be ChatGoogleGenerativeAI, got {type(llm)}'
-        else:
-            # No key — falls back to ChatOpenAI placeholder pointing at Gemini endpoint
-            assert hasattr(llm, 'invoke')
+    def test_paid_generation_ignores_invalid_legacy_gateway_flags(self, monkeypatch):
+        """Mandatory paid routing must not consult legacy feature/chat rollout validation."""
+        mod = get_llm.__globals__
+
+        monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
+        monkeypatch.setenv('OMI_LLM_CHAT_AGENT_ROUTE', 'invalid-old-value')
+        gateway_llm = MagicMock()
+        gateway = MagicMock(return_value=gateway_llm)
+        direct = MagicMock(side_effect=AssertionError('company-paid direct client is forbidden'))
+        monkeypatch.setitem(mod, 'get_or_create_omi_gateway_llm', gateway)
+        monkeypatch.setitem(mod, 'get_default_client', direct)
+
+        result = get_llm('chat_agent')
+
+        assert result is gateway_llm
+        assert gateway.call_args.args[0] == 'omi:auto:chat-agent'
+        direct.assert_not_called()
+
+    def test_gemini_byok_stays_direct_when_optional_gateway_config_is_invalid(self, monkeypatch):
+        """An enrolled Gemini key remains user-paid and invalid rollout flags cannot reject it."""
+        mod = get_llm.__globals__
+
+        monkeypatch.setenv('OMI_LLM_GATEWAY_FEATURE_MODE', 'gateway')
+        monkeypatch.setenv('OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE', 'false')
+        monkeypatch.setenv('K_SERVICE', 'omi-backend')
+        monkeypatch.delenv('OMI_LLM_GATEWAY_URL', raising=False)
+        monkeypatch.setitem(mod, 'get_byok_key', lambda provider: 'user-gemini-key' if provider == 'gemini' else None)
+        user_client = MagicMock()
+        byok_factory = MagicMock(return_value=user_client)
+        gateway = MagicMock(side_effect=AssertionError('Gemini BYOK must keep its provider-scoped route'))
+        monkeypatch.setitem(mod, '_create_byok_client', byok_factory)
+        monkeypatch.setitem(mod, 'get_or_create_omi_gateway_llm', gateway)
+
+        result = get_llm('followup')
+
+        assert result is user_client
+        assert byok_factory.call_args.args[:3] == ('gemini-2.5-flash-lite', 'gemini', 'user-gemini-key')
+        gateway.assert_not_called()
 
     def test_openglass_routes_to_openai(self):
         """openglass (vision) should route to OpenAI Luna."""
@@ -974,20 +1066,22 @@ class TestRuntimeProviderRouting:
         assert 'openrouter' not in base_url
         assert 'generativelanguage.googleapis.com' not in base_url
 
-    def test_openrouter_temperature_applied_via_get_llm(self):
-        """When get_llm routes to OpenRouter, _OPENROUTER_TEMPERATURES config is applied."""
-        from utils.llm.clients import _OPENROUTER_TEMPERATURES
-
+    def test_wrapped_analysis_uses_luna_gateway_for_paid_calls(self):
         llm = get_llm('wrapped_analysis')
-        expected_temp = _OPENROUTER_TEMPERATURES.get('wrapped_analysis')
-        assert expected_temp == 0.7, "wrapped_analysis should have temp 0.7 in config"
-        assert llm.temperature == expected_temp, "get_llm should apply _OPENROUTER_TEMPERATURES"
+        assert getattr(llm, 'model_name', None) == 'omi:auto:wrapped-analysis'
 
-    def test_openrouter_adds_vendor_prefix_for_gemini_models(self):
-        """Profile stores bare model name; OpenRouter factory must add google/ prefix for API calls."""
+    def test_wrapped_analysis_preserves_user_paid_openrouter_byok(self, monkeypatch):
+        mod = get_llm.__globals__
+
+        monkeypatch.setitem(
+            mod,
+            'get_byok_key',
+            lambda provider: 'user-openrouter-key' if provider == 'openrouter' else None,
+        )
         llm = get_llm('wrapped_analysis')
-        default = getattr(llm, '_default', llm)
-        assert default.model_name.startswith('google/'), f"Expected google/ prefix, got {default.model_name}"
+        assert llm.model_name == 'google/gemini-3-flash-preview'
+        assert llm.openai_api_base == 'https://openrouter.ai/api/v1'
+        assert llm.temperature == 0.7
 
 
 class TestBYOKWrapperArchitecture:
@@ -1184,18 +1278,14 @@ class TestStructuredOutputFeatureTracking:
             for profile_name, profile in MODEL_QOS_PROFILES.items():
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
-    def test_premium_gemini_structured_output(self):
-        """In premium profile, translation, trends, and screen_frame_judge use structured output on Gemini."""
+    def test_paid_profiles_have_no_gemini_structured_output(self):
+        """Company-paid structured features all resolve to Luna/OpenAI, never Gemini."""
         premium = MODEL_QOS_PROFILES['premium']
         gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
-        assert gemini_so == {
-            'translation',
-            'trends',
-            'screen_frame_judge',
-        }, f'Expected translation, trends, and screen_frame_judge on Gemini SO in premium, got {gemini_so}'
+        assert gemini_so == set()
 
     def test_byok_no_gemini_structured_output(self):
-        """BYOK routes structured output to OpenAI except managed translation/trends/screen_frame_judge."""
+        """BYOK retains the explicit user-paid Gemini routes for former Gemini features."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
             if feature in {'translation', 'trends', 'screen_frame_judge'}:

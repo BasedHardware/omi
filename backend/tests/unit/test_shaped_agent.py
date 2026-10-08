@@ -433,7 +433,6 @@ def test_notes_v2_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
     uid = uid_in_bucket(monkeypatch, 'shadow') if mode == 'shadow' else 'test'
     if mode != 'shadow':
         monkeypatch.setenv(shaped.FLAG, mode)
-    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda c: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
