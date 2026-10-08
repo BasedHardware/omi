@@ -468,6 +468,9 @@ environments:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -1143,6 +1146,9 @@ environments:
               category: rollout
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
+              category: rollout
+            REVIEW_SURFACE_MODE:
+              value: 'on'
               category: rollout
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
@@ -2936,6 +2942,9 @@ environments:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
+            category: rollout
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
@@ -3655,6 +3664,9 @@ environments:
               category: rollout
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
+              category: rollout
+            REVIEW_SURFACE_MODE:
+              value: 'on'
               category: rollout
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23

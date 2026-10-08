@@ -1691,6 +1691,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
@@ -2007,6 +2008,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
@@ -2079,6 +2081,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},

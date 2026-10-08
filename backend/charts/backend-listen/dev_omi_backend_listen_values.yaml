@@ -219,6 +219,8 @@ env:
     value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
