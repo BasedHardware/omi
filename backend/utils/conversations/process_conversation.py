@@ -97,6 +97,7 @@ from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, r
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
+    emit_recorded_decision,
     record_decision,
     rules_only_relevance,
 )
@@ -2333,6 +2334,8 @@ def _store_deferred_conversation(
         record_lazy_desktop_deferral(event='fenced')
         return conversation
 
+    emit_recorded_decision(uid, conversation.id, decision)
+
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     record_lazy_desktop_deferral(event='stored')
     return conversation
@@ -2483,6 +2486,7 @@ def _store_deterministic_minimum(
             plan.reason,
         )
         return conversation, False
+    emit_recorded_decision(uid, conversation.id, decision)
     logger.info(
         'free-tier: stored %s uid=%s conv=%s mode=%s reason=%s',
         kind,
@@ -3056,6 +3060,9 @@ def process_conversation(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
         )
         return conversation
+
+    if relevance is not None:
+        emit_recorded_decision(uid, conversation.id, relevance)
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a
