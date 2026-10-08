@@ -16,7 +16,6 @@ nothing, so callers preflight with :func:`has_cacheable_prefix` first.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Mapping
 from typing import Any
 

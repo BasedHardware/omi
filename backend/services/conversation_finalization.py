@@ -33,9 +33,6 @@ from utils.metrics import (
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
-from utils.conversations.meeting_receipt import (
-    record_finalized_meeting_receipt,
-)
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
