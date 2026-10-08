@@ -1,0 +1,38 @@
+version: 2
+name: mcp-marketplace-setup
+tier: manual
+description: Exact marketplace install receipt continues to explicit connection setup, using an isolated named bundle and loopback OAuth fixture
+app: com.omi.omi-marketplace-setup
+covers:
+  - desktop/macos/Desktop/Sources/Chat/ExtensionCatalogService.swift
+  - desktop/macos/Desktop/Sources/Chat/ExtensionInstallSession.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalMcpStore.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalMcpStore+OAuth.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalSkillsStore.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalExtensionQAStorage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Extensions/ExtensionDetailSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Extensions/MarketplaceSetupQAHooks.swift
+preconditions:
+  - auth_ready
+steps:
+  - id: S1
+    name: Open controlled marketplace entry
+    do: "Start scripts/mcp-marketplace-fixture.py. Launch only the named bundle with OMI_EXTENSION_QA_ISOLATION=1 in .env.app.dev, verify current source identity, navigate Apps, then invoke marketplace_setup_show_fixture with the printed loopback endpoint. Verify literal publisher/endpoint and Install before any write."
+    expect:
+      text_visible:
+        - MCP Setup QA
+        - Install
+  - id: S2
+    name: Install and preserve exact configuration identity
+    do: "Press Install through marketplace_setup_fixture_install. Poll marketplace_setup_fixture_snapshot for server_setup and the exact receipt name. Verify the same sheet now shows connection status and explicit Sign In/Save Key, with no second Install and no browser opened automatically. Repeat installation attempts must not create duplicates."
+    expect:
+      text_visible:
+        - Sign In
+        - Save Key
+  - id: S3
+    name: Explicit OAuth and read-only MCP round trip
+    do: "Press Sign In in the existing connection sheet. The loopback fixture completes DCR/PKCE/resource/code exchange without a real account. Verify responding/tool status, private isolated config, and a read-only qa_read call using the installed transport/token. Cancel/close leaves committed config recoverable and never rolls it back. Verify default and maximum supported text sizes, including scroll reachability."
+    expect:
+      text_visible:
+        - Remove

@@ -244,156 +244,6 @@ struct ExtensionMarketplaceSection: View {
   }
 }
 
-/// What a marketplace entry is and exactly what installing it writes, so the decision to run a
-/// third party's command — or hand it a credential — is made against the facts, not a card.
-struct ExtensionDetailSheet: View {
-  let entry: ExtensionCatalog.Entry
-  @ObservedObject var appProvider: AppProvider
-  let onDismiss: () -> Void
-
-  @State private var values: [String: String] = [:]
-  @State private var errorText: String?
-  @State private var isInstalling = false
-
-  private var requiredFields: [String] {
-    switch entry.install {
-    case .mcpRemote(_, _, let header): return header.map { [$0] } ?? []
-    case .mcpStdio(_, _, let env): return env
-    case .skill: return []
-    }
-  }
-
-  /// The literal thing that lands in ~/.omi. Shown verbatim: a command a user cannot see is a
-  /// command they cannot refuse.
-  private var installSummary: String {
-    switch entry.install {
-    case .mcpRemote(let url, let transport, _): return "\(transport.uppercased())  \(url)"
-    case .mcpStdio(let command, let args, _): return ([command] + args).joined(separator: " ")
-    case .skill(let source):
-      let folder = "\(source.repo)/skills/\(source.slug)"
-      guard source.files.count > 1 else { return "\(folder)  ·  SKILL.md" }
-      return "\(folder)  ·  SKILL.md and \(source.files.count - 1) bundled files"
-    }
-  }
-
-  private var installSummaryLabel: String {
-    if case .skill = entry.install { return "Source" }
-    if case .mcpStdio = entry.install { return "Runs on your Mac" }
-    return "Endpoint"
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(spacing: OmiSpacing.md) {
-        ExtensionLogo(imageUrl: entry.iconURL, fallbackSymbol: fallbackSymbol, size: 44)
-
-        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-          Text(entry.name)
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text(entry.publisher.isEmpty ? entry.subtitle : "\(entry.subtitle) · \(entry.publisher)")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-            .lineLimit(1)
-        }
-        Spacer()
-      }
-
-      ScrollView {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          if !entry.detail.isEmpty {
-            Text(entry.detail)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-
-          labelled(installSummaryLabel) {
-            Text(installSummary)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.primary)
-              .textSelection(.enabled)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-
-          ForEach(requiredFields, id: \.self) { field in
-            labelled(field) {
-              SecureField("Required", text: binding(for: field))
-                .textFieldStyle(.roundedBorder)
-            }
-          }
-
-          if let website = entry.websiteURL, let url = URL(string: website) {
-            Link("Open publisher page", destination: url)
-              .scaledFont(size: OmiType.caption)
-          }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-
-      if let errorText {
-        Text(errorText)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      HStack {
-        Spacer()
-        Button("Cancel", action: onDismiss)
-          .buttonStyle(.plain)
-          .foregroundColor(Ink.secondary)
-        Button(action: install) {
-          ConnectionModalActionButton(title: isInstalling ? "Installing…" : "Install")
-        }
-        .buttonStyle(.plain)
-        .disabled(isInstalling)
-      }
-    }
-    .padding(OmiSpacing.lg)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-  }
-
-  private var fallbackSymbol: String {
-    switch entry.install {
-    case .skill: return "graduationcap"
-    case .mcpStdio: return "terminal"
-    case .mcpRemote: return "server.rack"
-    }
-  }
-
-  @ViewBuilder
-  private func labelled<Content: View>(_ label: String, @ViewBuilder content: () -> Content)
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.secondary)
-      content()
-    }
-  }
-
-  private func binding(for field: String) -> Binding<String> {
-    Binding(get: { values[field] ?? "" }, set: { values[field] = $0 })
-  }
-
-  private func install() {
-    isInstalling = true
-    errorText = nil
-    Task {
-      do {
-        try await ExtensionCatalogService.install(entry, secrets: values)
-        await appProvider.fetchUserExtensions()
-        onDismiss()
-      } catch {
-        errorText = error.localizedDescription
-        isInstalling = false
-      }
-    }
-  }
-}
-
 /// A publisher logo that degrades to a symbol.
 ///
 /// `AsyncImage` is not usable here: many publishers serve SVG, which SwiftUI's image decoder
@@ -1161,107 +1011,109 @@ struct LocalMcpDetailSheet: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(server.name)
-            .scaledFont(size: OmiType.title, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          // "Local" here used to mean "configured locally", which read as a claim about where a
-          // remote server runs.
-          Text(server.isCommand ? "Local command" : "Remote server")
+    ScrollView {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        HStack(alignment: .top) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text(server.name)
+              .scaledFont(size: OmiType.title, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            // "Local" here used to mean "configured locally", which read as a claim about where a
+            // remote server runs.
+            Text(server.isCommand ? "Local command" : "Remote server")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          DismissButton(action: onDismiss)
+        }
+
+        Text(server.summary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.primary)
+          .padding(OmiSpacing.md)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(Ink.rowFill)
+          .cornerRadius(OmiChrome.smallControlRadius)
+
+        // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
+        // browser round trip, an API key needs the key. Both live here because a card that reports
+        // "Needs sign-in" with nothing to press is a dead end.
+        if !server.isCommand {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            HStack(spacing: OmiSpacing.sm) {
+              Text(status.label)
+                .scaledFont(size: OmiType.caption, weight: .medium)
+                .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
+              Spacer()
+              Button(action: signIn) {
+                ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
+              }
+              .buttonStyle(.plain)
+              .disabled(isSigningIn)
+              .accessibilityIdentifier("apps-mcp-sign-in")
+            }
+
+            HStack(spacing: OmiSpacing.sm) {
+              SecureField("Or paste an API key", text: $apiKey)
+                .textFieldStyle(.roundedBorder)
+              Button("Save Key", action: saveAPIKey)
+                .buttonStyle(.plain)
+                .foregroundColor(Ink.secondary)
+                .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+          }
+        }
+
+        if let notice {
+          Text(notice)
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        Spacer()
-        DismissButton(action: onDismiss)
-      }
 
-      Text(server.summary)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .padding(OmiSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.smallControlRadius)
-
-      // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
-      // browser round trip, an API key needs the key. Both live here because a card that reports
-      // "Needs sign-in" with nothing to press is a dead end.
-      if !server.isCommand {
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          HStack(spacing: OmiSpacing.sm) {
-            Text(status.label)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
-            Spacer()
-            Button(action: signIn) {
-              ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
-            }
-            .buttonStyle(.plain)
-            .disabled(isSigningIn)
-            .accessibilityIdentifier("apps-mcp-sign-in")
-          }
-
-          HStack(spacing: OmiSpacing.sm) {
-            SecureField("Or paste an API key", text: $apiKey)
-              .textFieldStyle(.roundedBorder)
-            Button("Save Key", action: saveAPIKey)
-              .buttonStyle(.plain)
-              .foregroundColor(Ink.secondary)
-              .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-          }
-        }
-      }
-
-      if let notice {
-        Text(notice)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      if let errorText {
-        Text(errorText)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Text(
-        "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
-      )
-      .scaledFont(size: OmiType.caption)
-      .foregroundColor(Ink.secondary)
-      .fixedSize(horizontal: false, vertical: true)
-
-      HStack {
-        Spacer()
-        Button {
-          if confirmingDelete {
-            LocalMcpStore.removeServer(name: server.name)
-            Task {
-              await appProvider.fetchUserExtensions()
-              onDismiss()
-            }
-          } else {
-            confirmingDelete = true
-          }
-        } label: {
-          Text(confirmingDelete ? "Confirm Remove" : "Remove")
-            .scaledFont(size: OmiType.caption, weight: .medium)
+        if let errorText {
+          Text(errorText)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.errorRed)
-            .padding(.horizontal, OmiSpacing.md)
-            .frame(height: 28)
-            .background(Ink.errorRed.opacity(0.1))
-            .cornerRadius(OmiChrome.chipRadius)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .buttonStyle(.plain)
-      }
 
-      Spacer(minLength: 0)
+        Text(
+          "Configured in ~/.omi/mcp.json. Changes reach chat automatically — right away, or with your next message if a reply is in flight."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+
+        HStack {
+          Spacer()
+          Button {
+            if confirmingDelete {
+              LocalMcpStore.removeServer(name: server.name)
+              Task {
+                await appProvider.fetchUserExtensions()
+                onDismiss()
+              }
+            } else {
+              confirmingDelete = true
+            }
+          } label: {
+            Text(confirmingDelete ? "Confirm Remove" : "Remove")
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.errorRed)
+              .padding(.horizontal, OmiSpacing.md)
+              .frame(height: 28)
+              .background(Ink.errorRed.opacity(0.1))
+              .cornerRadius(OmiChrome.chipRadius)
+          }
+          .buttonStyle(.plain)
+        }
+
+        Spacer(minLength: 0)
+      }
+      .padding(OmiSpacing.lg)
     }
-    .padding(OmiSpacing.lg)
     .background(Ink.surface)
   }
 
