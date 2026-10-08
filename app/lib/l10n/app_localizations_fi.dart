@@ -12454,4 +12454,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get partialRecording => 'Osittainen tallenne';
+
+  @override
+  String get importTranscriptFiles => 'Litterointitiedostot';
+
+  @override
+  String get importTranscriptFilesDescription => 'Valitse SRT-, VTT- tai TXT-litteroinnit tai niitä sisältävä ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Liian monta tuontia juuri nyt. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get importFileTooLarge => 'Tämä tiedosto on liian suuri tuotavaksi.';
+
+  @override
+  String get importUnsupportedFileType => 'Tämän tyyppistä tiedostoa ei voi tuoda.';
 }

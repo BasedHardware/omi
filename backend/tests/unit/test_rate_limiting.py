@@ -253,6 +253,11 @@ class TestBoostExemption(unittest.TestCase):
             self.assertEqual(get_effective_limit(name, boost=1.0), (base, window))
 
 
+def test_transcript_upload_budget_ignores_boost():
+    assert 'import:upload' in BOOST_EXEMPT_POLICIES
+    assert get_effective_limit('import:upload', boost=100) == (30, 3600)
+
+
 class TestShadowMode(unittest.TestCase):
     """Test shadow mode env var parsing."""
 
@@ -520,8 +525,15 @@ class TestWithRateLimitWrapper(unittest.TestCase):
         dep_func = self.ep.with_rate_limit(lambda: "test_uid", "chat:send_message")
         # The inner dependency expects uid as a keyword arg (from Depends)
         result = asyncio.run(dep_func(uid="user123"))
-        mock_enforce.assert_called_once_with("user123", "chat:send_message")
+        mock_enforce.assert_called_once_with("user123", "chat:send_message", fail_closed=False)
         self.assertEqual(result, "user123")
+
+    def test_with_rate_limit_can_fail_closed(self):
+        with patch.object(self.ep, 'check_rate_limit', side_effect=self.ep.redis_pkg.exceptions.RedisError('down')):
+            dependency = self.ep.with_rate_limit(lambda: 'uid', 'import:upload', fail_closed=True)
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(dependency(uid='uid'))
+        self.assertEqual(error.exception.status_code, 503)
 
     @patch('utils.other.endpoints._enforce_rate_limit', side_effect=HTTPException(status_code=429, detail="blocked"))
     def test_with_rate_limit_dependency_propagates_429(self, mock_enforce):
@@ -559,14 +571,14 @@ class TestWithRateLimitWrapper(unittest.TestCase):
             entered = asyncio.Event()
             release = threading.Event()
 
-            def blocking_enforce(_uid, _policy):
+            def blocking_enforce(_uid, _policy, *, fail_closed=False):
                 loop.call_soon_threadsafe(entered.set)
                 release.wait()
 
             dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
             with patch.object(self.ep, "_enforce_rate_limit", blocking_enforce):
                 dependency_task = asyncio.create_task(dep_func(uid="user123"))
-                await entered.wait()
+                await asyncio.wait_for(entered.wait(), timeout=5)
 
                 # If the Redis/Lua boundary were still running on the event loop,
                 # execution could not reach this assertion until release was set.
@@ -631,6 +643,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "voice:message",
             "voice:transcribe",
             "file:upload",
+            "import:upload",
             "agent:execute_tool",
             "mcp:sse",
             "memories:create",

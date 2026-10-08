@@ -12478,4 +12478,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get partialRecording => 'Частковий запис';
+
+  @override
+  String get importTranscriptFiles => 'Файли розшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними';
+
+  @override
+  String get importTooManyAttempts => 'Зараз забагато імпортів. Спробуйте пізніше.';
+
+  @override
+  String get importFileTooLarge => 'Цей файл завеликий для імпорту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файли цього типу не можна імпортувати.';
 }

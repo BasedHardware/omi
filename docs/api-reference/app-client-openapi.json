@@ -4837,6 +4837,20 @@
         "title": "Body_import_limitless_data_v1_import_limitless_post",
         "type": "object"
       },
+      "Body_import_transcript_files_v1_import_transcripts_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_transcript_files_v1_import_transcripts_post",
+        "type": "object"
+      },
       "Body_migrate_app_owner_v1_apps_migrate_owner_post": {
         "properties": {
           "source_token": {
@@ -16376,6 +16390,17 @@
             ],
             "title": "Processed Files"
           },
+          "source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportSourceType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which importer created the job"
+          },
           "status": {
             "$ref": "#/components/schemas/ImportJobStatus"
           },
@@ -16407,6 +16432,14 @@
           "cancelled"
         ],
         "title": "ImportJobStatus",
+        "type": "string"
+      },
+      "ImportSourceType": {
+        "enum": [
+          "limitless",
+          "transcript_files"
+        ],
+        "title": "ImportSourceType",
         "type": "string"
       },
       "Insight": {
@@ -52756,6 +52789,124 @@
           }
         ],
         "summary": "Delete Limitless Conversations",
+        "tags": [
+          "import"
+        ]
+      }
+    },
+    "/v1/import/transcripts": {
+      "post": {
+        "description": "Start importing transcripts exported from other tools.\n\nAccepts one ``.srt``, ``.vtt`` or ``.txt`` transcript, or a ``.zip`` of them. Each\ntranscript becomes a completed conversation (no AI processing); re-importing the\nsame file is skipped. ``tz`` reads dates in file names, and ``origin`` is ``plaud``\nor ``other``. Poll GET /v1/import/jobs/{job_id} for progress.",
+        "operationId": "import_transcript_files_v1_import_transcripts_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "title": "Language",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "title": "Tz",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "default": "other",
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_transcript_files_v1_import_transcripts_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Import Transcript Files",
         "tags": [
           "import"
         ]

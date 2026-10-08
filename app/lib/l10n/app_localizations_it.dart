@@ -12519,4 +12519,20 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get partialRecording => 'Registrazione parziale';
+
+  @override
+  String get importTranscriptFiles => 'File di trascrizione';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Seleziona trascrizioni SRT, VTT o TXT, oppure uno ZIP che le contenga';
+
+  @override
+  String get importTooManyAttempts => 'Troppe importazioni in questo momento. Riprova più tardi.';
+
+  @override
+  String get importFileTooLarge => 'Questo file è troppo grande per essere importato.';
+
+  @override
+  String get importUnsupportedFileType => 'Questo tipo di file non può essere importato.';
 }

@@ -12379,4 +12379,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get partialRecording => 'تسجيل جزئي';
+
+  @override
+  String get importTranscriptFiles => 'ملفات النصوص';
+
+  @override
+  String get importTranscriptFilesDescription => 'اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها';
+
+  @override
+  String get importTooManyAttempts => 'عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get importFileTooLarge => 'هذا الملف كبير جدًا بحيث لا يمكن استيراده.';
+
+  @override
+  String get importUnsupportedFileType => 'لا يمكن استيراد هذا النوع من الملفات.';
 }

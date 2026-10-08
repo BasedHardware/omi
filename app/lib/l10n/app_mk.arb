@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "Оцена со 5 ѕвезди навистина ни помага ❤️",
     "onboardingRatingPromptYes": "Да, сакам да ве поддржам!",
     "onboardingRatingPromptNo": "Не баш",
-    "partialRecording": "Делумна снимка"
+    "partialRecording": "Делумна снимка",
+    "importTranscriptFiles": "Датотеки со транскрипти",
+    "importTranscriptFilesDescription": "Изберете SRT, VTT или TXT транскрипти или ZIP со нив",
+    "importTooManyAttempts": "Моментално има премногу увезувања. Обидете се повторно подоцна.",
+    "importFileTooLarge": "Оваа датотека е преголема за увезување.",
+    "importUnsupportedFileType": "Овој тип на датотека не може да се увезе."
 }

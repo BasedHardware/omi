@@ -3886,5 +3886,10 @@
     "onboardingRatingPromptBody": "Оценка в 5 звёзд очень нам поможет ❤️",
     "onboardingRatingPromptYes": "Да, хочу вас поддержать!",
     "onboardingRatingPromptNo": "Не совсем",
-    "partialRecording": "Частичная запись"
+    "partialRecording": "Частичная запись",
+    "importTranscriptFiles": "Файлы расшифровок",
+    "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними",
+    "importTooManyAttempts": "Сейчас слишком много импортов. Повторите попытку позже.",
+    "importFileTooLarge": "Этот файл слишком большой для импорта.",
+    "importUnsupportedFileType": "Файлы этого типа нельзя импортировать."
 }

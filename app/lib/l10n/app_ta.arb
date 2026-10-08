@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️",
     "onboardingRatingPromptYes": "ஆம், உங்களுக்கு ஆதரவளிக்க விரும்புகிறேன்!",
     "onboardingRatingPromptNo": "அவ்வளவாக இல்லை",
-    "partialRecording": "பகுதியளவு பதிவு"
+    "partialRecording": "பகுதியளவு பதிவு",
+    "importTranscriptFiles": "படியெடுப்பு கோப்புகள்",
+    "importTranscriptFilesDescription": "SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்",
+    "importTooManyAttempts": "இப்போது அதிகமான இறக்குமதிகள் நடைபெறுகின்றன. பின்னர் மீண்டும் முயலுங்கள்.",
+    "importFileTooLarge": "இந்தக் கோப்பு இறக்குமதி செய்ய மிகவும் பெரியது.",
+    "importUnsupportedFileType": "இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது."
 }

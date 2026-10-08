@@ -12498,4 +12498,20 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get partialRecording => 'Részleges felvétel';
+
+  @override
+  String get importTranscriptFiles => 'Átiratfájlok';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt';
+
+  @override
+  String get importTooManyAttempts => 'Jelenleg túl sok az importálás. Próbálja újra később.';
+
+  @override
+  String get importFileTooLarge => 'Ez a fájl túl nagy az importáláshoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ez a fájltípus nem importálható.';
 }

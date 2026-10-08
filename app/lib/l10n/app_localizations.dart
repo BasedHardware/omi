@@ -22298,6 +22298,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Partial recording'**
   String get partialRecording;
+
+  /// Import source card title for SRT, VTT or TXT transcripts exported from other apps
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript files'**
+  String get importTranscriptFiles;
+
+  /// Subtitle on the transcript-files import card
+  ///
+  /// In en, this message translates to:
+  /// **'Select SRT, VTT or TXT transcripts, or a ZIP of them'**
+  String get importTranscriptFilesDescription;
+
+  /// Error when an import is refused because the user started too many imports in a short time (HTTP 429)
+  ///
+  /// In en, this message translates to:
+  /// **'Too many imports right now. Try again later.'**
+  String get importTooManyAttempts;
+
+  /// Error when the selected import file is over the upload size limit
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large to import.'**
+  String get importFileTooLarge;
+
+  /// Error when the file picked for an import has an extension the importer does not accept
+  ///
+  /// In en, this message translates to:
+  /// **'This file type can\'t be imported.'**
+  String get importUnsupportedFileType;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

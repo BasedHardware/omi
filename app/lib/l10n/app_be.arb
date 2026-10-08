@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "Ацэнка ў 5 зорак вельмі нам дапаможа ❤️",
     "onboardingRatingPromptYes": "Так, хачу вас падтрымаць!",
     "onboardingRatingPromptNo": "Не асабліва",
-    "partialRecording": "Частковы запіс"
+    "partialRecording": "Частковы запіс",
+    "importTranscriptFiles": "Файлы стэнаграм",
+    "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
+    "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",
+    "importFileTooLarge": "Гэты файл занадта вялікі для імпарту.",
+    "importUnsupportedFileType": "Файлы гэтага тыпу нельга імпартаваць."
 }

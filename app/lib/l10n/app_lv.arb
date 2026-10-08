@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 zvaigžņu vērtējums mums ļoti palīdz ❤️",
     "onboardingRatingPromptYes": "Jā, es vēlos jūs atbalstīt!",
     "onboardingRatingPromptNo": "Ne gluži",
-    "partialRecording": "Daļējs ieraksts"
+    "partialRecording": "Daļējs ieraksts",
+    "importTranscriptFiles": "Transkripciju faili",
+    "importTranscriptFilesDescription": "Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām",
+    "importTooManyAttempts": "Pašlaik ir pārāk daudz importēšanu. Mēģiniet vēlreiz vēlāk.",
+    "importFileTooLarge": "Šis fails ir pārāk liels importēšanai.",
+    "importUnsupportedFileType": "Šāda veida failu nevar importēt."
 }

@@ -12472,4 +12472,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get partialRecording => 'Dalinis įrašas';
+
+  @override
+  String get importTranscriptFiles => 'Transkripcijų failai';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą';
+
+  @override
+  String get importTooManyAttempts => 'Šiuo metu per daug importavimų. Bandykite vėliau.';
+
+  @override
+  String get importFileTooLarge => 'Šis failas per didelis, kad būtų importuotas.';
+
+  @override
+  String get importUnsupportedFileType => 'Šio tipo failo importuoti negalima.';
 }
