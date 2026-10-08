@@ -6,6 +6,7 @@ from typing import Literal, cast
 from google.cloud import firestore
 
 from database import review_store as store
+from database.read_boundary import parse_payload_strict
 from models.product_memory import LedgerWriteReason, MemoryKind, MemoryItem
 from models.review import ReviewChange
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
@@ -59,14 +60,14 @@ def record_merge(uid, change, edit, edit_key):
 
     data = reserve(store.client().transaction())
     if data['phase'] == 'applied':
-        return ReviewChange.model_validate(data['change'])
+        return parse_payload_strict(ReviewChange, data['change'], document_path=ref.path)
     target = _merge(uid, data['before'], edit.content, 'review:' + change.change_id)
     ref.update({'phase': 'applied', 'active_memory_ids': [target]})
     return change
 
 
 def _merge(uid, rows, content, action_id):
-    source = MemoryItem.model_validate(rows[0])
+    source = parse_payload_strict(MemoryItem, rows[0], document_path=f'users/{uid}/review_memory_merge/source')
     return save_ledger_write(
         uid,
         LedgerWrite(
@@ -81,7 +82,13 @@ def _merge(uid, rows, content, action_id):
             slot=source.slot,
             visibility=cast(Literal['private', 'public', 'shared'], source.visibility),
             supersedes=[r['memory_id'] for r in rows],
-            preserved_evidence=[ev for row in rows for ev in MemoryItem.model_validate(row).evidence],
+            preserved_evidence=[
+                ev
+                for row in rows
+                for ev in parse_payload_strict(
+                    MemoryItem, row, document_path=f'users/{uid}/review_memory_merge/source'
+                ).evidence
+            ],
         ),
         db_client=store.client(),
         required_source_item=source,
@@ -121,7 +128,7 @@ def set_undone(uid, change_id, undone, data):
 
     latest, apply = reserve(store.client().transaction())
     if not apply:
-        return ReviewChange.model_validate(latest['change'])
+        return parse_payload_strict(ReviewChange, latest['change'], document_path=ref.path)
     action = f"review:{change_id}:{latest['revision']}:{phase}"
     if undone:
         source = latest['source'][0]
@@ -139,7 +146,9 @@ def set_undone(uid, change_id, undone, data):
             subject_entity_id=original.get('subject_entity_id'),
             visibility=original['visibility'],
             db_client=store.client(),
-            required_source_item=MemoryItem.model_validate(source),
+            required_source_item=parse_payload_strict(
+                MemoryItem, source, document_path=f'users/{uid}/review_memory_merge/source'
+            ),
         )
         second = save_fact(
             uid,
@@ -161,4 +170,4 @@ def set_undone(uid, change_id, undone, data):
         active = [_merge(uid, latest['source'], latest['memory_edit']['content'], action)]
     change = dict(latest['change'], undone=undone)
     ref.update(store.encode_doc(uid, {'change': change, 'phase': 'applied', 'active_memory_ids': active}))
-    return ReviewChange.model_validate(change)
+    return parse_payload_strict(ReviewChange, change, document_path=ref.path)
