@@ -60,8 +60,8 @@ from utils.other.audio_chunks import (
     iter_audio_chunk_pcm,
 )
 from utils.other.storage import (
-    download_speaker_embedding_cache,
-    upload_speaker_embedding_cache,
+    download_owner_evidence_cache as download_speaker_embedding_cache,
+    upload_owner_evidence_cache as upload_speaker_embedding_cache,
 )
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import (
