@@ -108,7 +108,7 @@ class RegistryFixture(unittest.TestCase):
         self.assertEqual(self.errors(), [])
         registry = load_registry(self.root / "config/feature-flags.yaml")
         output = render(self.root, registry, date(2026, 10, 8))
-        self.assertIn("ship", next(line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
+        self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
         self.assertNotIn("WARNING: overdue for a decision: EXAMPLE_ENABLED", check(self.root, check_render=False)[1])
 
     def test_unknown_decision_is_rejected(self) -> None:
