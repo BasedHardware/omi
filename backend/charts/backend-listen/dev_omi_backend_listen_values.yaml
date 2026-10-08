@@ -225,6 +225,8 @@ env:
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
