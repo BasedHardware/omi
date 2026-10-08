@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { SignAvatar } from './SignAvatar'
+import { SignVideo } from './SignVideo'
 import { SignWritingView } from './SignWritingView'
 import type { TranslationResult, SignGloss } from '../../../../shared/types'
 
@@ -10,6 +11,9 @@ export function SignLanguageOverlay(): React.JSX.Element {
   const [currentSWR, setCurrentSWR] = useState<string>('')
   const [fullSWR, setFullSWR] = useState<string>('')
   const [poseUrl, setPoseUrl] = useState<string | null>(null)
+  // translateToGlosses stores a video URL in poseUrl when the pose API fails
+  // and the video API succeeds. pose-viewer cannot play that payload.
+  const [assetType, setAssetType] = useState<'pose' | 'video'>('pose')
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
@@ -19,6 +23,7 @@ export function SignLanguageOverlay(): React.JSX.Element {
 
       setFullSWR(result.swrFull || '')
       setPoseUrl(result.poseUrl || null)
+      setAssetType(result.assetType === 'video' ? 'video' : 'pose')
 
       if (result.poseUrl) {
         setCurrentGloss('SIGNING')
@@ -45,6 +50,7 @@ export function SignLanguageOverlay(): React.JSX.Element {
           setCurrentGloss('IDLE')
           setCurrentSWR('')
           setPoseUrl(null)
+          setAssetType('pose')
         }, resetDelay)
       )
     })
@@ -89,7 +95,11 @@ export function SignLanguageOverlay(): React.JSX.Element {
         {currentGloss}
       </div>
       <div style={{ flex: 1 }}>
-        <SignAvatar poseUrl={poseUrl} />
+        {assetType === 'video' ? (
+          <SignVideo videoUrl={poseUrl} />
+        ) : (
+          <SignAvatar poseUrl={poseUrl} />
+        )}
       </div>
       <div
         style={{
