@@ -4,11 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/goals/goals_page.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
@@ -35,6 +38,7 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/voice_settings_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -131,19 +135,57 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
 /// voice profile; the older question-based redo page is no longer reachable (see the PR notes).
 Future<void> openVoiceProfile(BuildContext context) async {
   PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
-  await routeToPage(
-    context,
-    Builder(
-      builder: (routeContext) => Scaffold(
-        appBar: AppBar(leading: const OmiBackButton()),
-        body: SpeechProfileWidget(
-          flowSource: 'settings',
-          goNext: () => Navigator.of(routeContext).pop(),
-          onSkip: () => Navigator.of(routeContext).pop(),
-        ),
-      ),
-    ),
-  );
+  await routeToPage(context, const VoiceProfileRoute());
+}
+
+/// The Settings route of the guided voice flow. Where the native renderer is available, the native
+/// screen carries the route's back control in its own toolbar and any Flutter fallback restores the
+/// complete original page chrome; everywhere else it is the original page. Onboarding supplies its own.
+class VoiceProfileRoute extends StatefulWidget {
+  const VoiceProfileRoute({super.key, this.controller});
+
+  /// The guided voice owner; the flow creates its device-backed one when null. Injectable for tests.
+  final GuidedVoiceController? controller;
+
+  @override
+  State<VoiceProfileRoute> createState() => _VoiceProfileRouteState();
+}
+
+class _VoiceProfileRouteState extends State<VoiceProfileRoute> {
+  // Resolved once, so a rebuild never remounts the running voice flow.
+  late final Future<bool> _native =
+      nativePresentationEnabled ? supportsNativePresentation() : Future<bool>.value(false);
+
+  Widget _classic(Widget body) => Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: body);
+
+  @override
+  Widget build(BuildContext context) {
+    final flow = SpeechProfileWidget(
+      controller: widget.controller,
+      flowSource: 'settings',
+      goNext: () => Navigator.of(context).pop(),
+      onSkip: () => Navigator.of(context).pop(),
+    );
+    if (!nativePresentationEnabled) return _classic(flow);
+    return FutureBuilder<bool>(
+      future: _native,
+      builder: (context, support) {
+        if (support.connectionState != ConnectionState.done) return _classic(const OmiLoadingState());
+        if (support.data != true) return _classic(flow);
+        return Material(
+          color: OmiColors.surface0,
+          child: NativeNavigationChrome(
+            toolbar: [
+              NativeRow('voice_profile_back', context.l10n.back,
+                  symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+            ],
+            wrapFallback: (fallback) => NativeNavigationChrome(enabled: false, child: _classic(fallback)),
+            child: flow,
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Help center languages (checked 2026-09-24); any other app language opens English.

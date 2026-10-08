@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Picks how long a silence ends a conversation. A setting applies when it changes
 /// (docs/ux-contract.md §12): tapping an option saves it and closes the sheet.
 class ConversationTimeoutDialog {
-  static Future<void> show(BuildContext context) async {
+  ///
+  /// [debugPresentNative] lets a test present the native sheet body on a host without the renderer.
+  static Future<void> show(BuildContext context,
+      {@visibleForTesting
+      Future<int?> Function(BuildContext context, WidgetBuilder nativeBuilder)? debugPresentNative}) async {
     final l10n = context.l10n;
     final currentDuration = SharedPreferencesUtil().conversationSilenceDuration;
 
@@ -20,45 +25,72 @@ class ConversationTimeoutDialog {
       (value: -1, label: l10n.timeout4Hours, description: l10n.timeout4HoursDesc),
     ];
 
-    final selected = await showOmiSheet<int>(
-      context: context,
-      title: l10n.conversationTimeout,
-      builder: (sheetContext) => SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.md),
-              child: Text(
-                l10n.conversationTimeoutDesc,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+    Widget classic(BuildContext sheetContext) => SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.md),
+                child: Text(
+                  l10n.conversationTimeoutDesc,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
               ),
-            ),
-            OmiSettingsGroup(
-              children: [
-                for (final option in options)
-                  Semantics(
-                    selected: option.value == currentDuration,
-                    child: OmiSettingsRow(
-                      title: option.label,
-                      subtitle: option.description,
-                      showChevron: false,
-                      trailing: option.value == currentDuration
-                          ? Icon(Icons.check_rounded, color: OmiColors.accent, size: 22)
-                          : const SizedBox(width: 22),
-                      onTap: () => Navigator.of(sheetContext).pop(option.value),
+              OmiSettingsGroup(
+                children: [
+                  for (final option in options)
+                    Semantics(
+                      selected: option.value == currentDuration,
+                      child: OmiSettingsRow(
+                        title: option.label,
+                        subtitle: option.description,
+                        showChevron: false,
+                        trailing: option.value == currentDuration
+                            ? Icon(Icons.check_rounded, color: OmiColors.accent, size: 22)
+                            : const SizedBox(width: 22),
+                        onTap: () => Navigator.of(sheetContext).pop(option.value),
+                      ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: OmiSpacing.md),
-          ],
-        ),
-      ),
-    );
+                ],
+              ),
+              const SizedBox(height: OmiSpacing.md),
+            ],
+          ),
+        );
 
-    if (selected == null || selected == currentDuration) return;
+    Widget native(BuildContext sheetContext) => IosNativeSurface(
+          title: l10n.conversationTimeout,
+          fallback: OmiSheetScaffold(title: l10n.conversationTimeout, child: classic(sheetContext)),
+          toolbar: [
+            NativeRow('timeout_close', l10n.close,
+                symbol: 'xmark', action: (_) => Navigator.of(sheetContext).maybePop()),
+          ],
+          sections: [
+            NativeSection(
+              'timeout_options',
+              [
+                for (final option in options)
+                  NativeRow('timeout:${option.value}', option.label,
+                      subtitle: option.description,
+                      symbol: option.value == currentDuration ? 'checkmark' : null,
+                      action: (_) => Navigator.of(sheetContext).pop(option.value)),
+              ],
+              footer: l10n.conversationTimeoutDesc,
+            ),
+          ],
+        );
+
+    final selected = debugPresentNative != null
+        ? await debugPresentNative(context, native)
+        : await showOmiSheet<int>(
+            context: context,
+            title: l10n.conversationTimeout,
+            builder: classic,
+            nativeBuilder: native,
+          );
+
+    if (selected == null || selected == currentDuration || !options.any((option) => option.value == selected)) return;
     SharedPreferencesUtil().conversationSilenceDuration = selected;
     if (!context.mounted) return;
     final message = selected == -1

@@ -14,10 +14,15 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+part 'wrapped_2025_native.dart';
 
 // Bold color palette inspired by LinkedIn Wrapped
 class WrappedColors {
@@ -33,7 +38,13 @@ class WrappedColors {
 }
 
 class Wrapped2025Page extends StatefulWidget {
-  const Wrapped2025Page({super.key});
+  const Wrapped2025Page({super.key, this.fetchWrapped, this.startGeneration});
+
+  /// The Wrapped status and result owner; defaults to the backend API. Injectable for tests.
+  final Future<Wrapped2025Response?> Function()? fetchWrapped;
+
+  /// Starts generation; defaults to the backend API. Injectable for tests.
+  final Future<Wrapped2025Response?> Function()? startGeneration;
 
   @override
   State<Wrapped2025Page> createState() => _Wrapped2025PageState();
@@ -56,9 +67,25 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   // Total number of cards
   int get _totalCards => 13;
 
+  // Results apply only to the account that opened the page; a session change also stops polling.
+  final AuthSessionSnapshot? _owner = AuthService.instance.captureSessionSnapshot();
+  StreamSubscription<int>? _sessionEvents;
+  bool _sessionChanged = false;
+
+  bool get _applies {
+    final owner = _owner;
+    return mounted && !_sessionChanged && (owner == null || AuthService.instance.isSessionSnapshotCurrent(owner));
+  }
+
+  Future<Wrapped2025Response?> _fetch() => (widget.fetchWrapped ?? getWrapped2025)();
+
   @override
   void initState() {
     super.initState();
+    _sessionEvents = AuthService.instance.sessionGenerationEvents.listen((_) {
+      _sessionChanged = true;
+      _pollTimer?.cancel();
+    });
     PlatformManager.instance.analytics.wrappedPageOpened();
     SharedPreferencesUtil().hasViewedWrapped2025 = true;
     _loadWrappedStatus();
@@ -68,6 +95,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    unawaited(_sessionEvents?.cancel());
     _pageController.removeListener(_onPageChanged);
     _pageController.dispose();
     super.dispose();
@@ -107,7 +135,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   Future<void> _loadWrappedStatus() async {
     setState(() => _isLoading = true);
 
-    final response = await getWrapped2025();
+    final response = await _fetch();
+    if (!_applies) return;
 
     if (response != null) {
       setState(() {
@@ -132,7 +161,16 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   void _startPolling() {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      final response = await getWrapped2025();
+      if (!_applies) {
+        timer.cancel();
+        return;
+      }
+      final response = await _fetch();
+      // A result for a disposed page or a previous account is never applied.
+      if (!_applies) {
+        timer.cancel();
+        return;
+      }
       if (response != null) {
         setState(() {
           _status = response.status;
@@ -169,8 +207,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       _progress = {'step': context.l10n.wrappedStarting, 'pct': 0.0};
     });
 
-    final response = await generateWrapped2025();
-    if (!mounted) return;
+    final response = await (widget.startGeneration ?? generateWrapped2025)();
+    if (!_applies) return;
 
     if (response != null) {
       setState(() {
@@ -585,6 +623,12 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   @override
   Widget build(BuildContext context) {
+    // Built lazily, so the native projection decides first whether the result is usable.
+    final classic = Builder(builder: (_) => _buildClassic());
+    return nativePresentationEnabled ? _buildNative(classic) : classic;
+  }
+
+  Widget _buildClassic() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(

@@ -9,6 +9,9 @@ import 'package:omi/pages/settings/transcription/transcription_fields.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The native JSON field's limit in text units; a longer configuration keeps the complete Flutter editor.
+const nativeJsonEditorLimit = 262144;
+
 /// Pushed editor for a Custom STT request configuration or response schema. Pops with the edited
 /// JSON on Save; back discards.
 class TranscriptionJsonEditorPage extends StatefulWidget {
@@ -35,6 +38,10 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
   late final TextEditingController _controller = TextEditingController(text: widget.initialJson);
   String? _parseError;
 
+  /// Set once the JSON outgrows the native field: the complete Flutter editor then stays for this
+  /// page, so shortening the text never swaps editors mid-edit.
+  bool _beyondNativeLimit = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +55,7 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
   }
 
   void _parseJson() {
+    if (_controller.text.length > nativeJsonEditorLimit) _beyondNativeLimit = true;
     try {
       jsonDecode(_controller.text);
       _parseError = null;
@@ -115,6 +123,7 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
         ],
       ),
     );
+    if (_beyondNativeLimit) return classic;
     final l10n = context.l10n;
     final templates =
         widget.isResponseSchema ? SttResponseSchema.templates.keys : SttProviderConfig.requestTemplates.keys;
@@ -141,8 +150,8 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
             footer: widget.isResponseSchema ? l10n.quicklyPopulateResponse : l10n.quicklyPopulateRequest),
       NativeSection('json_editor', [
         if (_parseError != null) NativeRow('json_error', l10n.invalidJsonError, kind: 'label'),
-        NativeRow('json_text', widget.title, kind: 'text', maximumLength: 262144, value: _controller.text,
-            action: (value) {
+        NativeRow('json_text', widget.title,
+            kind: 'text', maximumLength: nativeJsonEditorLimit, value: _controller.text, action: (value) {
           _controller.text = value as String;
           _parseJson();
         }),

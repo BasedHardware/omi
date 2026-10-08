@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -12,6 +13,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
@@ -20,6 +22,13 @@ import 'package:omi/utils/other/temp.dart';
 
 class DataPrivacyPage extends StatefulWidget {
   const DataPrivacyPage({super.key});
+
+  /// Debug-only: the iOS gates a non-iOS test host cannot report. Release and profile builds ignore it.
+  @visibleForTesting
+  static ({bool ios, bool shortcutsHint, bool searchHint})? debugPlatformForTest;
+
+  static ({bool ios, bool shortcutsHint, bool searchHint})? get _debugPlatform =>
+      kDebugMode ? debugPlatformForTest : null;
 
   @override
   State<DataPrivacyPage> createState() => _DataPrivacyPageState();
@@ -31,8 +40,10 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
 
   // App Shortcuts and the native Shortcuts button require iOS 16; the
   // searchInApp schema requires iOS 27. Older systems keep the index switch.
-  late final bool _shortcutsHintSupported = PlatformService.isIOSAtLeast(16);
-  late final bool _searchHintSupported = PlatformService.isIOSAtLeast(27);
+  late final bool _isIOS = DataPrivacyPage._debugPlatform?.ios ?? Platform.isIOS;
+  late final bool _shortcutsHintSupported =
+      DataPrivacyPage._debugPlatform?.shortcutsHint ?? PlatformService.isIOSAtLeast(16);
+  late final bool _searchHintSupported = DataPrivacyPage._debugPlatform?.searchHint ?? PlatformService.isIOSAtLeast(27);
 
   // The native omi/shortcuts_button platform view is registered only by the
   // Siri toolchain (Xcode 27). Stable-compiler (Xcode 26.6) builds compile the
@@ -41,11 +52,25 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   // bridge confirms availability.
   bool _appShortcutsAvailable = false;
 
+  // The native list draws Apple's ShortcutsLink itself only when this host compiled it in; it is
+  // resolved once. Until then, and without it, the Shortcuts card keeps the classic page.
+  bool _shortcutsLinkCapable = false;
+  late final Future<bool> _shortcutsLinkCapability = _shortcutsHintSupported
+      ? nativeUiCapabilities().then((capabilities) => capabilities.contains('shortcuts_link'))
+      : Future.value(false);
+
   Future<void> _loadAppShortcutsAvailability() async {
     final revision = _siriRevision;
     try {
-      final available = await SiriIntegration.instance.appShortcutsAvailable();
-      if (mounted && revision == _siriRevision) setState(() => _appShortcutsAvailable = available);
+      final available = await SiriIntegration.current.appShortcutsAvailable();
+      // Both answers land together, so the card never flips between the classic and native lists.
+      final linkCapable = await _shortcutsLinkCapability;
+      if (mounted && revision == _siriRevision) {
+        setState(() {
+          _appShortcutsAvailable = available;
+          _shortcutsLinkCapable = linkCapable;
+        });
+      }
     } catch (_) {
       // Fail closed: leave the card hidden when the bridge cannot answer.
     }
@@ -54,7 +79,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   Future<void> _loadSiriSetting() async {
     final revision = _siriRevision;
     try {
-      final enabled = await SiriIntegration.instance.isEnabled();
+      final enabled = await SiriIntegration.current.isEnabled();
       if (mounted && revision == _siriRevision) setState(() => _siriEnabled = enabled);
     } catch (_) {/* Keep the default until native state is available. */}
   }
@@ -63,7 +88,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     final revision = ++_siriRevision;
     final previous = _siriEnabled;
     setState(() => _siriEnabled = enabled);
-    unawaited(SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
+    unawaited(SiriIntegration.current.setEnabled(enabled).catchError((Object _) {
       if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
     }));
   }
@@ -72,7 +97,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   void initState() {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
-    if (Platform.isIOS) _loadSiriSetting();
+    if (_isIOS) _loadSiriSetting();
     if (_shortcutsHintSupported) _loadAppShortcutsAvailability();
   }
 
@@ -124,6 +149,11 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     );
   }
 
+  String _shortcutsHint(BuildContext context) => _searchHintSupported
+      ? '${context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi')}'
+          '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
+      : context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi');
+
   String _getAccessDescription(BuildContext context, App app) {
     List<String> accessTypes = [];
     if (app.hasConversationsAccess()) {
@@ -172,7 +202,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                 padding: const EdgeInsets.all(OmiSpacing.md),
                 children: [
                   _buildEncryptionBanner(context),
-                  if (Platform.isIOS) ...[
+                  if (_isIOS) ...[
                     const SizedBox(height: OmiSpacing.xxl),
                     Container(
                       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
@@ -195,10 +225,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                             Text(context.l10n.askOmi, style: OmiType.body),
                             const SizedBox(height: OmiSpacing.xs),
                             Text(
-                              _searchHintSupported
-                                  ? '${context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi')}'
-                                      '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
-                                  : context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
+                              _shortcutsHint(context),
                               style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                             ),
                             const SizedBox(height: OmiSpacing.md),
@@ -254,8 +281,10 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
             ],
           ),
         );
-        // Keep the native Shortcuts control when this compiler exposes it.
-        if (_shortcutsHintSupported && _appShortcutsAvailable) return classic;
+        final shortcutsCard = _shortcutsHintSupported && _appShortcutsAvailable;
+        // The UIKit Shortcuts button lives in the classic page; the native list carries it only as the
+        // host's own ShortcutsLink.
+        if (shortcutsCard && !_shortcutsLinkCapable) return classic;
         final l10n = context.l10n;
         final apps = context.watch<AppProvider>().apps.where((app) => app.enabled && app.worksExternally()).toList();
         return IosNativeSurface(
@@ -273,7 +302,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
                 }),
               ]),
-              if (Platform.isIOS)
+              if (_isIOS)
                 NativeSection('siri', [
                   NativeRow('siri_index', l10n.siriIndexSetting,
                       kind: 'toggle',
@@ -281,6 +310,11 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                       value: _siriEnabled,
                       enabled: !isLoading || isMigrating,
                       action: (value) => _setSiriEnabled(value as bool)),
+                ]),
+              if (_isIOS && shortcutsCard && _shortcutsLinkCapable)
+                NativeSection('siri_shortcuts', [
+                  NativeRow('siri_shortcuts_hint', l10n.askOmi, kind: 'label', subtitle: _shortcutsHint(context)),
+                  NativeRow('siri_shortcuts_link', l10n.askOmi, kind: 'shortcuts_link'),
                 ]),
               NativeSection(
                   'app_access',
