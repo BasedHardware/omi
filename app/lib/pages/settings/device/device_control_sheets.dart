@@ -10,7 +10,8 @@ String micGainLevelLabel(BuildContext context, int level) {
   return level >= 1 && level <= decibels.length ? decibels[level - 1] : '';
 }
 
-String _micGainDescription(BuildContext context, int level) {
+/// What a mic-gain level (0–8) does, or '' outside that range.
+String micGainDescription(BuildContext context, int level) {
   final l10n = context.l10n;
   final descriptions = [
     l10n.micGainDescMuted,
@@ -92,7 +93,7 @@ Future<void> showMicGainSheet(
       max: 8,
       divisions: 8,
       valueLabel: (context, value) => micGainLevelLabel(context, value.round()),
-      description: (context, value) => _micGainDescription(context, value.round()),
+      description: (context, value) => micGainDescription(context, value.round()),
       minLabel: (context) => context.l10n.mute,
       presets: (context) => [(context.l10n.quiet, 2.0), (context.l10n.normal, 4.0), (context.l10n.high, 6.0)],
       onChanged: onChanged,

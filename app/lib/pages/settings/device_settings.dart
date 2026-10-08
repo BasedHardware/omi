@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_settings.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_asset_image.dart';
 
 import 'package:flutter/material.dart';
 
@@ -26,6 +26,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -45,7 +46,12 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// the home-screen quick action, and (through the `ConnectedDevice` alias in
 /// `pages/home/device.dart`) the header battery pill.
 class DeviceSettings extends StatefulWidget {
-  const DeviceSettings({super.key});
+  const DeviceSettings({super.key, this.connectionForTest});
+
+  /// Test-only: resolves a device connection in place of [ServiceManager], so hermetic tests reach
+  /// a fake device writer. Production always passes null.
+  @visibleForTesting
+  final Future<DeviceConnection?> Function(String deviceId)? connectionForTest;
 
   @override
   State<DeviceSettings> createState() => _DeviceSettingsState();
@@ -63,6 +69,9 @@ T? _maybeProvider<T>(BuildContext context, {bool listen = true}) {
 class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
+  /// How long a native level control must rest before its latest value is written.
+  static const Duration _nativeWriteDelay = Duration(milliseconds: 300);
+
   CaptureProvider? _captureProvider;
 
   double _dimRatio = 100.0;
@@ -75,13 +84,28 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Timer? _debounce;
   Timer? _micGainDebounce;
+
+  /// Pending native level writes by control. Each holds the latest value only; leaving the page
+  /// writes it at once, so the final value always reaches the device.
+  final _nativeWrites = <String, ({Timer timer, String deviceId, Future<void> Function() write})>{};
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
-  Future<String>? _rayBanMetaCameraStatusFuture;
+  /// Ray-Ban Meta camera readiness, last answered; null until the first check completes.
+  String? _rayBanMetaCameraStatus;
   String? _rayBanMetaCameraStatusDeviceId;
+  bool _rayBanMetaCameraStatusRequested = false;
+  int _rayBanMetaCameraStatusRequest = 0;
+
+  /// The device owner the page last built with; a pending write for a device it no longer pairs
+  /// (forgotten or unpaired while the page closes) is dropped instead of reconnecting it.
+  DeviceProvider? _deviceProvider;
+
+  /// The native device thumbnail: the bundled picture last requested, and its file URI once copied.
+  String? _thumbnailAsset;
+  String? _thumbnailUri;
 
   @override
   void initState() {
@@ -103,15 +127,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     _captureProvider?.removeMetricsListener();
     _debounce?.cancel();
     _micGainDebounce?.cancel();
+    _flushNativeWrites();
     super.dispose();
   }
+
+  Future<DeviceConnection?> _connection(String deviceId) =>
+      widget.connectionForTest?.call(deviceId) ?? ServiceManager.instance().device.ensureConnection(deviceId);
 
   // Device features: LED dimming and mic gain.
 
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
     if (deviceProvider.pairedDevice == null) return;
-    final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+    final connection = await _connection(deviceProvider.pairedDevice!.id);
     if (connection == null) return;
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
@@ -138,17 +166,71 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Future<void> _updateDimRatio(double value) async {
-    final deviceProvider = context.read<DeviceProvider>();
-    if (deviceProvider.pairedDevice == null) return;
-    final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
-    await connection?.setLedDimRatio(value.toInt());
+    final deviceId = context.read<DeviceProvider>().pairedDevice?.id;
+    if (deviceId == null) return;
+    await _writeDimRatio(deviceId, value.toInt());
   }
 
   Future<void> _updateMicGain(double value) async {
-    final deviceProvider = context.read<DeviceProvider>();
-    if (deviceProvider.pairedDevice == null) return;
-    final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
-    await connection?.setMicGain(value.toInt());
+    final deviceId = context.read<DeviceProvider>().pairedDevice?.id;
+    if (deviceId == null) return;
+    await _writeMicGain(deviceId, value.toInt());
+  }
+
+  Future<void> _writeDimRatio(String deviceId, int ratio) async {
+    final connection = await _connection(deviceId);
+    await connection?.setLedDimRatio(ratio);
+  }
+
+  Future<void> _writeMicGain(String deviceId, int gain) async {
+    final connection = await _connection(deviceId);
+    await connection?.setMicGain(gain);
+  }
+
+  // Native level controls. Swift sends one value when a drag ends; Dart rounds it, shows it at
+  // once and writes the latest value after a trailing [_nativeWriteDelay].
+
+  void _scheduleNativeWrite(String control, String deviceId, Future<void> Function() write) {
+    _nativeWrites.remove(control)?.timer.cancel();
+    final timer = Timer(_nativeWriteDelay, () {
+      _nativeWrites.remove(control);
+      unawaited(write());
+    });
+    _nativeWrites[control] = (timer: timer, deviceId: deviceId, write: write);
+  }
+
+  void _flushNativeWrites() {
+    final pending = _nativeWrites.values.toList();
+    _nativeWrites.clear();
+    for (final write in pending) {
+      write.timer.cancel();
+      if (write.deviceId == _deviceProvider?.pairedDevice?.id) unawaited(write.write());
+    }
+  }
+
+  void _setNativeDimRatio(num value) {
+    final deviceId = context.read<DeviceProvider>().pairedDevice?.id;
+    if (deviceId == null) return;
+    final ratio = value.round().clamp(0, 100);
+    setState(() => _dimRatio = ratio.toDouble());
+    _scheduleNativeWrite('led', deviceId, () => _writeDimRatio(deviceId, ratio));
+  }
+
+  void _setNativeMicGain(num value) {
+    final deviceId = context.read<DeviceProvider>().pairedDevice?.id;
+    if (deviceId == null) return;
+    final gain = value.round().clamp(0, 8);
+    setState(() => _micGain = gain.toDouble());
+    _scheduleNativeWrite('mic_gain', deviceId, () => _writeMicGain(deviceId, gain));
+  }
+
+  /// A preset is an explicit choice, so it replaces any pending drag value and is written at once.
+  Future<void> _applyNativeMicGainPreset(int gain) async {
+    final deviceId = context.read<DeviceProvider>().pairedDevice?.id;
+    if (deviceId == null) return;
+    _nativeWrites.remove('mic_gain')?.timer.cancel();
+    setState(() => _micGain = gain.toDouble());
+    await _writeMicGain(deviceId, gain);
   }
 
   void _showBrightnessSheet() {
@@ -229,29 +311,40 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Ray-Ban Meta.
 
-  Future<String> _rayBanMetaCameraStatus(DeviceProvider provider) {
+  /// The camera readiness label for the connected glasses, or null while it is checked. The first
+  /// request per device starts the check; its answer rebuilds the page.
+  String? _rayBanMetaCameraLabel(DeviceProvider provider) {
     final deviceId = provider.connectedDevice?.id;
-    if (_rayBanMetaCameraStatusFuture == null || _rayBanMetaCameraStatusDeviceId != deviceId) {
+    if (!_rayBanMetaCameraStatusRequested || _rayBanMetaCameraStatusDeviceId != deviceId) {
+      _rayBanMetaCameraStatusRequested = true;
+      // The previous answer stays until the new one arrives, as the classic FutureBuilder kept it.
       _rayBanMetaCameraStatusDeviceId = deviceId;
-      _rayBanMetaCameraStatusFuture = () async {
-        try {
-          if (deviceId == null) return 'unavailable';
-          final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-          if (connection is! RayBanMetaDeviceConnection) return 'unavailable';
-          return await connection.getCameraPermissionStatus();
-        } catch (_) {
-          return 'unavailable';
-        }
-      }();
+      final request = ++_rayBanMetaCameraStatusRequest;
+      unawaited(_loadRayBanMetaCameraStatus(deviceId).then((status) {
+        if (!mounted || request != _rayBanMetaCameraStatusRequest) return;
+        setState(() => _rayBanMetaCameraStatus = status);
+      }));
     }
-    return _rayBanMetaCameraStatusFuture!;
+    final status = _rayBanMetaCameraStatus;
+    return status == null ? null : rayBanCameraLabel(context, status);
+  }
+
+  Future<String> _loadRayBanMetaCameraStatus(String? deviceId) async {
+    try {
+      if (deviceId == null) return 'unavailable';
+      final connection = await _connection(deviceId);
+      if (connection is! RayBanMetaDeviceConnection) return 'unavailable';
+      return await connection.getCameraPermissionStatus();
+    } catch (_) {
+      return 'unavailable';
+    }
   }
 
   Future<void> _captureRayBanMetaPhoto() async {
     try {
       final deviceId = context.read<DeviceProvider>().connectedDevice?.id;
       if (deviceId == null) return;
-      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      final connection = await _connection(deviceId);
       if (connection is! RayBanMetaDeviceConnection) return;
       final cameraStatus = await connection.getCameraPermissionStatus();
       if (cameraStatus != 'granted') {
@@ -375,7 +468,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final device = provider.connectedDevice;
     if (device != null) {
       provider.markDisconnectIntentional(device.id);
-      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      final connection = await _connection(device.id);
       if (connection != null) {
         await connection.unpair();
         await connection.disconnect();
@@ -396,6 +489,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
     final doubleTapRow = OmiSettingsRow(
+      key: const ValueKey('device_double_tap'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.doubleTap,
       value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
@@ -436,6 +530,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           doubleTapRow,
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
+            key: const ValueKey('device_led'),
             leading: const FaIcon(FontAwesomeIcons.lightbulb),
             title: l10n.ledBrightness,
             value: '${_dimRatio.round()}%',
@@ -444,6 +539,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
         if (_isMicGainLoaded && _hasMicGainFeature == true)
           OmiSettingsRow(
+            key: const ValueKey('device_mic_gain'),
             leading: const FaIcon(FontAwesomeIcons.microphone),
             title: l10n.micGain,
             value: micGainLevelLabel(context, _micGain.round()),
@@ -565,12 +661,87 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  /// Replaces the projected double-tap, LED and mic-gain rows with native controls. Values are
+  /// clamped to their ranges, so a device reporting an out-of-range level never invalidates the page.
+  List<NativeSection> _nativeDeviceControls(List<NativeSection> sections) {
+    final l10n = context.l10n;
+    Iterable<NativeRow> control(NativeRow row) sync* {
+      switch (row.id) {
+        case 'device_double_tap':
+          final current = SharedPreferencesUtil().doubleTapAction;
+          yield NativeRow(row.id, row.title,
+              kind: 'choice',
+              symbol: row.symbol,
+              // An unknown stored action reads as the default, as the classic row's label does.
+              value: '${current >= 0 && current <= 2 ? current : 0}',
+              options: {
+                '0': l10n.endAndProcess,
+                '1': l10n.deviceOnboardingMuteUnmute,
+                '2': l10n.starOngoing,
+              }, action: (value) {
+            final action = int.parse(value! as String);
+            if (mounted) setState(() => SharedPreferencesUtil().doubleTapAction = action);
+          });
+        case 'device_led':
+          final ratio = _dimRatio.round().clamp(0, 100);
+          yield NativeRow(row.id, row.title,
+              kind: 'level',
+              symbol: row.symbol,
+              subtitle: '$ratio%',
+              value: ratio.toDouble(),
+              minimumValue: 0,
+              maximumValue: 100,
+              step: 1,
+              action: (value) => _setNativeDimRatio(value! as num));
+        case 'device_mic_gain':
+          final gain = _micGain.round().clamp(0, 8);
+          yield NativeRow(row.id, row.title,
+              kind: 'level',
+              symbol: row.symbol,
+              subtitle: [micGainLevelLabel(context, gain), micGainDescription(context, gain)]
+                  .where((text) => text.isNotEmpty)
+                  .join(' · '),
+              value: gain.toDouble(),
+              minimumValue: 0,
+              maximumValue: 8,
+              step: 1,
+              action: (value) => _setNativeMicGain(value! as num));
+          for (final (id, label, level) in [
+            ('device_mic_gain_quiet', l10n.quiet, 2),
+            ('device_mic_gain_normal', l10n.normal, 4),
+            ('device_mic_gain_high', l10n.high, 6),
+          ]) {
+            yield NativeRow(id, label,
+                symbol: gain == level ? 'checkmark' : null, action: (_) => _applyNativeMicGainPreset(level));
+          }
+        default:
+          yield row;
+      }
+    }
+
+    return [
+      for (final section in sections)
+        NativeSection(section.id, [for (final row in section.rows) ...control(row)],
+            title: section.title, footer: section.footer),
+    ];
+  }
+
+  /// Copies the device picture for the native status row once per bundled asset.
+  void _watchThumbnail(String asset) {
+    if (_thumbnailAsset == asset) return;
+    _thumbnailAsset = asset;
+    unawaited(nativeAssetImageUri(asset).then((uri) {
+      if (mounted && _thumbnailAsset == asset) setState(() => _thumbnailUri = uri);
+    }));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DeviceProvider>();
+    final provider = _deviceProvider = context.watch<DeviceProvider>();
     final capture = _maybeProvider<CaptureProvider>(context);
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    final rayBanCamera = paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraLabel(provider) : null;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
     final classic = Scaffold(
@@ -592,11 +763,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           gap,
           _deviceGroup(provider),
           gap,
-          DeviceInfoGroups(
-            pairedDevice: paired,
-            isDeviceConnected: connected != null,
-            rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
-          ),
+          DeviceInfoGroups(pairedDevice: paired, isDeviceConnected: connected != null, rayBanCameraLabel: rayBanCamera),
           gap,
           _forgetGroup(provider),
           if (connected != null && capture != null && capture.havingRecordingDevice) ...[
@@ -606,15 +773,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         ],
       ),
     );
-    if (!iosSwiftUiEnabled) return classic;
+    if (!nativePresentationEnabled) return classic;
     final l10n = context.l10n;
     final projected = nativeSettingsSections([
       if (provider.isConnected) _customizationGroup(paired ?? connected, provider),
       _deviceGroup(provider),
-      DeviceInfoGroups(
-              pairedDevice: paired,
-              isDeviceConnected: connected != null,
-              rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null)
+      DeviceInfoGroups(pairedDevice: paired, isDeviceConnected: connected != null, rayBanCameraLabel: rayBanCamera)
           .build(context),
       _forgetGroup(provider),
     ],
@@ -624,17 +788,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 ? l10n.loading
                 : null);
     if (projected == null) return classic;
+    // The same picture, from the same arguments, as the classic header.
+    _watchThumbnail(DeviceUtils.getDeviceImagePathWithState(
+      deviceType: connected?.type,
+      modelNumber: connected?.modelNumber,
+      deviceName: connected?.name ?? paired?.name,
+      isConnected: connected != null,
+    ));
     return IosNativeSurface(title: l10n.deviceSettings, fallback: classic, toolbar: [
       NativeRow('device_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
     ], sections: [
       NativeSection('device_status', [
-        NativeRow('device_name', paired?.name ?? l10n.omiAppName,
-            kind: 'label', subtitle: provider.isConnected ? l10n.connected : l10n.disconnected),
+        NativeRow('device_name', deviceDisplayName(paired?.name, l10n.omiAppName),
+            kind: 'label',
+            imageUri: _thumbnailUri,
+            subtitle: provider.isConnected ? l10n.connected : l10n.disconnected),
         if (connected != null && provider.batteryLevel > 0)
           NativeRow('device_battery', l10n.battery,
               kind: 'label', subtitle: '${provider.batteryLevel}%${provider.isCharging ? ' · ${l10n.charging}' : ''}'),
+        // Shown in place of the device controls while the device is not connected.
+        if (!provider.isConnected)
+          NativeRow('device_disconnected', l10n.deviceNotConnected, kind: 'label', subtitle: l10n.connectDeviceMessage),
       ]),
-      ...projected,
+      ..._nativeDeviceControls(projected),
       if (connected != null && capture != null && capture.havingRecordingDevice)
         NativeSection('device_streaming', [
           NativeRow('device_stream_rates', l10n.diagnostics,

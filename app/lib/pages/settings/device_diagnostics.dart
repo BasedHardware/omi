@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:clock/clock.dart';
@@ -287,28 +288,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       return;
     }
     if (!mounted) return;
-    final send = await showDialog<bool>(
-      context: context,
-      builder: (context) => OmiAlertDialog(
-        title: context.l10n.sendToSupport,
-        content: SizedBox(
-          width: 520,
-          height: 400,
-          child: Column(
-            children: [
-              Text(context.l10n.deviceDiagnosticsUploadDescription),
-              const SizedBox(height: 12),
-              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-            ],
-          ),
-        ),
-        actions: [
-          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
-          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
-        ],
-      ),
-    );
-    if (send != true) {
+    final native = await _reviewNatively(json);
+    // A review withdrawn by a session change or by leaving the page was never answered.
+    if (native != null && ['invalidated', 'unmounted'].contains(native.reason)) return;
+    final send = native != null ? native.action == 'send' : (mounted ? await _reviewInFlutter(json) : null);
+    if (send == null) return;
+    if (!send) {
       _trackSendFailed(DiagnosticsSendFailedFailureStage.dialogCancelled, json, bundle);
       return;
     }
@@ -349,6 +334,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
     _trackSent(json, bundle);
     if (!mounted) return;
+    if (await _showTicketNatively(ticket)) return;
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => OmiAlertDialog(
@@ -357,6 +344,66 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
       ),
     );
+  }
+
+  /// The native review's outcome, or null to review in Flutter: the native presentation is
+  /// unavailable, or the bundle is too large to show natively.
+  Future<NativeModalResult?> _reviewNatively(String json) async {
+    if (utf8.encode(json).length > maxNativeDiagnosticsReviewBytes) return null;
+    final l10n = context.l10n;
+    return showIosNativeModal(
+      context,
+      title: l10n.sendToSupport,
+      actions: [NativeRow('cancel', l10n.cancel), NativeRow('send', l10n.send)],
+      sections: [
+        NativeSection('diagnostics_review', [
+          NativeRow('diagnostics_review_description', l10n.deviceDiagnosticsUploadDescription, kind: 'label'),
+          NativeRow('diagnostics_review_bundle', l10n.deviceDiagnostics, kind: 'rich_text', blocks: [
+            {'kind': 'code', 'text': json, 'indent': 0, 'prefix': ''},
+          ]),
+        ]),
+      ],
+    );
+  }
+
+  Future<bool> _reviewInFlutter(String json) async {
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.sendToSupport,
+        content: SizedBox(
+          width: 520,
+          height: 400,
+          child: Column(
+            children: [
+              Text(context.l10n.deviceDiagnosticsUploadDescription),
+              const SizedBox(height: 12),
+              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+            ],
+          ),
+        ),
+        actions: [
+          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
+          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    return send == true;
+  }
+
+  /// Shows the support ticket in a native sheet; false when the caller should show its Flutter dialog.
+  Future<bool> _showTicketNatively(String ticket) async {
+    final l10n = context.l10n;
+    final result = await showIosNativeModal(
+      context,
+      title: l10n.deviceDiagnosticsTicket,
+      cancelId: 'ok',
+      actions: [NativeRow('ok', l10n.ok)],
+      sections: [
+        NativeSection('diagnostics_ticket', [NativeRow('diagnostics_ticket_id', ticket, kind: 'label')]),
+      ],
+    );
+    return result != null;
   }
 
   void _onRssiUpdate(int rssi) {
@@ -1059,6 +1106,11 @@ class _RssiPoint {
 
   _RssiPoint(this.time, this.rssi);
 }
+
+/// The largest support bundle (UTF-8 bytes) the native review shows; a larger one keeps the
+/// Flutter review dialog.
+@visibleForTesting
+const maxNativeDiagnosticsReviewBytes = 256 * 1024;
 
 /// A failed support send whose failure event has not been emitted yet; the
 /// single catch in `_sendToSupport` emits exactly one per failure. [statusCode]
