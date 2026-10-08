@@ -509,7 +509,6 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
-| `OMI_MODEL_TIER` | 2026-10-08 | Managed utility features use Luna gateway auto lanes; proxy budget tier removed |
 | `autoCreateSpeakersEnabled` | 2026-09-26 | Shipped developer preference removed; create_speakers always true |
 | `context_buckets` | 2026-09-24 | Unused nominal enable row; bundle identity owns the active gate |
 | `daily-memory-sweep-v1` | 2026-09-24 | Decoy name never authorizes JIT or sweep admission |

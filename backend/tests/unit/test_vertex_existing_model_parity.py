@@ -6,9 +6,7 @@ including origin/main's acceptance of a valid body on a 3xx response.
 All generation aliases now use the active dedicated reservation; embeddings retain shared capacity.
 """
 
-import asyncio
 import json
-import time
 
 import httpx
 import pytest
