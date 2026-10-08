@@ -9,6 +9,7 @@ import inspect
 import io
 import os
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
@@ -362,3 +363,115 @@ def test_route_policy_records_the_byok_check_its_auth_runs():
     (entry,) = [r for r in manifest['routes'] if (r['method'], r['path']) == ('POST', '/v1/import/transcripts')]
 
     assert entry['policy']['byok'] == 'validated_when_headers_present'
+
+
+# --------------------------------------------------------------------------- multipart body
+
+
+def _transcripts_route(routes=None):
+    routes = imports_mod.router.routes if routes is None else routes
+    return next(r for r in routes if getattr(r, 'path', None) == '/v1/import/transcripts')
+
+
+@pytest.fixture
+def spooled(monkeypatch):
+    """Bytes the multipart parser writes into file parts, i.e. what a request makes the server spool."""
+    import utils.multipart as multipart
+
+    written = []
+    on_part_data = multipart.FileSizeLimitedMultiPartParser.on_part_data
+
+    def counting(self, data, start, end):
+        if self._current_part.file is not None:
+            written.append(end - start)
+        return on_part_data(self, data, start, end)
+
+    monkeypatch.setattr(multipart.FileSizeLimitedMultiPartParser, 'on_part_data', counting)
+    return written
+
+
+def _unauthenticated_client() -> TestClient:
+    app = FastAPI()
+    app.include_router(imports_mod.router)
+    return TestClient(app)
+
+
+def test_extra_file_parts_are_refused_while_parsing_before_they_are_spooled(staged, spooled):
+    """The route takes one file; extra parts are refused before auth and before their bytes are kept."""
+    create, worker, _ = staged
+    part = b'x' * 900
+
+    response = _unauthenticated_client().post(
+        '/v1/import/transcripts',
+        files={'file': ('a.srt', part), 'unused1': ('b.srt', part), 'unused2': ('c.srt', part)},
+    )
+
+    assert response.status_code == 400
+    assert 'Too many files' in response.json()['detail']
+    assert sum(spooled) <= len(part), 'only the first file part was read'
+    create.assert_not_called()
+    assert not worker.called.is_set()
+
+
+def test_an_extra_file_part_is_refused_for_a_signed_in_user_too(staged, monkeypatch, spooled):
+    create, worker, _ = staged
+
+    response = _client(monkeypatch, lambda *_a, **_k: None).post(
+        '/v1/import/transcripts',
+        files={'file': ('a.srt', b'1\n00:00:01,000 --> 00:00:02,000\nhi\n'), 'unused1': ('b.srt', b'x' * 900)},
+    )
+
+    assert response.status_code == 400
+    create.assert_not_called()
+    assert not worker.called.is_set()
+
+
+def test_form_fields_are_refused_the_route_takes_none(staged, monkeypatch):
+    create, _, _ = staged
+
+    response = _client(monkeypatch, lambda *_a, **_k: None).post(
+        '/v1/import/transcripts',
+        files={'file': ('a.srt', b'1\n00:00:01,000 --> 00:00:02,000\nhi\n')},
+        data={'note': 'x' * 900},
+    )
+
+    assert response.status_code == 400
+    assert 'Too many fields' in response.json()['detail']
+    create.assert_not_called()
+
+
+def test_a_request_over_the_body_limit_is_refused_before_it_is_read(staged, monkeypatch, spooled):
+    """The per-part cap alone does not bound the request; the whole body has its own limit."""
+    create, _, _ = staged
+    client = _unauthenticated_client()
+    # include_router copies routes: scale down the copy the app serves.
+    route = _transcripts_route(client.app.routes)
+    monkeypatch.setattr(route, 'multipart_max_part_size', 1024)
+    monkeypatch.setattr(route, 'multipart_limits', replace(route.multipart_limits, max_body_size=1100))
+
+    response = client.post('/v1/import/transcripts', files={'file': ('a.srt', b'x' * 1000)})
+
+    assert response.status_code == 400
+    assert 'Form body exceeded maximum size' in response.json()['detail']
+    assert spooled == [], 'nothing was spooled'
+    create.assert_not_called()
+
+
+def test_a_request_within_the_limits_still_reaches_auth(staged, spooled):
+    create, _, _ = staged
+
+    response = _unauthenticated_client().post(
+        '/v1/import/transcripts', files={'file': ('a.srt', b'1\n00:00:01,000 --> 00:00:02,000\nhi\n')}
+    )
+
+    assert response.status_code == 401
+    create.assert_not_called()
+
+
+def test_the_route_declares_one_file_and_a_whole_request_limit():
+    from utils.multipart import IMPORT_MAX_PART_SIZE, MULTIPART_OVERHEAD_BYTES
+
+    limits = _transcripts_route().multipart_limits
+
+    assert (limits.max_files, limits.max_fields) == (1, 0)
+    assert limits.max_body_size == IMPORT_MAX_PART_SIZE + MULTIPART_OVERHEAD_BYTES

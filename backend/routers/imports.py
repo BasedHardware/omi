@@ -23,7 +23,13 @@ from utils.imports.transcript_files import (
     create_transcript_import_job,
     process_transcript_import,
 )
-from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
+from utils.multipart import (
+    IMPORT_MAX_PART_SIZE,
+    MultipartMaxPartSizeRoute,
+    max_part_size,
+    multipart_limits,
+    single_file_limits,
+)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
@@ -114,6 +120,9 @@ async def import_limitless_data(
     tags=['import'],
 )
 @max_part_size(IMPORT_MAX_PART_SIZE)
+# The form is parsed before auth and the rate limit: one file part and no fields, in a
+# body no larger than that file allows, bound what any request can make the server spool.
+@multipart_limits(single_file_limits(IMPORT_MAX_PART_SIZE))
 async def import_transcript_files(
     file: UploadFile = File(...),
     language: str = 'en',
