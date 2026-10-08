@@ -610,6 +610,7 @@ void main() {
         },
       ));
       await NativeTestHost.settle(tester);
+      final recap = host.created.last;
       expect(_row(tester, 'recap_stats'), isNull);
       expect([
         for (final id in [
@@ -636,7 +637,11 @@ void main() {
       await tester.pumpAndSettle();
       await NativeTestHost.settle(tester);
 
-      await _tap(tester, host, 'recap_tasks_stat');
+      // The day page is a native surface of its own; once popped, the recap surface is the one to tap.
+      expect(host.created.last, isNot(recap));
+      expect(host.disposed, contains(host.created.last));
+      unawaited(host.sendFromNative(recap, const MethodCall('action', {'id': 'recap_tasks_stat', 'value': null})));
+      await tester.pump();
       await tester.pumpAndSettle();
       expect(find.byType(DayTasksPage), findsOneWidget);
       expect(tasks, [DateTime(2026, 7, 15)]);
