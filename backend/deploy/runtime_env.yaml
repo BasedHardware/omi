@@ -139,7 +139,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
@@ -252,16 +251,6 @@ environments:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED: {value: 'false',
-            category: rollout}
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE: {value: '1.0',
-            category: rollout}
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED: {value: 'false',
-            category: rollout}
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE: {value: '1.0',
-            category: rollout}
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED: {value: 'false', category: rollout}
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE: {value: '1.0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
@@ -319,7 +308,6 @@ environments:
           MEMORY_ENABLED:
             value: 'on'
           MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
-          CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
           CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
@@ -659,7 +647,6 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
             LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
             CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
@@ -763,16 +750,6 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED: {value: 'false', category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE: {value: '1.0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
@@ -915,7 +892,6 @@ environments:
               value: 'on'
             MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
             MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
-            CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
             CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
@@ -965,16 +941,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED: {value: 'false', category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE: {value: '1.0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
@@ -1154,16 +1120,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED: {value: 'false', category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE: {value: '1.0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
@@ -1310,16 +1266,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED: {value: 'false',
-              category: rollout}
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE: {value: '1.0',
-              category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED: {value: 'false', category: rollout}
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE: {value: '1.0', category: rollout}
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -1856,7 +1802,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
@@ -2095,7 +2040,6 @@ environments:
           MEMORY_ENABLED:
             value: 'on'
           MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
-          CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
           CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
@@ -2104,6 +2048,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          DREAM_AGENT_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+            category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
             category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2361,7 +2308,6 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
             LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
             CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
@@ -2649,7 +2595,6 @@ environments:
               value: 'on'
             MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
             MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
-            CONVERSATION_NOTES_V2_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
             CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}

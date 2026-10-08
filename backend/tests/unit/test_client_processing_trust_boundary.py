@@ -521,7 +521,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             '_canonical_conversation_write_payload',
             'model_dump',
         ),
-        DumpSite('utils/conversations/process_conversation.py', 'save_structured_vector', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),

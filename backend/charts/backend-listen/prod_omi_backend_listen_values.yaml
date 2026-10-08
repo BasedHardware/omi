@@ -198,8 +198,6 @@ env:
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "cohort"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
   - name: DREAM_AGENT_MODE
     value: 'shadow'
   - name: DREAM_AGENT_UID_ALLOWLIST

@@ -237,8 +237,6 @@ env:
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "cohort"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED

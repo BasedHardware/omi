@@ -553,10 +553,7 @@ async def test_gateway_failure_is_typed_unavailable_without_direct_fallback(monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('caller_supplies_cap', [True, False])
-async def test_public_lane_provider_contract_enforces_output_cap_from_caller_and_route_policy(
-    monkeypatch, caller_supplies_cap: bool
-):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS', 'public_shared_conversation_chat')
+async def test_public_lane_provider_contract_preserves_caller_output_cap(monkeypatch, caller_supplies_cap: bool):
     config = load_gateway_config(prod_mode=True)
     request: dict[str, object] = {
         'model': PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID,
@@ -577,7 +574,10 @@ async def test_public_lane_provider_contract_enforces_output_cap_from_caller_and
     )
 
     provider_request = provider.calls[0].request
-    assert provider_request['max_completion_tokens'] == 600
+    if caller_supplies_cap:
+        assert provider_request['max_completion_tokens'] == 600
+    else:
+        assert 'max_completion_tokens' not in provider_request
     assert provider_request['stream'] is False
     assert 'tools' not in provider_request
     assert 'retrieval' not in provider_request
@@ -934,9 +934,7 @@ def test_gateway_config_inventory_and_promotion_contract():
     assert route.artifact_digest == route.content_digest
     assert route.fallbacks == []
     assert route.retry.max_attempts == 1
-    assert route.output_budget is not None
-    assert route.output_budget.experiment == 'public_shared_conversation_chat'
-    assert route.output_budget.max_completion_tokens == 600
+    assert route.output_budget is None
     assert bundle.lane_id == PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID
     assert bundle.promotion_gates['frontend_service_auth'] == 'cloud_run_oidc_and_opaque_ip_hmac'
 
@@ -972,12 +970,23 @@ def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     assert '/v1/conversations/shared/chat' not in app.openapi()['paths']
 
 
-def test_public_shared_chat_runtime_mode_per_backend_surface():
+@pytest.fixture(scope='module')
+def _runtime_surface_configs():
+    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
+        manifest = yaml.safe_load(handle)
+    charts = {}
+    for environment in ('dev', 'prod'):
+        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
+        with chart_path.open(encoding='utf-8') as handle:
+            charts[environment] = yaml.safe_load(handle)
+    return manifest, charts
+
+
+def test_public_shared_chat_runtime_mode_per_backend_surface(_runtime_surface_configs):
     # Dev enables every surface. Prod enables the Cloud Run services only: the
     # prod load balancer sends /v1/conversations/shared/chat to Cloud Run
     # `backend`, never to GKE backend-listen, which stays off (no Helm roll).
-    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
-        manifest = yaml.safe_load(handle)
+    manifest, charts = _runtime_surface_configs
 
     for environment in ('dev', 'prod'):
         listener_env = manifest['environments'][environment]['gke']['backend-listen']['env']
@@ -995,10 +1004,7 @@ def test_public_shared_chat_runtime_mode_per_backend_surface():
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
         )
 
-        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
-        with chart_path.open(encoding='utf-8') as chart_handle:
-            chart = yaml.safe_load(chart_handle)
-        chart_env = {item['name']: item.get('value') for item in chart['env']}
+        chart_env = {item['name']: item.get('value') for item in charts[environment]['env']}
         assert (
             chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']
             == {

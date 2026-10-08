@@ -209,7 +209,6 @@ def test_byok_gateway_construction_carries_the_foreground_deadline(monkeypatch):
         return object()
 
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm_for_byok", fake_byok_gateway)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 
@@ -233,7 +232,6 @@ def test_byok_direct_construction_never_drops_below_the_foreground_deadline(monk
         "_cached_openai_chat",
         lambda model, key, kwargs: captured.update(model=model, kwargs=dict(kwargs)) or object(),
     )
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 
@@ -254,7 +252,6 @@ def test_managed_route_uses_gateway_with_foreground_deadline_even_when_optional_
         return object()
 
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
-    monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 

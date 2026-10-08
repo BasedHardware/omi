@@ -30942,18 +30942,13 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived from the\nuniversal task decision; persistence excludes it so clients cannot turn a\nsampled response into later authority.",
+        "description": "Persisted workflow metadata for legacy records and operational history.",
         "properties": {
           "account_generation": {
             "default": 0,
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
-          },
-          "chat_first_ui": {
-            "default": false,
-            "title": "Chat First Ui",
-            "type": "boolean"
           },
           "workflow_mode": {
             "$ref": "#/components/schemas/TaskWorkflowMode",
