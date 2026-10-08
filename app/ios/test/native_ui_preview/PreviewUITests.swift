@@ -706,4 +706,39 @@ final class PreviewUITests: XCTestCase {
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
         return XCTWaiter.wait(for: [gone], timeout: timeout) == .completed
     }
+
+    func testSecretIsMonospacedAndCopySendsOnlyTheCommand() {
+        let app = start(["surface", "secret"])
+        let key = "omi_dev_iiiiiiiiiiiiiiii"
+        let value = app.staticTexts[key]
+        XCTAssertTrue(value.waitForExistence(timeout: 10))
+        // Sixteen narrow letters: a proportional font would draw this key far narrower.
+        XCTAssertGreaterThan(value.frame.width, CGFloat(key.count) * 8)
+        XCTAssertEqual(value.identifier, "secret_value")
+        capture(app, "native-secret-reveal")
+        let copy = app.buttons["secret_value"]
+        XCTAssertEqual(copy.label, "Copy")
+        copy.tap()
+        XCTAssertTrue(app.staticTexts["secret_value:copy"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", key)).count, 1,
+                       "Only the secret row carries the key; the copy command never echoes it")
+        app.buttons["secret_done"].tap()
+        XCTAssertTrue(app.staticTexts["secret_done:"].waitForExistence(timeout: 5))
+    }
+
+    func testSecretRedactsWhileInactiveAndClearsOnSessionEnd() {
+        let app = start(["surface", "secret"])
+        let key = "omi_dev_iiiiiiiiiiiiiiii"
+        XCTAssertTrue(app.staticTexts[key].waitForExistence(timeout: 10))
+        app.buttons["preview-resign-active"].tap()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.staticTexts[key])
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        capture(app, "native-secret-inactive-redacted")
+        app.buttons["preview-become-active"].tap()
+        XCTAssertTrue(app.staticTexts[key].waitForExistence(timeout: 5))
+        app.buttons["preview-end-session"].tap()
+        let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["secret_value"])
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 5), .completed)
+        XCTAssertFalse(app.staticTexts[key].exists)
+    }
 }

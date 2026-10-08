@@ -80,6 +80,8 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                     result(nil)
                 case "invalidate": state.invalidate(); result(nil)
                 case "captureImage":
+                    // A one-time secret is never captured, whatever the caller asks.
+                    if state.snapshot.sensitive == true { result(nil); return }
                     guard state.valid, let container, container.window != nil else { result(nil); return }
                     let bounds = container.bounds
                     let scale = container.traitCollection.displayScale

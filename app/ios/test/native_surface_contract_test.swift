@@ -193,6 +193,7 @@ struct NativeSurfaceTests {
         rejects(input)
         try activityRequests()
         try toastRequests()
+        try secrets()
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
 
@@ -315,6 +316,51 @@ struct NativeSurfaceTests {
         catch { return }
         preconditionFailure("Invalid native activity accepted")
     }
+    /// A one-time secret: printable ASCII, one 'copy' command, one section row of a sensitive snapshot.
+    static func secrets() throws {
+        let key = "omi_dev_0123456789abcdef"
+        let secret: [String: Any] = ["id": "secret_value", "title": "API Key", "kind": "secret", "subtitle": "",
+            "value": key, "options": [["id": "copy", "title": "Copy"]], "destructive": false, "enabled": true]
+        let done: [String: Any] = ["id": "secret_done", "title": "Done", "kind": "button", "symbol": "checkmark",
+            "subtitle": "", "options": [], "destructive": false, "enabled": true]
+        let base: [String: Any] = ["version": 1, "revision": 0, "title": "Key Created", "appearance": "system",
+            "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "",
+            "toolbar": [done], "searchEnabled": false, "searchValue": "", "searchPlaceholder": "",
+            "refreshEnabled": false, "error": "Error", "retry": "Retry", "loadingLabel": "Loading", "sensitive": true]
+        func reveal(_ rows: [[String: Any]], _ change: (inout [String: Any]) -> Void = { _ in }) -> [String: Any] {
+            var snapshot = base
+            snapshot["sections"] = [["id": "secret", "title": "", "footer": "", "rows": rows]]
+            change(&snapshot)
+            return snapshot
+        }
+        func with(_ field: String, _ value: Any) -> [String: Any] {
+            var row = secret
+            row[field] = value
+            return row
+        }
+        let accepted = try NativeSurfaceSnapshot.decode(reveal([secret]))
+        precondition(accepted.sensitive == true && accepted.sections[0].rows[0].value?.text == key)
+        precondition(accepted.replacingValue(id: "secret_done", value: .text("")).sensitive == true)
+        let cleared = accepted.withoutContent()
+        precondition(cleared.sensitive == false && cleared.allRows.isEmpty)
+        _ = try NativeSurfaceSnapshot.decode(reveal([with("value", String(repeating: "~", count: 4096))]))
+        rejects(reveal([secret]) { $0["sensitive"] = false })
+        rejects(reveal([secret]) { $0.removeValue(forKey: "sensitive") })
+        for value in ["", String(repeating: "a", count: 4097), "omi\nkey", "omi key", "omi\tkey", "omi\u{7F}key", "omi_kéy", "omi_🔑"] {
+            rejects(reveal([with("value", value)]))
+        }
+        rejects(reveal([with("value", true)]))
+        rejects(reveal([with("options", [["id": "reveal", "title": "Reveal"]])]))
+        rejects(reveal([with("options", [["id": "copy", "title": "Copy"], ["id": "share", "title": "Share"]])]))
+        rejects(reveal([with("options", [["id": "copy", "title": ""]])]))
+        rejects(reveal([with("imageUri", "https://example.com/key.png")]))
+        rejects(reveal([]) { $0["toolbar"] = [done, secret] })
+        rejects(reveal([secret, with("id", "secret_again")]))
+        rejects(reveal([secret]) {
+            $0["chat"] = ["draft": "", "placeholder": "Ask Omi", "followup": "", "streaming": false, "actions": []]
+        })
+    }
+
     static func rejects(_ input: Any) {
         do { _ = try NativeSurfaceSnapshot.decode(input) }
         catch { return }

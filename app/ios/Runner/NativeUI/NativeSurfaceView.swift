@@ -134,6 +134,7 @@ struct NativeSurfaceView: View {
             }
         }
         .tint(.primary)
+        .modifier(NativeSensitiveCover(enabled: state.snapshot.sensitive == true))
         .preferredColorScheme(state.snapshot.appearance == "system" ? nil
             : state.snapshot.appearance == "dark" ? .dark : .light)
         .environment(\.locale, Locale(identifier: state.snapshot.locale))
@@ -391,6 +392,8 @@ struct NativeSurfaceView: View {
                 NativeTextRow(row: row, state: state)
             case "keypad":
                 NativeKeypadRow(row: row, state: state)
+            case "secret":
+                NativeSecretRow(row: row, state: state)
             case "label":
                 if let symbol = row.symbol {
                     Label { label(row) } icon: {
@@ -400,7 +403,7 @@ struct NativeSurfaceView: View {
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
+        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user", "secret"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
     }
 
@@ -892,5 +895,59 @@ private struct NativeChatMessageFramesPreference: PreferenceKey {
     static var defaultValue: [String: CGRect] { [:] }
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+/// A one-time secret. Copying goes only through the explicit Copy command to the Dart clipboard
+/// owner, so the value offers no system text selection. While the surface is redacted for privacy,
+/// the value leaves the view (and accessibility) entirely.
+@available(iOS 16.0, *)
+private struct NativeSecretRow: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+    @Environment(\.redactionReasons) private var redaction
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(row.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            // VoiceOver spells the key out, so it can be transcribed character by character.
+            Text(verbatim: redaction.contains(.privacy) ? "" : row.value?.text ?? "")
+                .speechSpellsOutCharacters()
+                .font(.body.monospaced())
+                .privacySensitive()
+                .fixedSize(horizontal: false, vertical: true)
+            if !row.subtitle.isEmpty { Text(row.subtitle).font(.footnote).foregroundStyle(.secondary) }
+            Button { Task { await state.send(row.id, value: "copy") } } label: {
+                Label(row.options.first(where: { $0.id == "copy" })?.title ?? "", systemImage: "doc.on.doc")
+            }.buttonStyle(.bordered).controlSize(.large).disabled(!row.enabled)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A sensitive surface keeps its secret out of the app-switcher snapshot: while the app is inactive,
+/// its content is redacted for privacy under a material. The cover takes no touches; an inactive app
+/// receives none.
+@available(iOS 16.0, *)
+private struct NativeSensitiveCover: ViewModifier {
+    let enabled: Bool
+    @State private var inactive = false
+
+    func body(content: Content) -> some View {
+        content
+            .redacted(reason: enabled && inactive ? .privacy : [])
+            .overlay {
+                if enabled && inactive {
+                    Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            // A surface that appears while the app is already inactive starts redacted.
+            .onAppear { inactive = UIApplication.shared.applicationState != .active }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                inactive = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                inactive = false
+            }
     }
 }

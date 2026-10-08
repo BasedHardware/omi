@@ -62,6 +62,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
               let discard = args["discard"] as? [String: String],
               let root = rootController() else { throw PresentationError.unavailable }
         let snapshot = try NativeSurfaceSnapshot.decode(snapshotInput)
+        // Completion echoes every row value back, so a one-time secret never enters a presentation.
+        guard !snapshot.allRows.contains(where: { $0.kind == "secret" }) else { throw PresentationError.invalid }
         guard snapshot.chat == nil, !snapshot.toolbar.isEmpty,
               snapshot.toolbar.allSatisfy({ $0.kind == "button" }),
               snapshot.toolbar.contains(where: { $0.id == cancelID && $0.enabled }) else { throw PresentationError.invalid }

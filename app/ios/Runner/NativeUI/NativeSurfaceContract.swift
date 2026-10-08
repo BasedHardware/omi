@@ -78,6 +78,10 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
             guard case let .text(text) = value else { return false }
             return text.isEmpty || Double(text).map { $0.isFinite && abs($0) <= 8640000000000000 } == true
         case "text": if case let .text(text) = value { return text.count <= (maximumLength ?? 10000) }; return false
+        case "secret":
+            guard case let .text(text) = value else { return false }
+            return (1...4096).contains(text.unicodeScalars.count)
+                && text.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
         default: return value == nil
         }
     }
@@ -138,6 +142,8 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let error: String
     let retry: String
     let loadingLabel: String
+    /// Holds a one-time secret; its single 'secret' row is redacted while the app is inactive.
+    let sensitive: Bool?
 
     var allRows: [NativeSurfaceRow] {
         toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
@@ -159,14 +165,15 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                     appearance: appearance, largeTitle: largeTitle, locale: locale, direction: direction,
                     loading: loading, failed: failed, empty: empty, sections: sections, toolbar: toolbar,
                     searchEnabled: searchEnabled, searchValue: searchValue, searchPlaceholder: searchPlaceholder,
-                    refreshEnabled: refreshEnabled, error: error, retry: retry, loadingLabel: loadingLabel)
+                    refreshEnabled: refreshEnabled, error: error, retry: retry, loadingLabel: loadingLabel,
+                    sensitive: sensitive)
     }
 
     func withoutContent() -> Self {
         Self(reader: nil, navigation: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
-             error: error, retry: retry, loadingLabel: loadingLabel)
+             error: error, retry: retry, loadingLabel: loadingLabel, sensitive: false)
     }
 
     static func decode(_ input: Any) throws -> Self {
@@ -195,7 +202,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               rows.allSatisfy({ row in
-                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
+                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret"].contains(row.kind)
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
@@ -215,12 +222,28 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
               }) else { throw ContractError.invalidSnapshot }
+        // A one-time secret appears at most once, as a section row of a sensitive snapshot; a sensitive
+        // snapshot is never chat, reader or navigation. Dart applies the same rules before publishing.
+        let secrets = snapshot.sections.flatMap(\.rows).filter { $0.kind == "secret" }
+        let controls = snapshot.toolbar + (snapshot.chat?.actions ?? []) + (snapshot.reader?.actions ?? [])
+            + (snapshot.navigation.map { [$0] } ?? [])
+        guard !controls.contains(where: { $0.kind == "secret" }), secrets.count <= 1,
+              secrets.isEmpty || snapshot.sensitive == true,
+              snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil),
+              secrets.allSatisfy(\.hasOnlySecretFields) else { throw ContractError.invalidSnapshot }
         return snapshot
     }
     enum ContractError: Error { case invalidSnapshot }
 }
 
 private extension NativeSurfaceRow {
+    /// The secret's value and exactly one 'copy' command; no image, chart, rich or text-entry fields.
+    var hasOnlySecretFields: Bool {
+        options.count == 1 && options.first?.id == "copy" && !(options.first?.title ?? "").isEmpty
+            && imageUri == nil && level == nil && (points ?? []).isEmpty && (blocks ?? []).isEmpty
+            && maximumValue == nil && keyboard == nil && maximumLength == nil
+    }
+
     var hasValidImageURI: Bool {
         guard let imageUri else { return true }
         guard imageUri.count <= 4096, let url = URL(string: imageUri),

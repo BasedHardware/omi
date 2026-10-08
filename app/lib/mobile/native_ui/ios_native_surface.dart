@@ -12,6 +12,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'ios_native_home.dart';
+import 'ios_native_secret.dart';
 import 'native_read_session.dart';
 import 'native_navigation_chrome.dart';
 
@@ -194,6 +195,19 @@ class NativeRow {
       return false;
     }
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
+    // A one-time secret carries only its value and the single Copy command.
+    if (kind == 'secret' &&
+        (imageUri != null ||
+            points.isNotEmpty ||
+            blocks.isNotEmpty ||
+            level != null ||
+            maximumValue != null ||
+            keyboard != null ||
+            maximumLength != null ||
+            options.length != 1 ||
+            options['copy']?.isNotEmpty != true)) {
+      return false;
+    }
     if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
     return switch (kind) {
       'image' => value == null &&
@@ -221,6 +235,7 @@ class NativeRow {
           options.keys.every((key) => RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(key)),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
+      'secret' => value is String && nativeSecretValid(value as String),
       'label' ||
       'button' ||
       'navigation' ||
@@ -252,6 +267,7 @@ class NativeRow {
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
+        'secret' => input == 'copy',
         _ => input == null,
       };
 }
@@ -377,6 +393,7 @@ class IosNativeSurface extends StatefulWidget {
     this.controller,
     this.navigation,
     this.loadingLabel,
+    this.sensitive = false,
   });
 
   /// Debug-only: while set, every native snapshot (surfaces and Home) carries an unsupported version,
@@ -415,6 +432,10 @@ class IosNativeSurface extends StatefulWidget {
 
   /// Names what is loading; defaults to the generic loading copy.
   final String? loadingLabel;
+
+  /// Holds a one-time secret: the only surface that may carry a 'secret' row. Swift redacts it while
+  /// the app is inactive, and [NativeSurfaceController.captureImage] never captures it.
+  final bool sensitive;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
@@ -464,6 +485,23 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         if (widget.navigation != null) widget.navigation!,
       ];
 
+  /// A secret row appears only once, in a section of a sensitive surface; a sensitive surface is
+  /// never public, chat, reader or navigation. Anything else keeps the complete Flutter surface.
+  bool get _sensitiveValid {
+    bool secret(NativeRow row) => row.kind == 'secret';
+    final secrets = _sections.expand((section) => section.rows).where(secret).length;
+    if (_toolbar.any(secret) ||
+        widget.chat?.actions.any(secret) == true ||
+        widget.reader?.actions.any(secret) == true ||
+        widget.navigation?.kind == 'secret' ||
+        secrets > 1 ||
+        secrets == 1 && !widget.sensitive) {
+      return false;
+    }
+    return !widget.sensitive ||
+        !widget.publicSurface && widget.chat == null && widget.reader == null && widget.navigation == null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -499,6 +537,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
   }
 
   Future<Uint8List?> _captureImage() async {
+    if (widget.sensitive) return null;
     final channel = _channel;
     if (channel == null || !mounted || !_session.active) return null;
     final image = await channel.invokeMethod<Uint8List>('captureImage');
@@ -529,6 +568,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'chat': widget.chat?.projection,
         'reader': widget.reader?.projection,
         'navigation': widget.navigation?.projection,
+        'sensitive': widget.sensitive,
       };
 
   Future<Object?> _handle(MethodCall call) async {
@@ -596,6 +636,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     final rows = _rows;
     if (!nativePresentationEnabled ||
         _rejected ||
+        !_sensitiveValid ||
         widget.navigation != null &&
             (widget.navigation!.id != 'main_destination' ||
                 widget.navigation!.kind != 'segmented' ||

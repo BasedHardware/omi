@@ -45,6 +45,14 @@ struct PreviewApp: App {
                         if ProcessInfo.processInfo.arguments.contains("keypad") {
                             Button("Burst 123*#") { harness.burstKeys() }.accessibilityIdentifier("preview-burst-keys")
                         }
+                        if ProcessInfo.processInfo.arguments.contains("secret") {
+                            Button("Resign") {
+                                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                            }.accessibilityIdentifier("preview-resign-active")
+                            Button("Activate") {
+                                NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                            }.accessibilityIdentifier("preview-become-active")
+                        }
                     }.font(.caption).padding()
                     }
                 }
@@ -606,6 +614,22 @@ final class PreviewHarness: ObservableObject {
                 ["id": "chat_voice_discard", "title": "Discard Recording", "kind": "button", "symbol": "xmark", "subtitle": "", "options": [], "enabled": true, "destructive": false],
             ]
             surfaceRaw["chat"] = chat
+        }
+        if ProcessInfo.processInfo.arguments.contains("secret") {
+            // A synthetic one-time key; its narrow letters make a proportional font measurably shorter.
+            surfaceRaw["title"] = "Key Created"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sensitive"] = true
+            surfaceRaw["toolbar"] = [["id": "secret_done", "title": "Done", "kind": "button", "symbol": "checkmark",
+                "subtitle": "", "options": [], "enabled": true, "destructive": false]]
+            surfaceRaw["sections"] = [["id": "secret", "title": "", "footer": "", "rows": [
+                ["id": "secret_message", "title": "Your new key", "kind": "label", "subtitle": "", "options": [],
+                 "enabled": false, "destructive": false],
+                ["id": "secret_warning", "title": "Copy it now. You will not see it again.", "kind": "label",
+                 "symbol": "exclamationmark.triangle", "subtitle": "", "options": [], "enabled": false, "destructive": false],
+                ["id": "secret_value", "title": "API Key", "kind": "secret", "subtitle": "", "value": "omi_dev_iiiiiiiiiiiiiiii",
+                 "options": [["id": "copy", "title": "Copy"]], "enabled": true, "destructive": false],
+            ]]]
         }
         if ProcessInfo.processInfo.arguments.contains("light") { raw["appearance"] = "light" }
         else { raw["appearance"] = "dark" }
