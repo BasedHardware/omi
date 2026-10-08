@@ -5,6 +5,9 @@
 /// without an id or a kind is dropped by the list parser rather than shown half-built.
 library;
 
+import 'package:omi/backend/schema/gen/review_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/entity_pages_wire.g.dart' as entity_wire;
+
 String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
 int _int(Object? v) => v is num ? v.toInt() : 0;
 double _double(Object? v) => v is num ? v.toDouble() : 0;
@@ -280,6 +283,10 @@ class ReviewItem {
 }
 
 class ReviewItemsResponse {
+  factory ReviewItemsResponse.fromGenerated(wire.GeneratedReviewItemsResponse generated) {
+    return fromJson(generated.toJson());
+  }
+
   const ReviewItemsResponse({required this.items, required this.remainingToday});
   final List<ReviewItem> items;
   final int remainingToday;
@@ -383,6 +390,12 @@ class ReviewChangeRef {
 }
 
 class ReviewChange {
+  factory ReviewChange.fromGenerated(wire.GeneratedReviewChange generated) {
+    final value = fromJson(generated.toJson());
+    if (value == null) throw const FormatException('Malformed ReviewChange');
+    return value;
+  }
+
   const ReviewChange({
     required this.changeId,
     required this.kind,
@@ -442,6 +455,10 @@ class ReviewChange {
 }
 
 class ReviewChangesPage {
+  factory ReviewChangesPage.fromGenerated(wire.GeneratedReviewChangesResponse generated) {
+    return fromJson(generated.toJson());
+  }
+
   const ReviewChangesPage({required this.changes, this.nextCursor});
   final List<ReviewChange> changes;
   final String? nextCursor;
@@ -455,13 +472,14 @@ class ReviewChangesPage {
 enum FactSourceKind { conversation, chat, screen, user }
 
 class Fact {
-  const Fact(
-      {required this.factId,
-      required this.text,
-      required this.sourceKind,
-      required this.sourceLabel,
-      this.conversationId,
-      this.at});
+  const Fact({
+    required this.factId,
+    required this.text,
+    required this.sourceKind,
+    required this.sourceLabel,
+    this.conversationId,
+    this.at,
+  });
   final String factId;
   final String text;
   final FactSourceKind sourceKind;
@@ -534,6 +552,12 @@ class ConversationRef {
 }
 
 class EntityPageData {
+  factory EntityPageData.fromGenerated(entity_wire.GeneratedEntityPage generated) {
+    final value = fromJson(generated.toJson());
+    if (value == null) throw const FormatException('Malformed EntityPageData');
+    return value;
+  }
+
   const EntityPageData({
     required this.entityId,
     required this.type,
@@ -583,10 +607,9 @@ class EntityPageData {
       facts: Fact.listFrom(json['facts']),
       openTasks: _maps(json['open_tasks']).map(TaskRef.fromJson).whereType<TaskRef>().toList(growable: false),
       decisions: Fact.listFrom(json['decisions']),
-      recentConversations: _maps(json['recent_conversations'])
-          .map(ConversationRef.fromJson)
-          .whereType<ConversationRef>()
-          .toList(growable: false),
+      recentConversations: _maps(
+        json['recent_conversations'],
+      ).map(ConversationRef.fromJson).whereType<ConversationRef>().toList(growable: false),
       pendingQuestion: question == null ? null : ReviewItem.fromJson(question),
     );
   }
