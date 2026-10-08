@@ -446,6 +446,110 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
 
 ---
 
+## Verifying Webhook Signatures
+
+Anyone who knows a user's `uid` can send your endpoint a request that looks like one of the payloads above. To prove a request really came from Omi, issue a **signing secret** for your destination and check the signature on every delivery before you trust `uid`.
+
+### Getting a secret
+
+| Destination | Endpoint |
+|-------------|----------|
+| Developer webhooks (the URLs in Developer Settings) | `POST /v1/users/developer/webhook-signing-secret` |
+| An integration app you own | `POST /v1/apps/{app_id}/webhook-signing-secret` |
+
+Call the endpoint with your normal Omi `Authorization` header. The response contains the secret (`whsec_...`) **once**; store it in your server's secret manager. `GET` on the same path reports whether a secret is configured, and `DELETE` turns signing off again.
+
+Calling `POST` again **rotates** the secret: the new secret signs immediately, and the old one keeps signing alongside it for 24 hours (`previous_valid_until` in the response), so you can switch your server over without dropping deliveries.
+
+Issue, rotate and delete are limited to 10 calls per hour per account across both destinations; a refused call answers `429` with a `Retry-After` header. Reading the status is not limited.
+
+### What a signed delivery carries
+
+| Header | Value |
+|--------|-------|
+| `X-Omi-Signature` | `t=<unix seconds>,v1=<hex HMAC-SHA256>`. During a rotation window there are two `v1=` entries, one per secret. |
+| `X-Omi-Event` | The webhook type: `memory_created`, `realtime_transcript`, `audio_bytes`, `day_summary` or `button_event` |
+| `X-Omi-Delivery` | A stable id for this delivery, repeated unchanged on every retry |
+| `Idempotency-Key` | Developer webhooks: the same id as `X-Omi-Delivery`. Integration apps receive it as `X-Omi-Idempotency-Key` on memory deliveries. |
+
+### The signed string
+
+The signature is HMAC-SHA256, keyed with your secret, over these bytes, in this order:
+
+1. the `t` value from the header, as decimal ASCII digits;
+2. one `.` (ASCII 0x2E);
+3. the `uid` Omi appended to the request's query string, as the decoded parameter value, UTF-8 encoded;
+4. one `.`;
+5. the raw request body, byte for byte.
+
+So for `t=1760000000`, `?uid=abc123` and a JSON body, the signed bytes are `1760000000.abc123.{"id":...}`. Every delivery Omi sends today carries `uid`; if a future event has none, the segment is empty (`1760000000..<body>`). The signature covers `uid` on purpose: most bodies do not contain the user id, so without it a captured delivery could be replayed within the tolerance window with someone else's `uid` in the query string. A changed `uid` makes verification fail.
+
+Verify against the exact body bytes you received: parsing the JSON and serializing it again will not match. Reject timestamps more than five minutes away from your clock so a captured delivery cannot be replayed later.
+
+A destination without a secret receives exactly what it receives today, with none of these headers.
+
+<Warning>
+Two paths are **not** signed yet: chat-tool invocations (the `{uid, app_id, tool_name, ...}` POSTs described in [Chat Tools](/doc/developer/apps/ChatTools)) and the `audio_bytes_websocket` stream. Keep treating `uid` in those as unverified until signing lands for them.
+</Warning>
+
+### Verifying (Python)
+
+`body` must be the raw request **bytes** (`await request.body()`), never a parsed-and-re-serialized object. `uid` is the value from the query string. The comparison runs on bytes so a hostile non-ASCII header yields `False` (your 401) rather than an exception (a 500).
+
+```python
+import hashlib
+import hmac
+import time
+
+TOLERANCE_SECONDS = 300
+
+
+def verify_omi_signature(headers, body: bytes, uid: str, secret: str) -> bool:
+    if not isinstance(body, (bytes, bytearray)):
+        return False
+    timestamp, signatures = None, []
+    for part in headers.get("X-Omi-Signature", "").split(","):
+        key, _, value = part.strip().partition("=")
+        if key == "t" and value.isascii() and value.isdigit():
+            timestamp = int(value)  # isascii: "²".isdigit() is True and int("²") raises
+        elif key == "v1" and value:
+            signatures.append(value)
+    if timestamp is None or not signatures:
+        return False
+    if abs(time.time() - timestamp) > TOLERANCE_SECONDS:
+        return False  # stale or from the future: treat as a replay
+    message = f"{timestamp}.{uid}.".encode("utf-8") + bytes(body)
+    expected = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest().encode("ascii")
+    return any(hmac.compare_digest(expected, candidate.encode("utf-8")) for candidate in signatures)
+```
+
+Used from the FastAPI handler shown below:
+
+```python
+import json
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+
+app = FastAPI()
+OMI_WEBHOOK_SECRET = os.environ["OMI_WEBHOOK_SECRET"]
+
+
+@app.post("/webhook")
+async def handle_memory(request: Request, uid: str):
+    body = await request.body()  # raw bytes: do not use request.json() here
+    if not verify_omi_signature(request.headers, body, uid, OMI_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid Omi signature")
+    memory = json.loads(body)  # only now is uid trustworthy
+    return {"status": "ok"}
+```
+
+### Retries and duplicate deliveries
+
+Developer webhooks are retried after a network error, a 5xx, a 408 or a 429: up to three more attempts, roughly 1, 5 and 30 seconds later. Any other 4xx is treated as final and is not retried. Every attempt carries the same `Idempotency-Key` and `X-Omi-Delivery`, so keep a short-lived record of the ids you have processed and skip repeats. Each attempt is signed with a fresh timestamp. A developer webhook that fails 100 times in a row is switched off automatically and you receive a notification; fix the endpoint, then re-enable the webhook in Developer Settings.
+
+---
+
 ## Creating an Integration App
 
 <Steps>
@@ -461,6 +565,7 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
 
     Your endpoint should:
     - Accept POST requests
+    - Verify `X-Omi-Signature` (see [Verifying Webhook Signatures](#verifying-webhook-signatures)) before trusting the request
     - Parse JSON body (or binary for audio)
     - Read `uid` from query parameters
     - Return 200 OK quickly
