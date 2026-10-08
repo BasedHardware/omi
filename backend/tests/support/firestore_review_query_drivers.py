@@ -25,7 +25,7 @@ def _project_dependencies(client):
     )
     stack.enter_context(patch.object(entity_pages, '_facts', return_value=([], [], set())))
     stack.enter_context(patch.object(entity_pages.knowledge_graph, 'get_knowledge_edges', return_value=[]))
-    stack.enter_context(patch.object(entity_pages.conversations, 'get_conversations', return_value=[]))
+    stack.enter_context(patch.object(entity_pages, '_entity_page_conversation_page', return_value={}))
     stack.enter_context(patch.object(entity_pages.store, 'list_proposals', return_value=[]))
     return stack
 
@@ -41,7 +41,8 @@ def entries():
             setup=_changes_seed,
         ),
         DriverEntry('utils.entity_pages.project_refs', base={'uid': UID}),
-        DriverEntry('utils.entity_pages._facts', base={'uid': UID, 'entity_ids': ['org']}),
+        DriverEntry('utils.entity_pages._facts', base={'uid': UID, 'entity_ids': ['org'], 'conversation_cache': {}}),
+        DriverEntry('utils.entity_pages._entity_page_conversation_page', base={'uid': UID}),
         DriverEntry(
             'utils.entity_pages.get_entity_page',
             base={'uid': UID, 'entity_id': 'project'},
