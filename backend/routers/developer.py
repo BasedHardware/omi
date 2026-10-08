@@ -1,3 +1,4 @@
+from database import conversation_tombstones
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -1970,6 +1971,17 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        if conversation_tombstones.is_deleted(uid, conversation_id):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
@@ -2288,6 +2300,7 @@ def delete_conversation_endpoint(
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
     from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 
+    conversation_tombstones.record_deletion(uid, conversation_id)
     delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 

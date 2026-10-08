@@ -157,6 +157,7 @@ def _passthrough_resolve_geolocation(monkeypatch):
     # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
     # through unchanged, matching production for the None / already-resolved cases these tests exercise.
     monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, cid: False)
 
     def record_receipt(uid, conversation, **_kwargs):
         external_data = (
@@ -888,3 +889,23 @@ def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_i
     )
     developer._create_conversation_from_segments('uid1', oversized)
     assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'overflow'
+
+
+def test_deleted_session_ack_skips_existing_row_and_processing(monkeypatch):
+    cid = developer._from_segments_conversation_id('uid1', 'deleted-session')
+    lookup = MagicMock(return_value=True)
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='deleted-session'))
+    assert response.model_dump() == {
+        'id': cid,
+        'status': 'deleted',
+        'discarded': True,
+        'meeting_treatment_eligible': False,
+    }
+    lookup.assert_called_once_with('uid1', cid)
+    read.assert_not_called()
+    process.assert_not_called()

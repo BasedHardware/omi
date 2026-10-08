@@ -350,6 +350,11 @@ actor ConversationFinalizationService {
       captureEvidence: captureEvidence
     )
     let response = try await apiClient.createConversationFromSegments(request)
+    if response.status == "deleted" {
+      // A terminal deletion ack resolves this exact upload; never hydrate or retry it.
+      try await TranscriptionStorage.shared.deleteSession(id: sessionId)
+      return false
+    }
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
     let completed = try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId,

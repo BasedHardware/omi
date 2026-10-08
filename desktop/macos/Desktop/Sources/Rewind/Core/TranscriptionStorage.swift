@@ -392,20 +392,30 @@ actor TranscriptionStorage {
     SiriIndexHooks.conversationChanged(backendId)
   }
 
-  /// Soft-delete by backend conversation ID
+  /// Resolve only sessions with an exact server/client identity, including never-synced outbox rows.
   func deleteByBackendId(
     _ backendId: String,
     cacheScope: ConversationCacheWriteScope? = nil,
     cacheGeneration: Int? = nil
   ) async throws {
     let db = try await ensureInitialized()
-
+    let uid = RewindDatabase.currentUserId
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
-        try database.execute(
-          sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-          arguments: [Date(), backendId]
-        )
+        let candidates =
+          try TranscriptionSessionRecord
+          .filter(Column("backendId") == backendId || Column("backendId") == nil || Column("backendId") == "")
+          .fetchAll(database)
+        for session in candidates
+        where ConversationDeletionIdentity.matches(session, conversationID: backendId, uid: uid) {
+          guard let id = session.id else { continue }
+          try database.execute(
+            sql:
+              "UPDATE transcription_sessions SET deleted = 1, backendSynced = 1, status = ?, updatedAt = ? WHERE id = ?",
+            arguments: [TranscriptionSessionStatus.completed.rawValue, Date(), id]
+          )
+          try database.execute(sql: "DELETE FROM transcription_segments WHERE sessionId = ?", arguments: [id])
+        }
       }
     }
     await SiriIndexHooks.conversationDeleted(backendId)
