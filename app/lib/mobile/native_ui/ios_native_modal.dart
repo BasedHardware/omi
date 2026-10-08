@@ -69,7 +69,12 @@ Future<NativeModalResult?> showIosNativeModal(
   // The presenter echoes values back, so a one-time secret never enters it.
   if (rows.any((row) => row.kind == 'secret')) return null;
   // An unrepresentable request keeps the caller's complete Flutter dialog.
-  if (rows.any((row) => !row.valid) || rows.map((row) => row.id).toSet().length != rows.length) return null;
+  if (rows.any((row) => !row.valid) ||
+      // Host-drawn rows belong to surface lists; a presentation never carries them.
+      rows.any((row) => nativeHostRowKinds.contains(row.kind)) ||
+      rows.map((row) => row.id).toSet().length != rows.length) {
+    return null;
+  }
   // List interactions belong to list surfaces; the Swift presenter refuses them as well.
   if (sections.any((section) => section.reorder != null || section.collapsible) ||
       rows.any((row) => row.indent != null || row.swipeLeading.isNotEmpty || row.swipeTrailing.isNotEmpty)) {

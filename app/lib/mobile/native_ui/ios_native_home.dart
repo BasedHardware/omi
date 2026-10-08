@@ -47,6 +47,38 @@ Future<bool> supportsIosSwiftUi() async {
   return supported;
 }
 
+Future<Set<String>>? _nativeUiCapabilities;
+
+/// The host-rendered row kinds this iOS build compiled in, such as Apple's Shortcuts link (Siri
+/// toolchain builds only). Flag-off and non-iOS builds answer {} without touching a channel, as does
+/// a host without the handler or with a malformed answer. Resolved once per process.
+Future<Set<String>> nativeUiCapabilities() {
+  if (!IosNativeSurface.debugNativeHostForTest && !(iosSwiftUiEnabled && Platform.isIOS)) {
+    return Future.value(const <String>{});
+  }
+  return _nativeUiCapabilities ??= _loadNativeUiCapabilities();
+}
+
+Future<Set<String>> _loadNativeUiCapabilities() async {
+  try {
+    final answer = await const MethodChannel('com.omi.native_ui/config').invokeMethod<Object?>('capabilities');
+    if (answer is! List) return const <String>{};
+    return Set.unmodifiable({
+      for (final kind in answer)
+        // Dart projects only the host kinds it knows; the host may answer fewer, never more.
+        if (kind is String && nativeHostRowKinds.contains(kind)) kind,
+    });
+  } on MissingPluginException {
+    return const <String>{};
+  } on PlatformException {
+    return const <String>{};
+  }
+}
+
+/// Forgets the process answer so each test starts from an unresolved host.
+@visibleForTesting
+void debugResetNativeUiCapabilities() => _nativeUiCapabilities = null;
+
 /// Stage one: SwiftUI renders the library; the current services still own every read and action.
 /// A snapshot Swift refuses, or a view without a renderer, restores the classic Home for good.
 class IosNativeHome extends StatefulWidget {

@@ -196,6 +196,48 @@ struct NativeSurfaceTests {
         try secrets()
         try listInteractions()
         try richMessagesAndCategoricalCharts(input)
+        input.removeValue(forKey: "chat")
+        let link: [String: Any] = ["id": "siri_shortcuts_link", "title": "Ask Omi", "kind": "shortcuts_link", "subtitle": "",
+            "options": [], "destructive": false, "enabled": false]
+        // Every advertised capability decodes in the configuration that answers 'capabilities'.
+        for kind in NativeUICapabilities.current {
+            var advertised = link
+            advertised["kind"] = kind
+            input["sections"] = [["id": "host", "title": "", "footer": "", "rows": [advertised]]]
+            let decoded = try NativeSurfaceSnapshot.decode(input)
+            precondition(decoded.sections[0].rows[0].kind == kind)
+        }
+        input["sections"] = [["id": "host", "title": "", "footer": "", "rows": [link]]]
+        #if compiler(>=6.4)
+        precondition(NativeUICapabilities.current == ["shortcuts_link"])
+        _ = try NativeSurfaceSnapshot.decode(input)
+        let forgeries: [(String, Any)] = [("value", "open"), ("options", [["id": "open", "title": "Open"]]),
+            ("symbol", "link"), ("enabled", true), ("imageUri", "https://example.com/a.jpg"),
+            ("points", [["x": 0, "y": 0.5, "label": ""] as [String: Any]]),
+            ("blocks", [["kind": "text", "text": "a", "indent": 0, "prefix": ""] as [String: Any]])]
+        for (key, value) in forgeries {
+            var forged = link
+            forged[key] = value
+            input["sections"] = [["id": "host", "title": "", "footer": "", "rows": [forged]]]
+            rejects(input)
+        }
+        #else
+        precondition(NativeUICapabilities.current.isEmpty && NativeUICapabilities.compiledKinds.isEmpty)
+        rejects(input)
+        #endif
+        // Host rows are list content only, in every configuration.
+        input["sections"] = []
+        input["toolbar"] = [link]
+        rejects(input)
+        input["toolbar"] = []
+        input["reader"] = ["request": 0, "following": false, "footer": [link]]
+        rejects(input)
+        input.removeValue(forKey: "reader")
+        input["chat"] = ["draft": "", "placeholder": "Ask Omi", "followup": "", "streaming": false, "actions": [link]]
+        rejects(input)
+        input.removeValue(forKey: "chat")
+        input["bottomBar"] = [link]
+        rejects(input)
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
     }
 
