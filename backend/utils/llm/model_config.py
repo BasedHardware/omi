@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.model_constants import LUNA_MODEL
 from utils.llm.vertex_pt_routing import (
     LANE_OVERFLOW_ORIGINS as FEATURE_PT_OVERFLOW_ORIGIN,
     OVERFLOW_ORIGIN_OPTION,
@@ -40,8 +41,6 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 # Canonical Luna model id. Feature defaults, scripts, and tests import this
 # instead of embedding a versioned string. A bump changes this constant plus
 # the gateway route artifacts and the provider rate card.
-LUNA_MODEL = 'gpt-6-luna'
-
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #

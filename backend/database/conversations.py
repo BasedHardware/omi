@@ -79,7 +79,7 @@ from .first_open_obligations import (
 from config.translation import resolve_ondemand_config
 from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
-from utils.llm.model_config import LUNA_MODEL
+from utils.llm.model_constants import LUNA_MODEL
 
 logger = logging.getLogger(__name__)
 
