@@ -370,14 +370,6 @@ def resolve_conversation_speakers(
         if position is not None:
             votes = by_old_id.setdefault(capture_key(segment), {})
             votes[position] = votes.get(position, 0.0) + max(_duration(segment), 1e-3)
-    placed = sorted(
-        (
-            (float(_seg(s, 'start', 0.0) or 0.0) + float(_seg(s, 'end', 0.0) or 0.0)) / 2.0,
-            cluster_of_segment[_seg(s, 'id')],
-        )
-        for s in eligible
-        if _seg(s, 'id') in cluster_of_segment
-    )
     for segment in eligible:
         segment_id = _seg(segment, 'id')
         if segment_id in cluster_of_segment:
@@ -390,21 +382,10 @@ def resolve_conversation_speakers(
                 # Acoustic contradiction within this provider voice: no majority
                 # can establish which person uttered an unembedded short reply.
                 contradicted.add(segment_id)
-        elif placed and _duration(segment) < MIN_EMBED_SECONDS:
-            # Too short to ever embed: the voice speaking around it.
-            center = (float(_seg(segment, 'start', 0.0) or 0.0) + float(_seg(segment, 'end', 0.0) or 0.0)) / 2.0
-            source_scope = _seg(segment, 'speaker_id_scope') or ''
-            neighbors = [
-                (
-                    (float(_seg(s, 'start', 0.0) or 0.0) + float(_seg(s, 'end', 0.0) or 0.0)) / 2.0,
-                    cluster_of_segment[_seg(s, 'id')],
-                )
-                for s in eligible
-                if _seg(s, 'id') in cluster_of_segment
-                and (not source_scope or (_seg(s, 'speaker_id_scope') or '') == source_scope)
-            ]
-            if neighbors:
-                cluster_of_segment[segment_id] = min(neighbors, key=lambda item: abs(item[0] - center))[1]
+        elif _duration(segment) < MIN_EMBED_SECONDS:
+            # A distinct provider voice has no compatible acoustic vote. Temporal
+            # proximity cannot promote it to its neighbour's owner/person identity.
+            contradicted.add(segment_id)
         # Otherwise it was embeddable but not embedded yet (budget, missing audio):
         # it keeps capture's id rather than borrowing a neighbour's voice.
 

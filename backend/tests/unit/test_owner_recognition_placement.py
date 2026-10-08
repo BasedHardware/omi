@@ -140,3 +140,20 @@ def test_late_audio_identity_commit_refuses_intervening_manual_write(monkeypatch
     assert decoded[0]['is_user'] is False
     store.rows[('account_deletions', 'u1')] = {'wipe_status': 'pending'}
     assert not stage.identity_updates_db.persist_speaker_resolution_if_current('u1', payload, expected_updated_at=at)
+
+
+def test_partial_pass_does_not_borrow_owner_for_distinct_short_voice(env, monkeypatch):
+    _span_flags(monkeypatch)
+    _install_audio(monkeypatch, [0, 0, 1, 2], offset=180.0)
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: VOICES[0].tolist())
+    conversation = _capture_shifted_conversation([0, 0, 1, 2])
+    for segment in conversation.transcript_segments:
+        segment.speaker_id_scope = 'conn:0'
+    short = conversation.transcript_segments[2]
+    short.end = short.start + 0.5
+    short.audio_capture_end = short.audio_capture_start + 0.5
+    missing = conversation.transcript_segments[3]
+    missing.audio_capture_start = missing.audio_capture_end = None
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert [s['is_user'] for s in conversation.model_dump()['transcript_segments']] == [True, True, False, False]
+    assert conversation.speaker_resolution.status == 'unavailable'
