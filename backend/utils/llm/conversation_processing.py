@@ -65,8 +65,6 @@ from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
-    explicit_cache_switch_enabled,
     has_cacheable_prefix,
     marked_prefix_request,
     prefix_cache_key,
@@ -177,7 +175,7 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 def _gpt56_explicit_cache_enabled() -> bool:
     # The route half stays local so this module's gateway seam remains patchable;
     # the kill-switch half is owned once, in prompt_cache, for every caller.
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
+    return should_route_features_through_gateway()
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -1391,9 +1389,7 @@ def _get_conversation_notes_legacy(
     # prompt_cache_breakpoint is not a valid content part. Anthropic rejects it
     # (system.0.prompt_cache_breakpoint: Extra inputs are not permitted) and
     # _get_structured maps that 400 to HTTP 500.
-    explicit_cache_enabled = (
-        shared_conversation_cache_supported() and explicit_cache_switch_enabled() and not has_byok_keys()
-    )
+    explicit_cache_enabled = shared_conversation_cache_supported() and not has_byok_keys()
     cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
     messages = [
         _gpt56_cacheable_system_message(static_instructions, cache_enabled=cache_enabled, formatted=True),
@@ -1802,7 +1798,7 @@ def get_app_result(
 Name: {app.name}
 Description: {app.description}
 Task: {app.memory_prompt}'''
-        explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
+        explicit_cache_enabled = shared_conversation_cache_supported()
         cache_enabled = explicit_cache_enabled and has_cacheable_prefix(instructions)
         model = get_llm(
             'conv_app_result',

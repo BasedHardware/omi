@@ -82,10 +82,6 @@ from utils.conversations.transcript_hash import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
-from utils.conversations.mcp_transcript_search import (
-    merge_summary_and_transcript_ids,
-    resolve_mcp_conversation_search_ids,
-)
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
@@ -1446,15 +1442,7 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     except ConversationSearchUnavailableError as exc:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    summary_ids = [item["id"] for item in items if item.get("id")]
-    transcript_ids = resolve_mcp_conversation_search_ids(
-        uid,
-        question,
-        limit=request.limit,
-        query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
-    )
-    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 

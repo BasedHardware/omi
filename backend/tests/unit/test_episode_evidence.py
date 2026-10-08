@@ -920,7 +920,6 @@ def test_long_speech_uses_baseline_prompt_with_no_episode_overhead(processing, m
 
 def test_episode_static_prefix_keeps_explicit_cache_breakpoint(processing, monkeypatch):
     monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: True)
-    monkeypatch.setattr(processing, 'explicit_cache_switch_enabled', lambda: True)
     _, calls = invoke_notes(processing, monkeypatch, [valid_note().model_dump(mode='json')], cache=True)
     static = calls[0][0].content[0]
     assert static['prompt_cache_breakpoint'] == {'mode': 'explicit'}
