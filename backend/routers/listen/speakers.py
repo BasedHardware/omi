@@ -275,6 +275,17 @@ class SpeakerMatcher:
                     self._covered_audio[voice] = covered
                     self._voice_scopes[voice] = owner_carry_scope
                     self._voice_segments[voice] = ''
+                # Matches may have run while only part of the print roster was
+                # loaded. Revalidate every current centroid against the completed
+                # roster before the shared owner arbitration.
+                for voice, centroid in self._voice_centroids.items():
+                    distances = {}
+                    for person_id, value in self.person_embeddings.items():
+                        vector = validated_embedding(value.get('embedding'))
+                        if vector is not None and vector.size == centroid.size:
+                            distances[person_id] = compare_embeddings(centroid, vector)
+                    self._voice_distances[voice] = distances
+                    self._voice_decisions[voice] = select_speaker_match(distances)
                 rejected = manual_rejected_speakers(current_receipt)
                 decisions = arbitrate_owner_matches(
                     {v: d for v, d in self._voice_distances.items() if v not in rejected},

@@ -499,6 +499,37 @@ def _cold_start_vector(distance, sign=1):
     return np.array([[cosine, sign * np.sqrt(1 - cosine**2)]], dtype=np.float32)
 
 
+@pytest.mark.parametrize('source', ['auto', 'manual', 'carried'])
+@pytest.mark.parametrize('next_person', ['user', 'peer'])
+def test_identity_projection_corrects_only_automatic_positive_labels(source, next_person):
+    was_owner = next_person == 'peer'
+    segment = TranscriptSegment(
+        id='s',
+        text='synthetic',
+        speaker_id=0,
+        start=0,
+        end=5,
+        is_user=was_owner,
+        person_id=None if was_owner else 'peer',
+        speaker_label_source=source,
+        speaker_match_source='live_embedding',
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={0: (next_person, 'Name')},
+            voice_identity_status={},
+            segment_identity_status={},
+        )
+    )
+    processor._apply_speaker_identity_statuses([segment])
+    rendered = segment.model_dump()
+    expected_owner = next_person == 'user' if source == 'auto' else was_owner
+    assert rendered['is_user'] is expected_owner
+    assert rendered['person_id'] == (None if expected_owner else 'peer')
+
+
 @pytest.mark.parametrize('reverse', [False, True])
 def test_live_cold_start_retracts_previous_owner_and_projects_all_segments(monkeypatch, reverse):
     vectors = [_cold_start_vector(0.631), _cold_start_vector(0.645, -1)]

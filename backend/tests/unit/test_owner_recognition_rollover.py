@@ -135,3 +135,51 @@ async def test_carry_arbitrates_voice_matched_during_donor_read(monkeypatch):
     assert [s.is_user for s in incoming] == [False, False]
     assert matcher.voice_identity_status[0] == matcher.voice_identity_status[1] == SpeakerIdentityStatus.ambiguous
     assert any(args[0] == 1 and not args[1] for args in emitted), 'withdraw already published owner'
+
+
+@pytest.mark.anyio
+async def test_carry_revalidates_current_prints_and_corrects_emitted_owner(monkeypatch):
+    from types import SimpleNamespace
+    from tests.unit.test_speaker_match import _live_matcher, _segment as audio_segment
+    from routers.listen.transcripts import TranscriptProcessor
+
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    old = np.array([[0.47, -np.sqrt(1 - 0.47**2)]], dtype=np.float32)
+    other = np.array([[0.6, 0.8]], dtype=np.float32)
+    matcher, host, emitted = _live_matcher(monkeypatch, [other])
+    matcher.person_embeddings = {'user': {'embedding': owner, 'name': 'Owner'}}
+    matcher._profile_conversation_id = 'old'
+    matcher.speaker_to_person[0] = ('user', 'Owner')
+    matcher._mapping_origin[0] = 'automatic'
+    matcher._voice_distances[0] = {'user': 0.53}
+    matcher._voice_decisions[0] = select_speaker_match({'user': 0.53})
+    matcher._voice_centroids[0] = old
+    matcher._voice_scopes[0] = SCOPE
+    matcher.speaker_evidence[0] = deque([(old, 5.0)], maxlen=3)
+    host.state.speaker_id_enabled = True
+    host.request.uid = 'u'
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))
+    host.emit_speaker_suggestion = lambda *args, **kw: emitted.append(args)
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = SimpleNamespace(speakers=matcher)
+    incoming = [TranscriptSegment(**_segment(f'new{v}', speaker_id=v)) for v in (0, 1)]
+
+    async def read(fn, *args, **kwargs):
+        return {'id': 'old'} if fn.__name__ == 'get_conversation' else {}
+
+    async def load():
+        matcher.person_embeddings['user'] = {'embedding': owner, 'name': 'Owner'}
+        await matcher.match(1, dict(audio_segment('new1', 6, 5), speaker_id_scope=SCOPE))
+        process_speaker_assigned_segments(incoming, {}, matcher.speaker_to_person)
+        processor._apply_speaker_identity_statuses(incoming)
+        assert incoming[1].is_user is True
+        # The paid person's print arrives after the early owner-only comparison.
+        matcher.person_embeddings['peer'] = {'embedding': other, 'name': 'Other'}
+
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence = SimpleNamespace(call=read)
+    await matcher.refresh_for_conversation('next', owner_carry_scope=SCOPE, owner_carry_donor={'id': 'old'})
+    process_speaker_assigned_segments(incoming, {}, matcher.speaker_to_person)
+    processor._apply_speaker_identity_statuses(incoming)
+    assert [s.model_dump()['is_user'] for s in incoming] == [True, False]
+    assert incoming[1].person_id == 'peer'

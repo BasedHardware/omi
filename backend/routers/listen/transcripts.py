@@ -609,6 +609,13 @@ class TranscriptProcessor:
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
                 person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]
             if person_id is not None:
+                if segment.speaker_label_source == 'auto' or (
+                    segment.speaker_label_source is None and segment.speaker_match_source == 'live_embedding'
+                ):
+                    # Correct an earlier automatic accept after the full print
+                    # roster or owner arbitration changes its identity.
+                    segment.is_user = is_user_self_match(person_id)
+                    segment.person_id = None if segment.is_user else person_id
                 segment.speaker_identity_status = (
                     SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
                 )
