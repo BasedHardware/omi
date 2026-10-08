@@ -17,6 +17,10 @@ enum CapturePalette {
     static let secondary = Color(red: 0x9A / 255, green: 0xA1 / 255, blue: 0xAD / 255)
     static let ink = Color(red: 0x0A / 255, green: 0x0C / 255, blue: 0x10 / 255)
     static let led = Color(red: 0x4C / 255, green: 0x9B / 255, blue: 0xFF / 255)
+    /// Capture needs the user: paused, or the pendant unheard.
+    static let attention = Color(red: 0xFF / 255, green: 0xB5 / 255, blue: 0x47 / 255)
+    /// The pendant is about to stop capturing.
+    static let critical = Color(red: 0xFF / 255, green: 0x7A / 255, blue: 0x6E / 255)
     /// material.glassThick (dark): rgba(26,29,37,.88).
     static let card = Color(red: 26 / 255, green: 29 / 255, blue: 37 / 255).opacity(0.88)
 }
@@ -69,12 +73,15 @@ extension ActivityViewContext where Attributes == OmiCaptureAttributes {
 struct OmiCaptureLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: OmiCaptureAttributes.self) { context in
-            CaptureLockScreenView(snapshot: context.omiSnapshot)
+            CaptureCard(snapshot: context.omiSnapshot)
                 .activityBackgroundTint(CapturePalette.card)
                 .activitySystemActionForegroundColor(CapturePalette.label)
                 .widgetURL(captureURL(context.attributes.recordingId))
         } dynamicIsland: { context in
             let snapshot = context.omiSnapshot
+            if let notice = snapshot.notice {
+                return noticeIsland(snapshot: snapshot, notice: notice, id: context.attributes.recordingId)
+            }
             let island = DynamicIsland {
                 // Island.dc.html: 372 x 172 with 18/22 padding, one 40 pt row, a
                 // 22 pt waveform and 38 pt buttons, 12 pt apart. iOS caps the
@@ -108,7 +115,12 @@ struct OmiCaptureLiveActivity: Widget {
                 CapturePendant(active: snapshot.isReceivingAudio, size: 20)
                     .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
             } compactTrailing: {
-                CaptureCompactClock(snapshot: snapshot)
+                // Turned sideways the trailing slot is about as wide as the island, so the
+                // clock gives way to a dot rather than clipping to "2:1".
+                ViewThatFits(in: .horizontal) {
+                    CaptureCompactClock(snapshot: snapshot)
+                    Circle().fill(CapturePalette.led).frame(width: 8, height: 8)
+                }
                     .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
             } minimal: {
                 CapturePendant(active: snapshot.isReceivingAudio, size: 20)
@@ -126,6 +138,62 @@ struct OmiCaptureLiveActivity: Widget {
     }
 }
 
+/// Pendant capture shows a card only while it needs the user (CapturePresentationPolicy): one
+/// glyph and one value, and a button only where a tap fixes it.
+@available(iOS 16.1, *)
+private func noticeIsland(snapshot: CaptureSnapshot, notice: CaptureNotice, id: String) -> DynamicIsland {
+    let island = DynamicIsland {
+        DynamicIslandExpandedRegion(.leading) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    CaptureNoticeGlyph(notice: notice, size: 32)
+                    CaptureNoticeTitle(snapshot: snapshot, notice: notice).fixedSize()
+                }
+                CaptureNoticeGlyph(notice: notice, size: 32)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.top, 6)
+            .padding(.leading, 4)
+            .dynamicTypeSize(...DynamicTypeSize.large)
+        }
+        DynamicIslandExpandedRegion(.trailing) {
+            CaptureNoticeValue(snapshot: snapshot, notice: notice, size: 22)
+                .frame(maxHeight: .infinity, alignment: .center)
+                .padding(.top, 6)
+                .padding(.trailing, 4)
+        }
+        DynamicIslandExpandedRegion(.bottom) {
+            VStack(spacing: 10) {
+                // The longest title has no room beside the camera.
+                if notice == .unheard {
+                    CaptureNoticeTitle(snapshot: snapshot, notice: notice)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                CaptureNoticeDetail(snapshot: snapshot, notice: notice, height: 38)
+            }
+        }
+    } compactLeading: {
+        // The pendant says this is Omi; the symbol says what is wrong. Values wait for the
+        // expanded island, so nothing here can clip when the island turns sideways.
+        CapturePendant(active: snapshot.isReceivingAudio, size: 20)
+    } compactTrailing: {
+        CaptureNoticeSymbol(notice: notice).font(.system(size: 15, weight: .semibold))
+            .padding(.trailing, 4)
+    } minimal: {
+        CapturePendant(active: snapshot.isReceivingAudio, size: 20)
+            .overlay(alignment: .bottomTrailing) {
+                Circle().fill(notice.tint).frame(width: 8, height: 8)
+                    .overlay(Circle().stroke(.black, lineWidth: 1.5))
+            }
+    }
+    .widgetURL(captureURL(id))
+    .keylineTint(notice.tint)
+    if #available(iOS 17.0, *) {
+        return island.contentMargins(.horizontal, 12, for: .expanded)
+    }
+    return island
+}
+
 private func captureURL(_ id: String) -> URL? {
     // The callback scheme is supplied by the embedding app's configuration.
     var components = URLComponents()
@@ -134,6 +202,20 @@ private func captureURL(_ id: String) -> URL? {
     components.path = "/capture"
     components.queryItems = [URLQueryItem(name: "recording", value: id)]
     return components.url
+}
+
+/// The Lock Screen presentation: a notice when capture needs the user, else the recording card.
+@available(iOS 16.1, *)
+struct CaptureCard: View {
+    let snapshot: CaptureSnapshot
+
+    var body: some View {
+        if let notice = snapshot.notice {
+            CaptureNoticeLockScreenView(snapshot: snapshot, notice: notice)
+        } else {
+            CaptureLockScreenView(snapshot: snapshot)
+        }
+    }
 }
 
 /// A stable 160 pt card, including padding, fits the Lock Screen height limit.
@@ -611,5 +693,185 @@ private struct CaptureActions: View {
 private struct CaptureActionStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+    }
+}
+
+// MARK: - Notices
+
+@available(iOS 16.1, *)
+extension CaptureSnapshot {
+    var notice: CaptureNotice? { state.notice.flatMap(CaptureNotice.init(rawValue:)) }
+}
+
+extension CaptureNotice {
+    var tint: Color { self == .battery ? CapturePalette.critical : CapturePalette.attention }
+
+    var symbol: String {
+        switch self {
+        case .muted: return "mic.slash.fill"
+        case .unheard: return "waveform.slash"
+        case .battery: return "battery.25"
+        }
+    }
+}
+
+@available(iOS 16.1, *)
+private struct CaptureNoticeSymbol: View {
+    let notice: CaptureNotice
+
+    var body: some View {
+        Image(systemName: notice.symbol)
+            .foregroundStyle(notice.tint)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The notice's symbol on a tinted disc.
+@available(iOS 16.1, *)
+private struct CaptureNoticeGlyph: View {
+    let notice: CaptureNotice
+    let size: CGFloat
+
+    var body: some View {
+        CaptureNoticeSymbol(notice: notice)
+            .font(.system(size: size * 0.47, weight: .semibold))
+            .frame(width: size, height: size)
+            .background(notice.tint.opacity(0.18), in: Circle())
+    }
+}
+
+@available(iOS 16.1, *)
+private struct CaptureNoticeTitle: View {
+    let snapshot: CaptureSnapshot
+    let notice: CaptureNotice
+
+    private var title: LocalizedStringKey {
+        if snapshot.isStale { return "Open Omi to reconnect" }
+        if snapshot.state.actionFailed { return "Open Omi to continue" }
+        switch notice {
+        case .muted: return "Paused"
+        case .unheard: return "No audio from pendant"
+        case .battery: return "Omi pendant"
+        }
+    }
+
+    var body: some View {
+        Text(title)
+            .contentTransition(.identity)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(CapturePalette.label)
+            .lineLimit(1)
+    }
+}
+
+/// How long capture has been paused or unheard, or the battery left.
+@available(iOS 16.1, *)
+private struct CaptureNoticeValue: View {
+    let snapshot: CaptureSnapshot
+    let notice: CaptureNotice
+    @ScaledMetric private var size: CGFloat
+
+    init(snapshot: CaptureSnapshot, notice: CaptureNotice, size: CGFloat) {
+        self.snapshot = snapshot
+        self.notice = notice
+        _size = ScaledMetric(wrappedValue: size, relativeTo: .title)
+    }
+
+    var body: some View {
+        Group {
+            if snapshot.isStale {
+                Text("—")
+            } else if notice == .battery {
+                Text(verbatim: "\(max(0, snapshot.state.pendantBattery ?? 0))%")
+            } else {
+                // A live count from when it began, in a slot sized for an hour or more.
+                let since = Date(timeIntervalSince1970: snapshot.state.noticeSince ?? Date().timeIntervalSince1970)
+                Text(timerInterval: since...since.addingTimeInterval(7 * 24 * 3600), countsDown: false)
+                    .frame(width: size * 4.3, alignment: .trailing)
+            }
+        }
+        .font(.system(size: size, weight: .semibold))
+        .monospacedDigit()
+        .multilineTextAlignment(.trailing)
+        .contentTransition(.identity)
+        .foregroundStyle(notice.tint)
+        .lineLimit(1)
+    }
+}
+
+/// Below the title: Start for a pause, the charge left for a low battery, nothing otherwise.
+@available(iOS 16.1, *)
+private struct CaptureNoticeDetail: View {
+    let snapshot: CaptureSnapshot
+    let notice: CaptureNotice
+    let height: CGFloat
+
+    var body: some View {
+        switch notice {
+        case .muted:
+            CaptureNoticeResume(snapshot: snapshot, height: height)
+        case .battery:
+            GeometryReader { geometry in
+                let level = CGFloat(min(100, max(0, snapshot.state.pendantBattery ?? 0))) / 100
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.12))
+                    Capsule().fill(notice.tint).frame(width: max(6, geometry.size.width * level))
+                }
+            }
+            .frame(height: 6)
+            .accessibilityHidden(true)
+        case .unheard:
+            EmptyView()
+        }
+    }
+}
+
+@available(iOS 16.1, *)
+private struct CaptureNoticeResume: View {
+    let snapshot: CaptureSnapshot
+    let height: CGFloat
+
+    var body: some View {
+        #if compiler(>=6.4)
+        if #available(iOS 17.0, *), !snapshot.isStale, snapshot.state.canPause {
+            Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
+                                            revision: snapshot.state.conversationRevision, action: "resume")) {
+                Text("Start")
+                    .contentTransition(.identity)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .foregroundStyle(CapturePalette.ink)
+                    .background(CapturePalette.label, in: Capsule())
+            }
+            .buttonStyle(CaptureActionStyle())
+            .disabled(snapshot.state.busy)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        }
+        #endif
+    }
+}
+
+@available(iOS 16.1, *)
+struct CaptureNoticeLockScreenView: View {
+    let snapshot: CaptureSnapshot
+    let notice: CaptureNotice
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                CaptureNoticeGlyph(notice: notice, size: 36)
+                CaptureNoticeTitle(snapshot: snapshot, notice: notice)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                CaptureNoticeValue(snapshot: snapshot, notice: notice, size: 24)
+            }
+            .frame(height: 40)
+            CaptureNoticeDetail(snapshot: snapshot, notice: notice, height: 40)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .foregroundStyle(CapturePalette.label)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
