@@ -12446,6 +12446,21 @@ class AppLocalizationsEt extends AppLocalizations {
   String get partialRecording => 'Osaline salvestus';
 
   @override
+  String get importTranscriptFiles => 'Transkriptsioonifailid';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP';
+
+  @override
+  String get importTooManyAttempts => 'Praegu on liiga palju importimisi. Proovi hiljem uuesti.';
+
+  @override
+  String get importFileTooLarge => 'See fail on importimiseks liiga suur.';
+
+  @override
+  String get importUnsupportedFileType => 'Seda failitüüpi ei saa importida.';
+
+  @override
   String get reviewTitle => 'Ülevaatus';
 
   @override

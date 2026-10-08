@@ -12465,6 +12465,21 @@ class AppLocalizationsUr extends AppLocalizations {
   String get partialRecording => 'جزوی ریکارڈنگ';
 
   @override
+  String get importTranscriptFiles => 'ٹرانسکرپٹ فائلیں';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT، VTT یا TXT ٹرانسکرپٹس، یا ان کی ZIP فائل منتخب کریں';
+
+  @override
+  String get importTooManyAttempts => 'اس وقت بہت زیادہ درآمدات جاری ہیں۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get importFileTooLarge => 'یہ فائل درآمد کرنے کے لیے بہت بڑی ہے۔';
+
+  @override
+  String get importUnsupportedFileType => 'اس قسم کی فائل درآمد نہیں کی جا سکتی۔';
+
+  @override
   String get reviewTitle => 'جائزہ';
 
   @override

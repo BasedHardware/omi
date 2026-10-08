@@ -12480,6 +12480,21 @@ class AppLocalizationsLv extends AppLocalizations {
   String get partialRecording => 'Daļējs ieraksts';
 
   @override
+  String get importTranscriptFiles => 'Transkripciju faili';
+
+  @override
+  String get importTranscriptFilesDescription => 'Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām';
+
+  @override
+  String get importTooManyAttempts => 'Pašlaik ir pārāk daudz importēšanu. Mēģiniet vēlreiz vēlāk.';
+
+  @override
+  String get importFileTooLarge => 'Šis fails ir pārāk liels importēšanai.';
+
+  @override
+  String get importUnsupportedFileType => 'Šāda veida failu nevar importēt.';
+
+  @override
   String get reviewTitle => 'Pārskatīšana';
 
   @override

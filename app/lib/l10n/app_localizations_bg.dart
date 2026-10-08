@@ -12497,6 +12497,21 @@ class AppLocalizationsBg extends AppLocalizations {
   String get partialRecording => 'Частичен запис';
 
   @override
+  String get importTranscriptFiles => 'Файлове с транскрипции';
+
+  @override
+  String get importTranscriptFilesDescription => 'Изберете транскрипции SRT, VTT или TXT или ZIP архив с тях';
+
+  @override
+  String get importTooManyAttempts => 'Твърде много импортирания в момента. Опитайте отново по-късно.';
+
+  @override
+  String get importFileTooLarge => 'Този файл е твърде голям за импортиране.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлове от този тип не могат да бъдат импортирани.';
+
+  @override
   String get reviewTitle => 'Преглед';
 
   @override

@@ -12435,6 +12435,21 @@ class AppLocalizationsHi extends AppLocalizations {
   String get partialRecording => 'आंशिक रिकॉर्डिंग';
 
   @override
+  String get importTranscriptFiles => 'ट्रांसक्रिप्ट फ़ाइलें';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT या TXT ट्रांसक्रिप्ट, या उनकी ZIP फ़ाइल चुनें';
+
+  @override
+  String get importTooManyAttempts => 'अभी बहुत अधिक आयात हो रहे हैं। बाद में फिर से प्रयास करें।';
+
+  @override
+  String get importFileTooLarge => 'यह फ़ाइल आयात करने के लिए बहुत बड़ी है।';
+
+  @override
+  String get importUnsupportedFileType => 'इस प्रकार की फ़ाइल आयात नहीं की जा सकती।';
+
+  @override
   String get reviewTitle => 'समीक्षा';
 
   @override
