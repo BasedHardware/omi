@@ -12493,4 +12493,27 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Файли цього типу не можна імпортувати.';
+
+  @override
+  String get thisWeek => 'Цей тиждень';
+
+  @override
+  String get busiestDay => 'Найнасиченіший день';
+
+  @override
+  String get timeRecorded => 'Записаний час';
+
+  @override
+  String get peopleYouTalkedToMost => 'З ким ви говорили найбільше';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Раніше: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'За цей період ще нічого не записано';
+
+  @override
+  String get openTasks => 'Відкриті завдання';
 }

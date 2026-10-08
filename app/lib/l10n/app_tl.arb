@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito",
     "importTooManyAttempts": "Masyadong maraming pag-import ngayon. Subukan ulit mamaya.",
     "importFileTooLarge": "Masyadong malaki ang file na ito para i-import.",
-    "importUnsupportedFileType": "Hindi ma-import ang ganitong uri ng file."
+    "importUnsupportedFileType": "Hindi ma-import ang ganitong uri ng file.",
+    "thisWeek": "Ngayong linggo",
+    "busiestDay": "Pinakaabalang araw",
+    "timeRecorded": "Oras na na-record",
+    "peopleYouTalkedToMost": "Mga taong pinakamadalas mong kausap",
+    "recapPrevious": "Nakaraan: {value}",
+    "noRecapForPeriod": "Wala pang na-record sa panahong ito",
+    "openTasks": "Mga bukas na gawain"
 }

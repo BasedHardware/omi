@@ -3891,5 +3891,12 @@
     "importTranscriptFilesDescription": "Pilih transkrip SRT, VTT, atau TXT, atau ZIP yang berisi transkrip tersebut",
     "importTooManyAttempts": "Terlalu banyak impor saat ini. Coba lagi nanti.",
     "importFileTooLarge": "File ini terlalu besar untuk diimpor.",
-    "importUnsupportedFileType": "Jenis file ini tidak dapat diimpor."
+    "importUnsupportedFileType": "Jenis file ini tidak dapat diimpor.",
+    "thisWeek": "Minggu ini",
+    "busiestDay": "Hari tersibuk",
+    "timeRecorded": "Waktu terekam",
+    "peopleYouTalkedToMost": "Orang yang paling sering Anda ajak bicara",
+    "recapPrevious": "Sebelumnya: {value}",
+    "noRecapForPeriod": "Belum ada yang terekam pada periode ini",
+    "openTasks": "Tugas terbuka"
 }

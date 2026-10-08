@@ -12453,4 +12453,27 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Denne filtype kan ikke importeres.';
+
+  @override
+  String get thisWeek => 'Denne uge';
+
+  @override
+  String get busiestDay => 'Travleste dag';
+
+  @override
+  String get timeRecorded => 'Optaget tid';
+
+  @override
+  String get peopleYouTalkedToMost => 'Dem, du talte mest med';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Forrige: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Intet optaget i denne periode endnu';
+
+  @override
+  String get openTasks => 'Åbne opgaver';
 }

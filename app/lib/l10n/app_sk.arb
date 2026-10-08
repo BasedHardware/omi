@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Vyberte prepisy SRT, VTT alebo TXT, alebo ZIP s nimi",
     "importTooManyAttempts": "Práve prebieha príliš veľa importov. Skúste to neskôr.",
     "importFileTooLarge": "Tento súbor je príliš veľký na import.",
-    "importUnsupportedFileType": "Tento typ súboru nie je možné importovať."
+    "importUnsupportedFileType": "Tento typ súboru nie je možné importovať.",
+    "thisWeek": "Tento týždeň",
+    "busiestDay": "Najrušnejší deň",
+    "timeRecorded": "Nahraný čas",
+    "peopleYouTalkedToMost": "Ľudia, s ktorými ste sa rozprávali najviac",
+    "recapPrevious": "Predchádzajúce: {value}",
+    "noRecapForPeriod": "V tomto období zatiaľ nič nenahrané",
+    "openTasks": "Otvorené úlohy"
 }

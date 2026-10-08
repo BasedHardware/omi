@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください",
     "importTooManyAttempts": "現在インポートが多すぎます。しばらくしてからもう一度お試しください。",
     "importFileTooLarge": "このファイルはインポートするには大きすぎます。",
-    "importUnsupportedFileType": "この種類のファイルはインポートできません。"
+    "importUnsupportedFileType": "この種類のファイルはインポートできません。",
+    "thisWeek": "今週",
+    "busiestDay": "最も忙しかった日",
+    "timeRecorded": "録音時間",
+    "peopleYouTalkedToMost": "よく話した人",
+    "recapPrevious": "前回: {value}",
+    "noRecapForPeriod": "この期間の記録はまだありません",
+    "openTasks": "未完了のタスク"
 }

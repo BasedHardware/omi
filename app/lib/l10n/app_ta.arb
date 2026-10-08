@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "SRT, VTT அல்லது TXT படியெடுப்புகளை அல்லது அவற்றின் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்",
     "importTooManyAttempts": "இப்போது அதிகமான இறக்குமதிகள் நடைபெறுகின்றன. பின்னர் மீண்டும் முயலுங்கள்.",
     "importFileTooLarge": "இந்தக் கோப்பு இறக்குமதி செய்ய மிகவும் பெரியது.",
-    "importUnsupportedFileType": "இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது."
+    "importUnsupportedFileType": "இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது.",
+    "thisWeek": "இந்த வாரம்",
+    "busiestDay": "மிகவும் பரபரப்பான நாள்",
+    "timeRecorded": "பதிவு செய்த நேரம்",
+    "peopleYouTalkedToMost": "நீங்கள் அதிகம் பேசியவர்கள்",
+    "recapPrevious": "முந்தையது: {value}",
+    "noRecapForPeriod": "இந்தக் காலத்தில் இன்னும் எதுவும் பதிவு செய்யப்படவில்லை",
+    "openTasks": "நிலுவையிலுள்ள பணிகள்"
 }

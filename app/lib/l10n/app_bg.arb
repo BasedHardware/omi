@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Изберете транскрипции SRT, VTT или TXT или ZIP архив с тях",
     "importTooManyAttempts": "Твърде много импортирания в момента. Опитайте отново по-късно.",
     "importFileTooLarge": "Този файл е твърде голям за импортиране.",
-    "importUnsupportedFileType": "Файлове от този тип не могат да бъдат импортирани."
+    "importUnsupportedFileType": "Файлове от този тип не могат да бъдат импортирани.",
+    "thisWeek": "Тази седмица",
+    "busiestDay": "Най-натоварен ден",
+    "timeRecorded": "Записано време",
+    "peopleYouTalkedToMost": "Хората, с които говорихте най-много",
+    "recapPrevious": "Предишно: {value}",
+    "noRecapForPeriod": "Все още няма записи за този период",
+    "openTasks": "Отворени задачи"
 }

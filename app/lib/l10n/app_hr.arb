@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima",
     "importTooManyAttempts": "Trenutačno ima previše uvoza. Pokušajte ponovno kasnije.",
     "importFileTooLarge": "Ova je datoteka prevelika za uvoz.",
-    "importUnsupportedFileType": "Ova vrsta datoteke ne može se uvesti."
+    "importUnsupportedFileType": "Ova vrsta datoteke ne može se uvesti.",
+    "thisWeek": "Ovaj tjedan",
+    "busiestDay": "Najzauzetiji dan",
+    "timeRecorded": "Snimljeno vrijeme",
+    "peopleYouTalkedToMost": "Osobe s kojima ste najviše razgovarali",
+    "recapPrevious": "Prethodno: {value}",
+    "noRecapForPeriod": "U ovom razdoblju još ništa nije snimljeno",
+    "openTasks": "Otvoreni zadaci"
 }

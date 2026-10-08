@@ -12517,4 +12517,27 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.';
+
+  @override
+  String get thisWeek => 'ఈ వారం';
+
+  @override
+  String get busiestDay => 'అత్యంత బిజీగా ఉన్న రోజు';
+
+  @override
+  String get timeRecorded => 'రికార్డ్ చేసిన సమయం';
+
+  @override
+  String get peopleYouTalkedToMost => 'మీరు ఎక్కువగా మాట్లాడిన వ్యక్తులు';
+
+  @override
+  String recapPrevious(String value) {
+    return 'మునుపటి: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'ఈ వ్యవధిలో ఇంకా ఏమీ రికార్డ్ కాలేదు';
+
+  @override
+  String get openTasks => 'పెండింగ్ పనులు';
 }

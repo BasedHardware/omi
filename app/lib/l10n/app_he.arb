@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם",
     "importTooManyAttempts": "יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.",
     "importFileTooLarge": "הקובץ גדול מדי לייבוא.",
-    "importUnsupportedFileType": "לא ניתן לייבא סוג קובץ זה."
+    "importUnsupportedFileType": "לא ניתן לייבא סוג קובץ זה.",
+    "thisWeek": "השבוע",
+    "busiestDay": "היום העמוס ביותר",
+    "timeRecorded": "זמן מוקלט",
+    "peopleYouTalkedToMost": "האנשים שדיברת איתם הכי הרבה",
+    "recapPrevious": "קודם: {value}",
+    "noRecapForPeriod": "עדיין לא הוקלט דבר בתקופה הזו",
+    "openTasks": "משימות פתוחות"
 }

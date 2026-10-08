@@ -3952,5 +3952,12 @@
     "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt",
     "importTooManyAttempts": "Jelenleg túl sok az importálás. Próbálja újra később.",
     "importFileTooLarge": "Ez a fájl túl nagy az importáláshoz.",
-    "importUnsupportedFileType": "Ez a fájltípus nem importálható."
+    "importUnsupportedFileType": "Ez a fájltípus nem importálható.",
+    "thisWeek": "Ez a hét",
+    "busiestDay": "Legforgalmasabb nap",
+    "timeRecorded": "Rögzített idő",
+    "peopleYouTalkedToMost": "Akikkel a legtöbbet beszéltél",
+    "recapPrevious": "Előző: {value}",
+    "noRecapForPeriod": "Ebben az időszakban még nincs felvétel",
+    "openTasks": "Nyitott feladatok"
 }

@@ -12463,4 +12463,27 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'این نوع فایل را نمی‌توان وارد کرد.';
+
+  @override
+  String get thisWeek => 'این هفته';
+
+  @override
+  String get busiestDay => 'پرمشغله‌ترین روز';
+
+  @override
+  String get timeRecorded => 'زمان ضبط‌شده';
+
+  @override
+  String get peopleYouTalkedToMost => 'کسانی که بیشتر با آن‌ها صحبت کردید';
+
+  @override
+  String recapPrevious(String value) {
+    return 'قبلی: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'هنوز در این بازه چیزی ضبط نشده است';
+
+  @override
+  String get openTasks => 'وظایف باز';
 }

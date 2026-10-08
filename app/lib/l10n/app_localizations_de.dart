@@ -12561,4 +12561,27 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Dieser Dateityp kann nicht importiert werden.';
+
+  @override
+  String get thisWeek => 'Diese Woche';
+
+  @override
+  String get busiestDay => 'Aktivster Tag';
+
+  @override
+  String get timeRecorded => 'Aufgenommene Zeit';
+
+  @override
+  String get peopleYouTalkedToMost => 'Mit wem du am meisten gesprochen hast';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Vorher: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'In diesem Zeitraum wurde noch nichts aufgenommen';
+
+  @override
+  String get openTasks => 'Offene Aufgaben';
 }

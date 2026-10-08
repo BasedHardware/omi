@@ -3891,5 +3891,12 @@
     "importTranscriptFilesDescription": "Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними",
     "importTooManyAttempts": "Сейчас слишком много импортов. Повторите попытку позже.",
     "importFileTooLarge": "Этот файл слишком большой для импорта.",
-    "importUnsupportedFileType": "Файлы этого типа нельзя импортировать."
+    "importUnsupportedFileType": "Файлы этого типа нельзя импортировать.",
+    "thisWeek": "Эта неделя",
+    "busiestDay": "Самый насыщенный день",
+    "timeRecorded": "Записанное время",
+    "peopleYouTalkedToMost": "С кем вы говорили больше всего",
+    "recapPrevious": "Ранее: {value}",
+    "noRecapForPeriod": "За этот период пока ничего не записано",
+    "openTasks": "Открытые задачи"
 }

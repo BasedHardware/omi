@@ -12510,4 +12510,27 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Файлове от този тип не могат да бъдат импортирани.';
+
+  @override
+  String get thisWeek => 'Тази седмица';
+
+  @override
+  String get busiestDay => 'Най-натоварен ден';
+
+  @override
+  String get timeRecorded => 'Записано време';
+
+  @override
+  String get peopleYouTalkedToMost => 'Хората, с които говорихте най-много';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Предишно: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Все още няма записи за този период';
+
+  @override
+  String get openTasks => 'Отворени задачи';
 }

@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Atlasiet SRT, VTT vai TXT transkripcijas vai ZIP arhīvu ar tām",
     "importTooManyAttempts": "Pašlaik ir pārāk daudz importēšanu. Mēģiniet vēlreiz vēlāk.",
     "importFileTooLarge": "Šis fails ir pārāk liels importēšanai.",
-    "importUnsupportedFileType": "Šāda veida failu nevar importēt."
+    "importUnsupportedFileType": "Šāda veida failu nevar importēt.",
+    "thisWeek": "Šī nedēļa",
+    "busiestDay": "Aizņemtākā diena",
+    "timeRecorded": "Ierakstītais laiks",
+    "peopleYouTalkedToMost": "Cilvēki, ar kuriem runājāt visvairāk",
+    "recapPrevious": "Iepriekšējais: {value}",
+    "noRecapForPeriod": "Šajā periodā vēl nekas nav ierakstīts",
+    "openTasks": "Neizpildītie uzdevumi"
 }

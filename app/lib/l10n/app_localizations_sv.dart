@@ -12470,4 +12470,27 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Den här filtypen kan inte importeras.';
+
+  @override
+  String get thisWeek => 'Den här veckan';
+
+  @override
+  String get busiestDay => 'Den mest aktiva dagen';
+
+  @override
+  String get timeRecorded => 'Inspelad tid';
+
+  @override
+  String get peopleYouTalkedToMost => 'Personerna du pratade mest med';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Föregående: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Inget inspelat under den här perioden än';
+
+  @override
+  String get openTasks => 'Öppna uppgifter';
 }

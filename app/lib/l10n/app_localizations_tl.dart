@@ -12566,4 +12566,27 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Hindi ma-import ang ganitong uri ng file.';
+
+  @override
+  String get thisWeek => 'Ngayong linggo';
+
+  @override
+  String get busiestDay => 'Pinakaabalang araw';
+
+  @override
+  String get timeRecorded => 'Oras na na-record';
+
+  @override
+  String get peopleYouTalkedToMost => 'Mga taong pinakamadalas mong kausap';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Nakaraan: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Wala pang na-record sa panahong ito';
+
+  @override
+  String get openTasks => 'Mga bukas na gawain';
 }

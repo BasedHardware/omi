@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele",
     "importTooManyAttempts": "Prea multe importuri în acest moment. Încearcă din nou mai târziu.",
     "importFileTooLarge": "Acest fișier este prea mare pentru a fi importat.",
-    "importUnsupportedFileType": "Acest tip de fișier nu poate fi importat."
+    "importUnsupportedFileType": "Acest tip de fișier nu poate fi importat.",
+    "thisWeek": "Săptămâna aceasta",
+    "busiestDay": "Cea mai aglomerată zi",
+    "timeRecorded": "Timp înregistrat",
+    "peopleYouTalkedToMost": "Persoanele cu care ai vorbit cel mai mult",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Încă nu s-a înregistrat nimic în această perioadă",
+    "openTasks": "Sarcini deschise"
 }

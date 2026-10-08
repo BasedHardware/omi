@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει",
     "importTooManyAttempts": "Πάρα πολλές εισαγωγές αυτή τη στιγμή. Δοκιμάστε ξανά αργότερα.",
     "importFileTooLarge": "Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή.",
-    "importUnsupportedFileType": "Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί."
+    "importUnsupportedFileType": "Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί.",
+    "thisWeek": "Αυτή την εβδομάδα",
+    "busiestDay": "Η πιο πολυάσχολη μέρα",
+    "timeRecorded": "Χρόνος ηχογράφησης",
+    "peopleYouTalkedToMost": "Με ποιους μίλησες περισσότερο",
+    "recapPrevious": "Προηγούμενη: {value}",
+    "noRecapForPeriod": "Δεν έχει ηχογραφηθεί τίποτα σε αυτή την περίοδο ακόμα",
+    "openTasks": "Ανοιχτές εργασίες"
 }

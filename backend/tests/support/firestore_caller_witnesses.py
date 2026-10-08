@@ -22,7 +22,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Iterable
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 import database.conversations as conversations_db
 import database.conversation_scan as conversation_scan
@@ -31,6 +31,7 @@ import routers.conversations as conversations_router
 import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
 import routers.integration as integration_router
+import routers.recaps as recaps_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
@@ -325,6 +326,34 @@ def _run_speaker_browse_recipe(monkeypatch: pytest.MonkeyPatch, capture: HelperC
             )
 
 
+def _run_period_recap(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, recaps_router.notification_db, 'get_user_time_zone', lambda uid: 'America/New_York')
+    _stub(monkeypatch, recaps_router.daily_summaries_db, 'get_daily_summaries', lambda uid, **kwargs: [])
+    _stub(monkeypatch, recaps_router, 'conversation_scan_budget', lambda request, route: None)
+    _stub(monkeypatch, recaps_router.action_items_db, 'get_action_items', lambda uid, **kwargs: [])
+    for period in ('week', 'month'):
+        trial(
+            capture,
+            recaps_router.get_period_recap,
+            request=None,
+            response=Response(),
+            period=period,
+            date=None,
+            uid='u1',
+        )
+
+
+def _run_period_recap_recipe(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(
+        capture,
+        conversation_scan.recap_people_scan,
+        'u1',
+        start_date=FROZEN_NOW,
+        end_date=FROZEN_LATER,
+        budget=None,
+    )
+
+
 def _run_daily_summary_regenerate(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, users_router, 'enforce_chat_quota', lambda *a, **k: None)
     _stub(monkeypatch, users_router.notification_db, 'get_user_time_zone', lambda uid: None)
@@ -549,6 +578,22 @@ WITNESSES: dict[str, CallerWitness] = {
             ('speaker-search-fallback',),
             1,
             _run_speaker_browse_recipe,
+        ),
+        CallerWitness(
+            'routers/recaps.py:_period_people:database.conversation_scan.recap_people_scan',
+            'database.conversation_scan.recap_people_scan',
+            'routers.recaps.recap_people_scan',
+            ('period-recap-people-recipe',),
+            1,
+            _run_period_recap,
+        ),
+        CallerWitness(
+            'database/conversation_scan.py:recap_people_scan:database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            'database.conversation_scan.iter_conversations',
+            ('period-recap-people',),
+            1,
+            _run_period_recap_recipe,
         ),
         CallerWitness(
             'routers/developer.py:get_conversations:database.conversations.get_conversations',

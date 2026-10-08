@@ -12278,4 +12278,27 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => '이 파일 형식은 가져올 수 없습니다.';
+
+  @override
+  String get thisWeek => '이번 주';
+
+  @override
+  String get busiestDay => '가장 바빴던 날';
+
+  @override
+  String get timeRecorded => '녹음 시간';
+
+  @override
+  String get peopleYouTalkedToMost => '가장 많이 대화한 사람';
+
+  @override
+  String recapPrevious(String value) {
+    return '이전: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => '이 기간에 아직 녹음된 내용이 없습니다';
+
+  @override
+  String get openTasks => '미완료 작업';
 }

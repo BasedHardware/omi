@@ -780,6 +780,25 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.conversation_scan.recap_people_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[2],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
+_add(
+    DriverEntry(
         'database.conversation_scan.speaker_browse_scan',
         base={'uid': UID},
         profiles=(RECIPE_PROFILES[1],),

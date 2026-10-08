@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा",
     "importTooManyAttempts": "सध्या खूप जास्त आयात होत आहेत. नंतर पुन्हा प्रयत्न करा.",
     "importFileTooLarge": "ही फाइल आयात करण्यासाठी खूप मोठी आहे.",
-    "importUnsupportedFileType": "या प्रकारची फाइल आयात करता येत नाही."
+    "importUnsupportedFileType": "या प्रकारची फाइल आयात करता येत नाही.",
+    "thisWeek": "हा आठवडा",
+    "busiestDay": "सर्वात व्यस्त दिवस",
+    "timeRecorded": "रेकॉर्ड केलेला वेळ",
+    "peopleYouTalkedToMost": "ज्यांच्याशी तुम्ही सर्वाधिक बोललात",
+    "recapPrevious": "मागील: {value}",
+    "noRecapForPeriod": "या कालावधीत अद्याप काहीही रेकॉर्ड झालेले नाही",
+    "openTasks": "प्रलंबित कार्ये"
 }

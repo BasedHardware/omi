@@ -14907,5 +14907,39 @@
     "importUnsupportedFileType": "This file type can't be imported.",
     "@importUnsupportedFileType": {
         "description": "Error when the file picked for an import has an extension the importer does not accept"
+    },
+    "thisWeek": "This Week",
+    "@thisWeek": {
+        "description": "Filter chip for the current week's recap"
+    },
+    "busiestDay": "Busiest day",
+    "@busiestDay": {
+        "description": "Recap row: the day with the most recorded time"
+    },
+    "timeRecorded": "Time recorded",
+    "@timeRecorded": {
+        "description": "Recap row: total conversation time in the period"
+    },
+    "peopleYouTalkedToMost": "People You Talked to Most",
+    "@peopleYouTalkedToMost": {
+        "description": "Recap section header listing people by talk time"
+    },
+    "recapPrevious": "Previous: {value}",
+    "@recapPrevious": {
+        "description": "Recap trend: the same figure for the same stretch of the previous week or month (as many days in as the current one so far, or the whole previous period once the current one is complete)",
+        "placeholders": {
+            "value": {
+                "type": "String",
+                "example": "9"
+            }
+        }
+    },
+    "noRecapForPeriod": "Nothing recorded in this period yet",
+    "@noRecapForPeriod": {
+        "description": "Empty state when a week or month has no recorded conversations"
+    },
+    "openTasks": "Open Tasks",
+    "@openTasks": {
+        "description": "Recap section header: tasks created in the week or month that are still not done (distinct from the count of tasks created)"
     }
 }

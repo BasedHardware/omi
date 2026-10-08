@@ -806,6 +806,326 @@ class GeneratedDailySummariesResponse {
   }
 }
 
+class GeneratedPeriodRecapStats {
+  final int actionItemsCreated;
+  final int memoriesCreated;
+  final int totalConversations;
+  final int totalDurationMinutes;
+
+  const GeneratedPeriodRecapStats({
+    this.actionItemsCreated = 0,
+    this.memoriesCreated = 0,
+    this.totalConversations = 0,
+    this.totalDurationMinutes = 0,
+  });
+
+  factory GeneratedPeriodRecapStats.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapStats(
+      actionItemsCreated: _required(_readFieldValue<int>(_readField(json, const ["action_items_created"]), "action_items_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "action_items_created"),
+      memoriesCreated: _required(_readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories_created"),
+      totalConversations: _required(_readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_conversations"),
+      totalDurationMinutes: _required(_readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_duration_minutes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_items_created': actionItemsCreated,
+      'memories_created': memoriesCreated,
+      'total_conversations': totalConversations,
+      'total_duration_minutes': totalDurationMinutes,
+    };
+  }
+}
+
+class GeneratedPeriodRecapPrevious {
+  final String endDate;
+  final String startDate;
+  final int totalConversations;
+  final int totalDurationMinutes;
+
+  const GeneratedPeriodRecapPrevious({
+    required this.endDate,
+    required this.startDate,
+    this.totalConversations = 0,
+    this.totalDurationMinutes = 0,
+  });
+
+  factory GeneratedPeriodRecapPrevious.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapPrevious(
+      endDate: _required(_readFieldValue<String>(_readField(json, const ["end_date"]), "end_date", _readString, requiredField: true, nullable: false), "end_date"),
+      startDate: _required(_readFieldValue<String>(_readField(json, const ["start_date"]), "start_date", _readString, requiredField: true, nullable: false), "start_date"),
+      totalConversations: _required(_readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_conversations"),
+      totalDurationMinutes: _required(_readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_duration_minutes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'end_date': endDate,
+      'start_date': startDate,
+      'total_conversations': totalConversations,
+      'total_duration_minutes': totalDurationMinutes,
+    };
+  }
+}
+
+class GeneratedPeriodRecapBusiestDay {
+  final String date;
+  final String? summaryId;
+  final int totalConversations;
+  final int totalDurationMinutes;
+
+  const GeneratedPeriodRecapBusiestDay({
+    required this.date,
+    this.summaryId,
+    this.totalConversations = 0,
+    this.totalDurationMinutes = 0,
+  });
+
+  factory GeneratedPeriodRecapBusiestDay.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapBusiestDay(
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      summaryId: _readFieldValue<String>(_readField(json, const ["summary_id"]), "summary_id", _readString, requiredField: false, nullable: true),
+      totalConversations: _required(_readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_conversations"),
+      totalDurationMinutes: _required(_readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_duration_minutes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'summary_id': summaryId,
+      'total_conversations': totalConversations,
+      'total_duration_minutes': totalDurationMinutes,
+    };
+  }
+}
+
+class GeneratedPeriodRecapHighlight {
+  final List<String>? conversationIds;
+  final String date;
+  final String? emoji;
+  final String? summary;
+  final String? topic;
+
+  const GeneratedPeriodRecapHighlight({
+    this.conversationIds,
+    required this.date,
+    this.emoji,
+    this.summary,
+    this.topic,
+  });
+
+  factory GeneratedPeriodRecapHighlight.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapHighlight(
+      conversationIds: _readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: false, nullable: true),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      emoji: _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: true),
+      summary: _readFieldValue<String>(_readField(json, const ["summary"]), "summary", _readString, requiredField: false, nullable: true),
+      topic: _readFieldValue<String>(_readField(json, const ["topic"]), "topic", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_ids': conversationIds,
+      'date': date,
+      'emoji': emoji,
+      'summary': summary,
+      'topic': topic,
+    };
+  }
+}
+
+class GeneratedPeriodRecapDecision {
+  final String? conversationId;
+  final String date;
+  final String decision;
+
+  const GeneratedPeriodRecapDecision({
+    this.conversationId,
+    required this.date,
+    required this.decision,
+  });
+
+  factory GeneratedPeriodRecapDecision.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapDecision(
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      decision: _required(_readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString, requiredField: true, nullable: false), "decision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'date': date,
+      'decision': decision,
+    };
+  }
+}
+
+class GeneratedPeriodRecapQuestion {
+  final String? conversationId;
+  final String date;
+  final String question;
+
+  const GeneratedPeriodRecapQuestion({
+    this.conversationId,
+    required this.date,
+    required this.question,
+  });
+
+  factory GeneratedPeriodRecapQuestion.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapQuestion(
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      question: _required(_readFieldValue<String>(_readField(json, const ["question"]), "question", _readString, requiredField: true, nullable: false), "question"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversation_id': conversationId,
+      'date': date,
+      'question': question,
+    };
+  }
+}
+
+class GeneratedPeriodRecapActionItem {
+  final String date;
+  final String description;
+  final String? dueAt;
+  final String id;
+  final String? sourceConversationId;
+
+  const GeneratedPeriodRecapActionItem({
+    required this.date,
+    required this.description,
+    this.dueAt,
+    required this.id,
+    this.sourceConversationId,
+  });
+
+  factory GeneratedPeriodRecapActionItem.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapActionItem(
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      dueAt: _readFieldValue<String>(_readField(json, const ["due_at"]), "due_at", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      sourceConversationId: _readFieldValue<String>(_readField(json, const ["source_conversation_id"]), "source_conversation_id", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'description': description,
+      'due_at': dueAt,
+      'id': id,
+      'source_conversation_id': sourceConversationId,
+    };
+  }
+}
+
+class GeneratedPeriodRecapPerson {
+  final int conversations;
+  final String name;
+  final String personId;
+  final int talkMinutes;
+
+  const GeneratedPeriodRecapPerson({
+    this.conversations = 0,
+    required this.name,
+    required this.personId,
+    this.talkMinutes = 0,
+  });
+
+  factory GeneratedPeriodRecapPerson.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapPerson(
+      conversations: _required(_readFieldValue<int>(_readField(json, const ["conversations"]), "conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "conversations"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      personId: _required(_readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: true, nullable: false), "person_id"),
+      talkMinutes: _required(_readFieldValue<int>(_readField(json, const ["talk_minutes"]), "talk_minutes", _readInt, requiredField: false, nullable: false, defaultValue: 0), "talk_minutes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'conversations': conversations,
+      'name': name,
+      'person_id': personId,
+      'talk_minutes': talkMinutes,
+    };
+  }
+}
+
+class GeneratedPeriodRecapResponse {
+  final GeneratedPeriodRecapBusiestDay? busiestDay;
+  final int daysRecorded;
+  final List<GeneratedPeriodRecapDecision>? decisions;
+  final String endDate;
+  final List<GeneratedPeriodRecapHighlight>? highlights;
+  final List<GeneratedPeriodRecapActionItem>? openActionItems;
+  final List<GeneratedPeriodRecapQuestion>? openQuestions;
+  final String period;
+  final GeneratedPeriodRecapPrevious? previous;
+  final String startDate;
+  final GeneratedPeriodRecapStats? stats;
+  final List<GeneratedPeriodRecapPerson>? topPeople;
+
+  const GeneratedPeriodRecapResponse({
+    this.busiestDay,
+    this.daysRecorded = 0,
+    this.decisions,
+    required this.endDate,
+    this.highlights,
+    this.openActionItems,
+    this.openQuestions,
+    required this.period,
+    this.previous,
+    required this.startDate,
+    this.stats,
+    this.topPeople,
+  });
+
+  factory GeneratedPeriodRecapResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedPeriodRecapResponse(
+      busiestDay: _readFieldValue<GeneratedPeriodRecapBusiestDay>(_readField(json, const ["busiest_day"]), "busiest_day", (value) => _readObject(value, GeneratedPeriodRecapBusiestDay.fromJson), requiredField: false, nullable: true),
+      daysRecorded: _required(_readFieldValue<int>(_readField(json, const ["days_recorded"]), "days_recorded", _readInt, requiredField: false, nullable: false, defaultValue: 0), "days_recorded"),
+      decisions: _readFieldValue<List<GeneratedPeriodRecapDecision>>(_readField(json, const ["decisions"]), "decisions", (value) => _readObjectList(value, GeneratedPeriodRecapDecision.fromJson), requiredField: false, nullable: true),
+      endDate: _required(_readFieldValue<String>(_readField(json, const ["end_date"]), "end_date", _readString, requiredField: true, nullable: false), "end_date"),
+      highlights: _readFieldValue<List<GeneratedPeriodRecapHighlight>>(_readField(json, const ["highlights"]), "highlights", (value) => _readObjectList(value, GeneratedPeriodRecapHighlight.fromJson), requiredField: false, nullable: true),
+      openActionItems: _readFieldValue<List<GeneratedPeriodRecapActionItem>>(_readField(json, const ["open_action_items"]), "open_action_items", (value) => _readObjectList(value, GeneratedPeriodRecapActionItem.fromJson), requiredField: false, nullable: true),
+      openQuestions: _readFieldValue<List<GeneratedPeriodRecapQuestion>>(_readField(json, const ["open_questions"]), "open_questions", (value) => _readObjectList(value, GeneratedPeriodRecapQuestion.fromJson), requiredField: false, nullable: true),
+      period: _required(_readFieldValue<String>(_readField(json, const ["period"]), "period", _readString, requiredField: true, nullable: false), "period"),
+      previous: _readFieldValue<GeneratedPeriodRecapPrevious>(_readField(json, const ["previous"]), "previous", (value) => _readObject(value, GeneratedPeriodRecapPrevious.fromJson), requiredField: false, nullable: true),
+      startDate: _required(_readFieldValue<String>(_readField(json, const ["start_date"]), "start_date", _readString, requiredField: true, nullable: false), "start_date"),
+      stats: _readFieldValue<GeneratedPeriodRecapStats>(_readField(json, const ["stats"]), "stats", (value) => _readObject(value, GeneratedPeriodRecapStats.fromJson), requiredField: false, nullable: true),
+      topPeople: _readFieldValue<List<GeneratedPeriodRecapPerson>>(_readField(json, const ["top_people"]), "top_people", (value) => _readObjectList(value, GeneratedPeriodRecapPerson.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'busiest_day': busiestDay?.toJson(),
+      'days_recorded': daysRecorded,
+      'decisions': decisions?.map((value) => value.toJson()).toList(),
+      'end_date': endDate,
+      'highlights': highlights?.map((value) => value.toJson()).toList(),
+      'open_action_items': openActionItems?.map((value) => value.toJson()).toList(),
+      'open_questions': openQuestions?.map((value) => value.toJson()).toList(),
+      'period': period,
+      'previous': previous?.toJson(),
+      'start_date': startDate,
+      'stats': stats?.toJson(),
+      'top_people': topPeople?.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedFairUseDailyGenerationsBudgetResponse {
   final int dailyLimitMs;
   final bool exhausted;

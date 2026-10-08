@@ -12493,4 +12493,27 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Šāda veida failu nevar importēt.';
+
+  @override
+  String get thisWeek => 'Šī nedēļa';
+
+  @override
+  String get busiestDay => 'Aizņemtākā diena';
+
+  @override
+  String get timeRecorded => 'Ierakstītais laiks';
+
+  @override
+  String get peopleYouTalkedToMost => 'Cilvēki, ar kuriem runājāt visvairāk';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Iepriekšējais: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Šajā periodā vēl nekas nav ierakstīts';
+
+  @override
+  String get openTasks => 'Neizpildītie uzdevumi';
 }

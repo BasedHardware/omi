@@ -12495,4 +12495,27 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Te vrste datoteke ni mogoče uvoziti.';
+
+  @override
+  String get thisWeek => 'Ta teden';
+
+  @override
+  String get busiestDay => 'Najbolj zaseden dan';
+
+  @override
+  String get timeRecorded => 'Posneti čas';
+
+  @override
+  String get peopleYouTalkedToMost => 'Osebe, s katerimi ste največ govorili';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Prejšnje: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'V tem obdobju še ni nič posnetega';
+
+  @override
+  String get openTasks => 'Odprte naloge';
 }

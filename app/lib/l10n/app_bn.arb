@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন",
     "importTooManyAttempts": "এই মুহূর্তে অনেক বেশি আমদানি চলছে। পরে আবার চেষ্টা করুন।",
     "importFileTooLarge": "এই ফাইলটি আমদানি করার জন্য অনেক বড়।",
-    "importUnsupportedFileType": "এই ধরনের ফাইল আমদানি করা যায় না।"
+    "importUnsupportedFileType": "এই ধরনের ফাইল আমদানি করা যায় না।",
+    "thisWeek": "এই সপ্তাহ",
+    "busiestDay": "সবচেয়ে ব্যস্ত দিন",
+    "timeRecorded": "রেকর্ড করা সময়",
+    "peopleYouTalkedToMost": "যাদের সঙ্গে সবচেয়ে বেশি কথা বলেছেন",
+    "recapPrevious": "আগের: {value}",
+    "noRecapForPeriod": "এই সময়ে এখনো কিছু রেকর্ড হয়নি",
+    "openTasks": "বাকি কাজ"
 }

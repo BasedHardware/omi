@@ -12550,4 +12550,27 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'இந்த வகை கோப்பை இறக்குமதி செய்ய முடியாது.';
+
+  @override
+  String get thisWeek => 'இந்த வாரம்';
+
+  @override
+  String get busiestDay => 'மிகவும் பரபரப்பான நாள்';
+
+  @override
+  String get timeRecorded => 'பதிவு செய்த நேரம்';
+
+  @override
+  String get peopleYouTalkedToMost => 'நீங்கள் அதிகம் பேசியவர்கள்';
+
+  @override
+  String recapPrevious(String value) {
+    return 'முந்தையது: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'இந்தக் காலத்தில் இன்னும் எதுவும் பதிவு செய்யப்படவில்லை';
+
+  @override
+  String get openTasks => 'நிலுவையிலுள்ள பணிகள்';
 }

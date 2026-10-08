@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "SRT, VTT ಅಥವಾ TXT ಪ್ರತಿಲೇಖನಗಳನ್ನು ಅಥವಾ ಅವುಗಳ ZIP ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ",
     "importTooManyAttempts": "ಈಗ ತುಂಬಾ ಹೆಚ್ಚು ಆಮದುಗಳು ನಡೆಯುತ್ತಿವೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "importFileTooLarge": "ಈ ಫೈಲ್ ಆಮದು ಮಾಡಲು ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ.",
-    "importUnsupportedFileType": "ಈ ಪ್ರಕಾರದ ಫೈಲ್ ಅನ್ನು ಆಮದು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ."
+    "importUnsupportedFileType": "ಈ ಪ್ರಕಾರದ ಫೈಲ್ ಅನ್ನು ಆಮದು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+    "thisWeek": "ಈ ವಾರ",
+    "busiestDay": "ಅತ್ಯಂತ ಬಿಡುವಿಲ್ಲದ ದಿನ",
+    "timeRecorded": "ದಾಖಲಾದ ಸಮಯ",
+    "peopleYouTalkedToMost": "ನೀವು ಹೆಚ್ಚು ಮಾತನಾಡಿದ ಜನರು",
+    "recapPrevious": "ಹಿಂದಿನದು: {value}",
+    "noRecapForPeriod": "ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ",
+    "openTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳು"
 }

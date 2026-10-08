@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید",
     "importTooManyAttempts": "در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.",
     "importFileTooLarge": "این فایل برای وارد کردن بیش از حد بزرگ است.",
-    "importUnsupportedFileType": "این نوع فایل را نمی‌توان وارد کرد."
+    "importUnsupportedFileType": "این نوع فایل را نمی‌توان وارد کرد.",
+    "thisWeek": "این هفته",
+    "busiestDay": "پرمشغله‌ترین روز",
+    "timeRecorded": "زمان ضبط‌شده",
+    "peopleYouTalkedToMost": "کسانی که بیشتر با آن‌ها صحبت کردید",
+    "recapPrevious": "قبلی: {value}",
+    "noRecapForPeriod": "هنوز در این بازه چیزی ضبط نشده است",
+    "openTasks": "وظایف باز"
 }

@@ -12502,4 +12502,27 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'ಈ ಪ್ರಕಾರದ ಫೈಲ್ ಅನ್ನು ಆಮದು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get thisWeek => 'ಈ ವಾರ';
+
+  @override
+  String get busiestDay => 'ಅತ್ಯಂತ ಬಿಡುವಿಲ್ಲದ ದಿನ';
+
+  @override
+  String get timeRecorded => 'ದಾಖಲಾದ ಸಮಯ';
+
+  @override
+  String get peopleYouTalkedToMost => 'ನೀವು ಹೆಚ್ಚು ಮಾತನಾಡಿದ ಜನರು';
+
+  @override
+  String recapPrevious(String value) {
+    return 'ಹಿಂದಿನದು: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ದಾಖಲಾಗಿಲ್ಲ';
+
+  @override
+  String get openTasks => 'ಬಾಕಿ ಕಾರ್ಯಗಳು';
 }

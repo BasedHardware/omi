@@ -21978,6 +21978,378 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PeriodRecapActionItem": {
+        "properties": {
+          "date": {
+            "description": "Local date the task was created (YYYY-MM-DD)",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the task is due (ISO 8601), if it has a due date",
+            "title": "Due At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Conversation Id"
+          }
+        },
+        "required": [
+          "id",
+          "date",
+          "description"
+        ],
+        "title": "PeriodRecapActionItem",
+        "type": "object"
+      },
+      "PeriodRecapBusiestDay": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "summary_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Id"
+          },
+          "total_conversations": {
+            "default": 0,
+            "title": "Total Conversations",
+            "type": "integer"
+          },
+          "total_duration_minutes": {
+            "default": 0,
+            "title": "Total Duration Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "PeriodRecapBusiestDay",
+        "type": "object"
+      },
+      "PeriodRecapDecision": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "decision"
+        ],
+        "title": "PeriodRecapDecision",
+        "type": "object"
+      },
+      "PeriodRecapHighlight": {
+        "properties": {
+          "conversation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conversation Ids",
+            "type": "array"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "PeriodRecapHighlight",
+        "type": "object"
+      },
+      "PeriodRecapPerson": {
+        "properties": {
+          "conversations": {
+            "default": 0,
+            "title": "Conversations",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "talk_minutes": {
+            "default": 0,
+            "title": "Talk Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "person_id",
+          "name"
+        ],
+        "title": "PeriodRecapPerson",
+        "type": "object"
+      },
+      "PeriodRecapPrevious": {
+        "properties": {
+          "end_date": {
+            "description": "Last local date compared (YYYY-MM-DD). The previous period's last day once the current period has ended, or reached its last day with that day's daily recap; before that, as many days in as the current period so far: through today once its daily recap exists, else through yesterday",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "description": "First local date compared (YYYY-MM-DD)",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "total_conversations": {
+            "default": 0,
+            "title": "Total Conversations",
+            "type": "integer"
+          },
+          "total_duration_minutes": {
+            "default": 0,
+            "title": "Total Duration Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_date",
+          "end_date"
+        ],
+        "title": "PeriodRecapPrevious",
+        "type": "object"
+      },
+      "PeriodRecapQuestion": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "question"
+        ],
+        "title": "PeriodRecapQuestion",
+        "type": "object"
+      },
+      "PeriodRecapResponse": {
+        "properties": {
+          "busiest_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeriodRecapBusiestDay"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days_recorded": {
+            "default": 0,
+            "description": "Days in the period that have a daily recap",
+            "title": "Days Recorded",
+            "type": "integer"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecapDecision"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "end_date": {
+            "description": "Last local date of the period (YYYY-MM-DD)",
+            "title": "End Date",
+            "type": "string"
+          },
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecapHighlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "open_action_items": {
+            "description": "Tasks created in the period that are still open now",
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecapActionItem"
+            },
+            "title": "Open Action Items",
+            "type": "array"
+          },
+          "open_questions": {
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecapQuestion"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "period": {
+            "enum": [
+              "week",
+              "month"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeriodRecapPrevious"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Totals for the same stretch of the period just before, for trends; absent when unknown or before the current period has a day to compare (today counts once its daily recap exists)"
+          },
+          "start_date": {
+            "description": "First local date of the period (YYYY-MM-DD)",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/PeriodRecapStats"
+          },
+          "top_people": {
+            "description": "People talked to most, ranked from up to 500 conversations in the period, newest first",
+            "items": {
+              "$ref": "#/components/schemas/PeriodRecapPerson"
+            },
+            "title": "Top People",
+            "type": "array"
+          }
+        },
+        "required": [
+          "period",
+          "start_date",
+          "end_date"
+        ],
+        "title": "PeriodRecapResponse",
+        "type": "object"
+      },
+      "PeriodRecapStats": {
+        "properties": {
+          "action_items_created": {
+            "default": 0,
+            "title": "Action Items Created",
+            "type": "integer"
+          },
+          "memories_created": {
+            "default": 0,
+            "title": "Memories Created",
+            "type": "integer"
+          },
+          "total_conversations": {
+            "default": 0,
+            "title": "Total Conversations",
+            "type": "integer"
+          },
+          "total_duration_minutes": {
+            "default": 0,
+            "title": "Total Duration Minutes",
+            "type": "integer"
+          }
+        },
+        "title": "PeriodRecapStats",
+        "type": "object"
+      },
       "Person": {
         "properties": {
           "auto_conversation_count": {
@@ -69142,6 +69514,114 @@
           }
         ],
         "summary": "Get User Profile Endpoint",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/recaps/{period}": {
+      "get": {
+        "description": "Get the weekly (Monday-Sunday) or monthly recap that contains ``date``.\n\nRolled up from the user's daily recaps: totals, busiest day, highlights,\ndecisions, open questions, the live open tasks created in the period, the\npeople talked to most, and the previous period's totals over the same\nstretch. No AI call is made. A read cut short by the request budget, or a\nfailed task or people read, sets ``X-Omi-List-Truncated``.",
+        "operationId": "get_period_recap_v1_users_recaps__period__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "period",
+            "required": true,
+            "schema": {
+              "title": "Period",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Any local date in the period (YYYY-MM-DD); defaults to today",
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any local date in the period (YYYY-MM-DD); defaults to today",
+              "title": "Date"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodRecapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Period Recap",
         "tags": [
           "v1"
         ]

@@ -12253,4 +12253,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => '无法导入此类型的文件。';
+
+  @override
+  String get thisWeek => '本周';
+
+  @override
+  String get busiestDay => '最忙碌的一天';
+
+  @override
+  String get timeRecorded => '录制时长';
+
+  @override
+  String get peopleYouTalkedToMost => '与你交谈最多的人';
+
+  @override
+  String recapPrevious(String value) {
+    return '上一期：$value';
+  }
+
+  @override
+  String get noRecapForPeriod => '此期间还没有任何录音';
+
+  @override
+  String get openTasks => '未完成的任务';
 }

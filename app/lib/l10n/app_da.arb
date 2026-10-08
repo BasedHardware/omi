@@ -3898,5 +3898,12 @@
     "importTranscriptFilesDescription": "Vælg SRT-, VTT- eller TXT-transskriptioner eller en ZIP med dem",
     "importTooManyAttempts": "For mange importer lige nu. Prøv igen senere.",
     "importFileTooLarge": "Denne fil er for stor til at blive importeret.",
-    "importUnsupportedFileType": "Denne filtype kan ikke importeres."
+    "importUnsupportedFileType": "Denne filtype kan ikke importeres.",
+    "thisWeek": "Denne uge",
+    "busiestDay": "Travleste dag",
+    "timeRecorded": "Optaget tid",
+    "peopleYouTalkedToMost": "Dem, du talte mest med",
+    "recapPrevious": "Forrige: {value}",
+    "noRecapForPeriod": "Intet optaget i denne periode endnu",
+    "openTasks": "Åbne opgaver"
 }

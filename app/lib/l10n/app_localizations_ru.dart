@@ -12508,4 +12508,27 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Файлы этого типа нельзя импортировать.';
+
+  @override
+  String get thisWeek => 'Эта неделя';
+
+  @override
+  String get busiestDay => 'Самый насыщенный день';
+
+  @override
+  String get timeRecorded => 'Записанное время';
+
+  @override
+  String get peopleYouTalkedToMost => 'С кем вы говорили больше всего';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Ранее: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'За этот период пока ничего не записано';
+
+  @override
+  String get openTasks => 'Открытые задачи';
 }

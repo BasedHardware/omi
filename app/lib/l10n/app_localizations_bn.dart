@@ -12465,4 +12465,27 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'এই ধরনের ফাইল আমদানি করা যায় না।';
+
+  @override
+  String get thisWeek => 'এই সপ্তাহ';
+
+  @override
+  String get busiestDay => 'সবচেয়ে ব্যস্ত দিন';
+
+  @override
+  String get timeRecorded => 'রেকর্ড করা সময়';
+
+  @override
+  String get peopleYouTalkedToMost => 'যাদের সঙ্গে সবচেয়ে বেশি কথা বলেছেন';
+
+  @override
+  String recapPrevious(String value) {
+    return 'আগের: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'এই সময়ে এখনো কিছু রেকর্ড হয়নি';
+
+  @override
+  String get openTasks => 'বাকি কাজ';
 }

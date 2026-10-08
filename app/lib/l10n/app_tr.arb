@@ -3891,5 +3891,12 @@
     "importTranscriptFilesDescription": "SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin",
     "importTooManyAttempts": "Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.",
     "importFileTooLarge": "Bu dosya içe aktarmak için çok büyük.",
-    "importUnsupportedFileType": "Bu dosya türü içe aktarılamaz."
+    "importUnsupportedFileType": "Bu dosya türü içe aktarılamaz.",
+    "thisWeek": "Bu hafta",
+    "busiestDay": "En yoğun gün",
+    "timeRecorded": "Kaydedilen süre",
+    "peopleYouTalkedToMost": "En çok konuştuğunuz kişiler",
+    "recapPrevious": "Önceki: {value}",
+    "noRecapForPeriod": "Bu dönemde henüz kayıt yok",
+    "openTasks": "Açık görevler"
 }

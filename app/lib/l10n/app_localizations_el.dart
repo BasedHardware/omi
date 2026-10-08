@@ -12546,4 +12546,27 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί.';
+
+  @override
+  String get thisWeek => 'Αυτή την εβδομάδα';
+
+  @override
+  String get busiestDay => 'Η πιο πολυάσχολη μέρα';
+
+  @override
+  String get timeRecorded => 'Χρόνος ηχογράφησης';
+
+  @override
+  String get peopleYouTalkedToMost => 'Με ποιους μίλησες περισσότερο';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Προηγούμενη: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Δεν έχει ηχογραφηθεί τίποτα σε αυτή την περίοδο ακόμα';
+
+  @override
+  String get openTasks => 'Ανοιχτές εργασίες';
 }

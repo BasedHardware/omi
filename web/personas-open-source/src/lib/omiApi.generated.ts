@@ -3521,6 +3521,77 @@ export interface PendingSyncResponse {
   synced_items: Array<ActionItemResponse>;
 }
 
+export interface PeriodRecapActionItem {
+  date: string;
+  description: string;
+  due_at?: string | null;
+  id: string;
+  source_conversation_id?: string | null;
+}
+
+export interface PeriodRecapBusiestDay {
+  date: string;
+  summary_id?: string | null;
+  total_conversations?: number;
+  total_duration_minutes?: number;
+}
+
+export interface PeriodRecapDecision {
+  conversation_id?: string | null;
+  date: string;
+  decision: string;
+}
+
+export interface PeriodRecapHighlight {
+  conversation_ids?: Array<string>;
+  date: string;
+  emoji?: string | null;
+  summary?: string | null;
+  topic?: string | null;
+}
+
+export interface PeriodRecapPerson {
+  conversations?: number;
+  name: string;
+  person_id: string;
+  talk_minutes?: number;
+}
+
+export interface PeriodRecapPrevious {
+  end_date: string;
+  start_date: string;
+  total_conversations?: number;
+  total_duration_minutes?: number;
+}
+
+export interface PeriodRecapQuestion {
+  conversation_id?: string | null;
+  date: string;
+  question: string;
+}
+
+export interface PeriodRecapResponse {
+  busiest_day?: PeriodRecapBusiestDay | null;
+  days_recorded?: number;
+  decisions?: Array<PeriodRecapDecision>;
+  end_date: string;
+  highlights?: Array<PeriodRecapHighlight>;
+  open_action_items?: Array<PeriodRecapActionItem>;
+  open_questions?: Array<PeriodRecapQuestion>;
+  period: "week" | "month";
+  previous?: PeriodRecapPrevious | null;
+  start_date: string;
+  stats?: PeriodRecapStats;
+  top_people?: Array<PeriodRecapPerson>;
+}
+
+export interface PeriodRecapStats {
+  action_items_created?: number;
+  memories_created?: number;
+  total_conversations?: number;
+  total_duration_minutes?: number;
+}
+
 export interface Person {
   auto_conversation_count?: number | null;
   confidence?: PersonConfidence;
@@ -5924,6 +5995,15 @@ export interface OmiApiSchemas {
   "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
+  "PeriodRecapActionItem": PeriodRecapActionItem;
+  "PeriodRecapBusiestDay": PeriodRecapBusiestDay;
+  "PeriodRecapDecision": PeriodRecapDecision;
+  "PeriodRecapHighlight": PeriodRecapHighlight;
+  "PeriodRecapPerson": PeriodRecapPerson;
+  "PeriodRecapPrevious": PeriodRecapPrevious;
+  "PeriodRecapQuestion": PeriodRecapQuestion;
+  "PeriodRecapResponse": PeriodRecapResponse;
+  "PeriodRecapStats": PeriodRecapStats;
   "Person": Person;
   "PersonConfidence": PersonConfidence;
   "PersonConfidenceReason": PersonConfidenceReason;
@@ -10299,6 +10379,17 @@ export interface OmiApiPaths {
       responses: {
         "200": UserProfileResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/recaps/{period}": {
+    get: {
+      operationId: "get_period_recap_v1_users_recaps__period__get";
+      responses: {
+        "200": PeriodRecapResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -19075,6 +19166,28 @@ export async function get_user_profile_endpoint_v1_users_profile_get(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_period_recap_v1_users_recaps__period__get(path: { period: string }, query: { date?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PeriodRecapResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/recaps/${path.period}`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/stats/chat-messages`;
@@ -20691,4 +20804,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 480 client methods generated.
+// Total: 481 client methods generated.

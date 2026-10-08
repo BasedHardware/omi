@@ -12465,4 +12465,27 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Denne filtypen kan ikke importeres.';
+
+  @override
+  String get thisWeek => 'Denne uken';
+
+  @override
+  String get busiestDay => 'Travleste dag';
+
+  @override
+  String get timeRecorded => 'Tid tatt opp';
+
+  @override
+  String get peopleYouTalkedToMost => 'Dem du snakket mest med';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Forrige: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Ingenting tatt opp i denne perioden ennå';
+
+  @override
+  String get openTasks => 'Åpne oppgaver';
 }

@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Selecciona transcripciones SRT, VTT o TXT, o un ZIP que las contenga",
     "importTooManyAttempts": "Demasiadas importaciones en este momento. Inténtalo de nuevo más tarde.",
     "importFileTooLarge": "Este archivo es demasiado grande para importarlo.",
-    "importUnsupportedFileType": "Este tipo de archivo no se puede importar."
+    "importUnsupportedFileType": "Este tipo de archivo no se puede importar.",
+    "thisWeek": "Esta semana",
+    "busiestDay": "Día más ocupado",
+    "timeRecorded": "Tiempo grabado",
+    "peopleYouTalkedToMost": "Personas con las que más hablaste",
+    "recapPrevious": "Anterior: {value}",
+    "noRecapForPeriod": "Aún no hay nada grabado en este período",
+    "openTasks": "Tareas pendientes"
 }

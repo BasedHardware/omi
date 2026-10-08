@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP",
     "importTooManyAttempts": "Praegu on liiga palju importimisi. Proovi hiljem uuesti.",
     "importFileTooLarge": "See fail on importimiseks liiga suur.",
-    "importUnsupportedFileType": "Seda failitüüpi ei saa importida."
+    "importUnsupportedFileType": "Seda failitüüpi ei saa importida.",
+    "thisWeek": "See nädal",
+    "busiestDay": "Kõige tihedam päev",
+    "timeRecorded": "Salvestatud aeg",
+    "peopleYouTalkedToMost": "Inimesed, kellega rääkisid kõige rohkem",
+    "recapPrevious": "Eelmine: {value}",
+    "noRecapForPeriod": "Selles perioodis pole veel midagi salvestatud",
+    "openTasks": "Avatud ülesanded"
 }

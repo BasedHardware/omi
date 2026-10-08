@@ -11413,5 +11413,12 @@
     "importTranscriptFilesDescription": "Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі",
     "importTooManyAttempts": "Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.",
     "importFileTooLarge": "Гэты файл занадта вялікі для імпарту.",
-    "importUnsupportedFileType": "Файлы гэтага тыпу нельга імпартаваць."
+    "importUnsupportedFileType": "Файлы гэтага тыпу нельга імпартаваць.",
+    "thisWeek": "Гэты тыдзень",
+    "busiestDay": "Самы насычаны дзень",
+    "timeRecorded": "Запісаны час",
+    "peopleYouTalkedToMost": "З кім вы размаўлялі найбольш",
+    "recapPrevious": "Папярэдні: {value}",
+    "noRecapForPeriod": "За гэты перыяд пакуль нічога не запісана",
+    "openTasks": "Адкрытыя задачы"
 }

@@ -12496,4 +12496,27 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Jenis fail ini tidak boleh diimport.';
+
+  @override
+  String get thisWeek => 'Minggu ini';
+
+  @override
+  String get busiestDay => 'Hari paling sibuk';
+
+  @override
+  String get timeRecorded => 'Masa dirakam';
+
+  @override
+  String get peopleYouTalkedToMost => 'Orang yang paling kerap bercakap dengan anda';
+
+  @override
+  String recapPrevious(String value) {
+    return 'Sebelumnya: $value';
+  }
+
+  @override
+  String get noRecapForPeriod => 'Belum ada rakaman dalam tempoh ini';
+
+  @override
+  String get openTasks => 'Tugas belum selesai';
 }

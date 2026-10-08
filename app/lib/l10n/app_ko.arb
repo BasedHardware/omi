@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "SRT, VTT 또는 TXT 녹취록이나 이를 묶은 ZIP 파일을 선택하세요",
     "importTooManyAttempts": "지금은 가져오기 요청이 너무 많습니다. 나중에 다시 시도하세요.",
     "importFileTooLarge": "이 파일은 너무 커서 가져올 수 없습니다.",
-    "importUnsupportedFileType": "이 파일 형식은 가져올 수 없습니다."
+    "importUnsupportedFileType": "이 파일 형식은 가져올 수 없습니다.",
+    "thisWeek": "이번 주",
+    "busiestDay": "가장 바빴던 날",
+    "timeRecorded": "녹음 시간",
+    "peopleYouTalkedToMost": "가장 많이 대화한 사람",
+    "recapPrevious": "이전: {value}",
+    "noRecapForPeriod": "이 기간에 아직 녹음된 내용이 없습니다",
+    "openTasks": "미완료 작업"
 }

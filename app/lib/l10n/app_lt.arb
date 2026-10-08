@@ -3856,5 +3856,12 @@
     "importTranscriptFilesDescription": "Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą",
     "importTooManyAttempts": "Šiuo metu per daug importavimų. Bandykite vėliau.",
     "importFileTooLarge": "Šis failas per didelis, kad būtų importuotas.",
-    "importUnsupportedFileType": "Šio tipo failo importuoti negalima."
+    "importUnsupportedFileType": "Šio tipo failo importuoti negalima.",
+    "thisWeek": "Ši savaitė",
+    "busiestDay": "Užimčiausia diena",
+    "timeRecorded": "Įrašytas laikas",
+    "peopleYouTalkedToMost": "Žmonės, su kuriais kalbėjote daugiausia",
+    "recapPrevious": "Ankstesnis: {value}",
+    "noRecapForPeriod": "Šiuo laikotarpiu dar nieko neįrašyta",
+    "openTasks": "Atviros užduotys"
 }
