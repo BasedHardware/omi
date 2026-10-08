@@ -189,7 +189,6 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` | C6 admitted source-kind threshold, default 2 | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` | C6 admitted speech word threshold, default 1500 | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` | Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
-| `MEETING_NOTES_RICH_CONTEXT_ENABLED` | Gather the rich meeting context pack for meeting notes | backend | env | closed | — | — | — | — | graduate | 2026-10-15 | dazheng |
 | `MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED` | Attach up to four approved meeting screenshots as images on the rich notes call | backend | env | closed | false | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-21 | dazheng |
 | `MEMORY_BELIEF_MODEL_ENABLED` | Enable belief-model processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED` | Enable daily memory sweep cohort gate | backend | env | closed | declared | false | false | — | pending | 2026-10-23 | unowned |
@@ -391,7 +390,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` — C6 admitted source-kind threshold, default 2 (fail: closed)
 - `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` — C6 admitted speech word threshold, default 1500 (fail: closed)
 - `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` — Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s (fail: closed)
-- `MEETING_NOTES_RICH_CONTEXT_ENABLED` — Gather the rich meeting context pack for meeting notes (fail: closed)
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
