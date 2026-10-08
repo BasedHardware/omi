@@ -2985,9 +2985,11 @@ emergency lever, not a toggle.
 Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
 `window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
-`omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` when
-that row was not already a visible completion; reprocessing a visible conversation does not increment
-again. Live accepts, rejects, ambiguous owner claims, and still-accumulating evidence increment
+`omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
+every successful persist, including the free-tier terminal stores. Sync intake's completed status is
+not a prior observation: the first enrichment counts, and a later pass counts only when that row had
+not already been enriched or terminally stored. Reprocessing an already enriched conversation does not
+increment again. Live accepts, rejects, ambiguous owner claims, and still-accumulating evidence increment
 `omi_speaker_id_live_decisions_total{target,decision}`, and the `speaker_id_decision` line carries
 `session` and `conversation`. A same-stream rollover counts mapped speakers on
 `omi_live_speaker_rollover_total{carried,target}` before the matcher clears them; automatic mappings

@@ -6,6 +6,8 @@ import importlib.util
 import json
 import logging
 import urllib.parse
+from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,8 +15,17 @@ import numpy as np
 import pytest
 
 import routers.listen.speakers as speakers_mod
-from models.conversation_enums import ConversationSource
-from models.transcript_segment import SpeakerIdentityStatus
+import utils.conversations.process_conversation as process_conversation_mod
+from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
+from models.conversation import Conversation, CreateConversation
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_sync_cross_job_assignment import chunk
+from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.recovery import structured_is_rich
+from utils.conversations.relevance import RelevanceDecision
 from utils.observability.owner_recognition import (
     LIVE_SPEAKER_DECISIONS,
     LIVE_SPEAKER_ROLLOVER,
@@ -23,6 +34,7 @@ from utils.observability.owner_recognition import (
     emit_finalized_owner_recognition,
     live_decision_labels,
     lookup_owner_voiceprint,
+    owner_recognition_already_observed,
     surface_label,
 )
 from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, SpeakerMatchDecision
@@ -61,13 +73,15 @@ def _conversation(segments, *, source='omi', resolution='capture', scores=None, 
 def _emit(conversation, **kwargs):
     defaults = dict(
         uid='uid-1',
-        is_reprocess=False,
-        prior_completed=False,
-        prior_discarded=False,
+        already_observed=False,
         owner_profile_present=True,
     )
     defaults.update(kwargs)
     return emit_finalized_owner_recognition(conversation, **defaults)
+
+
+def _conversation_total() -> float:
+    return sum(metric._value.get() for metric in OWNER_RECOGNITION_CONVERSATIONS._metrics.values())
 
 
 def test_owner_identified_counts_once_and_records_share(caplog):
@@ -148,7 +162,7 @@ def test_short_speech_is_too_little_even_when_labeled_owner():
     )
 
 
-def test_reprocess_of_a_visible_conversation_does_not_double_count(caplog):
+def test_reprocess_of_an_already_observed_conversation_does_not_double_count(caplog):
     conversation = _conversation(
         [_segment(True, 0, 3, speaker_id=0), _segment(False, 3, 6, speaker_id=1)],
         source='omi',
@@ -156,17 +170,53 @@ def test_reprocess_of_a_visible_conversation_does_not_double_count(caplog):
     before = _count(OWNER_RECOGNITION_CONVERSATIONS, surface='live', source='omi', outcome='owner_identified')
     assert _emit(conversation) == 'owner_identified'
     with caplog.at_level(logging.INFO, logger='utils.observability.owner_recognition'):
-        assert _emit(conversation, is_reprocess=True, prior_completed=True, prior_discarded=False) is None
+        assert _emit(conversation, already_observed=True) is None
     assert _count(OWNER_RECOGNITION_CONVERSATIONS, surface='live', source='omi', outcome='owner_identified') == (
         pytest.approx(before + 1)
     )
     assert not any('counted=False' in record.message for record in caplog.records)
 
 
-def test_reprocess_of_a_discarded_row_counts_the_visible_outcome():
-    conversation = _conversation([_segment(False, 0, 6, speaker_id=1, scope='sync:9')], source='omi')
+def test_sync_intake_completed_status_is_not_an_observation():
+    """Intake persists completed before the first enrichment, and clears discarded on promotion."""
+    segments = [_segment(False, 0, 6, speaker_id=1, scope='sync:9')]
+    fresh = _conversation(segments, source='omi')
+    fresh.status = 'completed'
+    fresh.discarded = False
+    assert (
+        owner_recognition_already_observed(
+            fresh,
+            is_reprocess=True,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            prior_relevance_decision=None,
+        )
+        is False
+    )
+    promoted = _conversation(segments, source='omi')
+    promoted.status = 'completed'
+    promoted.discarded = False
+    assert (
+        owner_recognition_already_observed(
+            promoted,
+            is_reprocess=True,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            prior_relevance_decision={'trigger': 'sync_intake', 'verdict': 'discard'},
+        )
+        is False
+    )
+    repeat = _conversation(segments, source='omi')
+    repeat.status = 'completed'
+    assert (
+        owner_recognition_already_observed(
+            repeat,
+            is_reprocess=True,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            prior_relevance_decision={'trigger': 'sync_update', 'verdict': 'keep'},
+        )
+        is True
+    )
     before = _count(OWNER_RECOGNITION_CONVERSATIONS, surface='sync', source='omi', outcome='owner_not_identified')
-    assert _emit(conversation, is_reprocess=True, prior_completed=True, prior_discarded=True) == 'owner_not_identified'
+    assert _emit(fresh, already_observed=False, owner_profile_present=True) == 'owner_not_identified'
     assert _count(
         OWNER_RECOGNITION_CONVERSATIONS, surface='sync', source='omi', outcome='owner_not_identified'
     ) == pytest.approx(before + 1)
@@ -204,15 +254,23 @@ def test_surface_uses_source_and_scopes():
     assert _emit(other) == 'too_little_speech'
 
 
-def test_process_conversation_emits_only_after_the_persist_fence():
+def test_process_conversation_observes_every_successful_persist():
     text = (BACKEND / 'utils' / 'conversations' / 'process_conversation.py').read_text()
     body = text[text.index('def process_conversation(') :]
-    emit = body.index('emit_finalized_owner_recognition(')
-    fence = body.rfind('if not persisted:', 0, emit)
-    assert fence != -1
-    assert 'return conversation' in body[fence:emit]
-    assert 'prior_completed' in body[:emit]
-    assert 'get_user_speaker_embedding' in body[fence:emit]
+    assert body.count('_observe_owner_recognition_completion(') == 2
+    report = body[body.index('def report_persistence(') : body.index('is_initial_creation')]
+    assert 'if current and completed is not None:' in report
+    assert '_observe_owner_recognition_completion(completed)' in report
+    fence = body.index('if not persisted:')
+    assert body.index('report_persistence(persisted, completed=conversation)') < fence
+    assert 'return conversation' in body[fence : fence + 400]
+    for marker in (
+        'report_persistence(\n                persisted,',
+        'if plan.mode == \'store_projection\'',
+        'eager_basic_deny',
+    ):
+        assert marker in body
+    assert 'prior_completed' not in body
 
 
 def test_metrics_survive_module_reload():
@@ -455,3 +513,255 @@ def test_owner_identified_share_alert_is_in_both_exports():
     assert 'too_little_speech' not in expressions
     assert rule['data'][3]['model']['expression'] == '$A >= 100 && $C > 0 && $B < ($C * 0.5)'
     assert (REPO / rule['annotations']['runbook']).is_file()
+
+
+def _sync_segment(*, text: str, is_user: bool, end: float, scope: str) -> dict:
+    return {
+        'start': 0.0,
+        'end': end,
+        'text': text,
+        'speaker': 'SPEAKER_00',
+        'speaker_id': 0,
+        'is_user': is_user,
+        'speaker_id_scope': scope,
+    }
+
+
+def _sync_incoming(key: str, timestamp: int, segment: dict) -> dict:
+    row = chunk(key, timestamp, text=segment['text'])
+    row['created_at'] = row['started_at']
+    row['finished_at'] = datetime.fromtimestamp(timestamp + segment['end'], timezone.utc)
+    row['transcript_segments'] = [segment]
+    row['status'] = 'completed'
+    row['data_protection_level'] = 'enhanced'
+    row['private_cloud_sync_enabled'] = False
+    create = CreateConversation(
+        started_at=row['started_at'],
+        finished_at=row['finished_at'],
+        transcript_segments=[
+            TranscriptSegment(
+                text=segment['text'],
+                speaker='SPEAKER_00',
+                is_user=segment['is_user'],
+                start=0.0,
+                end=segment['end'],
+                speaker_id=0,
+                speaker_id_scope=segment['speaker_id_scope'],
+            )
+        ],
+        source=ConversationSource.omi,
+        language='en',
+    )
+    row['structured'] = build_deterministic_minimum_structured(create).model_dump()
+    return row
+
+
+def _wire_sync_store(monkeypatch, store):
+    from database import conversations as conversations_db
+    from utils.conversations import lifecycle
+    from utils.sync import pipeline
+
+    assign = conversations_db.assign_sync_conversation
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda uid, row, **kwargs: assign(uid, row, firestore_client=store, **kwargs),
+    )
+
+    def _get(uid, conversation_id, **kwargs):
+        row = store.rows.get(('users', uid, 'conversations', conversation_id))
+        if row is None:
+            return None
+        # The strict store retains Firestore delete sentinels. A real read does not.
+        plain = {key: value for key, value in row.items() if type(value).__name__ != 'Sentinel'}
+        return pipeline.conversations_db.prepare_conversation_for_read(deepcopy(plain), uid)
+
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', _get)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *args, **kwargs: True)
+    return lifecycle, pipeline
+
+
+def _stub_sync_enrichment(monkeypatch, store):
+    """Keep the real intake and SYNC_UPDATE call, and skip the model."""
+
+    def _structured(*args, **kwargs):
+        observer = kwargs.get('relevance_observer')
+        if observer is not None:
+            observer(RelevanceDecision('keep', 'rule', 'substantive', ProcessingTrigger.SYNC_UPDATE))
+        return build_deterministic_minimum_structured(args[2]), False
+
+    def _persist(uid, payload, **kwargs):
+        # The real writer re-encrypts the transcript. This stand-in keeps the
+        # intake ciphertext and records the enrichment marker the second read uses.
+        key = ('users', uid, 'conversations', payload['id'])
+        current = dict(store.rows.get(key) or {})
+        if 'relevance_decision' in payload:
+            current['relevance_decision'] = payload['relevance_decision']
+        if isinstance(payload.get('structured'), dict):
+            current['structured'] = payload['structured']
+        if 'discarded' in payload:
+            current['discarded'] = payload['discarded']
+        store.rows[key] = current
+        return True
+
+    module = process_conversation_mod
+    monkeypatch.setattr(module, '_enrich_meeting_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, '_get_structured', _structured)
+    monkeypatch.setattr(module, 'link_duplicate_captures', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'trigger_conversation_apps', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, '_extract_memories', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', _persist)
+    monkeypatch.setattr(module.users_db, 'get_people_by_ids', lambda *args, **kwargs: [])
+    monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2, 0.3])
+    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
+
+
+def test_sync_intake_then_first_enrichment_counts_once(monkeypatch):
+    store = StrictFirestore()
+    lifecycle, pipeline = _wire_sync_store(monkeypatch, store)
+    _stub_sync_enrichment(monkeypatch, store)
+    segment = _sync_segment(
+        text='We agreed to ship the recognition fix today.',
+        is_user=True,
+        end=8.0,
+        scope='sync:keep',
+    )
+    assigned, created, _survivors = lifecycle.ingest_sync_conversation(
+        'u', _sync_incoming('keep', 1_700_000_000, segment)
+    )
+    assert created is True
+    status = getattr(assigned.get('status'), 'value', assigned.get('status'))
+    assert status == 'completed'
+    assert structured_is_rich(assigned.get('structured')) is False
+    before = _conversation_total()
+    pipeline._reprocess_conversation_after_update('u', assigned['id'], 'en')
+    assert _conversation_total() == pytest.approx(before + 1)
+    stored = store.rows[('users', 'u', 'conversations', assigned['id'])]
+    assert stored['relevance_decision']['trigger'] == 'sync_update'
+    assert structured_is_rich(stored.get('structured')) is False
+    pipeline._reprocess_conversation_after_update('u', assigned['id'], 'en')
+    assert _conversation_total() == pytest.approx(before + 1)
+
+
+def test_promoted_sync_fragment_counts_once(monkeypatch):
+    store = StrictFirestore()
+    lifecycle, pipeline = _wire_sync_store(monkeypatch, store)
+    _stub_sync_enrichment(monkeypatch, store)
+    filler = _sync_segment(text='yeah yeah', is_user=False, end=2.0, scope='sync:frag')
+    assigned, created, _survivors = lifecycle.ingest_sync_conversation(
+        'u', _sync_incoming('frag', 1_700_000_100, filler)
+    )
+    assert created is True
+    assert assigned.get('discarded') is True
+    assert (assigned.get('relevance_decision') or {}).get('trigger') == 'sync_intake'
+    before = _conversation_total()
+    pipeline._reprocess_conversation_after_update('u', assigned['id'], 'en')
+    assert _conversation_total() == pytest.approx(before)
+    speech = _sync_segment(
+        text='We agreed to ship the recognition fix today.',
+        is_user=True,
+        end=8.0,
+        scope='sync:frag',
+    )
+    promoted, _created, _survivors = lifecycle.ingest_sync_conversation(
+        'u', _sync_incoming('later', 1_700_000_160, speech)
+    )
+    assert promoted['id'] == assigned['id']
+    assert promoted.get('discarded') is False
+    pipeline._reprocess_conversation_after_update('u', assigned['id'], 'en')
+    assert _conversation_total() == pytest.approx(before + 1)
+    pipeline._reprocess_conversation_after_update('u', assigned['id'], 'en')
+    assert _conversation_total() == pytest.approx(before + 1)
+
+
+def _desktop_capture() -> CreateConversation:
+    return CreateConversation(
+        started_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 9, 2, 12, 5, tzinfo=timezone.utc),
+        transcript_segments=[
+            TranscriptSegment(
+                text='We agreed to ship the recognition fix today.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0.0,
+                end=8.0,
+            )
+        ],
+        source=ConversationSource.desktop,
+        language='en',
+    )
+
+
+def _desktop_projection() -> ClientProcessing:
+    return ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='local title', overview='local overview'),
+        provenance=ProjectionProvenance(
+            model_id='local-test-model',
+            runtime='test-runtime',
+            device_class='test-device',
+            generated_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        ),
+    )
+
+
+def _stub_desktop_terminal(monkeypatch):
+    module = process_conversation_mod
+    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(module, 'link_duplicate_captures', lambda *args, **kwargs: None)
+    monkeypatch.setattr(module.lifecycle_service, 'create_completed_conversation', lambda *args, **kwargs: True)
+    monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', lambda *args, **kwargs: True)
+    monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2])
+
+
+@pytest.mark.parametrize('mode', ['store_projection', 'deterministic_minimum', 'eager_denial'])
+def test_desktop_terminal_paths_count_once(monkeypatch, mode):
+    module = process_conversation_mod
+    _stub_desktop_terminal(monkeypatch)
+    before = _count(
+        OWNER_RECOGNITION_CONVERSATIONS,
+        surface='desktop',
+        source='desktop',
+        outcome='single_speaker_all_owner',
+    )
+    if mode == 'eager_denial':
+        monkeypatch.setattr(module, 'free_tier_local_processing_enabled', lambda uid: False)
+        monkeypatch.setattr(module, 'basic_plan_gate_eager_extraction_enabled', lambda: True)
+        monkeypatch.setattr(
+            module,
+            '_flag_off_identified_basic_deny',
+            lambda *args, **kwargs: module.FreeTierProcessingPlan(
+                mode='deterministic_minimum', reason='basic_not_entitled', decision=None
+            ),
+        )
+        stored = module.process_conversation('uid', 'en', _desktop_capture(), trigger=ProcessingTrigger.FIRST_OPEN)
+    else:
+        monkeypatch.setattr(module, 'free_tier_local_processing_enabled', lambda uid: True)
+        monkeypatch.setattr(
+            module,
+            'resolve_free_tier_processing_plan',
+            lambda **kwargs: module.FreeTierProcessingPlan(mode=mode, reason='basic_not_entitled', decision=None),
+        )
+        stored = module.process_conversation(
+            'uid',
+            'en',
+            _desktop_capture(),
+            client_projection=_desktop_projection() if mode == 'store_projection' else None,
+        )
+    assert stored.status == ConversationStatus.completed
+    assert _count(
+        OWNER_RECOGNITION_CONVERSATIONS,
+        surface='desktop',
+        source='desktop',
+        outcome='single_speaker_all_owner',
+    ) == pytest.approx(before + 1)
+    total = _conversation_total()
+    module.process_conversation('uid', 'en', stored, trigger=ProcessingTrigger.USER_REPROCESS)
+    assert _conversation_total() == pytest.approx(total)

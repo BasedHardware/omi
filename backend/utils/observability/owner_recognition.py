@@ -15,7 +15,9 @@ from typing import Any, Callable, Mapping, Optional
 
 from prometheus_client import REGISTRY, Counter, Histogram
 
-from models.conversation_enums import ConversationSource
+from models.conversation_enums import ConversationSource, ConversationStatus
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.recovery import structured_is_rich
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, SpeakerMatchDecision
 from utils.transcribe_decisions import USER_SELF_PERSON_ID
@@ -44,6 +46,9 @@ _RESOLUTION_STATUS = frozenset({'resolved', 'capture', 'unavailable'})
 _TARGETS = frozenset({'owner', 'person'})
 _LIVE_DECISIONS = frozenset({'accepted', 'rejected', 'ambiguous', 'pending'})
 _CARRIED = frozenset({'manual', 'automatic', 'none'})
+# process_conversation stamps one of these on relevance_decision.trigger.
+# Sync intake stamps ``sync_intake`` or nothing, which is not in this set.
+_PROCESSED_TRIGGERS = frozenset(item.value for item in ProcessingTrigger)
 
 
 def _owner_recognition_conversations() -> Counter:
@@ -264,24 +269,70 @@ def _log_outcome(
     )
 
 
+def _relevance_trigger(decision: Any) -> Optional[str]:
+    if not isinstance(decision, Mapping):
+        return None
+    trigger = decision.get('trigger')
+    return trigger if isinstance(trigger, str) else None
+
+
+def _status_value(conversation: Any) -> Optional[str]:
+    status = _field(conversation, 'status')
+    value = getattr(status, 'value', status)
+    return value if isinstance(value, str) else None
+
+
+def _enriched_or_terminal(conversation: Any) -> bool:
+    """True when an earlier pass already enriched this row or stored a free-tier terminal.
+
+    The deterministic minimum leaves overview, sections, action items, and events
+    empty, so ``structured_is_rich`` is false until enrichment. A projection store
+    leaves ``client_processing`` and no processing state; a bare minimum sets
+    ``processing_state``.
+    """
+    if structured_is_rich(_field(conversation, 'structured')):
+        return True
+    if _field(conversation, 'processing_state') is not None:
+        return True
+    return _field(conversation, 'client_processing') is not None
+
+
+def owner_recognition_already_observed(
+    conversation: Any,
+    *,
+    is_reprocess: bool,
+    trigger: ProcessingTrigger,
+    prior_relevance_decision: Any = None,
+) -> bool:
+    """Whether this call would be a second observation of the same conversation.
+
+    Sync intake persists ``status=completed`` before the first ``SYNC_UPDATE``,
+    and clears ``discarded`` when later speech promotes a fragment. Completed
+    status is intake's, not an observation. A previous ``process_conversation``
+    pass stores ``relevance_decision.trigger`` as a processing trigger; intake
+    stores ``sync_intake`` or nothing, and promotion deletes a rule discard.
+    """
+    if not is_reprocess:
+        return False
+    if _enriched_or_terminal(conversation):
+        return True
+    if trigger is ProcessingTrigger.SYNC_UPDATE:
+        return _relevance_trigger(prior_relevance_decision) in _PROCESSED_TRIGGERS
+    return _status_value(conversation) == ConversationStatus.completed.value
+
+
 def emit_finalized_owner_recognition(
     conversation: Any,
     *,
     uid: str,
-    is_reprocess: bool,
-    prior_completed: bool,
-    prior_discarded: bool,
+    already_observed: bool,
     owner_profile_present: Optional[bool],
 ) -> Optional[str]:
-    """Count one finalized transcript. A reprocess of an already-visible row does not.
+    """Count one finalized transcript. An already-enriched row does not count again.
 
-    The first completion counts, including a discarded fragment. A later pass
-    counts only when that earlier row was still discarded, so a fragment that
-    grows into a visible conversation is observed once as the visible outcome
-    and sync appends do not double-count. Returns the outcome when the counter
-    moved.
+    Returns the outcome when the counter moved.
     """
-    if is_reprocess and prior_completed and not prior_discarded:
+    if already_observed:
         return None
     stats = speech_stats(conversation)
     surface = surface_label(conversation)
