@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
@@ -21,7 +22,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
-        return OnboardingStepScaffold(
+        final classic = OnboardingStepScaffold(
           title: context.l10n.deviceOnboardingDoubleTapTitle,
           subtitle: '',
           content: Column(
@@ -97,8 +98,37 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               ? OnboardingContinueButton(onPressed: widget.onComplete)
               : null,
         );
+        if (!deviceTutorialNative(context)) return classic;
+        return _nativeSurface(provider, classic);
       },
     );
+  }
+
+  /// The inline double-tap demos are decorative; one single-select toggle per action and the same
+  /// hint copy replace them natively. Selection and the button count stay with the provider.
+  Widget _nativeSurface(DeviceOnboardingProvider provider, Widget classic) {
+    final l10n = context.l10n;
+    final actions = [
+      (l10n.deviceOnboardingEndConversation, l10n.deviceOnboardingEndConversationDesc),
+      (l10n.deviceOnboardingMuteUnmute, l10n.deviceOnboardingMuteUnmuteDesc),
+      (l10n.deviceOnboardingStarConversation, l10n.deviceOnboardingStarConversationDesc),
+    ];
+    return IosNativeSurface(title: l10n.deviceOnboardingDoubleTapTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_double', [
+        for (final (index, (title, description)) in actions.indexed)
+          NativeRow('dev_tut_double_$index', title,
+              kind: 'toggle',
+              value: provider.selectedDoubleTapAction == index,
+              subtitle: description,
+              action: (_) => provider.selectDoubleTapAction(index)),
+        if (provider.showSingleTapHint)
+          NativeRow('dev_tut_double_hint', l10n.deviceOnboardingSingleTapHint, kind: 'label', symbol: 'hand.tap')
+        else if (provider.selectedDoubleTapAction != -1 && provider.doublePressCount == 0)
+          NativeRow('dev_tut_double_prompt', l10n.deviceOnboardingTryDoubleTap, kind: 'label', symbol: 'hand.tap'),
+      ]),
+      if (provider.doublePressCount > 0 && !provider.showSingleTapHint)
+        NativeSection('dev_tut_actions', [deviceTutorialContinueRow(context, widget.onComplete)]),
+    ]);
   }
 
   Widget _buildOptionCard({

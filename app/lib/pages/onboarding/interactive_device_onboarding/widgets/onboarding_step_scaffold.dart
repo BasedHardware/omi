@@ -1,7 +1,83 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_asset_image.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+/// Device-supplied text (a transcript, a question, an answer) as a bounded literal native label.
+String deviceTutorialNativeText(String text, {int maximum = 4000}) {
+  final characters = text.characters;
+  return characters.length <= maximum ? text : '${characters.take(maximum)}…';
+}
+
+/// The tutorial's Continue action as a native row; the step keeps its own visibility rule.
+NativeRow deviceTutorialContinueRow(BuildContext context, VoidCallback onComplete) =>
+    NativeRow('dev_tut_continue', context.l10n.deviceOnboardingContinue, action: (_) => onComplete());
+
+/// Marks a tutorial the wrapper presents classically because SwiftUI is unsupported here, so its
+/// screens mount their classic trees directly instead of a native surface that would fall back.
+class DeviceTutorialClassicScope extends InheritedWidget {
+  const DeviceTutorialClassicScope({super.key, required super.child});
+
+  @override
+  bool updateShouldNotify(DeviceTutorialClassicScope oldWidget) => false;
+}
+
+/// Whether a tutorial screen projects natively: the preview flag is on and no classic scope encloses it.
+bool deviceTutorialNative(BuildContext context) =>
+    nativePresentationEnabled && context.dependOnInheritedWidgetOfExactType<DeviceTutorialClassicScope>() == null;
+
+/// Mounted only inside a screen's classic subtree, so decorative animations run while the classic
+/// presentation is on screen and never tick under the native surface, which does not mount it.
+class DeviceTutorialClassicAnimations extends StatefulWidget {
+  const DeviceTutorialClassicAnimations(
+      {super.key, required this.onMount, required this.onUnmount, required this.child});
+
+  final VoidCallback onMount;
+  final VoidCallback onUnmount;
+  final Widget child;
+
+  @override
+  State<DeviceTutorialClassicAnimations> createState() => _DeviceTutorialClassicAnimationsState();
+}
+
+class _DeviceTutorialClassicAnimationsState extends State<DeviceTutorialClassicAnimations> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  void dispose() {
+    // Children unmount before their parent, so the owning screen's controllers are still alive here.
+    widget.onUnmount();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Static bundled device artwork for native rows, replacing the classic animated artwork. Null on
+/// the classic path and until the copy is ready; a failed copy simply leaves the row without it.
+mixin DeviceTutorialNativeArtwork<T extends StatefulWidget> on State<T> {
+  final Map<String, String?> _nativeArtwork = {};
+
+  String? nativeArtwork(String asset) {
+    if (!nativePresentationEnabled) return null;
+    if (!_nativeArtwork.containsKey(asset)) {
+      _nativeArtwork[asset] = null;
+      unawaited(nativeAssetImageUri(asset).then((uri) {
+        if (mounted && uri != null) setState(() => _nativeArtwork[asset] = uri);
+      }));
+    }
+    return _nativeArtwork[asset];
+  }
+}
 
 // Persistent, self-animating progress indicator. Rendered once in the wrapper
 // (above the transitioning content) and driven live by provider.currentStep, so

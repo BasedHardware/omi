@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -16,7 +17,7 @@ class PowerCycleStep extends StatefulWidget {
   State<PowerCycleStep> createState() => _PowerCycleStepState();
 }
 
-class _PowerCycleStepState extends State<PowerCycleStep> {
+class _PowerCycleStepState extends State<PowerCycleStep> with DeviceTutorialNativeArtwork {
   bool _showHint = false;
   bool _showContinue = false;
   bool _continueScheduled = false;
@@ -45,7 +46,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
             provider.powerCycleState == PowerCycleSubState.waitingForReconnect;
         final isReconnected = provider.powerCycleState == PowerCycleSubState.reconnected;
 
-        return OnboardingStepScaffold(
+        final classic = OnboardingStepScaffold(
           title: _getTitle(provider.powerCycleState),
           subtitle: _getSubtitle(provider.powerCycleState),
           content: Column(
@@ -65,8 +66,34 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
           ),
           bottomAction: _showContinue && isReconnected ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
+        if (!deviceTutorialNative(context)) return classic;
+        return _nativeSurface(provider.powerCycleState, isOff: isOff, isReconnected: isReconnected, classic: classic);
       },
     );
+  }
+
+  /// The animated device swap is decorative; the static on/off art, a symbol and the same copy
+  /// replace it natively. Bluetooth disconnect/reconnect detection stays with the provider.
+  Widget _nativeSurface(PowerCycleSubState state,
+      {required bool isOff, required bool isReconnected, required Widget classic}) {
+    final l10n = context.l10n;
+    final (status, symbol) = switch (state) {
+      PowerCycleSubState.waitingForOff => (l10n.deviceOnboardingStatusConnected, 'power'),
+      PowerCycleSubState.deviceOff => (l10n.deviceOnboardingStatusTurningOff, 'power'),
+      PowerCycleSubState.waitingForReconnect => (l10n.deviceOnboardingStatusDisconnected, 'bolt.horizontal.circle'),
+      PowerCycleSubState.reconnected => (l10n.deviceOnboardingStatusConnectedDone, 'checkmark.circle'),
+    };
+    final art = isOff ? Assets.images.omiWithoutRopeTurnedOff.path : Assets.images.omiWithoutRope.path;
+    return IosNativeSurface(title: _getTitle(state), fallback: classic, sections: [
+      NativeSection('dev_tut_power', [
+        NativeRow('dev_tut_power_state', status,
+            kind: 'label', symbol: symbol, subtitle: _getSubtitle(state), imageUri: nativeArtwork(art)),
+        if (_showHint && state == PowerCycleSubState.waitingForOff)
+          NativeRow('dev_tut_power_hint', l10n.deviceOnboardingHoldButtonHint, kind: 'label', symbol: 'info.circle'),
+      ]),
+      if (_showContinue && isReconnected)
+        NativeSection('dev_tut_actions', [deviceTutorialContinueRow(context, widget.onComplete)]),
+    ]);
   }
 
   String _getTitle(PowerCycleSubState state) {

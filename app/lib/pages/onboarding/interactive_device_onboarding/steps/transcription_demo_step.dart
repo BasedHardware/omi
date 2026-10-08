@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -16,7 +17,8 @@ class TranscriptionDemoStep extends StatefulWidget {
   State<TranscriptionDemoStep> createState() => _TranscriptionDemoStepState();
 }
 
-class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with SingleTickerProviderStateMixin {
+class _TranscriptionDemoStepState extends State<TranscriptionDemoStep>
+    with SingleTickerProviderStateMixin, DeviceTutorialNativeArtwork {
   late AnimationController _pulseController;
   bool _showContinue = false;
   bool _continueScheduled = false;
@@ -24,7 +26,8 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    // The pulse runs only while the classic step is mounted ([DeviceTutorialClassicAnimations]).
+    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 4));
   }
 
   @override
@@ -44,29 +47,53 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
           });
         }
 
-        return OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingTranscriptionTitle,
-          subtitle: provider.transcriptionComplete ? '' : context.l10n.deviceOnboardingTranscriptionSubtitle,
-          content: Column(
-            children: [
-              if (!provider.transcriptionComplete) ...[
-                const Spacer(flex: 1),
-                _buildOmiWithPulse(),
-                const SizedBox(height: 32),
-              ],
-              if (provider.transcriptionComplete) ...[
-                const SizedBox(height: 16),
-                _buildSuccessCard(),
-                const SizedBox(height: 16),
-              ],
-              if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
-              const Spacer(flex: 2),
-            ],
-          ),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
-        );
+        final classic = DeviceTutorialClassicAnimations(
+            onMount: _pulseController.repeat,
+            onUnmount: _pulseController.stop,
+            child: OnboardingStepScaffold(
+              title: context.l10n.deviceOnboardingTranscriptionTitle,
+              subtitle: provider.transcriptionComplete ? '' : context.l10n.deviceOnboardingTranscriptionSubtitle,
+              content: Column(
+                children: [
+                  if (!provider.transcriptionComplete) ...[
+                    const Spacer(flex: 1),
+                    _buildOmiWithPulse(),
+                    const SizedBox(height: 32),
+                  ],
+                  if (provider.transcriptionComplete) ...[
+                    const SizedBox(height: 16),
+                    _buildSuccessCard(),
+                    const SizedBox(height: 16),
+                  ],
+                  if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
+                  const Spacer(flex: 2),
+                ],
+              ),
+              bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+            ));
+        if (!deviceTutorialNative(context)) return classic;
+        return _nativeSurface(provider, classic);
       },
     );
+  }
+
+  /// The pulse rings are decorative; static device art and the same copy replace them natively.
+  Widget _nativeSurface(DeviceOnboardingProvider provider, Widget classic) {
+    final l10n = context.l10n;
+    final transcript = provider.demoSegments.map((s) => s.text).join(' ');
+    return IosNativeSurface(title: l10n.deviceOnboardingTranscriptionTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_transcription', [
+        if (provider.transcriptionComplete)
+          NativeRow('dev_tut_transcription_done', l10n.deviceOnboardingGoodJob,
+              kind: 'label', symbol: 'checkmark.circle.fill')
+        else
+          NativeRow('dev_tut_transcription_status', l10n.deviceOnboardingTranscriptionSubtitle,
+              kind: 'label', imageUri: nativeArtwork(Assets.images.omiWithoutRope.path)),
+        if (provider.demoSegments.isNotEmpty)
+          NativeRow('dev_tut_transcript', deviceTutorialNativeText(transcript), kind: 'label'),
+      ]),
+      if (_showContinue) NativeSection('dev_tut_actions', [deviceTutorialContinueRow(context, widget.onComplete)]),
+    ]);
   }
 
   Widget _buildSuccessCard() {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -20,7 +22,7 @@ class AllSetStep extends StatelessWidget {
     final doubleTapAction =
         provider.selectedDoubleTapAction == -1 ? prefs.doubleTapAction : provider.selectedDoubleTapAction;
 
-    return Padding(
+    final classic = Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
       child: Column(
         children: [
@@ -93,6 +95,37 @@ class AllSetStep extends StatelessWidget {
         ],
       ),
     );
+    if (!deviceTutorialNative(context)) return classic;
+    final l10n = context.l10n;
+    NativeRow summary(String id, String title, String subtitle, int step, {String? badge, String? symbol}) =>
+        NativeRow(id, title,
+            kind: 'navigation',
+            subtitle: badge == null ? subtitle : '$badge · $subtitle',
+            symbol: symbol,
+            action: (_) => provider.goToStep(step));
+    return IosNativeSurface(title: l10n.deviceOnboardingAllSetTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_all_set', [
+        NativeRow('dev_tut_all_set_subtitle', l10n.deviceOnboardingAllSetSubtitle, kind: 'label'),
+        summary('dev_tut_all_set_press_once', l10n.deviceOnboardingAskQuestionTitle,
+            l10n.deviceOnboardingAskQuestionSubtitle, DeviceOnboardingProvider.askQuestionStep,
+            badge: l10n.deviceOnboardingAllSetSinglePressBadge),
+        summary('dev_tut_all_set_voice_reply', l10n.voiceResponseMode, _voiceModeLabel(context, voiceMode),
+            DeviceOnboardingProvider.voiceReplyStep,
+            symbol: 'headphones'),
+        summary('dev_tut_all_set_double_tap', l10n.doubleTap, _doubleTapLabel(context, doubleTapAction),
+            DeviceOnboardingProvider.doublePressStep,
+            badge: l10n.deviceOnboardingAllSetDoublePressBadge),
+        summary('dev_tut_all_set_hold', l10n.deviceOnboardingTurnOffTitle, l10n.deviceOnboardingTurnOffSubtitle,
+            DeviceOnboardingProvider.powerCycleStep,
+            symbol: 'power'),
+      ]),
+      NativeSection('dev_tut_actions', [
+        NativeRow('dev_tut_all_set_replay',
+            l10n.deviceOnboardingAllSetReplayHint(l10n.settings, l10n.deviceSettings, l10n.deviceTutorial),
+            kind: 'label'),
+        NativeRow('dev_tut_finish', l10n.deviceOnboardingFinish, action: (_) => onComplete()),
+      ]),
+    ]);
   }
 
   String _voiceModeLabel(BuildContext context, int mode) => switch (mode) {

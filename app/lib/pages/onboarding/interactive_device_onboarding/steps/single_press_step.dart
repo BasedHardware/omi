@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
@@ -36,6 +37,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   late MessageProvider _messageProvider;
   bool _showContinue = false;
   bool _wasListening = false;
+  bool _bounceStopped = false;
 
   late int _messageCountAtStart;
   String? _userQuestion;
@@ -44,8 +46,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
-    _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    // Both run only while the classic step is mounted ([DeviceTutorialClassicAnimations]).
+    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4));
+    _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -84,25 +87,70 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     super.dispose();
   }
 
+  void _startClassicAnimations() {
+    _animController.repeat();
+    // The bounce stops for good once listening starts.
+    if (!_bounceStopped) _bounceController.repeat();
+  }
+
+  void _stopClassicAnimations() {
+    _animController.stop();
+    _bounceController.stop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
         if (provider.voiceSessionActive && !_wasListening) {
           _wasListening = true;
+          _bounceStopped = true;
           _bounceController.stop();
         } else if (!provider.voiceSessionActive && _wasListening) {
           _wasListening = false;
         }
 
-        return OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingAskQuestionTitle,
-          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
-          content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
-        );
+        final classic = DeviceTutorialClassicAnimations(
+            onMount: _startClassicAnimations,
+            onUnmount: _stopClassicAnimations,
+            child: OnboardingStepScaffold(
+              title: context.l10n.deviceOnboardingAskQuestionTitle,
+              subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
+              content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
+              bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+            ));
+        if (!deviceTutorialNative(context)) return classic;
+        return _nativeSurface(provider, classic);
       },
     );
+  }
+
+  /// The bounce, pulse and shimmer are decorative; SF Symbols and the same copy replace them natively.
+  /// The question and answer stay literal text: the answer is shown markdown-stripped, as classic does.
+  Widget _nativeSurface(DeviceOnboardingProvider provider, Widget classic) {
+    final l10n = context.l10n;
+    final question = _userQuestion;
+    final answer = _aiResponse;
+    return IosNativeSurface(title: l10n.deviceOnboardingAskQuestionTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_press', [
+        if (answer == null)
+          if (provider.questionSent)
+            NativeRow('dev_tut_press_state', l10n.deviceOnboardingProcessingQuestion,
+                kind: 'label', symbol: 'ellipsis.bubble', subtitle: l10n.deviceOnboardingAskQuestionSubtitle)
+          else if (provider.voiceSessionActive)
+            NativeRow('dev_tut_press_state', l10n.deviceOnboardingListening,
+                kind: 'label', symbol: 'waveform', subtitle: l10n.deviceOnboardingAskQuestionSubtitle)
+          else
+            NativeRow('dev_tut_press_state', l10n.deviceOnboardingAskQuestionSubtitle,
+                kind: 'label', symbol: 'hand.tap'),
+        if (question != null && question.isNotEmpty && (answer != null || provider.questionSent))
+          NativeRow('dev_tut_question', deviceTutorialNativeText(question), kind: 'message_user', plainText: true),
+        if (answer != null)
+          NativeRow('dev_tut_answer', deviceTutorialNativeText(_stripMarkdown(answer)),
+              kind: 'message_ai', plainText: true),
+      ]),
+      if (_showContinue) NativeSection('dev_tut_actions', [deviceTutorialContinueRow(context, widget.onComplete)]),
+    ]);
   }
 
   Widget _buildContent(DeviceOnboardingProvider provider) {

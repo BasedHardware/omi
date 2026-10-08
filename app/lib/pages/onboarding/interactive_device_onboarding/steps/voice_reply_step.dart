@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/voice_playback/voice_output_route.dart';
@@ -45,6 +47,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
   StreamSubscription<VoiceOutputRoute>? _routeSubscription;
   VoiceOutputRoute _route = const VoiceOutputRoute.unknown();
   bool _playing = false;
+  bool _classicMounted = false;
 
   DeviceOnboardingProvider get _provider => context.read<DeviceOnboardingProvider>();
 
@@ -87,9 +90,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
     final text = widget.previewText?.trim();
     final previewText = text == null || text.isEmpty ? context.l10n.deviceOnboardingVoiceReplySample : text;
     setState(() => _playing = true);
-    if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
-      _waveController.repeat();
-    }
+    _startWave();
     await OmiHaptics.light();
     try {
       await (widget.playPreview ?? OmiVoicePlaybackService.instance.playPreview)(previewText);
@@ -98,6 +99,13 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
         _waveController.stop();
         setState(() => _playing = false);
       }
+    }
+  }
+
+  /// The preview wave is decorative: it runs only while the classic step is mounted.
+  void _startWave() {
+    if (_playing && _classicMounted && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+      _waveController.repeat();
     }
   }
 
@@ -113,92 +121,209 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(builder: (context, provider, _) {
       final mode = provider.selectedVoiceResponseMode ?? 0;
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-        child: Column(
-          children: [
-            const SizedBox(height: OmiSpacing.lg),
-            Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              context.l10n.deviceOnboardingVoiceReplySubtitle,
-              style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _PreviewCard(
-                      playing: _playing,
-                      animation: _waveController,
-                      route: _route,
-                      onPressed: _togglePreview,
-                    ),
-                    const SizedBox(height: OmiSpacing.lg),
-                    Text(
-                      context.l10n.voiceResponseModeTitle.toUpperCase(),
-                      style: OmiType.footnote.copyWith(
-                        color: OmiColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_off'),
-                      selected: mode == 0,
-                      title: context.l10n.voiceResponseOff,
-                      description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
-                      onTap: () => _selectMode(0),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_headphones'),
-                      selected: mode == 1,
-                      title: context.l10n.voiceResponseHeadphonesOnly,
-                      description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
-                      onTap: () => _selectMode(1),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_always'),
-                      selected: mode == 2,
-                      title: context.l10n.voiceResponseAlways,
-                      description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
-                      onTap: () => _selectMode(2),
-                    ),
-                    const SizedBox(height: OmiSpacing.sm),
-                    _OutputStatus(mode: mode, route: _route),
-                  ],
+      final classic = DeviceTutorialClassicAnimations(
+          onMount: () {
+            _classicMounted = true;
+            _startWave();
+          },
+          onUnmount: () {
+            _classicMounted = false;
+            _waveController.stop();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+            child: Column(
+              children: [
+                const SizedBox(height: OmiSpacing.lg),
+                Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
+                const SizedBox(height: OmiSpacing.xs),
+                Text(
+                  context.l10n.deviceOnboardingVoiceReplySubtitle,
+                  style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                const SizedBox(height: OmiSpacing.lg),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _PreviewCard(
+                          playing: _playing,
+                          animation: _waveController,
+                          route: _route,
+                          onPressed: _togglePreview,
+                        ),
+                        const SizedBox(height: OmiSpacing.lg),
+                        Text(
+                          context.l10n.voiceResponseModeTitle.toUpperCase(),
+                          style: OmiType.footnote.copyWith(
+                            color: OmiColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_off'),
+                          selected: mode == 0,
+                          title: context.l10n.voiceResponseOff,
+                          description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
+                          onTap: () => _selectMode(0),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_headphones'),
+                          selected: mode == 1,
+                          title: context.l10n.voiceResponseHeadphonesOnly,
+                          description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
+                          onTap: () => _selectMode(1),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_always'),
+                          selected: mode == 2,
+                          title: context.l10n.voiceResponseAlways,
+                          description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
+                          onTap: () => _selectMode(2),
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        _OutputStatus(mode: mode, route: _route),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  context.l10n.deviceOnboardingVoiceReplySettingsHint(
+                    context.l10n.settings,
+                    context.l10n.voiceResponseMode,
+                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                OmiButton(
+                  key: const Key('voice_reply_continue'),
+                  label: context.l10n.deviceOnboardingContinue,
+                  onPressed: widget.onComplete,
+                  expand: true,
+                  labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+              ],
             ),
-            const SizedBox(height: OmiSpacing.sm),
-            Text(
-              context.l10n.deviceOnboardingVoiceReplySettingsHint(
-                context.l10n.settings,
-                context.l10n.voiceResponseMode,
-              ),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: OmiSpacing.sm),
-            OmiButton(
-              key: const Key('voice_reply_continue'),
-              label: context.l10n.deviceOnboardingContinue,
-              onPressed: widget.onComplete,
-              expand: true,
-              labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-          ],
-        ),
-      );
+          ));
+      if (!deviceTutorialNative(context)) return classic;
+      return _nativeSurface(mode, classic);
     });
   }
+
+  /// The preview waveform is decorative; the play/stop state and the output route stay visible natively.
+  /// Playback, mode persistence and analytics keep their existing owners in this State.
+  Widget _nativeSurface(int mode, Widget classic) {
+    final l10n = context.l10n;
+    final status = _voiceOutputStatus(context, mode, _route);
+    final modes = [
+      (l10n.voiceResponseOff, l10n.deviceOnboardingVoiceReplyOffDescription),
+      (l10n.voiceResponseHeadphonesOnly, l10n.deviceOnboardingVoiceReplyHeadphonesDescription),
+      (l10n.voiceResponseAlways, l10n.deviceOnboardingVoiceReplyAlwaysDescription),
+    ];
+    return IosNativeSurface(title: l10n.deviceOnboardingVoiceReplyTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_voice', [
+        NativeRow('dev_tut_voice_subtitle', l10n.deviceOnboardingVoiceReplySubtitle, kind: 'label'),
+        // Not awaited: the row must stay tappable to stop a preview that is still playing.
+        NativeRow('dev_tut_preview',
+            _playing ? l10n.deviceOnboardingVoiceReplyPreviewPlaying : l10n.deviceOnboardingVoiceReplyPreviewIdle,
+            subtitle: _voiceRouteLabel(context, _route),
+            symbol: _playing ? 'stop.fill' : 'play.fill',
+            action: (_) => unawaited(_togglePreview())),
+      ]),
+      NativeSection(
+          'dev_tut_voice_modes',
+          [
+            for (final (index, (title, description)) in modes.indexed)
+              NativeRow('dev_tut_mode_$index', title,
+                  kind: 'toggle', value: mode == index, subtitle: description, action: (_) => _selectMode(index)),
+            NativeRow('dev_tut_voice_status', status.text, kind: 'label', symbol: status.symbol),
+          ],
+          title: l10n.voiceResponseModeTitle),
+      NativeSection('dev_tut_actions', [
+        NativeRow(
+            'dev_tut_voice_hint', l10n.deviceOnboardingVoiceReplySettingsHint(l10n.settings, l10n.voiceResponseMode),
+            kind: 'label'),
+        deviceTutorialContinueRow(context, widget.onComplete),
+      ]),
+    ]);
+  }
+}
+
+String _voiceRouteLabel(BuildContext context, VoiceOutputRoute route) => switch (route.kind) {
+      VoiceOutputRouteKind.headphones => context.l10n.deviceOnboardingVoiceReplyPreviewThroughDevice(
+          route.name == null || route.name!.isEmpty
+              ? context.l10n.deviceOnboardingVoiceReplyGenericHeadphones
+              : route.name!,
+        ),
+      VoiceOutputRouteKind.speaker => context.l10n.deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker,
+      VoiceOutputRouteKind.unknown => context.l10n.deviceOnboardingVoiceReplyPreviewThroughCurrentOutput,
+    };
+
+/// What the selected mode does on the current output route, shared by the classic and native status.
+({String text, Color tone, Color surface, IconData icon, String symbol}) _voiceOutputStatus(
+    BuildContext context, int mode, VoiceOutputRoute route) {
+  if (mode == 0) {
+    return (
+      text: context.l10n.deviceOnboardingVoiceReplyStatusOff,
+      tone: OmiColors.textSecondary,
+      surface: OmiColors.surface1,
+      icon: Icons.volume_off_outlined,
+      symbol: 'speaker.slash',
+    );
+  }
+
+  final routeName = route.name == null || route.name!.isEmpty ? context.l10n.voiceResponseHeadphonesOnly : route.name!;
+  if (mode == 1) {
+    return switch (route.kind) {
+      VoiceOutputRouteKind.headphones => (
+          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesConnected(routeName),
+          tone: OmiColors.success,
+          surface: OmiColors.successSurface,
+          icon: Icons.headphones,
+          symbol: 'headphones',
+        ),
+      VoiceOutputRouteKind.speaker => (
+          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
+          tone: OmiColors.warning,
+          surface: OmiColors.surface1,
+          icon: Icons.headset_off_outlined,
+          symbol: 'exclamationmark.triangle',
+        ),
+      VoiceOutputRouteKind.unknown => (
+          text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
+          tone: OmiColors.warning,
+          surface: OmiColors.surface1,
+          icon: Icons.help_outline,
+          symbol: 'questionmark.circle',
+        ),
+    };
+  }
+
+  return switch (route.kind) {
+    VoiceOutputRouteKind.headphones => (
+        text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysHeadphones(routeName),
+        tone: OmiColors.success,
+        surface: OmiColors.successSurface,
+        icon: Icons.headphones,
+        symbol: 'headphones',
+      ),
+    VoiceOutputRouteKind.speaker || VoiceOutputRouteKind.unknown => (
+        text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
+        tone: OmiColors.warning,
+        surface: OmiColors.surface1,
+        icon: Icons.volume_up_outlined,
+        symbol: 'speaker.wave.2',
+      ),
+  };
 }
 
 class _PreviewCard extends StatelessWidget {
@@ -213,16 +338,6 @@ class _PreviewCard extends StatelessWidget {
   final Animation<double> animation;
   final VoiceOutputRoute route;
   final Future<void> Function() onPressed;
-
-  String _routeLabel(BuildContext context) => switch (route.kind) {
-        VoiceOutputRouteKind.headphones => context.l10n.deviceOnboardingVoiceReplyPreviewThroughDevice(
-            route.name == null || route.name!.isEmpty
-                ? context.l10n.deviceOnboardingVoiceReplyGenericHeadphones
-                : route.name!,
-          ),
-        VoiceOutputRouteKind.speaker => context.l10n.deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker,
-        VoiceOutputRouteKind.unknown => context.l10n.deviceOnboardingVoiceReplyPreviewThroughCurrentOutput,
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +379,7 @@ class _PreviewCard extends StatelessWidget {
                 ),
                 const SizedBox(height: OmiSpacing.xxs),
                 Text(
-                  _routeLabel(context),
+                  _voiceRouteLabel(context, route),
                   style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                 ),
                 const SizedBox(height: OmiSpacing.xs),
@@ -377,7 +492,7 @@ class _OutputStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (:text, :tone, :surface, :icon) = _content(context);
+    final (:text, :tone, :surface, :icon, symbol: _) = _voiceOutputStatus(context, mode, route);
     return Semantics(
       liveRegion: true,
       child: AnimatedContainer(
@@ -394,63 +509,6 @@ class _OutputStatus extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  ({String text, Color tone, Color surface, IconData icon}) _content(BuildContext context) {
-    if (mode == 0) {
-      return (
-        text: context.l10n.deviceOnboardingVoiceReplyStatusOff,
-        tone: OmiColors.textSecondary,
-        surface: OmiColors.surface1,
-        icon: Icons.volume_off_outlined,
-      );
-    }
-
-    final routeName =
-        route.name == null || route.name!.isEmpty ? context.l10n.voiceResponseHeadphonesOnly : route.name!;
-    if (mode == 1) {
-      return switch (route.kind) {
-        VoiceOutputRouteKind.headphones => (
-            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesConnected(routeName),
-            tone: OmiColors.success,
-            surface: OmiColors.successSurface,
-            icon: Icons.headphones,
-          ),
-        VoiceOutputRouteKind.speaker => (
-            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
-            tone: OmiColors.warning,
-            surface: OmiColors.surface1,
-            icon: Icons.headset_off_outlined,
-          ),
-        VoiceOutputRouteKind.unknown => (
-            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
-            tone: OmiColors.warning,
-            surface: OmiColors.surface1,
-            icon: Icons.help_outline,
-          ),
-      };
-    }
-
-    return switch (route.kind) {
-      VoiceOutputRouteKind.headphones => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysHeadphones(routeName),
-          tone: OmiColors.success,
-          surface: OmiColors.successSurface,
-          icon: Icons.headphones,
-        ),
-      VoiceOutputRouteKind.speaker => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
-          tone: OmiColors.warning,
-          surface: OmiColors.surface1,
-          icon: Icons.volume_up_outlined,
-        ),
-      VoiceOutputRouteKind.unknown => (
-          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
-          tone: OmiColors.warning,
-          surface: OmiColors.surface1,
-          icon: Icons.volume_up_outlined,
-        ),
-    };
   }
 }
 
