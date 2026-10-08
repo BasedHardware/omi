@@ -12450,4 +12450,19 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get partialRecording => 'আংশিক রেকর্ডিং';
+
+  @override
+  String get importTranscriptFiles => 'ট্রান্সক্রিপ্ট ফাইল';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT বা TXT ট্রান্সক্রিপ্ট, বা সেগুলোর একটি ZIP নির্বাচন করুন';
+
+  @override
+  String get importTooManyAttempts => 'এই মুহূর্তে অনেক বেশি আমদানি চলছে। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get importFileTooLarge => 'এই ফাইলটি আমদানি করার জন্য অনেক বড়।';
+
+  @override
+  String get importUnsupportedFileType => 'এই ধরনের ফাইল আমদানি করা যায় না।';
 }

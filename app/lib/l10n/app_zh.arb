@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "给我们 5 星好评对我们真的很有帮助 ❤️",
     "onboardingRatingPromptYes": "好的，我想支持你们！",
     "onboardingRatingPromptNo": "不太满意",
-    "partialRecording": "部分录音"
+    "partialRecording": "部分录音",
+    "importTranscriptFiles": "转录文件",
+    "importTranscriptFilesDescription": "选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件",
+    "importTooManyAttempts": "当前导入次数过多，请稍后再试。",
+    "importFileTooLarge": "此文件过大，无法导入。",
+    "importUnsupportedFileType": "无法导入此类型的文件。"
 }

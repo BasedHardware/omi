@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 tärni aitavad meid tõesti palju ❤️",
     "onboardingRatingPromptYes": "Jah, tahan teid toetada!",
     "onboardingRatingPromptNo": "Pigem mitte",
-    "partialRecording": "Osaline salvestus"
+    "partialRecording": "Osaline salvestus",
+    "importTranscriptFiles": "Transkriptsioonifailid",
+    "importTranscriptFilesDescription": "Vali SRT-, VTT- või TXT-transkriptsioonid või neid sisaldav ZIP",
+    "importTooManyAttempts": "Praegu on liiga palju importimisi. Proovi hiljem uuesti.",
+    "importFileTooLarge": "See fail on importimiseks liiga suur.",
+    "importUnsupportedFileType": "Seda failitüüpi ei saa importida."
 }

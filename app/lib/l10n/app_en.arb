@@ -14887,5 +14887,25 @@
     "partialRecording": "Partial recording",
     "@partialRecording": {
         "description": "Conversation detail badge shown when capture evidence says the recording is incomplete."
+    },
+    "importTranscriptFiles": "Transcript files",
+    "@importTranscriptFiles": {
+        "description": "Import source card title for SRT, VTT or TXT transcripts exported from other apps"
+    },
+    "importTranscriptFilesDescription": "Select SRT, VTT or TXT transcripts, or a ZIP of them",
+    "@importTranscriptFilesDescription": {
+        "description": "Subtitle on the transcript-files import card"
+    },
+    "importTooManyAttempts": "Too many imports right now. Try again later.",
+    "@importTooManyAttempts": {
+        "description": "Error when an import is refused because the user started too many imports in a short time (HTTP 429)"
+    },
+    "importFileTooLarge": "This file is too large to import.",
+    "@importFileTooLarge": {
+        "description": "Error when the selected import file is over the upload size limit"
+    },
+    "importUnsupportedFileType": "This file type can't be imported.",
+    "@importUnsupportedFileType": {
+        "description": "Error when the file picked for an import has an extension the importer does not accept"
     }
 }

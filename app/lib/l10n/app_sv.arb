@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "5 stjärnor hjälper oss verkligen mycket ❤️",
     "onboardingRatingPromptYes": "Ja, jag vill stötta er!",
     "onboardingRatingPromptNo": "Inte direkt",
-    "partialRecording": "Delvis inspelning"
+    "partialRecording": "Delvis inspelning",
+    "importTranscriptFiles": "Transkriptionsfiler",
+    "importTranscriptFilesDescription": "Välj SRT-, VTT- eller TXT-transkriptioner eller en ZIP med dem",
+    "importTooManyAttempts": "För många importer just nu. Försök igen senare.",
+    "importFileTooLarge": "Den här filen är för stor för att importeras.",
+    "importUnsupportedFileType": "Den här filtypen kan inte importeras."
 }

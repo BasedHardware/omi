@@ -12462,4 +12462,20 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Kısmi kayıt';
+
+  @override
+  String get importTranscriptFiles => 'Transkript dosyaları';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin';
+
+  @override
+  String get importTooManyAttempts => 'Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.';
+
+  @override
+  String get importFileTooLarge => 'Bu dosya içe aktarmak için çok büyük.';
+
+  @override
+  String get importUnsupportedFileType => 'Bu dosya türü içe aktarılamaz.';
 }
