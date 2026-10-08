@@ -208,6 +208,7 @@ final class QuickActionsIconPatcher: NSObject {
     let nativeUIConfig = FlutterMethodChannel(name: "com.omi.native_ui/config", binaryMessenger: messenger)
     if #available(iOS 16.0, *) {
       let presentations = NativeModalPresenter(rootController: { [weak self] in self?.window?.rootViewController })
+      let toasts = NativeToastPresenter()
       nativeUIConfig.setMethodCallHandler { call, result in
         do {
           switch call.method {
@@ -216,6 +217,12 @@ final class QuickActionsIconPatcher: NSObject {
           case "presentActivity": try presentations.presentActivity(call.arguments, completion: result)
           case "dismissPresentation":
             if let id = call.arguments as? Int { presentations.dismiss(id: id) }
+            result(nil)
+          case "toast":
+            do { try toasts.show(call.arguments, completion: result) }
+            catch { result(FlutterError(code: "invalid_native_toast", message: nil, details: nil)) }
+          case "dismissToast":
+            toasts.dismiss()
             result(nil)
           default: result(FlutterMethodNotImplemented)
           }

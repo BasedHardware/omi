@@ -573,4 +573,137 @@ final class PreviewUITests: XCTestCase {
         capture(app, "native-activity-large-text")
         XCTAssertTrue(app.staticTexts["reason:programmatic"].waitForExistence(timeout: 15))
     }
+
+    func testToastAboveAPageSheetIsHittableAndReportsItsAction() {
+        let app = start(["toast"])
+        app.buttons["toast-sheet"].tap()
+        XCTAssertTrue(app.buttons["sheet-undo"].waitForExistence(timeout: 10))
+        app.buttons["sheet-undo"].tap()
+        let action = app.buttons["native-toast-action"]
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(action.isHittable)
+        XCTAssertEqual(action.label, "Undo")
+        capture(app, "native-toast-above-sheet")
+        action.tap()
+        waitForLabel(app.staticTexts["sheet-outcomes"], "1:action")
+        XCTAssertTrue(waitForDisappearance(app.otherElements["native-toast"]))
+    }
+
+    func testToastStaysTappableAboveABlockingOverlay() {
+        let app = start(["toast"])
+        app.buttons["toast-overlay"].tap()
+        let action = app.buttons["native-toast-action"]
+        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        XCTAssertTrue(action.isHittable)
+        capture(app, "native-toast-above-activity")
+        action.tap()
+        waitForLabel(app.staticTexts["overlay-outcomes"], "1:action")
+    }
+
+    func testTouchesOutsideTheToastReachTheContentBelow() {
+        let app = start(["toast"])
+        app.buttons["toast-progress"].tap()
+        let toast = app.otherElements["native-toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        // Coordinate taps test real touch pass-through rather than the accessibility hit test.
+        let background = app.buttons["toast-background"]
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        waitForLabel(background, "Background 2")
+        XCTAssertTrue(toast.exists, "A touch outside the toast leaves it up")
+        XCTAssertEqual(app.staticTexts["toast-outcomes"].label, "none")
+        app.buttons["toast-dismiss"].tap()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:invalidated")
+        XCTAssertTrue(waitForDisappearance(toast))
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        waitForLabel(background, "Background 3")
+    }
+
+    func testToastAnnouncesItsMessageAndTimesOut() {
+        let app = start(["toast"])
+        app.buttons["toast-confirm"].tap()
+        XCTAssertTrue(app.staticTexts["native-toast-message"].waitForExistence(timeout: 5))
+        waitForLabel(app.staticTexts["toast-announcement"], "Saved")
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:timeout", timeout: 6)
+        XCTAssertTrue(waitForDisappearance(app.otherElements["native-toast"]))
+    }
+
+    func testNewerToastReplacesTheCurrentOneAndCloseReportsClosed() {
+        let app = start(["toast"])
+        app.buttons["toast-undo"].tap()
+        XCTAssertTrue(app.buttons["native-toast-action"].waitForExistence(timeout: 5))
+        app.buttons["toast-error"].tap()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:replaced")
+        let close = app.buttons["native-toast-close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertEqual(close.label, "Close")
+        // The replaced capsule leaves with a short transition; wait until only the new action remains.
+        let single = NSPredicate { _, _ in app.buttons.matching(identifier: "native-toast-action").count == 1 }
+        expectation(for: single, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertEqual(app.buttons["native-toast-action"].label, "Try Again")
+        capture(app, "native-toast-error")
+        close.tap()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:replaced,2:closed")
+    }
+
+    func testSwipingTheToastDownReportsSwiped() {
+        let app = start(["toast"])
+        app.buttons["toast-undo"].tap()
+        let message = app.staticTexts["native-toast-message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        message.swipeDown()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:swiped")
+        XCTAssertTrue(waitForDisappearance(app.otherElements["native-toast"]))
+    }
+
+    func testToastFollowsRightToLeftAndAccessibilityTextSizes() {
+        let app = start(["toast", "rtl", "long", "-UIPreferredContentSizeCategoryName",
+                         "UICTContentSizeCategoryAccessibilityXL"])
+        app.buttons["toast-undo"].tap()
+        let toast = app.otherElements["native-toast"]
+        let action = app.buttons["native-toast-action"]
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(action.isHittable)
+        let screen = app.windows.firstMatch.frame
+        XCTAssertGreaterThanOrEqual(toast.frame.minX, screen.minX)
+        XCTAssertLessThanOrEqual(toast.frame.maxX, screen.maxX)
+        XCTAssertLessThan(toast.frame.height, screen.height / 2, "The message is limited to four lines")
+        XCTAssertLessThan(action.frame.midX, toast.frame.midX, "The action trails the message on the left in RTL")
+        capture(app, "native-toast-rtl-large-text")
+        action.tap()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:action")
+    }
+
+    func testToastRisesAboveTheKeyboard() {
+        let app = start(["toast"])
+        let field = app.textFields["toast-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        app.buttons["toast-undo"].tap()
+        let toast = app.otherElements["native-toast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        let above = NSPredicate { _, _ in toast.frame.maxY <= keyboard.frame.minY }
+        expectation(for: above, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(toast.isHittable)
+        capture(app, "native-toast-keyboard")
+        // The toast's window never becomes key, so its action leaves the focused field and keyboard alone.
+        app.buttons["native-toast-action"].tap()
+        waitForLabel(app.staticTexts["toast-outcomes"], "1:action")
+        XCTAssertTrue(keyboard.exists)
+    }
+
+    func waitForLabel(_ element: XCUIElement, _ label: String, timeout: TimeInterval = 5) {
+        let matches = NSPredicate { _, _ in element.exists && element.label == label }
+        expectation(for: matches, evaluatedWith: nil)
+        waitForExpectations(timeout: timeout)
+    }
+
+    func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
+        return XCTWaiter.wait(for: [gone], timeout: timeout) == .completed
+    }
 }

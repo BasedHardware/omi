@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'package:omi/mobile/native_ui/ios_native_feedback.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -36,6 +40,8 @@ Color get _infoIconColor => OmiColors.textSecondary;
 ///   text keeps its contrast.
 /// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance], and of a
 ///   pushed page's pinned bottom action via [OmiFeedbackClearance].
+/// * Native under the SwiftUI preview ([NativeFeedbackHost.active]): the same kinds, timings and outcomes,
+///   above sheets. A toast the host does not present falls back to this snackbar.
 ///
 /// ```dart
 /// OmiFeedback.confirm(context, l10n.memoryUpdated);
@@ -77,6 +83,17 @@ abstract final class OmiFeedback {
   /// There is deliberately no close button: nothing on an undo toast means "destroy this sooner".
   /// [icon] replaces the delete glyph when the deferred action is not a delete (a label, a mark).
   static Future<bool> undo(BuildContext context, String message, {required VoidCallback onUndo, IconData? icon}) async {
+    if (NativeFeedbackHost.active) {
+      return _showNative(
+        context,
+        message,
+        kind: OmiFeedbackKind.undo,
+        duration: OmiFeedbackTiming.undo,
+        actionLabel: context.l10n.undo,
+        onAction: onUndo,
+        icon: icon,
+      ).catchError(_nativeFailed);
+    }
     final controller = _show(
       context,
       message,
@@ -92,7 +109,10 @@ abstract final class OmiFeedback {
   }
 
   /// Hides whatever feedback is showing.
-  static void hide(BuildContext context) => ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+  static void hide(BuildContext context) {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    if (NativeFeedbackHost.active) unawaited(dismissIosNativeToast());
+  }
 
   static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _show(
     BuildContext context,
@@ -104,6 +124,19 @@ abstract final class OmiFeedback {
     bool showClose = false,
     IconData? icon,
   }) {
+    if (NativeFeedbackHost.active) {
+      unawaited(_showNative(
+        context,
+        message,
+        kind: kind,
+        duration: duration,
+        actionLabel: actionLabel,
+        onAction: onAction,
+        showClose: showClose,
+        icon: icon,
+      ).catchError(_nativeFailed));
+      return null;
+    }
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return null;
     messenger.hideCurrentSnackBar();
@@ -119,6 +152,84 @@ abstract final class OmiFeedback {
         icon: icon,
       ),
     );
+  }
+
+  /// The native toast, while the SwiftUI renderer is active. Resolves whether the reader took its action,
+  /// after [onAction] ran; every other ending is false, like a SnackBar closed for any other reason. A toast
+  /// the host does not present shows the SnackBar instead, unless a newer toast has already replaced it.
+  static Future<bool> _showNative(
+    BuildContext context,
+    String message, {
+    required OmiFeedbackKind kind,
+    required Duration duration,
+    String? actionLabel,
+    VoidCallback? onAction,
+    bool showClose = false,
+    IconData? icon,
+  }) async {
+    final nativeKind = switch (kind) {
+      OmiFeedbackKind.confirm => NativeToastKind.confirm,
+      OmiFeedbackKind.info => NativeToastKind.info,
+      OmiFeedbackKind.error => NativeToastKind.error,
+      OmiFeedbackKind.undo => NativeToastKind.undo,
+      OmiFeedbackKind.progress => NativeToastKind.progress,
+    };
+    final hasAction = actionLabel != null && onAction != null;
+    final request = NativeToastRequest(
+      kind: nativeKind,
+      message: message,
+      actionLabel: hasAction ? actionLabel : null,
+      closeLabel: showClose ? context.l10n.close : null,
+      durationMs: duration.inMilliseconds,
+      symbol: nativeToastSymbol(nativeKind, icon),
+      bottomClearance: _extraBottom(context),
+      appearance: Theme.of(context).brightness.name,
+      locale: Localizations.maybeLocaleOf(context)?.toLanguageTag() ?? 'en',
+      direction: (Directionality.maybeOf(context) ?? TextDirection.ltr).name,
+    );
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    // Built while the caller's context is current, in case the host does not present the toast.
+    final fallback = messenger == null
+        ? null
+        : buildSnackBar(
+            context,
+            message,
+            kind: kind,
+            duration: duration,
+            actionLabel: actionLabel,
+            onAction: onAction,
+            showClose: showClose,
+            icon: icon,
+          );
+    // One at a time: the toast replaces a SnackBar that is up.
+    messenger?.hideCurrentSnackBar();
+    NativeToastOutcome? outcome;
+    try {
+      outcome = await showIosNativeToast(request);
+    } on PlatformException {
+      outcome = null;
+    }
+    if (outcome == null) {
+      if (!request.isLatest) return false;
+      unawaited(dismissIosNativeToast());
+      if (messenger == null || fallback == null || !messenger.mounted) return false;
+      messenger.hideCurrentSnackBar();
+      return await messenger.showSnackBar(fallback).closed == SnackBarClosedReason.action;
+    }
+    if (outcome != NativeToastOutcome.action || !hasAction) return false;
+    // The reader took the action even if it throws, as when a SnackBar's action handler throws.
+    try {
+      onAction();
+    } catch (error, stack) {
+      _nativeFailed(error, stack);
+    }
+    return true;
+  }
+
+  /// Reports a native toast failure like a gesture callback's; the toast counts as not acted on.
+  static bool _nativeFailed(Object error, StackTrace stack) {
+    FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack, library: 'omi feedback'));
+    return false;
   }
 
   /// The snackbar [OmiFeedback] shows; public for tests and for [ScaffoldMessenger] owners that

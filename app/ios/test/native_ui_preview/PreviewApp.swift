@@ -13,6 +13,8 @@ struct PreviewApp: App {
                     }.ignoresSafeArea(edges: .bottom)
                 } else if ProcessInfo.processInfo.arguments.contains("modal") {
                     ModalFixture()
+                } else if ProcessInfo.processInfo.arguments.contains("toast") {
+                    ToastFixture()
                 } else if ProcessInfo.processInfo.arguments.contains("surface") || ProcessInfo.processInfo.arguments.contains("chat") || ProcessInfo.processInfo.arguments.contains("settings-menu") {
                     NativeSurfaceView(state: harness.surface)
                 } else { NativeHomeView(state: harness.state) }
@@ -161,6 +163,143 @@ private struct ModalFixtureControls: View {
             Button("Content Beneath") { model.beneath += 1 }.accessibilityIdentifier("activity-beneath")
             Text("beneath:\(model.beneath)").accessibilityIdentifier("activity-beneath-count")
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Drives the production toast presenter and window above the fixture, a page sheet and a blocking overlay.
+private struct ToastFixture: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> ToastFixtureController { ToastFixtureController() }
+    func updateUIViewController(_ controller: ToastFixtureController, context: Context) {}
+}
+
+@MainActor
+private final class ToastFixtureModel: ObservableObject {
+    @Published var outcomes: [String] = []
+    @Published var announcement = ""
+    @Published var backgroundTaps = 0
+    @Published var field = ""
+    var show: (String) -> Void = { _ in }
+    var dismiss: () -> Void = {}
+    var presentSheet: () -> Void = {}
+    var presentOverlay: () -> Void = {}
+}
+
+@MainActor
+private final class ToastFixtureController: UIViewController {
+    private let model = ToastFixtureModel()
+    private var nextId = 0
+    private lazy var presenter = NativeToastPresenter { [weak self] message in
+        self?.model.announcement = message
+        UIAccessibility.post(notification: .announcement, argument: message)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        _ = presenter // Observe keyboard frames before any field can focus, as AppDelegate does at launch.
+        let child = UIHostingController(rootView: ToastFixtureControls(model: model, prefix: "toast"))
+        addChild(child)
+        child.view.frame = view.bounds
+        child.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(child.view)
+        child.didMove(toParent: self)
+        model.show = { [weak self] kind in self?.show(kind) }
+        model.dismiss = { [weak self] in self?.presenter.dismiss() }
+        model.presentSheet = { [weak self] in
+            guard let self else { return }
+            self.present(ToastFixtureControls(model: self.model, prefix: "sheet"), style: .pageSheet)
+        }
+        model.presentOverlay = { [weak self] in
+            guard let self else { return }
+            self.present(ToastFixtureOverlay(model: self.model), style: .overFullScreen)
+            self.show("undo")
+        }
+    }
+
+    private func present<Content: View>(_ content: Content, style: UIModalPresentationStyle) {
+        let controller = UIHostingController(rootView: content)
+        controller.modalPresentationStyle = style
+        if style == .overFullScreen { controller.view.backgroundColor = .clear }
+        var parent: UIViewController = self
+        while let presented = parent.presentedViewController { parent = presented }
+        parent.present(controller, animated: false)
+    }
+
+    private func show(_ kind: String) {
+        let arguments = ProcessInfo.processInfo.arguments
+        let rtl = arguments.contains("rtl")
+        nextId += 1
+        var request: [String: Any] = ["requestId": nextId, "session": "preview", "kind": kind,
+            "durationMs": NativeToastRequest.durations[kind] ?? 0, "bottomClearance": 64.0, "appearance": "dark",
+            "locale": rtl ? "ar" : "en", "direction": rtl ? "rtl" : "ltr"]
+        switch kind {
+        case "undo":
+            request["message"] = arguments.contains("long") ? String(repeating: "Conversation deleted with its transcript. ", count: 8) : "Conversation deleted"
+            request["actionLabel"] = "Undo"
+            request["symbol"] = "trash"
+        case "error":
+            request["message"] = "Could not save"
+            request["actionLabel"] = "Try Again"
+            request["closeLabel"] = "Close"
+            request["symbol"] = "exclamationmark.circle.fill"
+        case "progress":
+            request["message"] = "Exporting…"
+            request["symbol"] = "progress"
+        default:
+            request["message"] = "Saved"
+            request["symbol"] = "checkmark.circle.fill"
+        }
+        let id = nextId
+        do {
+            try presenter.show(request) { [weak self] outcome in
+                self?.model.outcomes.append("\(id):\(outcome as? String ?? "nil")")
+            }
+        } catch { model.outcomes.append("\(id):refused") }
+    }
+}
+
+private struct ToastFixtureControls: View {
+    @ObservedObject var model: ToastFixtureModel
+    let prefix: String
+    var body: some View {
+        VStack(spacing: 12) {
+            Button("Background \(model.backgroundTaps)") { model.backgroundTaps += 1 }
+                .accessibilityIdentifier("\(prefix)-background")
+            HStack {
+                Button("Undo") { model.show("undo") }.accessibilityIdentifier("\(prefix)-undo")
+                Button("Error") { model.show("error") }.accessibilityIdentifier("\(prefix)-error")
+                Button("Saved") { model.show("confirm") }.accessibilityIdentifier("\(prefix)-confirm")
+                Button("Progress") { model.show("progress") }.accessibilityIdentifier("\(prefix)-progress")
+            }
+            HStack {
+                Button("Dismiss") { model.dismiss() }.accessibilityIdentifier("\(prefix)-dismiss")
+                if prefix == "toast" {
+                    Button("Sheet") { model.presentSheet() }.accessibilityIdentifier("toast-sheet")
+                    Button("Overlay") { model.presentOverlay() }.accessibilityIdentifier("toast-overlay")
+                }
+            }
+            TextField("Draft", text: $model.field).textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("\(prefix)-field")
+            Text(model.outcomes.isEmpty ? "none" : model.outcomes.joined(separator: ","))
+                .accessibilityIdentifier("\(prefix)-outcomes")
+            Text(model.announcement.isEmpty ? "none" : model.announcement)
+                .accessibilityIdentifier("\(prefix)-announcement")
+            Spacer()
+        }.padding()
+    }
+}
+
+/// Stands in for a blocking activity overlay: it covers the screen and takes every touch beneath the toast.
+private struct ToastFixtureOverlay: View {
+    @ObservedObject var model: ToastFixtureModel
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(model.outcomes.isEmpty ? "none" : model.outcomes.joined(separator: ","))
+                    .accessibilityIdentifier("overlay-outcomes")
+            }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }.contentShape(Rectangle()).onTapGesture { model.backgroundTaps += 1 }
     }
 }
 

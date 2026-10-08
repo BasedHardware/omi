@@ -30,6 +30,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+import 'ios_native_feedback.dart';
 import 'ios_native_surface.dart';
 import 'native_conversation_projection.dart';
 import 'native_read_session.dart';
@@ -40,7 +41,10 @@ const iosSwiftUiEnabled = bool.fromEnvironment('OMI_IOS_SWIFTUI');
 
 Future<bool> supportsIosSwiftUi() async {
   if (!iosSwiftUiEnabled || !Platform.isIOS) return false;
-  return await const MethodChannel('com.omi.native_ui/config').invokeMethod<bool>('isSupported') ?? false;
+  final supported = await const MethodChannel('com.omi.native_ui/config').invokeMethod<bool>('isSupported') ?? false;
+  // Feedback turns native only once the renderer is confirmed.
+  if (supported) NativeFeedbackHost.confirmSupported();
+  return supported;
 }
 
 /// Stage one: SwiftUI renders the library; the current services still own every read and action.

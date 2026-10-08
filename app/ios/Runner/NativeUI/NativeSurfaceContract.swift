@@ -251,3 +251,58 @@ struct NativeActivityRequest: Equatable {
     }
     enum ContractError: Error { case invalidRequest }
 }
+
+/// One OmiFeedback toast, as presentation values only. Dart keeps the callbacks; Swift reports how it ended.
+struct NativeToastRequest: Decodable, Equatable {
+    /// Each kind's only duration, matching OmiFeedbackTiming.
+    static let durations = ["confirm": 1500, "info": 4000, "error": 8000, "undo": 5000, "progress": 60000]
+    static let symbols: Set<String> = ["checkmark.circle.fill", "info.circle", "exclamationmark.circle.fill",
+                                       "trash", "person", "tv", "progress"]
+    let requestId: Int
+    let session: String
+    let kind: String
+    let message: String
+    let actionLabel: String?
+    let closeLabel: String?
+    let durationMs: Int
+    let symbol: String
+    let bottomClearance: Double
+    let appearance: String
+    let locale: String
+    let direction: String
+
+    /// The same rules as Dart's NativeToastRequest.valid.
+    func validate() throws {
+        func label(_ value: String?) -> Bool { value.map { (1...40).contains($0.count) } ?? true }
+        guard requestId >= 0, (1...64).contains(session.count),
+              let duration = Self.durations[kind], durationMs == duration,
+              (1...1000).contains(message.count), !message.unicodeScalars.contains("\u{0}"),
+              Self.symbols.contains(symbol), (symbol == "progress") == (kind == "progress"),
+              kind == "undo" ? actionLabel != nil : (kind == "error" || actionLabel == nil),
+              (closeLabel != nil) == (kind == "error"), label(actionLabel), label(closeLabel),
+              bottomClearance.isFinite, (0.0...240.0).contains(bottomClearance),
+              ["system", "light", "dark"].contains(appearance), !locale.isEmpty,
+              ["ltr", "rtl"].contains(direction) else { throw ContractError.invalidToast }
+    }
+
+    static func decode(_ input: Any) throws -> Self {
+        let request = try JSONDecoder().decode(Self.self, from: SafeJSON.data(withJSONObject: input))
+        try request.validate()
+        return request
+    }
+    enum ContractError: Error { case invalidToast }
+}
+
+/// Request ids strictly increase within one Dart process. A request carrying another session token (the
+/// engine restarted) starts a new sequence, so a restarted counter is never refused for good.
+struct NativeToastOrder {
+    private var session: String?
+    private var last = -1
+
+    mutating func accept(_ request: NativeToastRequest) -> Bool {
+        if request.session == session && request.requestId <= last { return false }
+        session = request.session
+        last = request.requestId
+        return true
+    }
+}

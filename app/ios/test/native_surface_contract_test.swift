@@ -192,7 +192,101 @@ struct NativeSurfaceTests {
         input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [wave]]]
         rejects(input)
         try activityRequests()
+        try toastRequests()
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
+    }
+
+    static func toastRequests() throws {
+        let undo: [String: Any] = ["requestId": 3, "session": "process-a", "kind": "undo", "message": "Task deleted",
+            "actionLabel": "Undo", "durationMs": 5000, "symbol": "trash", "bottomClearance": 128.0,
+            "appearance": "dark", "locale": "en", "direction": "ltr"]
+        let request = try NativeToastRequest.decode(undo)
+        precondition(request.kind == "undo" && request.actionLabel == "Undo" && request.closeLabel == nil)
+        var error = undo
+        error["kind"] = "error"; error["durationMs"] = 8000; error["symbol"] = "exclamationmark.circle.fill"
+        error["closeLabel"] = "Close"
+        _ = try NativeToastRequest.decode(error)
+        error.removeValue(forKey: "actionLabel")
+        _ = try NativeToastRequest.decode(error)
+        error.removeValue(forKey: "closeLabel")
+        rejectsToast(error)
+        var progress = undo
+        progress["kind"] = "progress"; progress["durationMs"] = 60000; progress["symbol"] = "progress"
+        progress.removeValue(forKey: "actionLabel")
+        _ = try NativeToastRequest.decode(progress)
+        progress["symbol"] = "info.circle"
+        rejectsToast(progress)
+        for (kind, duration, symbol) in [("confirm", 1500, "checkmark.circle.fill"), ("info", 4000, "info.circle"),
+                                         ("progress", 60000, "progress")] {
+            var plain = undo
+            plain["kind"] = kind; plain["durationMs"] = duration; plain["symbol"] = symbol
+            plain.removeValue(forKey: "actionLabel")
+            _ = try NativeToastRequest.decode(plain)
+            plain["actionLabel"] = "Undo"
+            rejectsToast(plain)
+            plain.removeValue(forKey: "actionLabel")
+            plain["durationMs"] = duration == 1500 ? 4000 : 1500
+            rejectsToast(plain)
+        }
+        var invalid = undo
+        invalid["kind"] = "celebrate"
+        rejectsToast(invalid)
+        invalid = undo
+        invalid["durationMs"] = 4000
+        rejectsToast(invalid)
+        invalid = undo
+        invalid.removeValue(forKey: "actionLabel")
+        rejectsToast(invalid)
+        invalid = undo
+        invalid["closeLabel"] = "Close"
+        rejectsToast(invalid)
+        invalid = undo
+        invalid["actionLabel"] = String(repeating: "a", count: 41)
+        rejectsToast(invalid)
+        for clearance in [Double.nan, .infinity, -1, 240.5] {
+            invalid = undo
+            invalid["bottomClearance"] = clearance
+            rejectsToast(invalid)
+        }
+        for message in ["", String(repeating: "👨‍👩‍👧‍👦", count: 1001), "a\u{0}b"] {
+            invalid = undo
+            invalid["message"] = message
+            rejectsToast(invalid)
+        }
+        invalid = undo
+        invalid["message"] = String(repeating: "👨‍👩‍👧‍👦", count: 1000)
+        _ = try NativeToastRequest.decode(invalid)
+        for (key, value) in [("symbol", "star"), ("appearance", "sepia"), ("direction", "up"), ("locale", ""),
+                             ("session", "")] {
+            invalid = undo
+            invalid[key] = value
+            rejectsToast(invalid)
+        }
+        invalid = undo
+        invalid["requestId"] = -1
+        rejectsToast(invalid)
+        func toast(_ id: Int, _ session: String) throws -> NativeToastRequest {
+            var input = undo
+            input["requestId"] = id; input["session"] = session
+            return try NativeToastRequest.decode(input)
+        }
+        var order = NativeToastOrder()
+        // A restarted engine (process-b) starts a new sequence instead of being refused for good.
+        let sequence: [(NativeToastRequest, Bool)] = try [
+            (toast(5, "process-a"), true), (toast(5, "process-a"), false), (toast(4, "process-a"), false),
+            (toast(6, "process-a"), true), (toast(0, "process-b"), true), (toast(0, "process-b"), false),
+            (toast(1, "process-b"), true),
+        ]
+        for (index, (request, accepted)) in sequence.enumerated() {
+            let result = order.accept(request)
+            precondition(result == accepted, "Toast order step \(index)")
+        }
+    }
+
+    static func rejectsToast(_ input: Any) {
+        do { _ = try NativeToastRequest.decode(input) }
+        catch { return }
+        preconditionFailure("Invalid native toast accepted")
     }
     /// The activity overlay accepts exactly the request Dart validates: a label of 1...200 characters.
     static func activityRequests() throws {

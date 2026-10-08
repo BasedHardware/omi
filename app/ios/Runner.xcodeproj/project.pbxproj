@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		306E9BEFCEAD668FE1ADCD41 /* NativeModalPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C58D4B33D598665C6CEB5B /* NativeModalPresenter.swift */; };
+		D03A7A04EBEEEAEF115C6465 /* NativeToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F6B9222250F0AF78C75DE2 /* NativeToastPresenter.swift */; };
 		3723CE14F90954A1B96E3493 /* NativeModalPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32C58D4B33D598665C6CEB5B /* NativeModalPresenter.swift */; };
+		BDCE628BB7DA1CE158875A5E /* NativeToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F6B9222250F0AF78C75DE2 /* NativeToastPresenter.swift */; };
 		721DCC1BF25CB6049E91BEF3 /* NativeSurfacePlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350A10205F7718E3BDBB583B /* NativeSurfacePlatformView.swift */; };
 		663D4480B0A96D1CC558C380 /* NativeSurfacePlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350A10205F7718E3BDBB583B /* NativeSurfacePlatformView.swift */; };
 		DA25761E7BCC571A7E2B6F64 /* NativeSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */; };
@@ -260,6 +262,7 @@
 
 /* Begin PBXFileReference section */
 		32C58D4B33D598665C6CEB5B /* NativeModalPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeModalPresenter.swift; sourceTree = "<group>"; };
+		D3F6B9222250F0AF78C75DE2 /* NativeToastPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeToastPresenter.swift; sourceTree = "<group>"; };
 		350A10205F7718E3BDBB583B /* NativeSurfacePlatformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfacePlatformView.swift; sourceTree = "<group>"; };
 		DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSurfaceView.swift; sourceTree = "<group>"; };
 		3097CE58FF0175FC6D5DF7DB /* NativeReaderComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeReaderComponents.swift; sourceTree = "<group>"; };
@@ -454,6 +457,7 @@
 			isa = PBXGroup;
 			children = (
 				32C58D4B33D598665C6CEB5B /* NativeModalPresenter.swift */,
+				D3F6B9222250F0AF78C75DE2 /* NativeToastPresenter.swift */,
 				5F8DA6EA972F5A4BE94DF8BB /* NativeGlass.swift */,
 				F692480F0C34DBD1283BD2F8 /* NativeSurfaceContract.swift */,
 				DB771B9876A4BCE2458ACCCC /* NativeSurfaceView.swift */,
@@ -1124,6 +1128,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3723CE14F90954A1B96E3493 /* NativeModalPresenter.swift in Sources */,
+				BDCE628BB7DA1CE158875A5E /* NativeToastPresenter.swift in Sources */,
 				2C5706F1A216FA899C7BFBA4 /* NativeGlass.swift in Sources */,
 				6CB1A229F8DDF62C3F558EB9 /* NativeSurfaceContract.swift in Sources */,
 				DA25761E7BCC571A7E2B6F64 /* NativeSurfaceView.swift in Sources */,
@@ -1202,6 +1207,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				306E9BEFCEAD668FE1ADCD41 /* NativeModalPresenter.swift in Sources */,
+				D03A7A04EBEEEAEF115C6465 /* NativeToastPresenter.swift in Sources */,
 				D0A243F4AA0C32F14A7C97CB /* NativeGlass.swift in Sources */,
 				02BED4B552DC59F9AA34EAB3 /* NativeSurfaceContract.swift in Sources */,
 				CE5CAA1A4CB92DFC7985209F /* NativeSurfaceView.swift in Sources */,
