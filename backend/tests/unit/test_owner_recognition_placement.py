@@ -157,3 +157,37 @@ def test_partial_pass_does_not_borrow_owner_for_distinct_short_voice(env, monkey
     stage.resolve_speakers_for_processing('u1', conversation)
     assert [s['is_user'] for s in conversation.model_dump()['transcript_segments']] == [True, True, False, False]
     assert conversation.speaker_resolution.status == 'unavailable'
+
+
+@pytest.mark.parametrize('committed', [False, True])
+def test_late_identity_repair_counter_observes_only_committed_cas(env, monkeypatch, committed):
+    from utils.observability import owner_recognition as metrics
+
+    conv = _capture_shifted_conversation([0, 0])
+    raw = conv.model_dump()
+    raw.update(status='completed', updated_at=conv.created_at)
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', lambda *a: raw)
+
+    def resolve(uid, conversation, **kw):
+        conversation.transcript_segments[0].is_user = True
+        return True
+
+    monkeypatch.setattr(stage, 'resolve_speakers_for_processing', resolve)
+    monkeypatch.setattr(stage.identity_updates_db, 'persist_speaker_resolution_if_current', lambda *a, **kw: committed)
+    counter = getattr(metrics, 'OWNER_IDENTITY_REPAIR', None)
+
+    def repair_count():
+        return counter.labels(outcome='owner_added')._value.get() if counter is not None else 0
+
+    def finalization_count():
+        return sum(
+            s.value
+            for family in metrics.OWNER_RECOGNITION_CONVERSATIONS.collect()
+            for s in family.samples
+            if s.name.endswith('_total')
+        )
+
+    before, finalized = repair_count(), finalization_count()
+    assert stage.refresh_completed_speaker_identity('u1', 'c1') is committed
+    assert repair_count() == before + int(committed)
+    assert finalization_count() == finalized

@@ -53,6 +53,7 @@ from utils.metrics import (
     OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL,
     OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES,
 )
+from utils.observability.owner_recognition import record_owner_identity_repair
 from utils.observability.fallback import record_fallback
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
@@ -953,9 +954,19 @@ def refresh_completed_speaker_identity(uid: str, conversation_id: str, *, candid
             uid, conversation, budget_seconds=5.0, max_embedding_attempts=24, allow_owner_audio_repair=False
         ):
             return False
-        return identity_updates_db.persist_speaker_resolution_if_current(
-            uid, conversation.model_dump(), expected_updated_at=raw['updated_at']
+        payload = conversation.model_dump()
+        committed = identity_updates_db.persist_speaker_resolution_if_current(
+            uid, payload, expected_updated_at=raw['updated_at']
         )
+        if committed:
+            try:
+                record_owner_identity_repair(raw, payload)
+            except Exception as error:
+                # Observability cannot turn an authoritative commit into a failure.
+                logger.warning(
+                    'event=owner_identity_repair_metrics outcome=failed exception_type=%s', type(error).__name__
+                )
+        return committed
     except Exception as error:
         logger.warning('event=speaker_identity_refresh outcome=failed exception_type=%s', type(error).__name__)
         return False
