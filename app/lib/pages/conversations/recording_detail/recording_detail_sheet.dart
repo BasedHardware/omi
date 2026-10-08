@@ -241,7 +241,6 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
           rec,
           isPlaying: isPlaying,
           canPlay: canPlay,
-          total: total,
           position: position,
           fallback: OmiSheetScaffold(
             title: OmiDateFormat.of(context).date(rec.startedAt),
@@ -261,7 +260,6 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     LocalRecording rec, {
     required bool isPlaying,
     required bool canPlay,
-    required Duration total,
     required Duration position,
     required Widget fallback,
   }) {
@@ -297,7 +295,9 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
           NativeRow('rec_time', OmiDateFormat.of(context).time(rec.startedAt), kind: 'label'),
           if (_loadingWaveform) NativeRow('rec_waveform_loading', l10n.loadingYourRecording, kind: 'label'),
           if (maximum != null)
-            NativeRow('rec_position', l10n.recordings,
+            // The id follows the enabled state, so a seek Dart refused once playback ended is dropped
+            // with the id instead of blocking every later action.
+            NativeRow(transport ? 'rec_position' : 'rec_position_idle', l10n.recordings,
                 kind: 'slider',
                 value: seconds,
                 maximumValue: maximum,

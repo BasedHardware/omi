@@ -175,6 +175,20 @@ Future<Object?> _send(NativeTestHost host, String id, [Object? value]) async {
   return const StandardMethodCodec().decodeEnvelope(reply!);
 }
 
+/// The row ids of the latest snapshot published to the current native view.
+Set<String> _publishedIds(NativeTestHost host) {
+  final view = host.created.last;
+  final update = host.calls.lastWhere((call) => call.$1 == view && call.$2.method == 'update').$2;
+  final arguments = update.arguments as Map;
+  return {
+    for (final group in [
+      [for (final section in (arguments['sections'] as List).cast<Map>()) ...(section['rows'] as List)],
+      arguments['toolbar'] as List? ?? const [],
+    ])
+      for (final row in group.cast<Map>()) row['id'] as String,
+  };
+}
+
 final _refused = throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'invalid_native_action'));
 
 /// Answers each 'present' with [reply] (a [PlatformException] is thrown) and records the snapshots.
@@ -326,13 +340,15 @@ void main() {
       await pumpWalDetail(tester, sync);
       expect(_row(tester, 'wal_storage')!.symbol, 'lock.shield');
       expect(_row(tester, 'wal_more')!.options.keys, ['info', 'share', 'delete']);
-      var slider = _row(tester, 'wal_position')!;
+      expect(_row(tester, 'wal_position'), isNull, reason: 'The idle slider has its own id');
+      var slider = _row(tester, 'wal_position_idle')!;
       expect(slider.kind, 'slider');
       expect(slider.maximumValue, 60);
       expect(slider.value, 0.0);
       expect(slider.points, hasLength(200));
       expect(slider.subtitle, '0:00 / 1:00');
       expect(slider.projection['enabled'], false);
+      await expectLater(_send(host, 'wal_position_idle', 5.0), _refused);
       await expectLater(_send(host, 'wal_position', 5.0), _refused);
       await expectLater(_send(host, 'wal_back10'), _refused);
       expect(sync.calls, isEmpty);
@@ -366,11 +382,68 @@ void main() {
       expect(sync.calls.last, 'toggle');
     });
 
+    testWidgets('a seek refused after playback ends drops the slider id, so Play still dispatches', (tester) async {
+      final host = NativeTestHost.install();
+      final sync = _FakeSync(_wal());
+      await pumpWalDetail(tester, sync);
+      sync.change(() {
+        sync.playing = true;
+        sync.position = const Duration(seconds: 58);
+      });
+      await NativeTestHost.settle(tester);
+      expect(_publishedIds(host), contains('wal_position'));
+
+      // Playback finishes while Swift still holds a queued drag value for the enabled slider.
+      sync.change(() {
+        sync.playing = false;
+        sync.position = Duration.zero;
+      });
+      await NativeTestHost.settle(tester);
+      await expectLater(_send(host, 'wal_position', 59.0), _refused);
+      // The refused id is gone from the snapshot, so Swift drops its failed edit and queued value.
+      expect(_publishedIds(host), isNot(contains('wal_position')));
+      expect(_publishedIds(host), contains('wal_position_idle'));
+      expect(await _send(host, 'wal_play'), isNull);
+      expect(await _send(host, 'wal_more', 'share'), isNull);
+      expect(sync.calls, ['toggle', 'share']);
+    });
+
+    testWidgets('Transfer to Phone from the menu returns at once, keeping the menu usable', (tester) async {
+      final host = NativeTestHost.install();
+      final sync = _FakeSync(_wal(storage: WalStorage.sdcard))..transferGate = Completer<void>();
+      await pumpWalDetail(tester, sync);
+      expect(await _send(host, 'wal_more', 'transfer'), isNull, reason: 'Not held for the whole transfer');
+      expect(sync.calls, ['transfer']);
+      sync.change(() => sync.wal.isSyncing = true);
+      await NativeTestHost.settle(tester);
+      expect(_row(tester, 'wal_more')!.options.keys, ['info']);
+      sync.transferGate!.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a covered detail is removed when the WAL leaves device storage', (tester) async {
+      NativeTestHost.install();
+      final sync = _FakeSync(_wal(storage: WalStorage.sdcard));
+      await pumpWalDetail(tester, sync);
+      final navigator = Navigator.of(tester.element(find.text('home', skipOffstage: false)));
+      unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('cover')))));
+      await tester.pumpAndSettle();
+      sync.change(() => sync.wal = _wal(storage: WalStorage.disk));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.byType(WalItemDetailPage, skipOffstage: false), findsNothing);
+      expect(find.text('cover'), findsOneWidget, reason: 'The covering route stays');
+      navigator.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('home'), findsOneWidget);
+    });
+
     testWidgets('a zero duration omits the slider instead of invalidating the surface', (tester) async {
       NativeTestHost.install();
       final sync = _FakeSync(_wal(seconds: 0));
       await pumpWalDetail(tester, sync);
       expect(_row(tester, 'wal_position'), isNull);
+      expect(_row(tester, 'wal_position_idle'), isNull);
       expect(_row(tester, 'wal_play'), isNotNull);
       expect(find.byType(UiKitView), findsOneWidget, reason: 'Still native, not the fallback');
     });
@@ -439,10 +512,12 @@ void main() {
       await openSheet(tester, recordings);
       expect(find.byType(UiKitView), findsOneWidget);
       expect(_row(tester, 'rec_more')!.options.keys, ['share', 'info', 'delete']);
-      final slider = _row(tester, 'rec_position')!;
+      expect(_row(tester, 'rec_position'), isNull, reason: 'The idle slider has its own id');
+      final slider = _row(tester, 'rec_position_idle')!;
       expect(slider.maximumValue, 45);
       expect(slider.points, hasLength(3));
       expect(slider.subtitle, '0:00 / 0:45');
+      await expectLater(_send(host, 'rec_position_idle', 4.0), _refused);
       await expectLater(_send(host, 'rec_position', 4.0), _refused);
       expect(_row(tester, 'rec_process')!.title, _l10n.processNow);
 
@@ -491,7 +566,7 @@ void main() {
       final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
       expect(surface.loading, true);
       expect(surface.loadingLabel, _l10n.preparingAudio);
-      for (final id in ['rec_more', 'rec_position', 'rec_back10', 'rec_play', 'rec_fwd10', 'rec_process']) {
+      for (final id in ['rec_more', 'rec_position_idle', 'rec_back10', 'rec_play', 'rec_fwd10', 'rec_process']) {
         expect(_row(tester, id)!.projection['enabled'], false, reason: id);
       }
       await expectLater(_send(host, 'rec_play'), _refused);

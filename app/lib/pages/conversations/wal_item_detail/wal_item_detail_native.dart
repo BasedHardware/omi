@@ -34,7 +34,8 @@ extension _NativeWalDetailPresentation on _WalItemDetailPageState {
                   case 'info':
                     await _showNativeFileDetails();
                   case 'transfer':
-                    await _handleTransferToPhone();
+                    // Returns at once so the menu (Recording Info) stays usable during the transfer.
+                    unawaited(_handleTransferToPhone());
                   case 'share':
                     await _handleShare(syncProvider);
                   case 'delete':
@@ -56,13 +57,20 @@ extension _NativeWalDetailPresentation on _WalItemDetailPageState {
   }
 
   /// The classic page pops once the WAL leaves device storage; the native page does too, exactly
-  /// once, and only while this route is on top. The owner notifies before Transfer to Phone
-  /// completes, so its success handler skips its own pop once this one is scheduled.
+  /// once. When another route covers this one it is removed from under it instead, so the page
+  /// never stays on a bare spinner. The owner notifies before Transfer to Phone completes, so its
+  /// success handler skips its own pop once this one is scheduled.
   void _popOnceTransferred() {
     if (_leavingTransferred) return;
     _leavingTransferred = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && ModalRoute.of(context)?.isCurrent != false) Navigator.of(context).pop();
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || route.isCurrent) {
+        Navigator.of(context).pop();
+      } else if (route.isActive) {
+        Navigator.of(context).removeRoute(route);
+      }
     });
   }
 
@@ -126,7 +134,9 @@ extension _NativeWalDetailPresentation on _WalItemDetailPageState {
       NativeSection('wal_player', [
         if (_isProcessingWaveform) NativeRow('wal_waveform_loading', l10n.loadingYourRecording, kind: 'label'),
         if (maximum != null)
-          NativeRow('wal_position', l10n.recordings,
+          // The id follows the enabled state, so a seek Dart refused once playback ended is dropped
+          // with the id instead of blocking every later action.
+          NativeRow(transport ? 'wal_position' : 'wal_position_idle', l10n.recordings,
               kind: 'slider',
               value: seconds,
               maximumValue: maximum,

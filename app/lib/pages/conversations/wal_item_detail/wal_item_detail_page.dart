@@ -40,6 +40,9 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   /// The bundled device artwork for the native info sheet, once copied; never user data.
   String? _nativeDeviceImage;
 
+  /// Whether this device renders the native presentation; asked only when the flag is on.
+  late final Future<bool> _nativeSupport = supportsNativePresentation();
+
   /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
   bool get _needsTransfer => widget.wal.storage == WalStorage.sdcard || widget.wal.storage == WalStorage.flashPage;
 
@@ -47,8 +50,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   void initState() {
     super.initState();
     if (nativePresentationEnabled) {
-      unawaited(nativeAssetImageUri(DeviceUtils.getDeviceImagePath(deviceName: widget.wal.deviceModel))
-          .then((uri) => _nativeDeviceImage = uri));
+      unawaited(_nativeSupport.then((supported) async {
+        if (!supported || !mounted) return;
+        _nativeDeviceImage =
+            await nativeAssetImageUri(DeviceUtils.getDeviceImagePath(deviceName: widget.wal.deviceModel));
+      }, onError: (_) {}));
     }
     if (!_needsTransfer) {
       _generateWaveform();
@@ -128,7 +134,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       backgroundColor: OmiColors.surface0,
       body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
-    return nativePresentationEnabled ? _nativeDetail(classic) : classic;
+    if (!nativePresentationEnabled) return classic;
+    // Flag on but no native renderer (iOS < 16, no host) keeps exactly the classic page.
+    return FutureBuilder<bool>(
+      future: _nativeSupport,
+      builder: (context, support) {
+        if (support.hasError || support.data == false) return classic;
+        if (support.connectionState != ConnectionState.done) {
+          return Scaffold(backgroundColor: OmiColors.surface0, body: const Center(child: OmiSpinner()));
+        }
+        return _nativeDetail(classic);
+      },
+    );
   }
 
   String _formatTransferEta(int seconds) => OmiDuration.compact(seconds, context.l10n);
