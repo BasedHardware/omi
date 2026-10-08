@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "Valorarnos con 5 estrellas nos ayuda muchísimo ❤️",
     "onboardingRatingPromptYes": "¡Sí, quiero apoyaros!",
     "onboardingRatingPromptNo": "No mucho",
-    "partialRecording": "Grabación parcial"
+    "partialRecording": "Grabación parcial",
+    "importTranscriptFiles": "Archivos de transcripción",
+    "importTranscriptFilesDescription": "Selecciona transcripciones SRT, VTT o TXT, o un ZIP que las contenga",
+    "importTooManyAttempts": "Demasiadas importaciones en este momento. Inténtalo de nuevo más tarde.",
+    "importFileTooLarge": "Este archivo es demasiado grande para importarlo.",
+    "importUnsupportedFileType": "Este tipo de archivo no se puede importar."
 }

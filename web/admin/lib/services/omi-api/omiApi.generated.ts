@@ -747,6 +747,10 @@ export interface Body_import_limitless_data_v1_import_limitless_post {
   file: string;
 }
 
+export interface Body_import_transcript_files_v1_import_transcripts_post {
+  file: string;
+}
+
 export interface Body_migrate_app_owner_v1_apps_migrate_owner_post {
   source_token?: string | null;
 }
@@ -2668,11 +2672,14 @@ export interface ImportJobResponse {
   error?: string | null;
   job_id: string;
   processed_files?: number | null;
+  source_type?: ImportSourceType | null;
   status: ImportJobStatus;
   total_files?: number | null;
 }
 
 export type ImportJobStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+
+export type ImportSourceType = "limitless" | "transcript_files";
 
 export interface Insight {
   kind: "prior_meeting" | "goal" | "memory" | "person";
@@ -3949,6 +3956,10 @@ export interface RejectSpeakerRequest {
   kind: "not_me" | "not_person" | "not_a_person";
   person_id?: string | null;
   segment_ids?: Array<string> | null;
+}
+
+export interface ReleaseChannel {
+  release_channel: "testflight" | "app_store" | "dev";
 }
 
 export interface ReorderFoldersRequest {
@@ -5744,6 +5755,7 @@ export interface OmiApiSchemas {
   "Body_create_app_v1_apps_post": Body_create_app_v1_apps_post;
   "Body_create_voice_message_stream_v2_voice_messages_post": Body_create_voice_message_stream_v2_voice_messages_post;
   "Body_import_limitless_data_v1_import_limitless_post": Body_import_limitless_data_v1_import_limitless_post;
+  "Body_import_transcript_files_v1_import_transcripts_post": Body_import_transcript_files_v1_import_transcripts_post;
   "Body_migrate_app_owner_v1_apps_migrate_owner_post": Body_migrate_app_owner_v1_apps_migrate_owner_post;
   "Body_sync_local_files_v2_v2_sync_local_files_post": Body_sync_local_files_v2_v2_sync_local_files_post;
   "Body_update_app_v1_apps__app_id__patch": Body_update_app_v1_apps__app_id__patch;
@@ -5996,6 +6008,7 @@ export interface OmiApiSchemas {
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
   "ImportJobStatus": ImportJobStatus;
+  "ImportSourceType": ImportSourceType;
   "Insight": Insight;
   "IntegrationData": IntegrationData;
   "IntegrationMutationResponse": IntegrationMutationResponse;
@@ -6170,6 +6183,7 @@ export interface OmiApiSchemas {
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
   "RejectSpeakerRequest": RejectSpeakerRequest;
+  "ReleaseChannel": ReleaseChannel;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -8639,6 +8653,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/import/transcripts": {
+    post: {
+      operationId: "import_transcript_files_v1_import_transcripts_post";
+      responses: {
+        "200": ImportJobResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/integrations/apple-health/sync": {
     put: {
       operationId: "sync_apple_health_data_v1_integrations_apple_health_sync_put";
@@ -10594,6 +10618,16 @@ export interface OmiApiPaths {
       operationId: "get_user_profile_endpoint_v1_users_profile_get";
       responses: {
         "200": UserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/release-channel": {
+    put: {
+      operationId: "record_channel_v1_users_release_channel_put";
+      responses: {
+        "204": void;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15769,6 +15803,29 @@ export async function delete_limitless_conversations_v1_import_limitless_convers
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function import_transcript_files_v1_import_transcripts_post(query: { language?: string, tz?: string, origin?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<ImportJobResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/import/transcripts`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function sync_apple_health_data_v1_integrations_apple_health_sync_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: AppleHealthSyncData, init?: OmiApiClientInit): Promise<AppleHealthSyncResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/integrations/apple-health/sync`;
@@ -19529,6 +19586,27 @@ export async function get_user_profile_endpoint_v1_users_profile_get(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function record_channel_v1_users_release_channel_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ReleaseChannel, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/release-channel`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/stats/chat-messages`;
@@ -21145,4 +21223,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 488 client methods generated.
+// Total: 490 client methods generated.

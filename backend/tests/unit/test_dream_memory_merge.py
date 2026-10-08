@@ -26,13 +26,15 @@ def memory(key, content):
         source_state='active',
         sensitivity_labels=[],
         visibility='private',
-        user_asserted=False,
+        user_asserted=True,
         captured_at=NOW,
         updated_at=NOW,
         ledger_schema_version='knowledge_ledger.v1',
         kind='fact',
         intent_backed=True,
         ledger_commit_id="synthetic-ledger-commit",
+        ledger_sequence=1,
+        write_reason="direct_user_statement",
     )
 
 

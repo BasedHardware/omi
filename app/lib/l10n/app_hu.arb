@@ -3947,5 +3947,10 @@
     "onboardingRatingPromptBody": "Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️",
     "onboardingRatingPromptYes": "Igen, szeretnék támogatni titeket!",
     "onboardingRatingPromptNo": "Nem igazán",
-    "partialRecording": "Részleges felvétel"
+    "partialRecording": "Részleges felvétel",
+    "importTranscriptFiles": "Átiratfájlok",
+    "importTranscriptFilesDescription": "Válassz SRT, VTT vagy TXT átiratokat, vagy egy őket tartalmazó ZIP-fájlt",
+    "importTooManyAttempts": "Jelenleg túl sok az importálás. Próbálja újra később.",
+    "importFileTooLarge": "Ez a fájl túl nagy az importáláshoz.",
+    "importUnsupportedFileType": "Ez a fájltípus nem importálható."
 }

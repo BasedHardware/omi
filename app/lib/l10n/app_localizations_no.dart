@@ -12450,4 +12450,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delvis opptak';
+
+  @override
+  String get importTranscriptFiles => 'Transkripsjonsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem';
+
+  @override
+  String get importTooManyAttempts => 'For mange importer akkurat nå. Prøv igjen senere.';
+
+  @override
+  String get importFileTooLarge => 'Denne filen er for stor til å importeres.';
+
+  @override
+  String get importUnsupportedFileType => 'Denne filtypen kan ikke importeres.';
 }

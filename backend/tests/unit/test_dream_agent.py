@@ -316,3 +316,37 @@ def test_feedback_storage_has_no_uid_and_rotates_distinct_hash(monkeypatch):
     assert all(UID not in str(row) for row in stored)
     assert stored[0]['distinct'] == stored[1]['distinct']
     assert stored[0]['distinct'] != stored[2]['distinct']
+
+
+def test_excerpts_keep_transcript_evidence_when_summary_is_large():
+    excerpt = dream_agent.excerpts(
+        {
+            'conversations/c1': {
+                'structured': {'title': 'x' * 10000},
+                'transcript_segments': [{'text': 'Synthetic misspelled name'}],
+            }
+        },
+        chars=160,
+    )['conversations/c1']
+    assert 'Synthetic misspelled name' in excerpt['transcript_segments']
+
+
+def test_large_input_stops_before_gateway_access(monkeypatch):
+    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **kw: pytest.fail('gateway accessed'))
+    with pytest.raises(ValueError, match='dream_input_token_budget'):
+        asyncio.run(
+            dream_transport.model_turn(
+                UID,
+                dream_transport.MAIN_LANE,
+                dream_agent.mount(Plan, 100),
+                [{'role': 'user', 'content': 'x' * 10000}],
+            )
+        )
+
+
+def test_evidence_shrinks_to_the_triage_budget():
+    records = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
+    messages = dream_agent.evidence_message(records, Triage, 6000, chars=240)
+    assert len(__import__('json').loads(messages[0]['content'])['records']) == 50
+    framed = dream_agent.mount(Triage, 6000).messages(messages)
+    assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000

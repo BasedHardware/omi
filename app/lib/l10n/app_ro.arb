@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "O evaluare de 5 stele ne ajută cu adevărat ❤️",
     "onboardingRatingPromptYes": "Da, vreau să vă susțin!",
     "onboardingRatingPromptNo": "Nu prea",
-    "partialRecording": "Înregistrare parțială"
+    "partialRecording": "Înregistrare parțială",
+    "importTranscriptFiles": "Fișiere de transcriere",
+    "importTranscriptFilesDescription": "Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele",
+    "importTooManyAttempts": "Prea multe importuri în acest moment. Încearcă din nou mai târziu.",
+    "importFileTooLarge": "Acest fișier este prea mare pentru a fi importat.",
+    "importUnsupportedFileType": "Acest tip de fișier nu poate fi importat."
 }

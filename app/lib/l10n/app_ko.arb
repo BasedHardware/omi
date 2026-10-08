@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "별 5개를 주시면 큰 힘이 됩니다 ❤️",
     "onboardingRatingPromptYes": "네, 응원할게요!",
     "onboardingRatingPromptNo": "별로예요",
-    "partialRecording": "부분 녹음"
+    "partialRecording": "부분 녹음",
+    "importTranscriptFiles": "녹취록 파일",
+    "importTranscriptFilesDescription": "SRT, VTT 또는 TXT 녹취록이나 이를 묶은 ZIP 파일을 선택하세요",
+    "importTooManyAttempts": "지금은 가져오기 요청이 너무 많습니다. 나중에 다시 시도하세요.",
+    "importFileTooLarge": "이 파일은 너무 커서 가져올 수 없습니다.",
+    "importUnsupportedFileType": "이 파일 형식은 가져올 수 없습니다."
 }
