@@ -110,7 +110,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
           children: [
             Text(
               context.l10n.processingTakingLonger,
-              style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.3),
             ),
             const SizedBox(height: 10),
             TextButton(

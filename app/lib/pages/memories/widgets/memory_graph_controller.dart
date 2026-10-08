@@ -291,7 +291,7 @@ Color memoryGraphColorForType(String nodeType) {
     case 'person':
       return Colors.cyanAccent;
     case 'place':
-      return const Color(0xFF00FF9D);
+      return const Color(0xFF00FF9D); // omi-ux-allow: color-literal -- classic node colour, moved as-is
     case 'organization':
       return Colors.orangeAccent;
     case 'thing':
