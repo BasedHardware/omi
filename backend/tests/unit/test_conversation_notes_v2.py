@@ -164,6 +164,60 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'terse fragments, not sentences' not in instructions
 
 
+def test_byok_notes_omit_gpt56_prompt_cache_breakpoint(monkeypatch):
+    """Anthropic BYOK rejects prompt_cache_breakpoint; that 400 must not become HTTP 500."""
+    from utils.byok import set_byok_keys
+    from utils.llm import conversation_processing
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
+
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='conv-byok',
+        transcript=_long_transcript(),
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        timezone_name='America/New_York',
+        language_code='en',
+        calendar_context=_meeting_context(),
+        speaker_map=_speaker_map(),
+        transcript_segment_ids=[f's{i}' for i in range(100)],
+    )
+    captured = {}
+
+    class Model:
+        def invoke(self, messages):
+            captured['messages'] = messages
+            return SimpleNamespace(
+                content=(
+                    '{"title":"Budget Review","overview":"Agreed.","emoji":"🧠",'
+                    '"category":"business","sections":[],"action_items":[],"events":[]}'
+                )
+            )
+
+    def fake_get_llm(_feature, **kwargs):
+        captured['kwargs'] = kwargs
+        return Model()
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', fake_get_llm)
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: True)
+    set_byok_keys({'anthropic': 'sk-ant-test'})
+    try:
+        conversation_processing.get_conversation_notes(
+            prefix,
+            started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+            language_code='en',
+            output_language_code='en',
+            tz='America/New_York',
+            task_intelligence_capture=False,
+        )
+    finally:
+        set_byok_keys({})
+
+    content = captured['messages'][0].content
+    parts = content if isinstance(content, list) else []
+    assert all('prompt_cache_breakpoint' not in part for part in parts if isinstance(part, dict))
+    assert captured['kwargs'].get('cache_key') is None
+    assert captured['kwargs'].get('prompt_cache_options') is None
+
+
 def test_memory_places_conversation_context_after_the_instruction_prefix(monkeypatch):
     from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
