@@ -457,7 +457,7 @@ Anyone who knows a user's `uid` can send your endpoint a request that looks like
     In the Omi web app open **Settings → Developer → Webhooks**. The **Signing secret** row sits under the four webhook URLs. Click **Create secret**; the secret (`whsec_...`) is shown **once**, so copy it into your server's secret manager before closing the dialog. One secret signs every developer webhook you have configured.
   </Step>
   <Step title="Integration apps" icon="puzzle-piece">
-    Open your app from **Connectors**, click **Edit**, and find **Webhook signing** in the **External Integration** section (it appears once the app exists). **Create secret** works the same way. Each app has its own secret, and only the app owner can manage it.
+    Open your app from **Connectors**, click **Edit**, and find **Webhook signing** in the **External Integration** section (it appears once the app exists). **Create secret** works the same way. Each app has its own secret, and only the app owner can manage it. The same secret also signs the app's [chat-tool calls](/doc/developer/apps/ChatTools#verify-every-tool-call).
   </Step>
   <Step title="Rotate or delete" icon="rotate">
     **Rotate** issues a new secret immediately and keeps the current one valid for 24 hours, so you can update your server without dropping deliveries. Only the current and the previous secret are kept. **Delete** turns signing off; deliveries then carry no signature headers.
@@ -496,13 +496,13 @@ The signature is HMAC-SHA256, keyed with your secret, over these bytes, in this 
 
 So for `t=1760000000`, `?uid=abc123` and a JSON body, the signed bytes are `1760000000.abc123.{"id":...}`. Every delivery Omi sends today carries `uid`; if a future event has none, the segment is empty (`1760000000..<body>`). The signature covers `uid` on purpose: most bodies do not contain the user id, so without it a captured delivery could be replayed within the tolerance window with someone else's `uid` in the query string. A changed `uid` makes verification fail.
 
-Verify against the exact body bytes you received: parsing the JSON and serializing it again will not match. Reject timestamps more than five minutes away from your clock so a captured delivery cannot be replayed later.
+Verify against the exact body bytes you received: parsing the JSON and serializing it again will not match. Reject timestamps more than five minutes away from your clock so a captured delivery cannot be replayed later. Inside those five minutes a captured delivery could still be sent again unchanged, and `v1` does not cover `X-Omi-Delivery`, so a replay can carry a fresh one. To reject replays inside the window, remember the signature values you have seen for five minutes and refuse a repeat. Omi's own retries are signed afresh, so this does not swallow them; use `X-Omi-Delivery` to recognise those (see [Retries and duplicate deliveries](#retries-and-duplicate-deliveries)).
 
 A destination without a secret receives exactly what it receives today, with none of these headers.
 
-<Warning>
-Two paths are **not** signed yet: chat-tool invocations (the `{uid, app_id, tool_name, ...}` POSTs described in [Chat Tools](/doc/developer/apps/ChatTools)) and the `audio_bytes_websocket` stream. Keep treating `uid` in those as unverified until signing lands for them.
-</Warning>
+<Note>
+Chat-tool calls are signed with the same app secret, but with the request-bound `v2` scheme, which also covers the method, path and query string: see [Verify Every Tool Call](/doc/developer/apps/ChatTools#verify-every-tool-call). The `audio_bytes_websocket` stream is not signed yet, so keep treating `uid` in it as unverified.
+</Note>
 
 ### Verifying (Python)
 

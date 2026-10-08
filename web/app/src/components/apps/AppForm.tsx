@@ -987,19 +987,24 @@ export function AppForm({ mode, app }: AppFormProps) {
                   Webhook signing
                 </label>
                 {signingAppId ? (
-                  <div className="rounded-xl border border-bg-quaternary bg-bg-tertiary px-4 py-1">
-                    <WebhookSigningSecretControl
-                      status={signingSecret}
-                      loadError={signingSecretError}
-                      onRetry={loadSigningSecretStatus}
-                      onIssue={handleIssueSigningSecret}
-                      onDelete={handleDeleteSigningSecret}
-                    />
-                  </div>
+                  <>
+                    <div className="rounded-xl border border-bg-quaternary bg-bg-tertiary px-4 py-1">
+                      <WebhookSigningSecretControl
+                        status={signingSecret}
+                        loadError={signingSecretError}
+                        onRetry={loadSigningSecretStatus}
+                        onIssue={handleIssueSigningSecret}
+                        onDelete={handleDeleteSigningSecret}
+                      />
+                    </div>
+                    <p className="mt-2 text-sm text-text-tertiary">
+                      This secret also signs your app&apos;s chat-tool calls.
+                    </p>
+                  </>
                 ) : (
                   <p className="text-sm text-text-tertiary">
-                    Available after the app is created. Omi signs deliveries with a
-                    per-app secret you can create here.
+                    Available after the app is created. Omi signs deliveries and chat-tool
+                    calls with a per-app secret you can create here.
                   </p>
                 )}
               </div>

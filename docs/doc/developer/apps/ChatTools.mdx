@@ -43,8 +43,9 @@ sequenceDiagram
 
     U->>O: "Send hello to #general"
     O->>O: AI decides to use your tool
-    O->>Y: POST /api/send_message
+    O->>Y: POST /api/send_message (signed: X-Omi-Signature)
     Note over Y: {uid, app_id, tool_name, geolocation?, ...params}
+    Y->>Y: Verify the signature, then read uid
     Y->>Y: Process request
     Y-->>O: {result: "Message sent!"}
     O-->>U: "Done! Message sent to #general"
@@ -58,15 +59,250 @@ sequenceDiagram
     Omi's AI determines your tool is the best way to fulfill the request
   </Step>
   <Step title="Omi Calls Your Endpoint">
-    POST request with `uid`, `app_id`, `tool_name`, plus extracted parameters
+    A request with `uid`, `app_id`, `tool_name` and the extracted parameters, signed with your app's secret
   </Step>
-  <Step title="Your Server Processes">
-    Execute the action and return a result
+  <Step title="Your Server Verifies, Then Processes">
+    Check the `X-Omi-Signature` header, then execute the action and return a result
   </Step>
   <Step title="User Sees Result">
     Omi displays your response to the user
   </Step>
 </Steps>
+
+---
+
+## Verify Every Tool Call
+
+Anyone who knows a user's `uid` can send your tool endpoint a request that looks exactly like one from Omi. So never act on `uid` until you have checked that Omi sent the request: give your app a signing secret, and verify the `X-Omi-Signature` header on every call. Verify first, then read `uid`.
+
+### Getting a secret
+
+Your app has one signing secret for its webhooks and its chat-tool calls. Open your app from **Connectors**, click **Edit**, and use **Webhook signing** in the **External Integration** section, or call `POST /v1/apps/{app_id}/webhook-signing-secret`. The secret (`whsec_...`) is shown **once**, so copy it into your server's secret manager. Rotating keeps the previous secret valid for 24 hours; see [Verifying Webhook Signatures](/doc/developer/apps/Integrations#verifying-webhook-signatures) for rotation and deletion.
+
+<Note>
+An app without a secret receives tool calls unsigned, exactly as before. Create the secret first, then deploy the endpoint that rejects unsigned calls.
+</Note>
+
+### What a signed call carries
+
+| Header | Value |
+|--------|-------|
+| `X-Omi-Signature` | `t=<unix seconds>,v2=<hex HMAC-SHA256>`. During a rotation window there are two `v2=` entries, one per secret. |
+| `X-Omi-Event` | `chat_tool` |
+| `X-Omi-Delivery` | A unique id for this call |
+
+Tool calls use the `v2` scheme. Webhook deliveries use `v1`, which signs only the body and `uid`. A webhook verifier rejects a tool call and a tool-call verifier rejects a webhook, by design.
+
+### The signed string
+
+`v2` signs the whole request, so a captured call cannot be replayed with different arguments, sent to another of your tools, or switched between GET and POST. The signature is HMAC-SHA256, keyed with your secret, over these parts in this order. Each of the first seven is followed by one newline (`\n`, byte `0x0A`):
+
+1. `v2`
+2. the `t` value from the header, in decimal digits
+3. the `X-Omi-Delivery` value
+4. the `X-Omi-Event` value
+5. the HTTP method in uppercase (`GET`, `POST`, ...)
+6. the canonical path
+7. the canonical query (empty if there is no query string)
+8. the raw request body, byte for byte (empty for GET)
+
+**Canonical query.** Take every `name=value` pair in the query string, decoded the way HTML forms are (`+` is a space). Percent-encode the name and the value as UTF-8 bytes, keeping only `A-Z`, `a-z`, `0-9`, `-`, `.`, `_` and `~`, with uppercase hex. So a space becomes `%20` and `+` becomes `%2B`. Sort the pairs by encoded name, keeping repeated names in the order they arrived, and join them as `name=value` with `&`. A name without `=` has an empty value, so `?flag` and `?flag=` are the same request. Omi sends the query in exactly this form, so the raw query of a call you receive is already canonical.
+
+**Canonical path.** The path Omi called, which is the path of your tool's endpoint URL, with each `/`-separated segment percent-decoded and then encoded by the same rule. If your tool paths use only letters, digits, `-`, `.`, `_`, `~` and `/`, this is simply the path. The host, scheme and port are not signed, so TLS termination and internal hostnames do not matter.
+
+`uid` is not a separate part: it is inside the signed query (GET) or body (POST).
+
+For example, with the secret `whsec_example_secret_do_not_use`, this GET call:
+
+```
+GET /api/tools/search_notes?app_id=01KAPP&limit=5&query=caf%C3%A9%20%26%20tea%2Bmilk&tags=b&tags=a&tool_name=search_notes&uid=u1AbC
+X-Omi-Signature: t=1760000000,v2=0157d30339830cdd2fb5511bb6068af79ba301437c4da0751a887f612e2ea8ed
+X-Omi-Event: chat_tool
+X-Omi-Delivery: 6f1c2a9e-4b7d-4e2a-9c1f-0d3b5a7e8f21
+```
+
+signs these bytes (shown with each `\n` written out; the body is empty):
+
+```
+v2\n1760000000\n6f1c2a9e-4b7d-4e2a-9c1f-0d3b5a7e8f21\nchat_tool\nGET\n/api/tools/search_notes\napp_id=01KAPP&limit=5&query=caf%C3%A9%20%26%20tea%2Bmilk&tags=b&tags=a&tool_name=search_notes&uid=u1AbC\n
+```
+
+A POST to `/tools/like_tweet` with the body `{"tweet_id":"1850000000000000000","uid":"u1AbC","app_id":"01KAPP","tool_name":"like_tweet"}` and the same `t` and delivery id signs `v2\n1760000000\n6f1c2a9e-4b7d-4e2a-9c1f-0d3b5a7e8f21\nchat_tool\nPOST\n/tools/like_tweet\n\n` followed by the body (note the empty query line), giving `v2=9d3ed16fc991fc13e7ad331370b40bce79b174cc60865b7c919033e7c6163452`. If your code produces these two values, it matches Omi. These timestamps are old, so check the computed hex rather than the freshness test.
+
+### Verifying (Python)
+
+`body` must be the raw request **bytes**, never a parsed and re-serialized object. Pass the query as the decoded `(name, value)` pairs with repeated names kept in order: `request.args.items(multi=True)` in Flask, `request.query_params.multi_items()` in FastAPI.
+
+```python
+import functools
+import hashlib
+import hmac
+import json
+import os
+import time
+from urllib.parse import quote, unquote_to_bytes
+
+from flask import Flask, g, jsonify, request
+
+TOLERANCE_SECONDS = 300
+OMI_SIGNING_SECRET = os.environ['OMI_SIGNING_SECRET']
+
+app = Flask(__name__)
+
+
+def _encode(value):
+    # Keeps A-Z a-z 0-9 - . _ ~ ; everything else becomes %XX (uppercase) of its UTF-8 bytes.
+    return quote(value, safe='')
+
+
+def omi_signed_message(timestamp, delivery, event, method, path, query_pairs, body):
+    """The exact bytes a v2 signature covers."""
+    for part in (delivery, event, method):
+        if not part or not part.isascii() or not part.isprintable():
+            raise ValueError('malformed header')
+    canonical_path = '/'.join(_encode(unquote_to_bytes(segment)) for segment in path.split('/')) or '/'
+    pairs = sorted(((_encode(n), _encode(v)) for n, v in query_pairs), key=lambda pair: pair[0])
+    canonical_query = '&'.join(f'{n}={v}' for n, v in pairs)  # sorted() is stable: repeated names keep order
+    lines = ['v2', str(timestamp), delivery, event, method.upper(), canonical_path, canonical_query]
+    return ''.join(line + '\n' for line in lines).encode('ascii') + bytes(body)
+
+
+def verify_omi_request(headers, method, path, query_pairs, body, secret):
+    if not isinstance(body, (bytes, bytearray)):
+        return False
+    timestamp, signatures = None, []
+    for part in headers.get('X-Omi-Signature', '').split(','):
+        key, _, value = part.strip().partition('=')
+        if key == 't' and value.isascii() and value.isdigit():
+            timestamp = int(value)
+        elif key == 'v2' and value:
+            signatures.append(value)
+    if timestamp is None or not signatures:
+        return False
+    if abs(time.time() - timestamp) > TOLERANCE_SECONDS:
+        return False  # stale or from the future: treat as a replay
+    try:
+        message = omi_signed_message(
+            timestamp,
+            headers.get('X-Omi-Delivery', ''),
+            headers.get('X-Omi-Event', ''),
+            method,
+            path,
+            query_pairs,
+            body,
+        )
+    except (UnicodeError, ValueError):
+        return False
+    expected = hmac.new(secret.encode('utf-8'), message, hashlib.sha256).hexdigest().encode('ascii')
+    return any(hmac.compare_digest(expected, candidate.encode('utf-8')) for candidate in signatures)
+
+
+def require_omi_signature(view):
+    """Reject anything Omi did not sign; put the verified payload in g.omi_call."""
+
+    @functools.wraps(view)
+    def wrapper(*args, **kwargs):
+        body = request.get_data()  # raw bytes, before any JSON parsing
+        query_pairs = list(request.args.items(multi=True))
+        if not verify_omi_request(request.headers, request.method, request.path, query_pairs, body, OMI_SIGNING_SECRET):
+            return jsonify({'error': 'Invalid Omi signature'}), 401
+        g.omi_call = json.loads(body) if body else dict(query_pairs)
+        return view(*args, **kwargs)
+
+    return wrapper
+```
+
+If you build on the [Omi plugin SDK](https://github.com/BasedHardware/omi/tree/main/plugins/omi-plugin-sdk), `omi_plugin_sdk.verify_request(headers, body, secret, method=..., path=..., query=...)` does the same check.
+
+### Verifying (Node)
+
+Same rules. Use a raw body parser on the tool routes and read the path and query from `req.originalUrl` (`req.url` and `req.path` are relative to the router). Take the path exactly as it arrived: `new URL(...)` resolves `..` segments and turns `\` into `/`, so a request for a different path could verify as this one. Parse the query with `URLSearchParams`, never `req.query`: Express's `qs` parser turns `a[b]=1` into objects and repeated keys into arrays.
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+import express from "express";
+
+const TOLERANCE_SECONDS = 300;
+
+// encodeURIComponent leaves ! ' ( ) * alone; the canonical form encodes them too.
+const encode = (value: string) =>
+  encodeURIComponent(value).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+
+function canonicalQuery(params: URLSearchParams): string {
+  const pairs = [...params].map(([name, value]) => [encode(name), encode(value)]);
+  pairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)); // stable: repeated names keep their order
+  return pairs.map(([name, value]) => `${name}=${value}`).join("&");
+}
+
+function canonicalPath(rawPath: string): string {
+  return rawPath.split("/").map((segment) => encode(decodeURIComponent(segment))).join("/") || "/";
+}
+
+// The path and query exactly as sent; no URL parsing, which would resolve ".." and "\".
+function splitTarget(originalUrl: string): [string, string] {
+  const mark = originalUrl.indexOf("?");
+  return mark === -1 ? [originalUrl, ""] : [originalUrl.slice(0, mark), originalUrl.slice(mark + 1)];
+}
+
+export function verifyOmiRequest(req: express.Request, body: Buffer, secret: string): boolean {
+  try {
+    const delivery = req.header("X-Omi-Delivery") ?? "";
+    const event = req.header("X-Omi-Event") ?? "";
+    let timestamp: number | undefined;
+    const signatures: string[] = [];
+    for (const part of (req.header("X-Omi-Signature") ?? "").split(",")) {
+      const [key, ...rest] = part.trim().split("=");
+      const value = rest.join("=");
+      if (key === "t" && /^\d+$/.test(value)) timestamp = Number(value);
+      else if (key === "v2" && value) signatures.push(value);
+    }
+    if (timestamp === undefined || signatures.length === 0) return false;
+    if (Math.abs(Date.now() / 1000 - timestamp) > TOLERANCE_SECONDS) return false; // stale or future: replay
+    if (![delivery, event].every((part) => /^[\x20-\x7e]+$/.test(part))) return false;
+    const [rawPath, rawQuery] = splitTarget(req.originalUrl);
+    const head = ["v2", String(timestamp), delivery, event, req.method.toUpperCase(),
+      canonicalPath(rawPath), canonicalQuery(new URLSearchParams(rawQuery))].map((line) => line + "\n").join("");
+    const expected = Buffer.from(createHmac("sha256", secret).update(head).update(body).digest("hex"));
+    return signatures.some((candidate) => {
+      const given = Buffer.from(candidate);
+      return given.length === expected.length && timingSafeEqual(expected, given);
+    });
+  } catch {
+    return false; // a malformed %-escape in the URL
+  }
+}
+
+const app = express();
+const OMI_SIGNING_SECRET = process.env.OMI_SIGNING_SECRET!;
+
+// express.raw keeps req.body as the exact bytes Omi sent; express.json() would re-serialize them.
+app.use("/tools", express.raw({ type: "*/*", limit: "1mb" }));
+
+app.all("/tools/:name", (req, res) => {
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0); // a GET has no body
+  if (!verifyOmiRequest(req, body, OMI_SIGNING_SECRET)) {
+    return res.status(401).json({ error: "Invalid Omi signature" });
+  }
+  const call = req.method === "GET"
+    ? Object.fromEntries(new URLSearchParams(splitTarget(req.originalUrl)[1]))
+    : JSON.parse(body.toString("utf8"));
+  return res.json({ result: `Verified call from ${call.uid}` }); // only now is uid trustworthy
+});
+```
+
+### Behind a proxy
+
+- **Path.** Verify against the path Omi called. FastAPI's `request.url.path` includes a mount prefix, and Express's `req.originalUrl` is the full original URL. If something in front of your server strips or rewrites the path (a path prefix, a gateway stage, a platform rewrite), pass the public path as a constant instead. Never build it from a client-supplied header.
+- **Query.** Proxies may re-encode or reorder the query; the canonical form absorbs that, as long as you decode it the way HTML forms are decoded.
+- **Body.** Read the raw bytes before any JSON parsing.
+
+### Replays and untrusted arguments
+
+The five-minute window stops old calls from being replayed. Inside it, someone holding a captured call could send it again unchanged. For tools that change something (post, delete, pay), remember each `X-Omi-Delivery` value for five minutes and refuse a repeat. The id is signed, so it cannot be swapped for a fresh one.
+
+<Warning>
+A valid signature proves that Omi sent the call on behalf of `uid`. It does not make the arguments safe: they come from the AI model and the user. Validate them like any other input.
+</Warning>
 
 ---
 
@@ -80,6 +316,7 @@ Your backend server needs to expose endpoints that Omi will call when tools are 
   <Accordion title="Endpoint Requirements" icon="list-check">
     Your endpoints should:
 
+    - Verify `X-Omi-Signature` before reading anything from the request (see [Verify Every Tool Call](#verify-every-tool-call))
     - Accept POST requests with JSON payload (or GET with query parameters)
     - Receive these standard fields:
       - `uid`: User ID
@@ -95,13 +332,16 @@ Your backend server needs to expose endpoints that Omi will call when tools are 
 
 #### Example: Send Message Tool
 
+The examples use the `require_omi_signature` decorator from [Verify Every Tool Call](#verify-every-tool-call): it rejects anything Omi did not sign and puts the verified payload in `g.omi_call`.
+
 ```python
-from flask import Flask, request, jsonify
+from flask import Flask, g, jsonify
 import requests
 
 app = Flask(__name__)
 
 @app.route('/api/send_message', methods=['POST'])
+@require_omi_signature
 def send_message():
     """
     Tool endpoint: Send a message to a Slack channel
@@ -115,11 +355,7 @@ def send_message():
         "message": "Hello from Omi!"
     }
     """
-    data = request.json
-
-    # Validate required parameters
-    if not data:
-        return jsonify({'error': 'Missing request body'}), 400
+    data = g.omi_call  # verified by require_omi_signature
 
     uid = data.get('uid')
     channel = data.get('channel')
@@ -160,6 +396,7 @@ def send_message():
 
 ```python
 @app.route('/api/search_messages', methods=['POST'])
+@require_omi_signature
 def search_messages():
     """
     Tool endpoint: Search for messages
@@ -173,7 +410,7 @@ def search_messages():
         "channel": "#general"  # optional
     }
     """
-    data = request.json
+    data = g.omi_call  # verified by require_omi_signature
 
     uid = data.get('uid')
     query = data.get('query')
@@ -229,7 +466,7 @@ If your tools require user authentication:
 
 <CardGroup cols={3}>
   <Card title="Store Tokens Securely" icon="lock">
-    Save OAuth tokens in a secure database associated with `uid`
+    Save OAuth tokens in a secure database associated with `uid`, and read `uid` only from a verified call
   </Card>
   <Card title="Validate Authentication" icon="shield-check">
     Check if user has connected their account before processing
@@ -246,9 +483,9 @@ def get_user_token(uid: str) -> Optional[str]:
     return user_tokens.get(uid)
 
 @app.route('/api/send_message', methods=['POST'])
+@require_omi_signature
 def send_message():
-    data = request.json
-    uid = data.get('uid')
+    uid = g.omi_call.get('uid')  # trustworthy: the signature covers it
 
     # Check authentication
     token = get_user_token(uid)
@@ -392,10 +629,10 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 |-------|------|----------|-------------|
 | `name` | string | Yes | Unique tool identifier (e.g., `send_slack_message`) |
 | `description` | string | Yes | Detailed description for the AI to understand when/how to use the tool |
-| `endpoint` | string | Yes | URL endpoint (can be relative or absolute) |
+| `endpoint` | string | Yes | URL endpoint (can be relative or absolute). Keep the path to letters, digits, `-` `.` `_` `~` and `/`, so the signed path is simply the path |
 | `method` | string | No | HTTP method (default: `POST`) |
 | `parameters` | object | No | JSON Schema defining tool parameters |
-| `auth_required` | boolean | No | Whether user auth is required (default: `true`) |
+| `auth_required` | boolean | No | Reserved (default: `true`). Omi sends no user credentials; [verify the signature](#verify-every-tool-call) instead |
 | `status_message` | string | No | Message shown to user when tool is called |
 
 ### Parameters Schema
@@ -589,7 +826,7 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
     | `POST` | Creating resources or sending data (most common) |
     | `GET` | Retrieving data (parameters as query params) |
     | `PUT/PATCH` | Updating resources |
-    | `DELETE` | Deleting resources |
+    | `DELETE` | Not recommended: Omi sends no payload with `DELETE` (or any method other than the four above), not even `uid`. The call is still signed, with an empty body |
   </Accordion>
   <Accordion title="Status Messages" icon="spinner">
     Provide custom messages shown during tool execution:
@@ -607,6 +844,8 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
 ## Request and Response Format
 
 ### Request Format
+
+When your app has a signing secret, every call carries `X-Omi-Signature`, `X-Omi-Event: chat_tool` and `X-Omi-Delivery` (see [Verify Every Tool Call](#verify-every-tool-call)).
 
 **POST Request:**
 ```json
@@ -626,9 +865,9 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
 }
 ```
 
-**GET Request:**
+**GET Request** (signed, so the parameters arrive sorted and percent-encoded, with `%20` for a space):
 ```
-GET /api/search?uid=user_id&app_id=app_id&tool_name=search_slack_messages&query=meeting
+GET /api/search?app_id=app_id&query=meeting%20notes&tool_name=search_slack_messages&uid=user_id
 ```
 
 ### Geolocation
@@ -649,8 +888,9 @@ Tool call payloads include an optional `geolocation` field when the user has sha
 
 ```python
 @app.route('/api/add_product_entry', methods=['POST'])
+@require_omi_signature
 def add_product_entry():
-    data = request.json
+    data = g.omi_call
     geolocation = data.get('geolocation')  # may be None
 
     store_location = None
@@ -716,9 +956,11 @@ Location data is cached server-side for 30 minutes. If the user moves significan
 
 ### Rate Limiting Example
 
+Rate-limit on the verified `uid`, so the signature check runs first (`require_omi_signature` from [Verify Every Tool Call](#verify-every-tool-call) sits above `rate_limit`):
+
 ```python
 from functools import wraps
-from flask import request, jsonify
+from flask import g, jsonify
 import time
 
 request_counts = {}
@@ -727,7 +969,7 @@ def rate_limit(max_requests=100, window=60):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            uid = request.json.get('uid')
+            uid = g.omi_call.get('uid')  # set by require_omi_signature
             key = f"{uid}_{f.__name__}"
             now = time.time()
 
@@ -747,6 +989,7 @@ def rate_limit(max_requests=100, window=60):
     return decorator
 
 @app.route('/api/send_message', methods=['POST'])
+@require_omi_signature
 @rate_limit(max_requests=100, window=60)
 def send_message():
     # ...
@@ -758,19 +1001,37 @@ def send_message():
 
 <Steps>
   <Step title="Test Endpoints Directly">
-    Use curl or Postman before adding to your app:
+    Your endpoint rejects unsigned requests, so sign a test call with your secret, using `omi_signed_message` from [Verifying (Python)](#verifying-python):
 
-    ```bash
-    curl -X POST https://your-server.com/api/send_message \
-      -H "Content-Type: application/json" \
-      -d '{
-        "uid": "test_user_id",
-        "app_id": "slack-integration",
-        "tool_name": "send_slack_message",
-        "channel": "#general",
-        "message": "Test message"
-      }'
+    ```python
+    import hashlib, hmac, json, time, uuid
+    import requests
+
+    secret = 'whsec_...'  # your app's signing secret
+    body = json.dumps({
+        'uid': 'test_user_id',
+        'app_id': 'slack-integration',
+        'tool_name': 'send_slack_message',
+        'channel': '#general',
+        'message': 'Test message',
+    }).encode()
+    t, delivery = int(time.time()), str(uuid.uuid4())
+    message = omi_signed_message(t, delivery, 'chat_tool', 'POST', '/api/send_message', [], body)
+    signature = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+
+    requests.post(
+        'https://your-server.com/api/send_message',
+        data=body,
+        headers={
+            'Content-Type': 'application/json',
+            'X-Omi-Signature': f't={t},v2={signature}',
+            'X-Omi-Event': 'chat_tool',
+            'X-Omi-Delivery': delivery,
+        },
+    )
     ```
+
+    The same request without the three headers, or with any byte changed, should get a `401`.
   </Step>
   <Step title="Create the App">
     Add your tool definitions in the Omi App Store
@@ -806,6 +1067,14 @@ def send_message():
     - Ensure response format matches specification
     - Test endpoints directly with curl/Postman
     - Check that required parameters are being sent
+  </Accordion>
+  <Accordion title="Your Endpoint Rejects Omi's Calls (401)" icon="circle-exclamation">
+    - Make sure your app has a signing secret and your server uses that one (after a rotation, either works for 24 hours)
+    - Verify against the raw body bytes, before any JSON parsing
+    - Use the path Omi called; if a proxy strips a prefix, pass the public path
+    - Decode the query with a form decoder that keeps repeated names in order (not Express's `req.query`)
+    - Check your server clock: timestamps more than five minutes off are rejected
+    - Compare your canonical string with the worked example in [The signed string](#the-signed-string)
   </Accordion>
   <Accordion title="AI Not Using Your Tool" icon="robot">
     - Improve tool description to be more specific about when to use it

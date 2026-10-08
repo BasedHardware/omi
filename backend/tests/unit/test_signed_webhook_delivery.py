@@ -374,8 +374,8 @@ def app_delivery(monkeypatch):
         app_integrations, 'safe_request_target', lambda url: (url, {'headers': {'Host': 'app.test'}, 'extensions': {}})
     )
     monkeypatch.setattr(app_integrations, 'is_app_webhook_disabled', lambda app_id: False)
-    monkeypatch.setattr(app_integrations, 'get_app_webhook_signing_db', MagicMock(return_value=None))
-    monkeypatch.setattr(app_integrations, 'note_unsigned_delivery', MagicMock())
+    monkeypatch.setattr(store, 'get_app_webhook_signing_db', MagicMock(return_value=None))
+    monkeypatch.setattr(store, 'note_unsigned_delivery', MagicMock())
     monkeypatch.setattr(app_integrations, 'record_app_webhook_success', MagicMock())
     monkeypatch.setattr(app_integrations, 'record_app_webhook_failure', MagicMock(return_value=0))
     monkeypatch.setattr(app_integrations, 'record_app_usage', MagicMock())
@@ -396,7 +396,7 @@ def _conversation():
 @pytest.mark.asyncio
 async def test_app_conversation_delivery_is_signed_for_the_query_uid(app_delivery, monkeypatch):
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(creation=True)])
-    app_integrations.get_app_webhook_signing_db.return_value = RECORD
+    store.get_app_webhook_signing_db.return_value = RECORD
     await app_integrations.trigger_external_integrations(UID, _conversation(), idempotency_key='fanout-1')
     headers, body, query_uid = _sent(app_delivery.post.await_args)
     assert query_uid == UID
@@ -408,7 +408,7 @@ async def test_app_conversation_delivery_is_signed_for_the_query_uid(app_deliver
     assert headers[webhook_signing.EVENT_HEADER] == 'memory_created'
     assert webhook_signing.verify(headers, body, CURRENT, uid=query_uid) is True
     assert webhook_signing.verify(headers, body, CURRENT, uid='victim') is False
-    app_integrations.get_app_webhook_signing_db.assert_called_once_with('app-1')
+    store.get_app_webhook_signing_db.assert_called_once_with('app-1')
 
 
 @pytest.mark.asyncio
@@ -423,7 +423,7 @@ async def test_app_conversation_delivery_without_a_secret_is_unchanged(app_deliv
 @pytest.mark.asyncio
 async def test_app_realtime_delivery_is_signed_and_gets_a_delivery_id(app_delivery, monkeypatch):
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(realtime=True)])
-    app_integrations.get_app_webhook_signing_db.return_value = ROTATED
+    store.get_app_webhook_signing_db.return_value = ROTATED
     await app_integrations._async_trigger_realtime_integrations(UID, [{'text': 'hi'}], 'c-1')
     headers, body, query_uid = _sent(app_delivery.post.await_args)
     assert query_uid == UID
@@ -439,7 +439,7 @@ async def test_app_realtime_delivery_is_signed_and_gets_a_delivery_id(app_delive
 async def test_app_realtime_delivery_signs_the_body_without_grouping_metadata(app_delivery, monkeypatch):
     # The signed bytes are the client-safe segments that are sent, not the raw internal rows.
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(realtime=True)])
-    app_integrations.get_app_webhook_signing_db.return_value = RECORD
+    store.get_app_webhook_signing_db.return_value = RECORD
     raw = [{'text': 'hi', **{field: 'internal' for field in GROUPING_INTERNAL_FIELDS}}]
     await app_integrations._async_trigger_realtime_integrations(UID, raw, 'c-1')
     headers, body, query_uid = _sent(app_delivery.post.await_args)
@@ -472,7 +472,7 @@ async def test_app_realtime_delivery_without_a_secret_is_unchanged(app_delivery,
 @pytest.mark.asyncio
 async def test_app_audio_bytes_delivery_signs_the_raw_bytes_for_the_query_uid(app_delivery, monkeypatch):
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(audio=True)])
-    app_integrations.get_app_webhook_signing_db.return_value = RECORD
+    store.get_app_webhook_signing_db.return_value = RECORD
     await app_integrations._async_trigger_realtime_audio_bytes(UID, 16000, bytearray(b'\x00\x01\x02'))
     headers, body, query_uid = _sent(app_delivery.post.await_args)
     assert query_uid == UID
@@ -485,8 +485,8 @@ async def test_app_audio_bytes_delivery_signs_the_raw_bytes_for_the_query_uid(ap
 @pytest.mark.asyncio
 async def test_app_signing_store_failure_delivers_unsigned_and_reports_the_fallback(app_delivery, monkeypatch):
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(realtime=True)])
-    app_integrations.get_app_webhook_signing_db.side_effect = RuntimeError('firestore down')
+    store.get_app_webhook_signing_db.side_effect = RuntimeError('firestore down')
     await app_integrations._async_trigger_realtime_integrations(UID, [{'text': 'hi'}], 'c-1')
     assert app_delivery.post.await_args.kwargs['headers'] == {'Host': 'app.test'}
-    app_integrations.note_unsigned_delivery.assert_called_once_with('other', 'app-1')
+    store.note_unsigned_delivery.assert_called_once_with('other', 'app-1')
     app_integrations.record_app_webhook_success.assert_called_once_with('app-1')

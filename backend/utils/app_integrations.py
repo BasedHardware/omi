@@ -29,7 +29,7 @@ from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
-from database.webhook_signing import get_app_webhook_signing_db, note_unsigned_delivery
+from database.webhook_signing import active_app_signing_secrets
 from database.webhook_health import (
     ACTION_DISABLE,
     ACTION_REDIRECT_NOT_FOLLOWED,
@@ -103,21 +103,6 @@ _RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
 def _delivery_failure_is_retryable(status_code: int) -> bool:
     """Whether a non-2xx webhook response leaves the finalization job retryable."""
     return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
-
-
-async def _load_app_signing_secrets(app_id: str) -> list[str]:
-    """Secrets that sign this app's deliveries right now; empty means deliver unsigned.
-
-    The lookup is cached in Redis (see database/webhook_signing.py). A store error must not
-    stop a delivery the developer configured; it is reported once per app per window (error log
-    + fallback metric) so unsigned deliveries never pass silently.
-    """
-    try:
-        record = await run_blocking(db_executor, get_app_webhook_signing_db, app_id)
-    except Exception:
-        await run_blocking(db_executor, note_unsigned_delivery, 'other', app_id)
-        return []
-    return record.active() if record else []
 
 
 def _drop_exhausted_delivery(app_id: str, reason: str) -> None:
@@ -322,7 +307,7 @@ async def trigger_external_integrations(
                     failed_deliveries.append(app.id)
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
             payload = serialize_datetimes(conversation_dict)
             headers = dict(pin_kwargs['headers'])
@@ -923,7 +908,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         if not cb.allow_request():
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
             headers = dict(pin_kwargs['headers'])
             headers['Content-Type'] = 'application/octet-stream'
@@ -1043,7 +1028,7 @@ async def _async_trigger_realtime_integrations(
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
             headers = dict(pin_kwargs['headers'])
             body_kwargs = signed_body_kwargs(

@@ -6,7 +6,8 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
-from typing import Any, Dict, List, Optional, cast
+import uuid
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import StructuredTool, BaseTool
@@ -18,6 +19,7 @@ from database.redis_db import (
     delete_app_cache_by_id,
     get_enabled_apps,
 )
+from database.webhook_signing import active_app_signing_secrets
 from database.webhook_health import (
     ACTION_REDIRECT_NOT_FOLLOWED,
     record_app_webhook_failure,
@@ -32,6 +34,7 @@ from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
+from utils.webhook_signing import CHAT_TOOL_EVENT, encode_json_body, signed_request
 import logging
 
 logger = logging.getLogger(__name__)
@@ -300,6 +303,50 @@ def get_tool_status_message(tool_name: str) -> Optional[str]:
     return _tool_status_messages.get(tool_name)
 
 
+_BODY_METHODS = ('POST', 'PUT', 'PATCH')
+
+
+def _tool_request(
+    method: str,
+    endpoint: str,
+    payload: Dict[str, Any],
+    headers: Dict[str, str],
+    signing_secrets: Sequence[str],
+) -> Tuple[str, Dict[str, Any]]:
+    """The URL and httpx kwargs for one tool call.
+
+    Without a signing secret this is exactly the request Omi has always sent: the payload as
+    JSON for POST/PUT/PATCH, as query parameters for GET, and nothing for any other method.
+    With one, the same payload is signed with ``v2`` (``utils/webhook_signing.py``): the JSON is
+    serialized once so the signed bytes are the sent bytes, a GET's parameters are stringified
+    the way httpx ``params=`` does and sent in canonical order and encoding, and every method,
+    including one that carries no payload, gets the three signature headers.
+    """
+    if not signing_secrets:
+        if method in _BODY_METHODS:
+            return endpoint, {'headers': headers, 'json': payload}
+        if method == 'GET':
+            return endpoint, {'headers': headers, 'params': payload}
+        return endpoint, {'headers': headers}
+
+    body = encode_json_body(payload) if method in _BODY_METHODS else b''
+    # httpx ``params=`` replaces any query the endpoint URL had, so a signed GET does the same.
+    query_pairs = httpx.QueryParams(payload).multi_items() if method == 'GET' else None
+    url, signature_headers = signed_request(
+        signing_secrets,
+        method=method,
+        url=endpoint,
+        body=body,
+        event=CHAT_TOOL_EVENT,
+        delivery_id=str(uuid.uuid4()),
+        query_pairs=query_pairs,
+    )
+    request_kwargs: Dict[str, Any] = {'headers': {**headers, **signature_headers}}
+    if method in _BODY_METHODS:
+        request_kwargs['content'] = body
+    return url, request_kwargs
+
+
 async def _call_tool_endpoint(
     kwargs: Dict[str, Any], config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str
 ) -> str:
@@ -338,12 +385,8 @@ async def _call_tool_endpoint(
         'Content-Type': 'application/json',
     }
 
-    # Add authentication if required
-    if app_tool.auth_required:
-        # Get user's API key or auth token for this app
-        # For now, we'll pass the uid and let the app handle auth
-        # In the future, you might want to store app-specific tokens
-        pass
+    # auth_required carries no credential: an app proves the call came from Omi by verifying
+    # X-Omi-Signature (added below when the app has a signing secret), then trusts ``uid``.
 
     if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
@@ -352,19 +395,14 @@ async def _call_tool_endpoint(
     if not cb.allow_request():
         return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
 
+    # The app's signing secret, shared with its webhooks; empty (or a store error) means unsigned.
+    signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app_id)
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
-            request_kwargs: Dict[str, Any] = {
-                'headers': headers,
-            }
-
-            if method in ['POST', 'PUT', 'PATCH']:
-                request_kwargs['json'] = payload
-            elif method == 'GET':
-                request_kwargs['params'] = payload
-
-            response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
+            url, request_kwargs = _tool_request(method, app_tool.endpoint, payload, headers, signing_secrets)
+            response = await client.request(method=method, url=url, **request_kwargs)
 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
