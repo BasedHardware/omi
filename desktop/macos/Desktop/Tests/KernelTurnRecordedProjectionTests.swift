@@ -153,7 +153,7 @@ import XCTest
       switch status {
       case .completed:
         break
-      case .running, .slow, .stalled, .failed:
+      case .running, .waitingApproval, .slow, .stalled, .failed:
         XCTFail("Expected journal-owned completed status")
       }
       XCTAssertEqual(output, "journal result")

@@ -271,6 +271,9 @@ export interface AcpRuntimeAdapterOptions {
   sessionMcpServersMode?: "passthrough" | "empty";
   supportsSessionSetModel?: boolean;
   noProgressTimeoutMs?: number;
+  /** True while the kernel holds this run in `waiting_approval`: the person's
+   *  turn, which the no-progress timer must not count as the adapter's silence. */
+  isRunWaitingOnUser?: (runId: string) => boolean;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -302,6 +305,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly sessionMcpServersMode: "passthrough" | "empty";
   private readonly supportsSessionSetModel: boolean;
   private readonly noProgressTimeoutMs: number;
+  private readonly isRunWaitingOnUser: (runId: string) => boolean;
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
     this.adapterId = options.adapterId ?? "acp";
@@ -314,6 +318,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.envCommandName = options.envCommandName;
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
+    this.isRunWaitingOnUser = options.isRunWaitingOnUser ?? (() => false);
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
       ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
@@ -600,6 +605,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         promptRequest,
         adapterSessionId,
         () => lastProgressAt,
+        () => {
+          lastProgressAt = Date.now();
+        },
+        context.runId,
         signal
       )) as {
         usage?: {
@@ -645,6 +654,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     promise: Promise<T>,
     adapterSessionId: string,
     getLastProgressAt: () => number,
+    markProgress: () => void,
+    runId: string,
     signal: AbortSignal
   ): Promise<T> {
     const timeoutMs = this.noProgressTimeoutMs;
@@ -667,6 +678,13 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const timer = setInterval(() => {
         if (signal.aborted) {
           onAbort();
+          return;
+        }
+        if (this.isRunWaitingOnUser(runId)) {
+          // A parked device tool call is waiting on the person, not on this
+          // adapter. The wait counts as progress, so the clock restarts from the
+          // answer and covers only the adapter's own silence.
+          markProgress();
           return;
         }
         const idleMs = Date.now() - getLastProgressAt();

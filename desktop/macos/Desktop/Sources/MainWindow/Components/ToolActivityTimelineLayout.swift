@@ -112,6 +112,8 @@ struct ToolCallActivityIcon: View {
       case .running:
         ProgressView()
           .controlSize(.mini)
+      case .waitingApproval:
+        alignedSymbol("hand.raised", color: Ink.secondary)
       case .slow:
         ProgressView()
           .controlSize(.mini)
