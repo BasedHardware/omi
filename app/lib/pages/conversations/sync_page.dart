@@ -6,6 +6,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -25,6 +26,8 @@ import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
+part 'sync_native.dart';
+
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
     padding: const EdgeInsets.only(left: 2, top: 1),
@@ -39,13 +42,15 @@ class WalListItem extends StatelessWidget {
 
   const WalListItem({super.key, required this.wal, required this.date, required this.walIdx});
 
-  double _calcProgress(Wal wal) {
+  static double _calcProgress(Wal wal) {
     if (!wal.isSyncing || wal.syncStartedAt == null) return 0.0;
     if (wal.storageTotalBytes <= 0) return 0.0;
     return (wal.storageOffset / wal.storageTotalBytes).clamp(0.0, 1.0);
   }
 
-  String? _sourceLabel(BuildContext context) {
+  String? _sourceLabel(BuildContext context) => _sourceOf(context, wal);
+
+  static String? _sourceOf(BuildContext context, Wal wal) {
     if (wal.storage == WalStorage.sdcard) return context.l10n.sdCard;
     if (wal.originalStorage == WalStorage.sdcard) return context.l10n.fromSd;
     if (wal.storage == WalStorage.flashPage || wal.originalStorage == WalStorage.flashPage) {
@@ -54,7 +59,9 @@ class WalListItem extends StatelessWidget {
     return null;
   }
 
-  (Color, String) _rowStatus(BuildContext context, bool hasError) {
+  (Color, String) _rowStatus(BuildContext context, bool hasError) => _statusOf(context, wal, hasError);
+
+  static (Color, String) _statusOf(BuildContext context, Wal wal, bool hasError) {
     final l = context.l10n;
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
@@ -98,10 +105,7 @@ class WalListItem extends StatelessWidget {
     }
     // No upload can resolve these, so offer removal rather than a chevron that
     // leads to a detail page with nothing actionable on it.
-    if (state == WalSyncDisplayState.corrupted ||
-        state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio ||
-        state == WalSyncDisplayState.uploadRejected) {
+    if (_unsyncable(state)) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -120,6 +124,19 @@ class WalListItem extends StatelessWidget {
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
   }
 
+  static bool _unsyncable(WalSyncDisplayState state) =>
+      state == WalSyncDisplayState.corrupted ||
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
+
+  /// The progress bar shows only while this recording itself is transferring.
+  static bool _showsProgress(Wal wal) =>
+      wal.syncDisplayState == WalSyncDisplayState.syncing &&
+      wal.status != WalStatus.synced &&
+      wal.syncStartedAt != null &&
+      wal.storage != WalStorage.flashPage;
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SyncProvider>(
@@ -130,10 +147,7 @@ class WalListItem extends StatelessWidget {
         final timeStr = OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = OmiDuration.compact(wal.seconds, context.l10n);
         final source = _sourceLabel(context);
-        final showBar = displayState == WalSyncDisplayState.syncing &&
-            wal.status != WalStatus.synced &&
-            wal.syncStartedAt != null &&
-            wal.storage != WalStorage.flashPage;
+        final showBar = _showsProgress(wal);
 
         return Container(
           clipBehavior: Clip.antiAlias,
@@ -249,6 +263,13 @@ class SyncPage extends StatefulWidget {
 }
 
 class _SyncPageState extends State<SyncPage> {
+  /// How many recordings the native list projects; presentation only (see sync_native.dart).
+  int _nativeWalWindow = _syncWalPage;
+  List<Wal>? _nativeSortSource;
+  int _nativeSortLength = -1;
+  List<Wal> _nativeSorted = const [];
+  void _updateNativeSync(VoidCallback update) => setState(update);
+
   @override
   void initState() {
     super.initState();
@@ -352,7 +373,7 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  void _showCancelSyncDialog(BuildContext context, SyncProvider provider) async {
+  Future<void> _showCancelSyncDialog(BuildContext context, SyncProvider provider) async {
     final confirmed = await showOmiConfirm(
       context,
       title: context.l10n.cancelSync,
@@ -370,8 +391,19 @@ class _SyncPageState extends State<SyncPage> {
     showOmiSheet<void>(
       context: context,
       title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => OfflineSyncStorageSheet(
+      padding: OfflineSyncStorageSheet.sheetPadding,
+      builder: (sheetContext) => _storageSheet(context, sheetContext, provider),
+      // The native list follows the provider's counts live; the actions are the same closures.
+      nativeBuilder: (sheetContext) => Consumer<SyncProvider>(
+          builder: (_, provider, __) =>
+              _storageSheet(context, sheetContext, provider, nativeTitle: context.l10n.manageStorage)),
+    );
+  }
+
+  OfflineSyncStorageSheet _storageSheet(BuildContext context, BuildContext sheetContext, SyncProvider provider,
+      {String? nativeTitle}) {
+    return OfflineSyncStorageSheet(
+        nativeTitle: nativeTitle,
         syncedCount: provider.syncedWals.length,
         pendingCount: provider.pendingDeletableWals.length,
         totalCount: provider.clearableWalsCount,
@@ -422,12 +454,19 @@ class _SyncPageState extends State<SyncPage> {
               OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }
-        },
-      ),
-    );
+        });
   }
 
-  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
+  /// Sync needs the internet; then the custom-STT and SD-card confirmations gate [SyncProvider.syncWals].
+  Future<void> _onSyncPressed(BuildContext context, SyncProvider syncProvider) async {
+    if (context.read<ConnectivityProvider>().isConnected) {
+      await _handleSyncWals(context, syncProvider);
+    } else {
+      OmiFeedback.error(context, context.l10n.internetRequired);
+    }
+  }
+
+  Future<void> _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     // Custom STT users: offline files are transcribed on Omi and count toward
     // the limit. Confirm before proceeding.
     if (!await confirmSyncForCustomStt(context)) return;
@@ -436,7 +475,7 @@ class _SyncPageState extends State<SyncPage> {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
     if (sdCardWals.isNotEmpty) {
-      _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+      await _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
     } else {
       syncProvider.syncWals();
     }
@@ -457,24 +496,17 @@ class _SyncPageState extends State<SyncPage> {
     return errorMessage;
   }
 
-  void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) async {
-    final process = await showOmiConfirm(
-      context,
-      title: context.l10n.sdCardProcessing,
-      message: context.l10n.sdCardProcessingMessage(sdCardCount),
-      confirmLabel: context.l10n.process,
-    );
+  Future<void> _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) async {
+    final process = await confirmSdCardProcessing(context, sdCardCount);
     if (process) syncProvider.syncWals();
   }
 
-  Widget _buildProcessCard(SyncProvider syncProvider) {
+  /// The status card's title, subtitle and action, in phase priority. The original card and the
+  /// native status section both read it, so their priorities cannot drift apart.
+  ({String title, String? subtitle, Color color, bool spinner, _SyncStatusAction action}) _syncStatus(
+      SyncProvider syncProvider) {
     final l = context.l10n;
     final s = syncProvider.syncState;
-
-    if (syncProvider.syncError != null && syncProvider.failedWal == null) {
-      return _buildSyncErrorCard(syncProvider);
-    }
-
     final isActive = syncProvider.isSyncing;
     final uploaded = syncProvider.uploadedWals.length;
     final readyToSync = syncProvider.missingWals.length;
@@ -483,7 +515,7 @@ class _SyncPageState extends State<SyncPage> {
     String title;
     String? subtitle;
     Color titleColor = OmiColors.textPrimary;
-    Widget? action;
+    var action = _SyncStatusAction.none;
 
     if (isActive) {
       final speed = syncProvider.syncSpeedKBps;
@@ -492,12 +524,12 @@ class _SyncPageState extends State<SyncPage> {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
           subtitle = _progressLine(s, speedStr);
-          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = _SyncStatusAction.cancel;
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, null);
-          action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
+          action = _SyncStatusAction.cancel;
           break;
         case SyncPhase.processingOnServer:
           title = l.syncCardProcessing;
@@ -510,9 +542,7 @@ class _SyncPageState extends State<SyncPage> {
         case SyncPhase.idle:
           title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, speedStr);
-          if (syncProvider.isSdCardSyncing) {
-            action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
-          }
+          if (syncProvider.isSdCardSyncing) action = _SyncStatusAction.cancel;
           break;
       }
     } else if (syncProvider.isRateLimited) {
@@ -529,17 +559,32 @@ class _SyncPageState extends State<SyncPage> {
           l.syncProcessingBackgroundHint;
     } else if (readyToSync > 0) {
       title = l.syncCardReadyCount(readyToSync);
-      action = statusActionPill(l.sync, OmiColors.accent, () {
-        if (context.read<ConnectivityProvider>().isConnected) {
-          _handleSyncWals(context, syncProvider);
-        } else {
-          OmiFeedback.error(context, l.internetRequired);
-        }
-      });
+      action = _SyncStatusAction.sync;
     } else {
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
+    return (title: title, subtitle: subtitle, color: titleColor, spinner: showSpinner, action: action);
+  }
+
+  Widget _buildProcessCard(SyncProvider syncProvider) {
+    final l = context.l10n;
+
+    if (syncProvider.syncError != null && syncProvider.failedWal == null) {
+      return _buildSyncErrorCard(syncProvider);
+    }
+
+    final status = _syncStatus(syncProvider);
+    final title = status.title;
+    final subtitle = status.subtitle;
+    final titleColor = status.color;
+    final showSpinner = status.spinner;
+    final Widget? action = switch (status.action) {
+      _SyncStatusAction.cancel =>
+        statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider)),
+      _SyncStatusAction.sync => statusActionPill(l.sync, OmiColors.accent, () => _onSyncPressed(context, syncProvider)),
+      _SyncStatusAction.none => null,
+    };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
@@ -652,8 +697,8 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  Widget _buildPendingList(List<Wal> pendingWals) {
-    // Group by source
+  /// Pending recordings by source, in list order: phone, SD card, Limitless.
+  static ({List<Wal> phone, List<Wal> sdCard, List<Wal> limitless}) _walsBySource(List<Wal> pendingWals) {
     final phoneWals = <Wal>[];
     final sdCardWals = <Wal>[];
     final limitlessWals = <Wal>[];
@@ -667,6 +712,12 @@ class _SyncPageState extends State<SyncPage> {
         phoneWals.add(wal);
       }
     }
+    return (phone: phoneWals, sdCard: sdCardWals, limitless: limitlessWals);
+  }
+
+  Widget _buildPendingList(List<Wal> pendingWals) {
+    // Group by source
+    final (phone: phoneWals, sdCard: sdCardWals, limitless: limitlessWals) = _walsBySource(pendingWals);
 
     // If only one source, skip the section headers
     final sourceCount =
@@ -738,71 +789,73 @@ class _SyncPageState extends State<SyncPage> {
     // Sync result persists until the next sync starts.
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        return Scaffold(
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.offlineSync),
-            actions: [
-              OmiIconButton(
-                icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
-                label: context.l10n.manageStorage,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  _showManageStorageSheet(context, syncProvider);
-                },
-              ),
-              const SizedBox(width: OmiSpacing.xxs),
-            ],
-          ),
-          body: CustomScrollView(
-            slivers: [
-              // Settings + Process card + status chips
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      _buildProcessCard(syncProvider),
-                      const SizedBox(height: 16),
-                      _buildConversationsCreatedCard(syncProvider),
-                      _buildSettingsCard(),
-                      const SizedBox(height: 16),
-                      _buildStatusChips(syncProvider),
-                      const SizedBox(height: 16),
-                    ],
+        return _nativeSync(
+            syncProvider,
+            Scaffold(
+              appBar: AppBar(
+                leading: const OmiBackButton(),
+                title: Text(context.l10n.offlineSync),
+                actions: [
+                  OmiIconButton(
+                    icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
+                    label: context.l10n.manageStorage,
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      _showManageStorageSheet(context, syncProvider);
+                    },
                   ),
-                ),
+                  const SizedBox(width: OmiSpacing.xxs),
+                ],
               ),
-              // Recordings list
-              Consumer<SyncProvider>(
-                builder: (context, syncProvider, child) {
-                  if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
-                    return const SliverToBoxAdapter(child: OmiLoadingState());
-                  }
+              body: CustomScrollView(
+                slivers: [
+                  // Settings + Process card + status chips
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          _buildProcessCard(syncProvider),
+                          const SizedBox(height: 16),
+                          _buildConversationsCreatedCard(syncProvider),
+                          _buildSettingsCard(),
+                          const SizedBox(height: 16),
+                          _buildStatusChips(syncProvider),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Recordings list
+                  Consumer<SyncProvider>(
+                    builder: (context, syncProvider, child) {
+                      if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
+                        return const SliverToBoxAdapter(child: OmiLoadingState());
+                      }
 
-                  if (syncProvider.allWals.isEmpty) {
-                    return SliverToBoxAdapter(child: _buildEmptyState(context));
-                  }
+                      if (syncProvider.allWals.isEmpty) {
+                        return SliverToBoxAdapter(child: _buildEmptyState(context));
+                      }
 
-                  final wals = syncProvider.filteredByStatusWals;
+                      final wals = syncProvider.filteredByStatusWals;
 
-                  if (wals.isEmpty) {
-                    return SliverToBoxAdapter(child: _buildEmptyFilterState(context, syncProvider.statusFilter));
-                  }
+                      if (wals.isEmpty) {
+                        return SliverToBoxAdapter(child: _buildEmptyFilterState(context, syncProvider.statusFilter));
+                      }
 
-                  if (syncProvider.statusFilter == WalStatusFilter.pending) {
-                    return _buildPendingList(wals);
-                  }
+                      if (syncProvider.statusFilter == WalStatusFilter.pending) {
+                        return _buildPendingList(wals);
+                      }
 
-                  return OptimizedWalsListWidget(wals: wals);
-                },
+                      return OptimizedWalsListWidget(wals: wals);
+                    },
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-        );
+            ));
       },
     );
   }
@@ -911,6 +964,8 @@ class WalItem extends ListItem {
   final DateTime date;
   WalItem(this.wal, this.index, this.date);
 }
+
+enum _SyncStatusAction { none, cancel, sync }
 
 class _PendingListItem {
   final bool isHeader;

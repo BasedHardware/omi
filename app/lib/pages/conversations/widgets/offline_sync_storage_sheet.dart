@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Offline Sync storage categories. Counts and clear actions are owned by the page.
+///
+/// With a [nativeTitle] (a `showOmiSheet` nativeBuilder) the categories are a native list that runs
+/// the same clear callbacks; an unsupported host keeps this sheet in its [OmiSheetScaffold].
 class OfflineSyncStorageSheet extends StatelessWidget {
+  /// The classic sheet's padding, shared by its native fallback.
+  static const sheetPadding = EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl);
+
+  final String? nativeTitle;
   final int syncedCount;
   final int pendingCount;
   final int totalCount;
@@ -21,10 +29,45 @@ class OfflineSyncStorageSheet extends StatelessWidget {
     required this.onClearSynced,
     required this.onClearPending,
     required this.onClearAll,
+    this.nativeTitle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final title = nativeTitle;
+    if (title != null) {
+      final l = context.l10n;
+      return IosNativeSurface(
+        title: title,
+        fallback: OmiSheetScaffold(
+          title: title,
+          padding: sheetPadding,
+          child: OfflineSyncStorageSheet(
+            syncedCount: syncedCount,
+            pendingCount: pendingCount,
+            totalCount: totalCount,
+            onClearSynced: onClearSynced,
+            onClearPending: onClearPending,
+            onClearAll: onClearAll,
+          ),
+        ),
+        toolbar: [
+          NativeRow('storage_close', l.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        ],
+        sections: [
+          NativeSection('storage_categories', [
+            NativeRow('storage_synced', l.synced, kind: 'label', subtitle: '${l.safelyBackedUp} · $syncedCount'),
+            NativeRow('storage_clear_synced', l.clear, enabled: syncedCount > 0, action: (_) => onClearSynced()),
+            NativeRow('storage_pending', l.pending, kind: 'label', subtitle: '${l.notYetSynced} · $pendingCount'),
+            NativeRow('storage_clear_pending', l.clear, enabled: pendingCount > 0, action: (_) => onClearPending()),
+          ]),
+          if (totalCount > 0)
+            NativeSection('storage_clear', [
+              NativeRow('storage_clear_all', l.clearAll, destructive: true, action: (_) => onClearAll()),
+            ]),
+        ],
+      );
+    }
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,

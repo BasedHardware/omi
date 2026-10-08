@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/widgets/omi_confirm_dialog.dart';
+import 'package:omi/ui/feedback/omi_dialogs.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Confirmation gate for manually syncing offline recordings.
@@ -13,18 +13,29 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// surface this trade-off and let them opt in per their choice.
 ///
 /// Returns `true` when the sync should proceed. For non-custom-STT users this is
-/// a no-op that always returns `true` (no dialog).
+/// a no-op that always returns `true` (no dialog). [showOmiConfirm] presents the
+/// native system alert when the SwiftUI presentation is active and the adaptive
+/// Flutter dialog otherwise.
 Future<bool> confirmSyncForCustomStt(BuildContext context) async {
   if (!SharedPreferencesUtil().useCustomStt) return true;
 
   final l = context.l10n;
-  final confirmed = await OmiConfirmDialog.show(
+  return showOmiConfirm(
     context,
     title: l.syncCustomSttWarningTitle,
     message: l.syncCustomSttWarningMessage,
     confirmLabel: l.sync,
     cancelLabel: l.cancel,
-    confirmColor: Colors.white,
   );
-  return confirmed ?? false;
+}
+
+/// Asks before processing [sdCardCount] SD card recordings; `true` means process them.
+Future<bool> confirmSdCardProcessing(BuildContext context, int sdCardCount) {
+  final l = context.l10n;
+  return showOmiConfirm(
+    context,
+    title: l.sdCardProcessing,
+    message: l.sdCardProcessingMessage(sdCardCount),
+    confirmLabel: l.process,
+  );
 }

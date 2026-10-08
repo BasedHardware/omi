@@ -112,7 +112,7 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
 
   Widget _nativeOfflineSync(
       SyncProvider owner, UserProvider user, DeviceProvider device, List<Wal> wals, Widget classic) {
-    if (!iosSwiftUiEnabled) return classic;
+    if (!nativePresentationEnabled) return classic;
     final l = context.l10n;
     final s = owner.syncState;
     final status = _offlineStatus(owner, s);
@@ -205,8 +205,10 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
                     WalDisplayFilter.pending.name: l.pending,
                     WalDisplayFilter.synced.name: l.synced
                   },
-                  action: (value) =>
-                      _updateNativeSync(() => _filter = WalDisplayFilter.values.byName(value as String))),
+                  action: (value) => _updateNativeSync(() {
+                        _filter = WalDisplayFilter.values.byName(value as String);
+                        _nativeWalWindow = _AutoSyncPageState._nativeWalPage;
+                      })),
               if (wals.isEmpty)
                 NativeRow(
                     'offline_empty',
@@ -216,7 +218,12 @@ extension _NativeOfflineSyncPresentation on _AutoSyncPageState {
                       _ => l.noRecordingsYet,
                     },
                     kind: 'label'),
-              for (var i = 0; i < wals.length; i++) ..._nativeWalRows(owner, wals[i], i),
+              for (var i = 0; i < wals.length && i < _nativeWalWindow; i++) ..._nativeWalRows(owner, wals[i], i),
+              // Reaching the end of the window projects the next page; nothing is loaded or synced.
+              if (wals.length > _nativeWalWindow)
+                NativeRow('offline_more', l.loading,
+                    kind: 'label',
+                    onVisible: (_) => _updateNativeSync(() => _nativeWalWindow += _AutoSyncPageState._nativeWalPage)),
             ],
             title: '${l.recordings} (${wals.length})'),
     ]));

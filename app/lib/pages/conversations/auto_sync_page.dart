@@ -15,7 +15,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
-import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -62,6 +62,93 @@ part 'auto_sync_native.dart';
   );
 }
 
+/// The Manage Storage sheet's actions, shared by its Flutter and native presentations. Each clear
+/// pops the sheet through `sheetContext`, confirms on [context], clears with the storage re-read and
+/// confirms with a toast. The auto-remove switch persists its preference, applies the retention at
+/// once when enabled, then calls [onRetentionChanged] while [context] is still mounted.
+typedef ManageStorageActions = ({
+  Future<void> Function(BuildContext sheetContext) clearSynced,
+  Future<void> Function(BuildContext sheetContext) clearPending,
+  Future<void> Function(BuildContext sheetContext) clearAll,
+  Future<void> Function(bool value) toggleAutoRemove,
+});
+
+ManageStorageActions buildManageStorageActions(
+  BuildContext context,
+  SyncProvider provider, {
+  required Future<void> Function() refreshDeviceStorage,
+  required VoidCallback onRetentionChanged,
+}) {
+  // Built before the sheet's async callbacks run, so the clear handlers do not
+  // reach through a BuildContext across an await — and so every action is
+  // paired with the storage re-read at a single construction site.
+  final clearActions = buildStorageClearActions(
+    clearSynced: provider.deleteAllSyncedWals,
+    clearPending: provider.deleteAllPendingWals,
+    clearAll: provider.deleteAllClearableWals,
+    refreshDeviceStorage: refreshDeviceStorage,
+  );
+  Future<void> confirmThenClear(
+    BuildContext sheetContext, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Future<void> Function() clear,
+    required String done,
+  }) async {
+    Navigator.of(sheetContext).pop();
+    final confirmed = await showOmiConfirm(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      destructive: true,
+    );
+    if (confirmed && context.mounted) {
+      await clear();
+      if (context.mounted) {
+        OmiFeedback.confirm(context, done);
+      }
+    }
+  }
+
+  return (
+    clearSynced: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deleteSyncedFiles,
+          message: context.l10n.deleteSyncedFilesMessage,
+          confirmLabel: context.l10n.clear,
+          clear: clearActions.synced,
+          done: context.l10n.syncedFilesDeleted,
+        ),
+    clearPending: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deletePendingFiles,
+          message: context.l10n.deletePendingFilesWarning,
+          confirmLabel: context.l10n.clear,
+          clear: clearActions.pending,
+          done: context.l10n.pendingFilesDeleted,
+        ),
+    clearAll: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deleteAllFiles,
+          message: context.l10n.deleteAllFilesWarning,
+          confirmLabel: context.l10n.clearAll,
+          clear: clearActions.all,
+          done: context.l10n.allFilesDeleted,
+        ),
+    toggleAutoRemove: (value) async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+      if (value) {
+        // Apply immediately: expired copies should not wait for the next
+        // sync pass or app restart.
+        await context.read<SyncProvider>().applySyncedCopyRetention();
+      }
+      if (context.mounted) onRetentionChanged();
+    },
+  );
+}
+
 class AutoSyncPage extends StatefulWidget {
   const AutoSyncPage({super.key});
 
@@ -77,6 +164,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // sliver-lazy, so visiting it is safe even with thousands of items.
   WalDisplayFilter _filter = WalDisplayFilter.pending;
   void _updateNativeSync(VoidCallback update) => setState(update);
+
+  /// How many recordings the native list projects; it grows by [_nativeWalPage] as the end comes
+  /// into view. Presentation only, so snapshots stay small while an active sync notifies often.
+  static const _nativeWalPage = 200;
+  int _nativeWalWindow = _nativeWalPage;
 
   @override
   void initState() {
@@ -670,9 +762,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Info bottom sheet
   // ─────────────────────────────────────────
 
-  void _showInfoSheet(BuildContext context) {
+  Future<void> _showInfoSheet(BuildContext context) async {
     final l = context.l10n;
-    showOmiSheet<void>(
+    final native = await showIosNativeModal(context, title: l.howSyncingWorks, cancelId: 'sync_info_done', actions: [
+      NativeRow('sync_info_done', l.done, symbol: 'checkmark')
+    ], sections: [
+      NativeSection(
+          'sync_info',
+          [
+            NativeRow('sync_info_intro', l.syncFlowIntro, kind: 'label'),
+            NativeRow('sync_info_upload', '1. ${l.syncStepUpload}', subtitle: l.syncStepUploadDesc, kind: 'label'),
+            NativeRow('sync_info_process', '2. ${l.syncStepProcess}', subtitle: l.syncStepProcessDesc, kind: 'label'),
+            NativeRow('sync_info_backed_up', '3. ${l.syncStepBackedUp}',
+                subtitle: l.syncStepBackedUpDesc, kind: 'label'),
+          ],
+          footer: l.syncFailureFootnote),
+    ]);
+    // A native result (Done, a swipe, a session change) ends here; null keeps the Flutter sheet.
+    if (native != null || !context.mounted) return;
+    await showOmiSheet<void>(
       context: context,
       title: l.howSyncingWorks,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xxs, OmiSpacing.xl, OmiSpacing.xl),
@@ -732,79 +840,26 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
-    // Built before the sheet's async callbacks run, so the clear handlers do not
-    // reach through a BuildContext across an await — and so every action is
-    // paired with the storage re-read at a single construction site.
-    final clearActions = buildStorageClearActions(
-      clearSynced: provider.deleteAllSyncedWals,
-      clearPending: provider.deleteAllPendingWals,
-      clearAll: provider.deleteAllClearableWals,
+    final actions = buildManageStorageActions(
+      context,
+      provider,
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
+      onRetentionChanged: () => setState(() {}),
     );
+    Widget classic(BuildContext sheetContext) => _ManageStorageSheet(
+          provider: provider,
+          onClearSynced: () => actions.clearSynced(sheetContext),
+          onClearPending: () => actions.clearPending(sheetContext),
+          onClearAll: () => actions.clearAll(sheetContext),
+          onToggleAutoRemove: actions.toggleAutoRemove,
+        );
+
     showOmiSheet<void>(
       context: context,
       title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
-        provider: provider,
-        onClearSynced: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteSyncedFiles,
-            message: context.l10n.deleteSyncedFilesMessage,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.synced();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
-            }
-          }
-        },
-        onClearPending: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deletePendingFiles,
-            message: context.l10n.deletePendingFilesWarning,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.pending();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
-            }
-          }
-        },
-        onClearAll: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteAllFiles,
-            message: context.l10n.deleteAllFilesWarning,
-            confirmLabel: context.l10n.clearAll,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.all();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
-            }
-          }
-        },
-        onToggleAutoRemove: (value) async {
-          SharedPreferencesUtil().autoRemoveSyncedCopies = value;
-          if (value) {
-            // Apply immediately: expired copies should not wait for the next
-            // sync pass or app restart.
-            await context.read<SyncProvider>().applySyncedCopyRetention();
-          }
-          if (context.mounted) setState(() {});
-        },
-      ),
+      padding: _manageStoragePadding,
+      builder: classic,
+      nativeBuilder: (sheetContext) => ManageStorageNativeSheet(actions: actions, fallback: classic(sheetContext)),
     );
   }
 
@@ -824,6 +879,67 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (confirmed) {
       syncProvider.cancelSync();
     }
+  }
+}
+
+const _manageStoragePadding = EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl);
+
+/// Manage Storage as a native list (the sheet's `showOmiSheet` nativeBuilder). Counts follow
+/// [SyncProvider] live; every row runs [actions], exactly as the Flutter sheet does. [fallback] is
+/// the complete Flutter sheet body.
+class ManageStorageNativeSheet extends StatefulWidget {
+  const ManageStorageNativeSheet({super.key, required this.actions, required this.fallback});
+
+  final ManageStorageActions actions;
+  final Widget fallback;
+
+  @override
+  State<ManageStorageNativeSheet> createState() => _ManageStorageNativeSheetState();
+}
+
+class _ManageStorageNativeSheetState extends State<ManageStorageNativeSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final actions = widget.actions;
+    return Consumer<SyncProvider>(builder: (context, provider, _) {
+      final l = context.l10n;
+      final synced = provider.syncedWals.length;
+      final pending = provider.pendingDeletableWals.length;
+      final total = provider.clearableWalsCount;
+      return IosNativeSurface(
+        title: l.manageStorage,
+        fallback: OmiSheetScaffold(title: l.manageStorage, padding: _manageStoragePadding, child: widget.fallback),
+        toolbar: [
+          NativeRow('storage_close', l.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        ],
+        sections: [
+          NativeSection('storage_categories', [
+            NativeRow('storage_synced', l.synced, kind: 'label', subtitle: '${l.safelyBackedUp} · $synced'),
+            NativeRow('storage_clear_synced', l.clear,
+                enabled: synced > 0, action: (_) => actions.clearSynced(context)),
+            NativeRow('storage_pending', l.pending, kind: 'label', subtitle: '${l.notYetSynced} · $pending'),
+            NativeRow('storage_clear_pending', l.clear,
+                enabled: pending > 0, action: (_) => actions.clearPending(context)),
+          ]),
+          NativeSection('storage_retention', [
+            NativeRow('storage_auto_remove', l.autoRemoveSyncedCopiesTitle,
+                kind: 'toggle',
+                value: SharedPreferencesUtil().autoRemoveSyncedCopies,
+                subtitle: l.autoRemoveSyncedCopiesDays(SharedPreferencesUtil().autoRemoveSyncedCopiesDays),
+                action: (value) async {
+              // The preference is written before the retention pass, so the switch reflects it at once.
+              final applied = actions.toggleAutoRemove(value as bool);
+              if (mounted) setState(() {});
+              await applied;
+            }),
+          ]),
+          if (total > 0)
+            NativeSection('storage_clear', [
+              NativeRow('storage_clear_all', l.clearAll, destructive: true, action: (_) => actions.clearAll(context)),
+            ]),
+        ],
+      );
+    });
   }
 }
 
