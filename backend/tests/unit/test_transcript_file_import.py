@@ -516,6 +516,67 @@ def test_inline_timed_text_keeps_its_timings_and_every_word(text, expected):
 
 
 @pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        pytest.param(
+            '[00:01.000 --> 00:07.000] Alice: Hello\n',
+            [(1.0, 7.0)],
+            id='the-final-turn-keeps-its-end',
+        ),
+        pytest.param(
+            '[00:00.000 --> 00:02.000] Alice: Hello\n[00:20.000 --> 00:27.500] Bob: Hi again\n',
+            [(0.0, 2.0), (20.0, 27.5)],
+            id='a-gap-between-turns-stays-a-gap',
+        ),
+        pytest.param(
+            '[00:00:01.000 --> 00:00:04.000]\nHello there\n[00:00:10.000 --> 00:00:12.000]\nHi Alice\n',
+            [(1.0, 4.0), (10.0, 12.0)],
+            id='timing-lines-with-text-below',
+        ),
+        pytest.param(
+            # An end at or before the start is not a usable end: the next turn closes the turn,
+            # and the last turn gets its estimate, as for a timing without one.
+            '[00:05.000 --> 00:03.000] Alice: Hello\n[00:09.000 --> 00:09.000] Bob: Hi\n',
+            [(5.0, 9.0), (9.0, 10.0)],
+            id='an-end-before-its-start-is-ignored',
+        ),
+        pytest.param(
+            '[00:00:02] Alice: Hello\n[00:00:06] Bob: Hi\n',
+            [(2.0, 6.0), (6.0, 7.0)],
+            id='no-end-closes-at-the-next-turn',
+        ),
+    ],
+)
+def test_an_inline_timing_keeps_its_explicit_end(text, expected):
+    """whisper.cpp writes "[start --> end]": the end is the source's, not an estimate."""
+    parsed = tf.parse_transcript_file('whisper.txt', text.encode('utf-8'))
+
+    assert parsed is not None
+    segments = tf.segments_from_cues(parsed.cues, owner_name=None, people={})
+    assert [(s.start, s.end) for s in segments] == expected
+
+
+def test_an_explicit_txt_end_sets_the_conversation_duration():
+    data = b'[00:00.000 --> 00:02.000] Alice: Hello\n[00:20.000 --> 00:27.000] Bob: Hi again\n'
+    parsed = tf.parse_transcript_file('whisper.txt', data)
+    assert parsed is not None
+    started = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    conversation = tf.build_imported_conversation(
+        UID,
+        parsed,
+        data,
+        source=ConversationSource.unknown,
+        language_code='en',
+        owner_name=None,
+        people={},
+        fallback_started_at=started,
+    )
+
+    assert (conversation.finished_at - started).total_seconds() == 27.0
+
+
+@pytest.mark.parametrize(
     'text',
     [
         pytest.param(

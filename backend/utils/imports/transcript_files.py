@@ -150,13 +150,13 @@ _ENTITY_RE = re.compile(r'&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0
 _HEADER_NAME_FIRST_RE = re.compile(rf'^(?P<name>\S(?:[^\n]{{0,58}}\S)?)\s{{2,}}\(?(?P<ts>{_TIMESTAMP})\)?$')
 _HEADER_TIME_FIRST_RE = re.compile(rf"^\[?(?P<ts>{_TIMESTAMP})\]?\s+(?P<name>[^\W\d_][\w .'-]{{0,39}})$")
 # An optional "--> end" (one-line cues, whisper.cpp's "[start --> end]") is consumed whole,
-# so its dash is never taken for the "-" separator before the text.
+# so its dash is never taken for the "-" separator before the text, and kept as the turn's end.
 _INLINE_TIMED_RE = re.compile(
-    rf'^\[?(?P<ts>{_TIMESTAMP})(?![\d.,:])(?:\s*-->\s*{_TIMESTAMP}(?![\d.,:]))?+\]?+\s*(?:-\s*)?(?P<rest>\S.*)$'
+    rf'^\[?(?P<ts>{_TIMESTAMP})(?![\d.,:])(?:\s*-->\s*(?P<end>{_TIMESTAMP})(?![\d.,:]))?+\]?+\s*(?:-\s*)?(?P<rest>\S.*)$'
 )
 # A line that is only a timing ("[00:32.000 --> 00:36.000]", an empty whisper.cpp
 # segment): it carries no words.
-_BARE_TIMING_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})(?:\s*-->\s*{_TIMESTAMP})?\]?$')
+_BARE_TIMING_RE = re.compile(rf'^\[?(?P<ts>{_TIMESTAMP})(?:\s*-->\s*(?P<end>{_TIMESTAMP}))?\]?$')
 # What may follow an SRT timing line's end time: cue settings (SRT's "X1:40 Y1:20",
 # WebVTT's "align:start position:10%"). Anything else is the text of a one-line cue.
 _CUE_SETTINGS_RE = re.compile(r'(?:\s+(?:[XY][12]|align|position|line|size|vertical|region):\S+)*\s*', re.IGNORECASE)
@@ -389,18 +389,23 @@ def parse_text_transcript(text: str, *, blocks: Optional[Sequence[Sequence[str]]
         # segment, or a timing with its text below) opens one with no text yet, and
         # turns that stay empty are dropped. Lines before the first timing keep their
         # words as an untimed cue. Each turn is joined once (per-line rebuilds were quadratic).
+        # A "[start --> end]" timing keeps its end; segments_from_cues estimates one only
+        # when it is missing or not after the start.
         lead: List[str] = []
-        turns: List[tuple[Optional[float], List[str]]] = []
+        turns: List[tuple[Optional[float], Optional[float], List[str]]] = []
         for line, match in zip(content, timed):
             if match:
                 rest = match.groupdict().get('rest')
-                turns.append((_seconds(match.group('ts')), [rest.strip()] if rest else []))
+                end = match.group('end')
+                turns.append(
+                    (_seconds(match.group('ts')), _seconds(end) if end else None, [rest.strip()] if rest else [])
+                )
             elif turns:
-                turns[-1][1].append(line)
+                turns[-1][2].append(line)
             else:
                 lead.append(line)
         cues = [TranscriptCue(text=' '.join(lead))] if lead else []
-        cues.extend(TranscriptCue(text=' '.join(parts), start=start) for start, parts in turns if parts)
+        cues.extend(TranscriptCue(text=' '.join(parts), start=start, end=end) for start, end, parts in turns if parts)
         return _assign_speakers(cues)
     cues: List[TranscriptCue] = []
     for block in _blocks(text) if blocks is None else blocks:
