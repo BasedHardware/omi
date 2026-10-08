@@ -25,6 +25,7 @@ import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_shee
 import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/pages/conversations/widgets/speaker_review_native.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -279,6 +280,39 @@ void main() {
       expect(_ids(tester, 'speaker_review_answer:'), isNotEmpty, reason: 'the question is back');
     });
 
+    testWidgets('a second answer from the same projection never drops the staged one', (tester) async {
+      NativeFeedbackHost.debugActiveForTest = true;
+      addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
+      final config = _Config.install();
+      final review = await _pumpReview(tester, [_prompt('q1', 'owner_check'), _prompt('q2', 'identify')]);
+      final question = _rows(tester);
+      NativeRow row(String id) => question.firstWhere((row) => row.id == 'speaker_review_answer:$id');
+
+      // Both taps land before the answered snapshot replaces the question.
+      await row('me').action!(null);
+      await row('skip').action!(null);
+      expect(review.provider.pending?.answer, SpeakerTagAnswer.me);
+      expect(review.provider.current?.id, 'q1', reason: 'skip did not advance past the staged answer');
+      await NativeTestHost.settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(config.toasts, hasLength(1), reason: 'one Undo toast, for the staged answer');
+      expect(review.answers.map((request) => request.answer), ['me'], reason: 'committed, and no skip was sent');
+    });
+
+    testWidgets("'Someone else' is refused while an answer is staged", (tester) async {
+      NativeFeedbackHost.debugActiveForTest = true;
+      addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
+      _Config.install();
+      final review = await _pumpReview(tester, [_prompt('q1', 'identify')]);
+      final someone = _rows(tester).firstWhere((row) => row.id == 'speaker_review_answer:someone');
+      review.provider.stage(SpeakerTagAnswer.notMe);
+      await someone.action!(null);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing, reason: 'no picker over a staged answer');
+      expect(review.provider.pending?.answer, SpeakerTagAnswer.notMe);
+    });
+
     testWidgets('the answered state shows the confidence meter of the person while staged', (tester) async {
       NativeFeedbackHost.debugActiveForTest = true;
       addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
@@ -504,6 +538,7 @@ void main() {
   });
 
   group('native transcript heading', () {
+    var published = <NativeSection>[];
     TranscriptSegment segment(String id, int speakerId, {bool isUser = false, String? personId}) => TranscriptSegment(
           id: id,
           text: 'speech $id',
@@ -549,6 +584,7 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
+      published = sections;
       return sections.expand((section) => section.rows).toList();
     }
 
@@ -565,6 +601,8 @@ void main() {
       expect(heading.title, 'Transcript · 3 speakers');
       expect(heading.valid, isTrue);
       expect(rows.where((row) => row.id == 'detail_unresolved_notice'), isEmpty);
+      // The heading row says "Transcript"; a section header saying it again would repeat it.
+      expect(published.single.title, isEmpty);
     });
 
     testWidgets('no unresolved notice when every other voice is named', (tester) async {
@@ -585,6 +623,57 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(_l10n.unresolvedSpeakersTitle), findsOneWidget);
       expect(find.text(_l10n.unresolvedSpeakersMessage), findsOneWidget);
+    });
+  });
+
+  group('native Home speaker and record actions', () {
+    testWidgets("the 'speakers' alert opens the speaker review sheet", (tester) async {
+      NativeTestHost.install();
+      final provider = SpeakerTagPromptsProvider(
+          fetchPrompts: () async =>
+              ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: [_prompt('q1', 'identify')])),
+          loadClip: (_) async => ApiSuccess(_wav(10)),
+          emit: (_) {});
+      addTearDown(provider.dispose);
+      await provider.loadIfDue();
+      final home = GlobalKey();
+      await tester.pumpWidget(_app(SizedBox.expand(key: home), prompts: provider));
+      final alert = nativeHomeSpeakerReviewAlert(home.currentContext!);
+      expect((alert.id, alert.title, alert.symbol), ('speakers', _l10n.speakerTagPromptTitle, 'person.wave.2'));
+      unawaited(Future<void>.sync(alert.perform));
+      await NativeTestHost.settle(tester);
+      // showOmiSheet presents nativeBuilder only on an iOS host (native_speaker_review_host_test drives
+      // this alert there); everywhere else the alert keeps the Flutter card in its titled sheet.
+      expect(find.byType(SpeakerTagPromptCard), findsOneWidget);
+      expect(find.byType(NativeSpeakerReview), findsNothing);
+      expect(find.text(_l10n.speakerTagPromptTitle), findsWidgets);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets("'record' marks the options tip shown before the primary action; 'record_options' opens the options",
+        (tester) async {
+      final home = GlobalKey();
+      await tester.pumpWidget(_app(SizedBox.expand(key: home)));
+      final calls = <String>[];
+      List<NativeHomeAction> actions({bool phoneRecording = false}) => nativeHomeRecordActions(home.currentContext!,
+          phoneRecording: phoneRecording,
+          enabled: true,
+          primary: () async {
+            // Pins the copied key of the private HomeRecordButtonState._optionsTipKey.
+            calls.add('primary tip=${SharedPreferencesUtil().getBool('v2/homeRecordOptionsTipShown')}');
+          },
+          options: () => calls.add('options'));
+
+      expect(actions().map((action) => action.id), ['record', 'record_options']);
+      expect(actions(phoneRecording: true).map((action) => action.id), ['record'],
+          reason: 'options are offered only while the phone is not recording');
+      expect(actions(phoneRecording: true).single.symbol, 'stop.fill');
+      expect(SharedPreferencesUtil().getBool('v2/homeRecordOptionsTipShown'), isNot(true));
+
+      await actions().first.perform();
+      await actions().last.perform();
+      expect(calls, ['primary tip=true', 'options']);
     });
   });
 

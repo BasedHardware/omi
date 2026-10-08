@@ -50,19 +50,11 @@ extension _NativeHomePresentation on _HomePageState {
                   footer: [
                     NativeHomeAction('chat', l10n.askOmi, 'bubble.left', () => _openChat()),
                     NativeHomeAction('voice', l10n.voiceMode, 'mic', () => _openChat(voice: true)),
-                    NativeHomeAction('record', phoneRecording ? l10n.stopRecording : l10n.startRecording,
-                        phoneRecording ? 'stop.fill' : 'record.circle', () async {
-                      // The one-time tip describes the Flutter button's arrow; native Home offers the options
-                      // as their own control, so the tip is marked as shown instead. The key must match
-                      // HomeRecordButtonState._optionsTipKey.
-                      SharedPreferencesUtil().saveBool('v2/homeRecordOptionsTipShown', true);
-                      await _nativeRecordKey.currentState?.performPrimaryAction();
-                    }, enabled: capture.recordingState != RecordingState.initialising),
-                    // The Flutter button's long-press: the record options sheet (phone mic or phone call).
-                    if (!phoneRecording)
-                      NativeHomeAction('record_options', l10n.moreOptions, 'ellipsis.circle', () {
-                        _nativeRecordKey.currentState?.showOptions();
-                      }, enabled: capture.recordingState != RecordingState.initialising),
+                    ...nativeHomeRecordActions(context,
+                        phoneRecording: phoneRecording,
+                        enabled: capture.recordingState != RecordingState.initialising,
+                        primary: () async => _nativeRecordKey.currentState?.performPrimaryAction(),
+                        options: () => _nativeRecordKey.currentState?.showOptions()),
                   ],
                   alerts: [
                     if (wedge.visiblePrompt != null)
@@ -100,15 +92,46 @@ extension _NativeHomePresentation on _HomePageState {
                                 : FirmwareUpdate(device: device.pairedDevice));
                       }),
                     if (prompts.visible && (prompts.finished || prompts.current != null))
-                      NativeHomeAction('speakers', l10n.speakerTagPromptTitle, 'person.wave.2', () async {
-                        await showOmiSheet<void>(
-                            context: context,
-                            title: l10n.speakerTagPromptTitle,
-                            builder: (_) => const SpeakerTagPromptCard(),
-                            nativeBuilder: (_) => const NativeSpeakerReview());
-                      }),
+                      nativeHomeSpeakerReviewAlert(context),
                     ...feed,
                   ],
                 )));
   }
+}
+
+/// Native Home's record controls: the primary action and, while the phone is not recording, the
+/// Flutter button's long-press options sheet (phone mic or phone call) as its own control.
+@visibleForTesting
+List<NativeHomeAction> nativeHomeRecordActions(BuildContext context,
+    {required bool phoneRecording,
+    required bool enabled,
+    required Future<void> Function() primary,
+    required VoidCallback options}) {
+  final l10n = context.l10n;
+  return [
+    NativeHomeAction('record', phoneRecording ? l10n.stopRecording : l10n.startRecording,
+        phoneRecording ? 'stop.fill' : 'record.circle', () async {
+      // The one-time tip describes the Flutter button's arrow; native Home offers the options as their
+      // own control, so the tip is marked as shown instead. The key must match the private
+      // HomeRecordButtonState._optionsTipKey (battery_info_widget.dart); native_speaker_review_test pins it.
+      SharedPreferencesUtil().saveBool('v2/homeRecordOptionsTipShown', true);
+      await primary();
+    }, enabled: enabled),
+    if (!phoneRecording)
+      NativeHomeAction('record_options', l10n.moreOptions, 'ellipsis.circle', options, enabled: enabled),
+  ];
+}
+
+/// Native Home's 'speakers' alert: the speaker review sheet, drawn natively with
+/// [SpeakerTagPromptCard] as its fallback.
+@visibleForTesting
+NativeHomeAction nativeHomeSpeakerReviewAlert(BuildContext context) {
+  final l10n = context.l10n;
+  return NativeHomeAction('speakers', l10n.speakerTagPromptTitle, 'person.wave.2', () async {
+    await showOmiSheet<void>(
+        context: context,
+        title: l10n.speakerTagPromptTitle,
+        builder: (_) => const SpeakerTagPromptCard(),
+        nativeBuilder: (_) => const NativeSpeakerReview());
+  });
 }

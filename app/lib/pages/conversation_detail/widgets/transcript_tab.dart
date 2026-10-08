@@ -202,7 +202,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           MediaViewerPage.open(context, items: mediaItemsForPhotos(current.photos, current.id), initialIndex: index);
         }));
       }
-      widget.onNativePresentation!([NativeSection('detail_transcript', rows, title: l10n.transcript)]);
+      // The heading row already says "Transcript", so the section header would repeat it.
+      widget.onNativePresentation!(
+          [NativeSection('detail_transcript', rows, title: segments.isEmpty ? l10n.transcript : '')]);
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }

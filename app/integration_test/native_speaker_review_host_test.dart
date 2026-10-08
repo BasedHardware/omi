@@ -14,16 +14,15 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_feedback.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
-import 'package:omi/ui/ui.dart';
 
 import 'journeys/support/hermetic_boot.dart';
 import 'support/native_host_harness.dart';
@@ -86,15 +85,13 @@ void main() {
       addTearDown(prompts.dispose);
       await prompts.loadIfDue();
       final home = GlobalKey();
-      // The Home 'speakers' alert opens exactly this sheet; Home itself stays Flutter here so the sheet
-      // is the only native view.
+      // Home itself stays Flutter here so the sheet is the only native view; the alert is the one native
+      // Home publishes, so its sheet wiring is what runs.
       await tester.pumpWidget(nativeHostApp(Scaffold(body: SizedBox.expand(key: home)),
           providers: [ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: prompts)]));
-      unawaited(showOmiSheet<void>(
-          context: home.currentContext!,
-          title: lookupAppLocalizations(const Locale('en')).speakerTagPromptTitle,
-          builder: (_) => const SpeakerTagPromptCard(),
-          nativeBuilder: (_) => const NativeSpeakerReview()));
+      final alert = nativeHomeSpeakerReviewAlert(home.currentContext!);
+      expect(alert.id, 'speakers');
+      unawaited(Future<void>.sync(alert.perform));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
@@ -107,6 +104,8 @@ void main() {
       await nativeProjectedRow(tester, 'speaker_review_answer:me').action!(null);
       await tester.pump(const Duration(seconds: 1));
       expect(prompts.pending?.answer, SpeakerTagAnswer.me, reason: 'staged while the native Undo toast is up');
+      expect(NativeFeedbackHost.active, isTrue);
+      expect(find.byType(SnackBar), findsNothing, reason: 'the Undo toast is native, not the Flutter SnackBar');
       expect(nativeProjectedRow(tester, 'speaker_review_answered').kind, 'label');
       // Inside the 5 s Undo window: the native toast floats above the sheet.
       await checkNativeHost(tester, 'native-speaker-review-voice-matches-toast-dark');

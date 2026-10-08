@@ -158,7 +158,9 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
     final suggestedName = prompt.suggestedPersonName ?? suggested?.name;
     // Commands resolve against the prompt this projection showed; a later prompt ignores them.
     void give(SpeakerTagAnswer answer, {String? personId, String? name, String? displayName}) {
-      if (!mounted || provider.submitting || provider.current?.id != prompt.id) return;
+      // A staged answer is still in its Undo window: a second tap before the answered snapshot
+      // arrives would otherwise drop it.
+      if (!mounted || provider.submitting || provider.pending != null || provider.current?.id != prompt.id) return;
       unawaited(
           giveSpeakerTagAnswer(context, provider, answer, personId: personId, name: name, displayName: displayName));
     }
@@ -245,7 +247,7 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
             else
               answer('someone', confirmsGuess ? l10n.speakerTagPromptNoAction : l10n.speakerTagPromptSomeoneElse, null,
                   symbol: confirmsGuess ? null : 'magnifyingglass', custom: () {
-                if (!mounted || provider.current?.id != prompt.id) return;
+                if (!mounted || provider.pending != null || provider.current?.id != prompt.id) return;
                 unawaited(answerSpeakerTagWithPicker(context, prompt, candidates, people, give));
               }),
             if (owner)

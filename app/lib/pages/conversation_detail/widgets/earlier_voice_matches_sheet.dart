@@ -113,7 +113,8 @@ class _EarlierVoiceMatchesListState extends State<EarlierVoiceMatchesList> {
     return _open.any((open) => identical(open, match)) ? match : null;
   }
 
-  /// One section per open match, identified by its index in [_open], never by a server id.
+  /// One section per open match, identified by its index in the original
+  /// [EarlierVoiceMatchesList.matches] list (stable while others are answered), never by a server id.
   Widget _native(BuildContext context, Widget fallback) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
