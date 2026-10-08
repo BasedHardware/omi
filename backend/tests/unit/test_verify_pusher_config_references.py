@@ -198,6 +198,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
+        "OMI_SHAPED_AGENT_MODE": "on",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
