@@ -25,6 +25,9 @@ covers:
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
+  # Capture API failures share this payload decoder; typed deletion-receipt and
+  # wrong-code rejection branches additionally have hermetic transport tests.
+  - desktop/macos/Desktop/Sources/CredentialHealthManager.swift
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenEvidencePass.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingEvidenceAuthorization.swift
