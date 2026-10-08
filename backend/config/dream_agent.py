@@ -12,9 +12,23 @@ def mode() -> str:
 
 def eligible(uid: str, user: dict) -> bool:
     allowlist = {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
-    return uid in allowlist or (
-        os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() == 'true'
-        and user.get('dream_release_channel') == 'testflight'
+    if uid in allowlist:
+        return True
+    minimum_build = os.getenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '').strip()
+    if not minimum_build or os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() != 'true':
+        return False
+    try:
+        minimum = int(minimum_build)
+    except ValueError:
+        return False
+    if minimum < 1:
+        return False
+    app_build = user.get('dream_app_build')
+    return (
+        user.get('dream_release_channel') == 'testflight'
+        and isinstance(app_build, int)
+        and not isinstance(app_build, bool)
+        and app_build >= minimum
     )
 
 

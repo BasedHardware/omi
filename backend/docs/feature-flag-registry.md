@@ -335,6 +335,7 @@ and an explicit empty literal renders as `''`.
 | `DREAM_AGENT_FEEDBACK_SALT` | Secret seed for weekly rotating distinct-user HMAC; unset prevents feedback storage | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MAX_USD_PER_TOKEN` | Conservative cost ceiling per token; default 0.00001 USD | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_PASSES_PER_DAY` | Per-user UTC daily pass admissions including shadow and failure; default 2 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum reported app build admitted to TestFlight cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_TOKENS_PER_PASS` | Combined triage and reasoning token cap; default 24000 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_UID_ALLOWLIST` | Comma-separated explicit cohort UIDs; default empty | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_UNDO_MIN_SAMPLES` | Minimum per-type journal samples before demotion; default 10 | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -408,6 +409,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DREAM_AGENT_MODE` — off (default), shadow reports only, on applies to admitted cohort (fail: closed)
 - `DREAM_AGENT_PASSES_PER_DAY` — Per-user UTC daily pass admissions including shadow and failure; default 2 (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Allow recorded TestFlight cohort; default false (fail: closed)
+- `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum reported app build admitted to TestFlight cohort; unset closes the cohort (fail: closed)
 - `DREAM_AGENT_TOKENS_PER_PASS` — Combined triage and reasoning token cap; default 24000 (fail: closed)
 - `DREAM_AGENT_UID_ALLOWLIST` — Comma-separated explicit cohort UIDs; default empty (fail: closed)
 - `DREAM_AGENT_UNDO_MIN_SAMPLES` — Minimum per-type journal samples before demotion; default 10 (fail: closed)

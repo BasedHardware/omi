@@ -56,11 +56,15 @@ def test_per_day_pass_cap(admission):
 
 
 def test_explicit_cohort_and_store_exit(monkeypatch):
+    monkeypatch.delenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', raising=False)
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     assert eligible(UID, {})
     assert not eligible('stranger', {'dream_release_channel': 'testflight'})
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'true')
-    assert eligible('stranger', {'dream_release_channel': 'testflight'})
+    assert not eligible('stranger', {'dream_release_channel': 'testflight', 'dream_app_build': 300})
+    monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '300')
+    assert eligible('stranger', {'dream_release_channel': 'testflight', 'dream_app_build': 300})
+    assert not eligible('stranger', {'dream_release_channel': 'testflight', 'dream_app_build': 299})
     assert not eligible('stranger', {'dream_release_channel': 'app_store'})
 
 
@@ -91,6 +95,17 @@ def test_feedback_rejects_vocabulary_and_four_word_overlap(text):
 def test_feedback_rejects_overlap_across_fields():
     with pytest.raises(ValueError):
         dream_feedback.validate(feedback('One two three four'), ['One two', 'three four'], [])
+
+
+@pytest.mark.parametrize('reproduction', ['Mira', 'mIrA!'])
+def test_feedback_rejects_unlisted_name_from_nested_transcript(reproduction):
+    inputs = {
+        'conversations/c1': {
+            'transcript_segments': [{'text': 'Mira will send the proposal.'}],
+        }
+    }
+    with pytest.raises(ValueError, match='feedback_vocabulary_overlap'):
+        dream_feedback.validate(feedback(reproduction), inputs, [])
 
 
 def test_feedback_accepts_invented_reproduction():
@@ -311,7 +326,7 @@ def test_feedback_storage_has_no_uid_and_rotates_distinct_hash(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_FEEDBACK_SALT', 'synthetic-secret-with-at-least-32-characters')
     for day in (8, 8, 15):
         dream_feedback.store(
-            UID, feedback(), {'text': 'Synthetic source'}, [], now=NOW.replace(day=day), firestore_client=database
+            UID, feedback(), {'text': 'source material'}, [], now=NOW.replace(day=day), firestore_client=database
         )
     assert all(UID not in str(row) for row in stored)
     assert stored[0]['distinct'] == stored[1]['distinct']

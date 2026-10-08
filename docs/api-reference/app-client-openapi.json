@@ -24458,6 +24458,18 @@
       "ReleaseChannel": {
         "additionalProperties": false,
         "properties": {
+          "app_build": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Build"
+          },
           "release_channel": {
             "enum": [
               "testflight",

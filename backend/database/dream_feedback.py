@@ -30,6 +30,45 @@ def strings(value):
             yield from strings(item)
 
 
+def _name_terms(inputs, vocabulary):
+    """Conservatively collect capitalized words and adjacent proper-noun runs."""
+    names = set()
+
+    def add_name(value):
+        tokens = words(value)
+        if tokens:
+            names.add(tuple(tokens))
+
+    for term in vocabulary:
+        if isinstance(term, str):
+            add_name(term)
+            continue
+        if isinstance(term, dict):
+            aliases = term.get('aliases') or []
+            for name in [term.get('spelling', ''), *aliases]:
+                if isinstance(name, str):
+                    add_name(name)
+
+    token_pattern = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*", re.UNICODE)
+    for text in strings(inputs):
+        tokens = token_pattern.findall(text)
+        run = []
+        for token in tokens:
+            normalized = words(token)
+            if token.casefold().endswith(("'s", '’s')):
+                normalized = words(token[:-2])
+            if token[:1].isupper() and normalized:
+                add_name(token)
+                run.extend(normalized)
+            else:
+                if len(run) > 1:
+                    names.add(tuple(run))
+                run = []
+        if len(run) > 1:
+            names.add(tuple(run))
+    return names
+
+
 def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
     text = report.reproduction
     output = words(text)
@@ -38,12 +77,11 @@ def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
     source = words(' '.join(strings(inputs)))
     if any(tuple(source[i : i + 4]) in grams for i in range(max(0, len(source) - 3))):
         raise ValueError('feedback_input_overlap')
-    names = [uid] if uid else []
-    for term in vocabulary:
-        names.extend([term['spelling'], *term.get('aliases', [])])
-    for name in names:
-        needle = words(name)
-        if needle and any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
+    names = _name_terms(inputs, vocabulary)
+    if uid:
+        names.add(tuple(words(uid)))
+    for needle in names:
+        if needle and any(output[i : i + len(needle)] == list(needle) for i in range(len(output) - len(needle) + 1)):
             raise ValueError('feedback_vocabulary_overlap')
 
 

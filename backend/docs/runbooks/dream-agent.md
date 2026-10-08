@@ -94,12 +94,18 @@ frame requests; the pass never waits for macOS fulfilment.
 
 The backend previously had no mobile release-channel record. The app must call
 `PUT /v1/users/release-channel` with its Firebase authorization and JSON:
-`{"release_channel":"testflight"}` when `Env.isTestFlight`, `app_store` for Store,
-`dev` for development. Send on each authenticated app launch, including Store
-launches so a prior TestFlight record is cleared. This is self-reported cohort
-metadata, not an entitlement or trusted release attestation. The endpoint is
-404 while dream is off. This PR adds the backend contract; the mobile rollout
-must add the call. Store clients continue to avoid the Review endpoints.
+`{"release_channel":"testflight","app_build":300}` when `Env.isTestFlight`,
+`app_store` for Store, and `dev` for development. `app_build` is optional for
+backwards compatibility. Send on each authenticated app launch, including Store
+launches, so a prior TestFlight record is cleared; an omitted build clears any
+previous build value. The channel and build are client assertions, bounded by
+the global daily spend cap and scoped to the caller's own user document; they
+are not release attestations. TestFlight admission additionally requires
+`DREAM_AGENT_TESTFLIGHT_ENABLED=true`, a configured
+`DREAM_AGENT_TESTFLIGHT_MIN_BUILD`, and a reported build at least that value.
+When the minimum build is unset or invalid, the TestFlight cohort is closed.
+The endpoint is 404 while dream is off. Store clients continue to avoid the
+Review endpoints.
 
 Live capture combines the encrypted dream vocabulary with existing user terms,
 behind `DREAM_AGENT_VOCABULARY_STT`. Soniox still requires its existing
