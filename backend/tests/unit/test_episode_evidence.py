@@ -7,13 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from models.structured import ActionItem, NoteClaim, Participant, Section, Structured
+from models.structured import NoteClaim, Structured
 from models.episode_extraction import EpisodeStructuredExtraction
 from models.structured_extraction import RichStructuredExtraction, StructuredExtraction
 from utils.conversations.episode_evidence import (
     EvidenceItem,
-    capture_evidence,
-    claim_violations,
     context_pack_evidence,
     meeting_evidence,
     open_task_evidence,
@@ -75,19 +73,6 @@ def processing():
         yield conversation_processing
 
 
-def test_flag_defaults_off_and_reads_env_at_call_boundary(monkeypatch):
-    from utils.conversations import meeting_notes_wiring as wiring
-
-    monkeypatch.delenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raising=False)
-    assert not wiring.meeting_notes_episode_evidence_enabled()
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', '100')
-    for raw in ('true', '1', 'on', 'YES'):
-        monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raw)
-        assert wiring.meeting_notes_episode_evidence_enabled('synthetic-owner')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', 'off')
-    assert not wiring.meeting_notes_episode_evidence_enabled()
-
-
 def test_flag_off_prompt_bytes_pinned_to_base(processing):
     from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 
@@ -109,13 +94,7 @@ def test_flag_off_prompt_bytes_pinned_to_base(processing):
     assert 'note_claims' in EpisodeStructuredExtraction.model_json_schema()['properties']
 
 
-def test_adapters_keep_source_time_actor_and_screen_rows():
-    segment = SimpleNamespace(id='s1', start=1.0, end=3.0, is_user=True, speaker='SPEAKER_00', text='Hello')
-    conv = SimpleNamespace(transcript_segments=[segment], source='desktop', started_at=START, finished_at=None)
-    speech, state = capture_evidence(conv)
-    assert speech.id == 'speech:s1' and speech.source_ref == 's1' and speech.actor == 'account owner'
-    assert speech.time == '+1.0s..+3.0s'
-    assert state.source_kind == 'device_state'
+def test_context_adapters_keep_source_time_actor_and_screen_rows():
     pack = SimpleNamespace(
         prior_meetings=[
             SimpleNamespace(title='Earlier', gist='Budget pending', date_label='2026-01-09', open_items=['Check quote'])
@@ -139,22 +118,6 @@ def test_adapters_keep_source_time_actor_and_screen_rows():
     )
 
 
-def test_wrong_provenance_invalid_ids_coverage():
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')]
-    note = valid_note()
-    assert not claim_violations(note, evidence)
-    assert note.note_claims[0].evidence_sources[0].source_kind == 'screen_ocr'
-    assert 'content' not in note.note_claims[0].evidence_sources[0].model_dump()
-    note.note_claims[0].provenance = 'said'
-    assert 'wrong_provenance' in claim_violations(note, evidence)
-    note.note_claims[0].evidence_ids = ['invented']
-    assert 'invalid_evidence_reference' in claim_violations(note, evidence)
-    note.note_claims[0].text = 'not in title'
-    assert 'invalid_claim_span' in claim_violations(note, evidence)
-    note.sections = [Section(heading='Uncovered', body_markdown='- A detail')]
-    assert 'missing_claim_coverage' in claim_violations(note, evidence)
-
-
 def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
     text = episode_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert EPISODE_CONTRACT in text
@@ -166,15 +129,6 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
     assert message['content'][1]['text'] == 'Evidence screen_frame:f1 at +00:10'
     assert message['content'][2]['type'] == 'image_url'
     assert len(screen_frames_message([frame])['content']) == 2
-
-
-def test_claim_coverage_includes_each_factual_span():
-    note = valid_note(overview='The message shows approval. Ari wrote about medical treatment.')
-    note.note_claims[1].text = 'The message shows approval.'
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic thread')]
-    assert 'missing_claim_coverage' in claim_violations(note, evidence)
-    note.note_claims.append(claim('/overview', 'Ari wrote about medical treatment.'))
-    assert not claim_violations(note, evidence)
 
 
 def test_sdk_and_backend_fallback_keep_claims_optional():
@@ -209,23 +163,6 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         ]
         serialized = model.model_validate(legacy).model_dump()['note_claims'][0]
         assert 'private' not in serialized and 'sensitivity' not in serialized['evidence_sources'][0]
-
-
-def test_mixed_remote_channel_does_not_gain_an_actor_from_roster():
-    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-
-    entries = tuple(
-        RosterEntry(display_name=name, email=None, organization=None, kind=kind, source='calendar')
-        for name, kind in (('Owner', 'owner'), ('Ari', 'human'), ('Noor', 'human'))
-    )
-    roster = MeetingRoster(entries=entries, display_title=None, title_is_window_title=False)
-    segment = SimpleNamespace(
-        id='s1', start=0, end=1, text='Approved', speaker='SPEAKER_01', speaker_id=1, is_user=False
-    )
-    conv = SimpleNamespace(transcript_segments=[segment], photos=[])
-    items = capture_evidence(conv, speaker_map={1: 'Ari'}, roster=roster, desktop_capture=True)
-    assert items[0].actor is None
-    assert json.loads(items[-1].content)['speaker_map'] == {'1': None}
 
 
 def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatch):
@@ -264,59 +201,7 @@ def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatc
     assert 'sensitive reason' in items[0].content
 
 
-def test_unknown_speech_clusters_remain_distinguishable_without_names():
-    segments = [
-        SimpleNamespace(
-            id=f's{index}', text='Synthetic commitment', start=index, end=index + 1, speaker_id=cluster, is_user=False
-        )
-        for index, cluster in enumerate((0, 1, 0))
-    ]
-    items = capture_evidence(SimpleNamespace(transcript_segments=segments))[:3]
-    assert [item.actor for item in items] == [None, None, None]
-    assert [item.diarization_key for item in items] == ['0', '1', '0']
-    note = valid_note()
-    note.note_claims[0].evidence_ids = ['speech:s0']
-    note.note_claims[0].provenance = 'said'
-    claim_violations(note, items)
-    assert note.note_claims[0].evidence_sources[0].diarization_key == '0'
-
-
-@pytest.mark.parametrize('source', ['screen_activity', 'google'])
-def test_roster_claim_retains_underlying_source(source):
-    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-
-    roster = MeetingRoster(
-        entries=(RosterEntry('Ari', None, None, 'human', source),),
-        display_title=None,
-        title_is_window_title=False,
-    )
-    item = meeting_evidence(roster, None, [])[0]
-    note = Structured(title='Ari', note_claims=[claim('/title', 'Ari', item.id, 'shown')])
-    assert not claim_violations(note, [item])
-    assert json.loads(item.content)['source'] == source
-    assert note.note_claims[0].evidence_sources[0].source_ref == source
-
-
-@pytest.mark.parametrize('field', ['owner_name', 'name', 'email', 'organization', 'role'])
-def test_claim_coverage_includes_owner_and_participant_fields(field):
-    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic identity')
-    note = Structured(title='Synthetic', note_claims=[claim('/title', 'Synthetic', item.id, 'shown')])
-    if field == 'owner_name':
-        note.action_items = [ActionItem(description='Send report', owner_name='Ari')]
-        note.note_claims.append(claim('/action_items/0/description', 'Send report', item.id, 'shown'))
-        target, text = '/action_items/0/owner_name', 'Ari'
-    else:
-        values = {'name': None, 'email': None, 'organization': None, 'role': None, 'source': 'roster'}
-        values[field] = 'Synthetic value'
-        note.participants = [Participant(**values)]
-        target, text = f'/participants/0/{field}', 'Synthetic value'
-    assert 'missing_claim_coverage' in claim_violations(note, [item], drop_invalid=True)
-    note.note_claims.append(claim(target, text, item.id, 'shown'))
-    assert not claim_violations(note, [item])
-
-
-@pytest.mark.parametrize('episode_mode', [True, False])
-def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch, episode_mode):
+def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     wiring = importlib.import_module('utils.conversations.meeting_notes_wiring')
     frame_module = importlib.import_module('utils.conversations.screen_frame_evidence')
     frame = frame_module.ScreenFrameEvidence('frame', START, 'strip', 0.5, ('Screen identity',), 'Private screen text')
@@ -333,7 +218,6 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
     conv = SimpleNamespace(
         id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
     )
-    items = [] if episode_mode else None
     roster, _, _, images = wiring.rich_notes_inputs(
         'synthetic',
         conv,
@@ -341,18 +225,11 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
         'UTC',
         include_background=True,
         include_screen_text=False,
-        evidence_items=items,
     )
     assert images == (image,)
     assert observed[0].frame_id == frame.frame_id
-    if episode_mode:
-        assert observed[0].summary == '' and observed[0].names == ()
-        assert 'Private screen text' not in render_episode_evidence(items)
-        assert 'Screen identity' not in render_episode_evidence(items)
-        assert not roster.entries
-    else:
-        assert observed[0].summary == frame.summary
-        assert roster.entries[0].display_name == 'Screen identity'
+    assert observed[0].summary == frame.summary
+    assert roster.entries[0].display_name == 'Screen identity'
 
 
 def test_frame_added_identity_in_calendar_roster_keeps_screen_source():
@@ -377,25 +254,6 @@ def test_frame_added_identity_in_calendar_roster_keeps_screen_source():
     items = meeting_evidence(roster, calendar, [frame])
     assert json.loads(items[1].content)['source'] == 'google'
     assert json.loads(items[2].content)['source'] == 'screen_activity'
-
-
-def test_short_unique_anchor_covers_its_unit_and_headings_need_no_claim():
-    item = EvidenceItem(id='speech:1', source_kind='speech', content='Ari approved a synthetic budget.')
-    note = Structured(
-        title='Budget approval',
-        overview='Ari approved the synthetic budget. They requested an agenda.',
-        sections=[Section(heading='Outcome', body_markdown='- Ari approved the synthetic budget.')],
-        note_claims=[
-            claim('/title', 'Budget approval', item.id, 'said'),
-            claim('/overview', 'synthetic budget', item.id, 'said'),
-            claim('/sections/0/body_markdown', 'synthetic budget', item.id, 'said'),
-        ],
-    )
-    assert 'missing_claim_coverage' in claim_violations(note, [item])
-    note.note_claims.append(claim('/overview', 'requested an agenda', item.id, 'said'))
-    assert not claim_violations(note, [item])
-    note.overview = 'Ari approved the synthetic budget. A private message mentioned the synthetic budget.'
-    assert 'ambiguous_claim_span' in claim_violations(note, [item], drop_invalid=True)
 
 
 def test_compact_evidence_preserves_provenance_and_trusted_metadata():
@@ -456,29 +314,3 @@ def test_episode_person_provenance_and_relevance_rules_are_shared():
         {'note_claims': [claim('/title', 'Budget').model_dump()]}
     ).to_structured()
     assert isinstance(output.note_claims[0], NoteClaim)
-
-
-@pytest.mark.parametrize('ending', ['', '\n', '\r\n'])
-def test_coverage_checks_each_unpunctuated_bullet(ending):
-    item = EvidenceItem(id='speech:1', source_kind='speech', content='Alice agreed; Bob declined.')
-    note = Structured(
-        title='Two responses',
-        sections=[Section(heading='Responses', body_markdown='- Alice agreed\n- Bob declined' + ending)],
-        note_claims=[
-            claim('/title', 'Two responses', item.id, 'inferred'),
-            claim('/sections/0/body_markdown', 'Alice agreed', item.id, 'said'),
-        ],
-    )
-    assert 'missing_claim_coverage' in claim_violations(note, [item])
-    note.note_claims.append(claim('/sections/0/body_markdown', 'Bob declined', item.id, 'said'))
-    assert not claim_violations(note, [item])
-
-
-def test_written_roster_provenance_is_valid():
-    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic roster name')
-    note = Structured(
-        title='Synthetic roster name',
-        note_claims=[claim('/title', 'Synthetic roster name', item.id, 'written')],
-    )
-    assert not claim_violations(note, [item], drop_invalid=True)
-    assert note.note_claims[0].evidence_sources[0].source_kind == 'roster'

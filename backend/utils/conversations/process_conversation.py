@@ -6,7 +6,6 @@ import sys
 import uuid
 import logging
 import asyncio
-from importlib import import_module
 from datetime import timezone, timedelta, datetime
 from collections.abc import Mapping, Sequence
 from enum import Enum
@@ -242,7 +241,6 @@ from utils.conversations.meeting_context import (
 )
 from utils.conversations.meeting_notes_wiring import (
     meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
-    meeting_notes_episode_evidence_enabled as _meeting_notes_episode_evidence_enabled,
     meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
     rich_notes_inputs,
     rich_roster_inputs,
@@ -471,15 +469,8 @@ def _get_structured(
                 if _conversation_notes_v2_enabled() or route_for_uid(uid) != 'old':
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
-                    episode_enabled = _meeting_notes_episode_evidence_enabled(uid)
-                    episode_items = (
-                        import_module('utils.conversations.episode_evidence').capture_evidence(
-                            conversation, transcript=ext_conv.text
-                        )
-                        if episode_enabled
-                        else []
-                    )
-                    if _meeting_notes_rich_context_enabled() or episode_enabled:
+                    _frames = ()
+                    if _meeting_notes_rich_context_enabled():
                         roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
                             conversation,
@@ -487,7 +478,6 @@ def _get_structured(
                             tz_str,
                             include_background=True,
                             include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                            **({'evidence_items': episode_items} if episode_enabled else {}),
                         )
                     prefix = build_conversation_prompt_prefix(
                         uid=uid,
@@ -512,15 +502,7 @@ def _get_structured(
                             meeting_context=meeting_context_block,
                             rich_context_enabled=roster is not None,
                             roster=roster,
-                            **(
-                                {
-                                    'episode_evidence': episode_items,
-                                    'screen_frames': _frames,
-                                    'episode_finished_at': conversation.finished_at,
-                                }
-                                if episode_enabled
-                                else {}
-                            ),
+                            screen_frames=_frames,
                         )
                     validate_structured_source_segment_ids(structured, ())
                     return structured, False
@@ -562,9 +544,6 @@ def _get_structured(
         duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-
-        episode_enabled = _conversation_notes_v2_enabled() and _meeting_notes_episode_evidence_enabled(uid)
-        episode_items = []
 
         def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
@@ -713,7 +692,7 @@ def _get_structured(
             roster: Optional[MeetingRoster] = None
             meeting_context_block: Optional[str] = None
             desktop_capture, screen_frames = False, ()
-            if _meeting_notes_rich_context_enabled() or episode_enabled:
+            if _meeting_notes_rich_context_enabled():
                 roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
@@ -721,15 +700,6 @@ def _get_structured(
                     tz_str,
                     include_background=True,
                     include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                    **({'evidence_items': episode_items} if episode_enabled else {}),
-                )
-            if episode_enabled:
-                episode_items[:0] = import_module('utils.conversations.episode_evidence').capture_evidence(
-                    main_conv,
-                    transcript=action_items_transcript,
-                    speaker_map=speaker_map,
-                    roster=roster,
-                    desktop_capture=desktop_capture,
                 )
             prefix = build_conversation_prompt_prefix(
                 uid=uid,
@@ -760,11 +730,6 @@ def _get_structured(
                     rich_context_enabled=roster is not None,
                     roster=roster,
                     screen_frames=screen_frames,
-                    **(
-                        {'episode_evidence': episode_items, 'episode_finished_at': conversation.finished_at}
-                        if episode_enabled
-                        else {}
-                    ),
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False

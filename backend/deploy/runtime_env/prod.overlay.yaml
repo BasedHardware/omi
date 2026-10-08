@@ -256,12 +256,6 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
           category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -390,12 +384,6 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -686,12 +674,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -855,12 +837,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -998,12 +974,6 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'

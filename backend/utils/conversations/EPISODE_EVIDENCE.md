@@ -1,5 +1,7 @@
 # Episode evidence, stage 1
 
+> Retired from serving on 2026-10-08: episode evidence capture and its ENABLED/PERCENT flags were removed after the legacy writer was deleted. The material below is historical evaluation context, not a production rollout procedure. Shaped serving is controlled by `OMI_SHAPED_AGENT_MODE`; restoring legacy serving requires the previous image.
+
 An episode is a capture window. Speech is one observation, not its boundary.
 `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` defaults off and applies only to notes
 v2, additionally requiring sticky hashed-UID admission through

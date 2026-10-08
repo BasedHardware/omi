@@ -46,11 +46,6 @@ def flag_off(monkeypatch):
     monkeypatch.delenv(shaped.FLAG, raising=False)
 
 
-def uid_in_bucket(monkeypatch, wanted):
-    monkeypatch.setenv(shaped.FLAG, 'cohort')
-    return next(f'test-{n}' for n in range(1000) if shaped.route_for_uid(f'test-{n}') == wanted)
-
-
 @pytest.mark.parametrize(
     'mode,uid,expected',
     [
@@ -59,7 +54,8 @@ def uid_in_bucket(monkeypatch, wanted):
         ('garbage', shaped.COHORT_UID, 'old'),
         ('true', shaped.COHORT_UID, 'old'),
         ('cohort', shaped.COHORT_UID, 'new'),
-        ('cohort', None, 'old'),
+        ('cohort', None, 'new'),
+        ('cohort', 'anyone', 'new'),
         ('on', 'anyone', 'new'),
         ('on', shaped.COHORT_UID, 'new'),
     ],
@@ -68,12 +64,6 @@ def test_flag_modes(monkeypatch, mode, uid, expected):
     if mode is not None:
         monkeypatch.setenv(shaped.FLAG, mode)
     assert shaped.route_for_uid(uid) == expected
-
-
-@pytest.mark.parametrize('bucket', ['shadow', 'old'])
-def test_bucket_stable_across_requests(monkeypatch, bucket):
-    uid = uid_in_bucket(monkeypatch, bucket)
-    assert {shaped.route_for_uid(uid) for _ in range(30)} == {bucket}
 
 
 def test_empty_mount_and_notes_chat_isolation():
@@ -513,9 +503,10 @@ def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch
     assert packet['speaker_map'] == {'0': None}
 
 
-@pytest.mark.parametrize('mode', ['off', 'invalid', 'cohort'])
+@pytest.mark.parametrize('mode', [None, 'off', 'invalid'])
 def test_disabled_notes_and_chat_never_invoke_models(monkeypatch, mode):
-    monkeypatch.setenv(shaped.FLAG, mode)
+    if mode is not None:
+        monkeypatch.setenv(shaped.FLAG, mode)
     notes_writer = Mock()
     chat_writer = AsyncMock()
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', notes_writer)
@@ -528,16 +519,17 @@ def test_disabled_notes_and_chat_never_invoke_models(monkeypatch, mode):
     chat_writer.assert_not_awaited()
 
 
-def test_on_dispatches_only_shaped_notes_and_chat(monkeypatch):
-    monkeypatch.setenv(shaped.FLAG, 'on')
+@pytest.mark.parametrize('mode', ['on', 'cohort'])
+@pytest.mark.parametrize('uid', ['anyone', shaped.COHORT_UID, None])
+def test_enabled_dispatches_only_shaped_notes_and_chat(monkeypatch, mode, uid):
+    monkeypatch.setenv(shaped.FLAG, mode)
     expected = object()
     notes_writer = Mock(return_value=expected)
     chat_writer = AsyncMock(return_value='new status')
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', notes_writer)
     monkeypatch.setattr(agentic, '_run_shaped_chat_stream', chat_writer)
-    assert notes.get_conversation_notes(object(), uid='anyone') is expected
+    assert notes.get_conversation_notes(object(), uid=uid) is expected
     assert (
-        asyncio.run(agentic._run_routed_chat_stream('', [], [], {}, None, [], None, {'user_id': 'anyone'}))
-        == 'new status'
+        asyncio.run(agentic._run_routed_chat_stream('', [], [], {}, None, [], None, {'user_id': uid})) == 'new status'
     )
     assert notes_writer.call_count == chat_writer.await_count == 1

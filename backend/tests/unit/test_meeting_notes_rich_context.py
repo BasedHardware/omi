@@ -923,36 +923,3 @@ def test_rich_prompt_anchors_still_match_legacy_wording():
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
     assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text
-
-
-def test_participant_names_corroborated_by_screen_background_are_kept():
-    from models.structured import Participant, Structured
-    from utils.llm.meeting_notes_validation import validate_rich_meeting_notes
-
-    roster = normalize_meeting_participants(
-        _context(
-            [MeetingParticipant(email='someone@duck.com'), MeetingParticipant(name='Boardy Boardman')],
-            title='Meet - abc-defg-hij',
-            source='screen_activity',
-            platform='Google Meet',
-        ),
-        ConversationSource.desktop,
-        owner_name='David Zhang',
-        owner_emails=['david@acme.com'],
-        people=[],
-    )
-    structured = Structured(
-        participants=[
-            Participant(name='Priya Raman', role='Founding-engineer candidate', source='roster'),
-            Participant(name='Invented Person', role='guess', source='transcript'),
-        ]
-    )
-    background = 'BACKGROUND CONTEXT\nSCREEN ACTIVITY\nWindows open during the meeting:\n- Google Chrome | Priya Raman | LinkedIn'
-    validated = validate_rich_meeting_notes(
-        structured,
-        transcript_body='hello there',
-        roster=roster,
-        has_background_context=True,
-        background_body=background,
-    )
-    assert [p.name for p in validated.participants] == ['Priya Raman']
