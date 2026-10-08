@@ -289,6 +289,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
           kind: 'navigation',
           imageUri: nativeImageUri(app.getImageUrl()),
           subtitle: [
+            if (_enabling.contains(app.id)) l10n.pleaseWait,
             if (app.description.isNotEmpty) app.description,
             if (app.ratingAvg != null) '★ ${app.getRatingAvg()} (${app.ratingCount})',
           ].join('\n'),

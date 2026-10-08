@@ -151,10 +151,14 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
       final originalIndex = provider.apps.indexWhere((a) => a.id == app.id);
       final enabled = (provider.apps.firstWhereOrNull((a) => a.id == app.id) ?? app).enabled;
       final canEnable = !enabled && !appNeedsDetailToEnable(app) && !_enabling.contains(app.id);
+      // The classic button's spinner: this page's enable or the owner's per-row loading flag.
+      final busy = _enabling.contains(app.id) ||
+          (originalIndex >= 0 && originalIndex < provider.appLoading.length && provider.appLoading[originalIndex]);
       return NativeRow('apps_$index', app.name.decodeString + (app.private ? ' 🔒'.decodeString : ''),
           kind: 'navigation',
           imageUri: nativeImageUri(app.getImageUrl()),
           subtitle: [
+            if (busy) l10n.pleaseWait,
             if (app.description.isNotEmpty) app.description,
             if (app.ratingAvg != null) '★ ${app.getRatingAvg()} (${app.ratingCount})',
           ].join('\n'),

@@ -430,8 +430,11 @@ void main() {
       await settle(tester);
       expect(provider.enables, ['one']);
       expect(row(tester, 'group_0_0')!.options, isEmpty, reason: 'No second enable while the owner answers');
+      expect(row(tester, 'group_0_0')!.subtitle.split('\n').first, _l10n.pleaseWait,
+          reason: 'The row shows the server call is running');
       provider.enableAnswer!.complete(true);
       await settle(tester);
+      expect(row(tester, 'group_0_0')!.subtitle, isNot(contains(_l10n.pleaseWait)));
       expect(row(tester, 'group_0_0')!.options.keys, ['enable'], reason: 'The owner still reports it disabled');
 
       unawaited(section.rows.first.action!(null) as Future<void>?);
@@ -440,6 +443,7 @@ void main() {
 
     testWidgets('category apps show the count, empty and failed states, and rows open AppDetailPage', (tester) async {
       NativeTestHost.install();
+      final provider = AppProvider();
       final answers =
           <Completer<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? category})>>[];
       final routes = await pump(
@@ -451,7 +455,7 @@ void main() {
                 answers.add(Completer());
                 return answers.last.future;
               }),
-          AppProvider());
+          provider);
       expect(surface(tester).loading, isTrue);
       expect(surface(tester).sections, isEmpty);
 
@@ -474,6 +478,19 @@ void main() {
       expect(surface(tester).sections.single.title, _l10n.categoryAppCount(7));
       final app = row(tester, 'apps_0')!;
       expect(app.kind, 'navigation');
+      expect(app.subtitle, isNot(contains(_l10n.pleaseWait)));
+
+      provider
+        ..apps = [_app(id: 'one')]
+        ..appLoading = [true]
+        ..notifyListeners();
+      await settle(tester);
+      expect(row(tester, 'apps_0')!.subtitle.split('\n').first, _l10n.pleaseWait,
+          reason: "The owner's per-row loading flag shows as busy");
+      provider
+        ..appLoading = [false]
+        ..notifyListeners();
+      await settle(tester);
 
       unawaited(app.action!(null) as Future<void>?);
       expect(routes.lastPage(tester), isA<AppDetailPage>());
