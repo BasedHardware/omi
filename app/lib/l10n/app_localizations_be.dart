@@ -12484,6 +12484,21 @@ class AppLocalizationsBe extends AppLocalizations {
   String get partialRecording => 'Частковы запіс';
 
   @override
+  String get importTranscriptFiles => 'Файлы стэнаграм';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі';
+
+  @override
+  String get importTooManyAttempts => 'Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.';
+
+  @override
+  String get importFileTooLarge => 'Гэты файл занадта вялікі для імпарту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы гэтага тыпу нельга імпартаваць.';
+
+  @override
   String get thisWeek => 'Гэты тыдзень';
 
   @override

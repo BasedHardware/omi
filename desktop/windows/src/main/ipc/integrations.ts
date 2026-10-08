@@ -15,10 +15,25 @@ import {
   gmailSessionFetch,
   gmailSessionDisconnect
 } from '../integrations/gmailSession'
+import { translateToGlosses, defaultSignOpts } from '../integrations/signLanguage'
 import type {
   GmailSessionStatus,
-  GmailSessionFetchResult
+  GmailSessionFetchResult,
+  TranslationResult
 } from '../../shared/types'
+
+// Sign-language translation is OPT-IN and defaults to off. Nothing is sent to the
+// sign.mt endpoints until the user explicitly enables it; see the translate handler
+// below, which short-circuits while this is false.
+let signLanguageEnabled = false
+
+export function isSignLanguageEnabled(): boolean {
+  return signLanguageEnabled
+}
+
+export function setSignLanguageEnabled(enabled: boolean): void {
+  signLanguageEnabled = enabled
+}
 
 // All integrations IPC lives here so concurrent chat/KG work doesn't conflict
 // in index.ts.
@@ -66,4 +81,49 @@ export function registerIntegrationsHandlers(): void {
     await xDisconnect(session)
     return { success: true }
   })
+
+  // --- Sign-language avatar. Opt-in: while disabled this returns a
+  // TRANSLATION_UNAVAILABLE marker WITHOUT contacting sign.mt, so no transcript text
+  // leaves the machine unless the user turned the feature on. ---
+  ipcMain.handle(
+    'integrations:signLanguage:translate',
+    async (_e, payload: unknown): Promise<TranslationResult> => {
+      const text = typeof payload === 'string' ? payload : (payload as { text?: string })?.text
+      const spokenLanguage =
+        typeof payload === 'object' && payload
+          ? (payload as { spokenLanguage?: string }).spokenLanguage
+          : 'en'
+      const signedLanguage =
+        typeof payload === 'object' && payload
+          ? (payload as { signedLanguage?: string }).signedLanguage
+          : 'ase'
+      if (!text) throw new Error('No text provided for translation')
+      if (!isSignLanguageEnabled()) {
+        return {
+          originalText: text,
+          poseUrl: '',
+          assetType: 'pose',
+          swrFull: 'TRANSLATION_UNAVAILABLE',
+          glosses: []
+        }
+      }
+      return translateToGlosses(
+        text,
+        spokenLanguage ?? 'en',
+        signedLanguage ?? 'ase',
+        defaultSignOpts()
+      )
+    }
+  )
+
+  ipcMain.handle('integrations:signLanguage:getEnabled', async (): Promise<boolean> => {
+    return isSignLanguageEnabled()
+  })
+
+  ipcMain.handle(
+    'integrations:signLanguage:setEnabled',
+    async (_e, enabled: boolean): Promise<void> => {
+      setSignLanguageEnabled(enabled)
+    }
+  )
 }

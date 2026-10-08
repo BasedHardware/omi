@@ -6,9 +6,13 @@ import 'package:flutter/services.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:path/path.dart' as p;
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/backend/http/api/users.dart' show getUsageDeviceTimeZone;
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -22,6 +26,54 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 /// [createdAt] is a server timestamp and parses as UTC; it is projected to local time first so the
 /// row lands on the reader's day.
 String importJobTimestampLabel(OmiDateFormat dates, DateTime createdAt) => dates.timestamp(createdAt.toLocal());
+
+/// What to tell the user when an import could not start. Rate limits and size limits
+/// get localized copy; another refusal shows the server's own reason (such as an
+/// unsupported file type); server errors keep the generic copy.
+String importStartFailureMessage(AppLocalizations l10n, ImportStartResult result) {
+  final status = result.statusCode;
+  final detail = result.errorDetail;
+  if (status == 429) return l10n.importTooManyAttempts;
+  // A file over the upload limit is refused before it is sent; a proxy in front of
+  // the backend can still answer 413 for a smaller one.
+  if (result.tooLarge || status == 413) return l10n.importFileTooLarge;
+  if (status != null && status >= 400 && status < 500 && detail != null) return detail;
+  return l10n.failedToStartImport;
+}
+
+/// Import extensions the iOS picker cannot filter by. iOS has no system file type for
+/// them, so file_picker's [FileType.custom] resolves each to a dynamic `dyn.` type and
+/// drops it, which leaves such a file unselectable. WebVTT, text and ZIP have system types.
+const iosUntypedImportExtensions = {'srt'};
+
+/// How an import's file picker opens. Where iOS would drop one of [allowedExtensions]
+/// ([iosUntypedImportExtensions]), the picker shows every file and [isImportableFile]
+/// checks the choice instead; otherwise it filters by [allowedExtensions].
+({FileType type, List<String>? allowedExtensions}) importPickerOptions(
+  List<String> allowedExtensions, {
+  required bool isIOS,
+}) {
+  if (isIOS && allowedExtensions.any(iosUntypedImportExtensions.contains)) {
+    return (type: FileType.any, allowedExtensions: null);
+  }
+  return (type: FileType.custom, allowedExtensions: allowedExtensions);
+}
+
+/// Whether [fileName] ends in one of [allowedExtensions], case aside. Every pick is
+/// checked: a picker showing every file, or a provider that ignores the filter, can
+/// return anything. A name that is only an extension (".srt") has none, as on the server.
+bool isImportableFile(String fileName, List<String> allowedExtensions) {
+  final extension = p.extension(fileName).toLowerCase();
+  return extension.length > 1 && allowedExtensions.contains(extension.substring(1));
+}
+
+/// The icon an import-history row shows for a job's importer, or null for the
+/// Limitless logo (Limitless jobs, including those from before sources were reported).
+IconData? importJobSourceIcon(ImportJobSource source) => switch (source) {
+      ImportJobSource.limitless => null,
+      ImportJobSource.transcriptFiles => Icons.subtitles_outlined,
+      ImportJobSource.other => Icons.upload_file_outlined,
+    };
 
 class ImportJobCountChip {
   final int count;
@@ -119,15 +171,44 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     }
   }
 
-  Future<void> _startLimitlessImport() async {
+  Future<void> _startLimitlessImport() => _startImport(
+        analyticsSource: 'limitless',
+        allowedExtensions: const ['zip'],
+        upload: (file) async {
+          final job = await startLimitlessImport(file);
+          return job == null ? const ImportStartResult.failed() : ImportStartResult.started(job);
+        },
+        retry: _startLimitlessImport,
+      );
+
+  Future<void> _startTranscriptImport() => _startImport(
+        analyticsSource: 'transcript_files',
+        allowedExtensions: transcriptImportExtensions,
+        upload: (file) async => startTranscriptImport(
+          file,
+          language: SharedPreferencesUtil().userPrimaryLanguage,
+          timeZone: await getUsageDeviceTimeZone(),
+        ),
+        retry: _startTranscriptImport,
+      );
+
+  Future<void> _startImport({
+    required String analyticsSource,
+    required List<String> allowedExtensions,
+    required Future<ImportStartResult> Function(File file) upload,
+    required VoidCallback retry,
+  }) async {
     try {
       if (!mounted) return;
-      PlatformManager.instance.analytics.importStarted(source: 'limitless');
+      PlatformManager.instance.analytics.importStarted(source: analyticsSource);
       setState(() => _isUploading = true);
 
-      // Pick ZIP file
-      Logger.debug('Opening file picker for ZIP…');
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
+      Logger.debug('Opening file picker for $analyticsSource import…');
+      final picker = importPickerOptions(allowedExtensions, isIOS: Platform.isIOS);
+      final result = await FilePicker.platform.pickFiles(
+        type: picker.type,
+        allowedExtensions: picker.allowedExtensions,
+      );
 
       if (result == null || result.files.isEmpty) {
         Logger.debug('User cancelled file picker');
@@ -137,7 +218,17 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         return;
       }
 
-      final filePath = result.files.single.path;
+      final picked = result.files.single;
+      if (!isImportableFile(picked.name, allowedExtensions)) {
+        Logger.debug('Picked file is not an importable type');
+        if (mounted) {
+          setState(() => _isUploading = false);
+          OmiFeedback.error(context, context.l10n.importUnsupportedFileType);
+        }
+        return;
+      }
+
+      final filePath = picked.path;
       Logger.debug('Selected file path: $filePath');
 
       if (filePath == null) {
@@ -150,16 +241,15 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       final file = File(filePath);
 
-      // Start import
-      Logger.debug('Starting Limitless import…');
-      final response = await startLimitlessImport(file);
-      Logger.debug('Import response: ${response?.jobId}');
+      Logger.debug('Starting $analyticsSource import…');
+      final started = await upload(file);
+      Logger.debug('Import response: ${started.job?.jobId}');
 
       if (mounted) {
         setState(() => _isUploading = false);
       }
 
-      if (response != null) {
+      if (started.job != null) {
         // Refresh the list and start polling
         await _loadJobs();
         if (mounted) OmiFeedback.confirm(context, context.l10n.importStarted);
@@ -167,9 +257,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         if (mounted) {
           OmiFeedback.error(
             context,
-            context.l10n.failedToStartImport,
+            importStartFailureMessage(context.l10n, started),
             actionLabel: context.l10n.tryAgain,
-            onAction: _startLimitlessImport,
+            onAction: retry,
           );
         }
       }
@@ -214,7 +304,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
   Widget _buildImportSourceCard({
     required String name,
-    required String logoPath,
+    String? logoPath,
+    IconData? icon,
     required String description,
     required bool isAvailable,
     required VoidCallback? onTap,
@@ -241,20 +332,27 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     ExcludeSemantics(
                       child: ClipRRect(
                         borderRadius: OmiRadius.smAll,
-                        child: Image.asset(
-                          logoPath,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 48,
-                              height: 48,
-                              color: OmiColors.surface2,
-                              child: Icon(Icons.device_unknown, color: OmiColors.textTertiary),
-                            );
-                          },
-                        ),
+                        child: icon != null || logoPath == null
+                            ? Container(
+                                width: 48,
+                                height: 48,
+                                color: OmiColors.surface2,
+                                child: Icon(icon ?? Icons.upload_file_outlined, color: OmiColors.textSecondary),
+                              )
+                            : Image.asset(
+                                logoPath,
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 48,
+                                    height: 48,
+                                    color: OmiColors.surface2,
+                                    child: Icon(Icons.device_unknown, color: OmiColors.textTertiary),
+                                  );
+                                },
+                              ),
                       ),
                     ),
                     const SizedBox(width: OmiSpacing.md),
@@ -335,6 +433,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           isAvailable: true,
           onTap: _isUploading ? null : _startLimitlessImport,
         ),
+        _buildImportSourceCard(
+          name: context.l10n.importTranscriptFiles,
+          icon: Icons.subtitles_outlined,
+          description: context.l10n.importTranscriptFilesDescription,
+          isAvailable: true,
+          onTap: _isUploading ? null : _startTranscriptImport,
+        ),
         // Coming soon placeholder
         Container(
           margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
@@ -402,15 +507,22 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         children: [
           Row(
             children: [
-              // Limitless logo small
+              // Importer badge: the Limitless logo, or an icon for other importers
               ClipRRect(
                 borderRadius: const BorderRadius.all(Radius.circular(6)),
-                child: Image.asset(
-                  'assets/competitor-logos/limitless-logo.jpg',
-                  width: 26,
-                  height: 26,
-                  fit: BoxFit.cover,
-                ),
+                child: importJobSourceIcon(job.source) == null
+                    ? Image.asset(
+                        'assets/competitor-logos/limitless-logo.jpg',
+                        width: 26,
+                        height: 26,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        width: 26,
+                        height: 26,
+                        color: OmiColors.surface2,
+                        child: Icon(importJobSourceIcon(job.source), size: 16, color: OmiColors.textSecondary),
+                      ),
               ),
               const SizedBox(width: OmiSpacing.xs),
               // Status icon (don't show for completed)

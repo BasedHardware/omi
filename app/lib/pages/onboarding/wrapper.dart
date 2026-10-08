@@ -59,13 +59,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// The steps the progress dots count, in order. Auth, consent and the completion screen are not
   /// steps: they are shown without dots.
+  /// The Knowledge Graph preview is hidden from the first run for now (Oct 2026: the step does not
+  /// work well enough yet). The page stays in the TabController so indices are stable; nothing
+  /// navigates to it while this is false.
+  static const bool kKnowledgeGraphStepEnabled = false;
+
   static const List<int> kProgressSteps = [
     kNamePage,
     kPrimaryLanguagePage,
     kFoundOmiPage,
     kPermissionsPage,
     kSpeechProfilePage,
-    kKnowledgeGraphPage,
+    if (kKnowledgeGraphStepEnabled) kKnowledgeGraphPage,
   ];
 
   TabController? _controller;
@@ -185,9 +190,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   Future<void> _leaveKnowledgeGraph() async {
     PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
+    await _continueAfterKnowledgeGraph();
+  }
+
+  /// Setup page when the flag allows it, otherwise the completion screen. Used by the Knowledge
+  /// Graph step's Continue and, while that step is hidden, straight from the speech profile.
+  Future<void> _continueAfterKnowledgeGraph() async {
     final enabled = await (_setupPageEnabled ?? OnboardingSetupRatingPromptGate.isEnabled());
     if (!mounted) return;
     _controller!.animateTo(stepAfterKnowledgeGraph(setupPageEnabled: enabled));
+  }
+
+  void _leaveSpeechProfile() {
+    if (kKnowledgeGraphStepEnabled) {
+      _controller!.animateTo(kKnowledgeGraphPage);
+    } else {
+      _continueAfterKnowledgeGraph();
+    }
   }
 
   // ---- Resume and back ----------------------------------------------------------------------
@@ -414,11 +433,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 // All Done is not enroll success (#12765). Upload/embedding
                 // events fire only from the guided I/O upload receipt.
                 PlatformManager.instance.analytics.speechProfileContinued();
-                _controller!.animateTo(kKnowledgeGraphPage);
+                _leaveSpeechProfile();
               },
               onSkip: () {
                 PlatformManager.instance.analytics.speechProfileSkipped();
-                _controller!.animateTo(kKnowledgeGraphPage);
+                _leaveSpeechProfile();
               },
             ),
       OnboardingKnowledgeGraphStep(onContinue: _leaveKnowledgeGraph),
@@ -484,6 +503,8 @@ abstract final class OnboardingProgressStepsForTest {
   static List<int> get steps => _OnboardingWrapperState.kProgressSteps;
   static int get setupPage => _OnboardingWrapperState.kSetupPage;
   static int get completePage => _OnboardingWrapperState.kCompletePage;
+  static int get knowledgeGraphPage => _OnboardingWrapperState.kKnowledgeGraphPage;
+  static bool get knowledgeGraphStepEnabled => _OnboardingWrapperState.kKnowledgeGraphStepEnabled;
   static int stepAfterKnowledgeGraph({required bool setupPageEnabled}) =>
       _OnboardingWrapperState.stepAfterKnowledgeGraph(setupPageEnabled: setupPageEnabled);
 }

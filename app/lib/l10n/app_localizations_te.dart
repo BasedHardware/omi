@@ -12503,6 +12503,22 @@ class AppLocalizationsTe extends AppLocalizations {
   String get partialRecording => 'పాక్షిక రికార్డింగ్';
 
   @override
+  String get importTranscriptFiles => 'ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి';
+
+  @override
+  String get importTooManyAttempts => 'ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get importFileTooLarge => 'ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.';
+
+  @override
+  String get importUnsupportedFileType => 'ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.';
+
+  @override
   String get thisWeek => 'ఈ వారం';
 
   @override

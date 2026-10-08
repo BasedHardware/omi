@@ -4,9 +4,8 @@ Tests for the proactive mentor notification system.
 Tests cover:
 - MessageBuffer buffering behavior
 - process_mentor_notification() return type (list of messages)
-- 3-step pipeline: evaluate_relevance, generate_notification, validate_notification
-- _process_mentor_proactive_notification() end-to-end with mocks
-- Source-level checks (no raw OpenAI client)
+- 3-step prompt builders: evaluate_relevance, generate_notification, validate_notification
+- Source-level checks (no raw OpenAI client; the legacy mentor pipeline is gone)
 - Legacy evaluate_proactive_notification (kept for eval backward compatibility)
 
 Hermeticity: every runtime fake is wired into the real production modules by the
@@ -209,6 +208,7 @@ def _make_segments(count: int) -> list:
 @pytest.mark.parametrize('segments', [0, 9])
 async def test_buffer_threshold_skips_plan_and_model_work(monkeypatch, segments):
     monkeypatch.setattr(mentor_mod, 'message_buffer', MessageBuffer())
+    monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
 
     async def inline(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -219,9 +219,6 @@ async def test_buffer_threshold_skips_plan_and_model_work(monkeypatch, segments)
     calls = []
     for name in [
         'mentor_plan_allows_evaluation',
-        'evaluate_relevance',
-        'generate_notification',
-        'validate_notification',
         'generate_embedding',
     ]:
         mock = MagicMock()
@@ -296,18 +293,12 @@ def test_no_trigger_functions_in_integrations():
     assert "def _build_trigger_context" not in source
 
 
-def test_integrations_has_mentor_function():
-    """app_integrations.py should have _process_mentor_proactive_notification."""
+def test_integrations_has_no_legacy_mentor_function():
+    """The legacy mentor pipeline was deleted; only the shared admission stays."""
     source = _read_integrations_source()
-    assert "def _process_mentor_proactive_notification" in source
-
-
-def test_integrations_uses_3step_imports():
-    """app_integrations.py should import the 3-step pipeline functions."""
-    source = _read_integrations_source()
-    assert "evaluate_relevance" in source
-    assert "generate_notification" in source
-    assert "validate_notification" in source
+    assert "evaluate_relevance" not in source
+    assert "generate_notification" not in source
+    assert "validate_notification" not in source
 
 
 def test_no_extract_topics_in_mentor():
@@ -669,301 +660,6 @@ def test_evaluate_proactive_notification_no_advice():
     assert result.advice is None
 
 
-# ── _process_mentor_proactive_notification tests (3-step pipeline) ──
-
-
-def test_process_mentor_proactive_notification_sends():
-    """_process_mentor_proactive_notification should send notification when all 3 steps pass."""
-    mock_send = _setup_app_integrations_stubs()
-
-    # Mock the 3 sequential LLM calls
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.85,
-        reasoning="User is skipping gym despite their 3x/week goal.",
-        context_summary="User discussing skipping exercise.",
-    )
-    draft_result = NotificationDraft(
-        notification_text="You've been skipping gym — remember your 3x/week goal!",
-        reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
-        confidence=0.82,
-        category="goal_connection",
-    )
-    critic_result = ValidationResult(
-        approved=True,
-        reasoning="This is a concrete reminder tied to a specific goal and current action.",
-    )
-
-    # with_structured_output is called 3 times; return different parsers each time
-    call_count = [0]
-    results = [gate_result, draft_result, critic_result]
-
-    def side_effect_structured_output(model_class):
-        parser = MagicMock()
-        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
-        call_count[0] += 1
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
-
-    # Reset rate limit mocks
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    messages = [
-        {"text": "I'll skip the gym today", "is_user": True},
-        {"text": "You sure?", "is_user": False},
-        {"text": "Yeah I'm too tired", "is_user": True},
-    ]
-
-    result = app_int._process_mentor_proactive_notification("test_uid", messages)
-
-    assert result is not None
-    assert "gym" in result.lower() or "3x" in result.lower() or "skip" in result.lower()
-    mock_send.assert_called()
-
-
-def _pass_all_three_steps():
-    """Configure mock_llm_mini so gate, generate and critic all approve."""
-    results = [
-        RelevanceResult(
-            is_relevant=True,
-            relevance_score=0.85,
-            reasoning="User is skipping gym despite their 3x/week goal.",
-            context_summary="User discussing skipping exercise.",
-        ),
-        NotificationDraft(
-            notification_text="You've been skipping gym — remember your 3x/week goal!",
-            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
-            confidence=0.82,
-            category="goal_connection",
-        ),
-        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
-    ]
-    call_count = [0]
-
-    def side_effect_structured_output(model_class):
-        parser = MagicMock()
-        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
-        call_count[0] += 1
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
-
-
-def test_mentor_past_context_survives_embedding_failure():
-    """A failing embedding provider must not also drop the recent-conversations context.
-
-    Semantic search and recent-by-time are separate sources: the first needs an embedding
-    provider and a vector store, the second needs neither. When they shared one try/except,
-    one embedding error (missing key, quota, outage) silently stripped both.
-    """
-    _setup_app_integrations_stubs()
-    _pass_all_three_steps()
-
-    mock_generate_embedding.side_effect = RuntimeError("no embedding provider configured")
-    mock_get_convos.reset_mock()
-    mock_get_convos.return_value = [{'id': 'conv-1', 'is_locked': False}]
-    mock_convos_to_string.reset_mock()
-    mock_convos_to_string.return_value = 'yesterday: user talked about the gym'
-
-    try:
-        result = app_int._process_mentor_proactive_notification(
-            "uid_embed_fail", [{"text": "I'll skip the gym today", "is_user": True}]
-        )
-    finally:
-        mock_generate_embedding.side_effect = None
-        mock_get_convos.return_value = []
-        mock_convos_to_string.return_value = ''
-
-    assert result is not None
-    # The recent-conversations fetch ran and its result was rendered for the prompt.
-    mock_get_convos.assert_called()
-    mock_convos_to_string.assert_called()
-
-
-def test_mentor_vector_context_survives_recent_conversations_failure():
-    """The mirror case: a failing recent-by-time fetch must not discard the vector hits.
-
-    The rendering step runs after both sources, so under the shared try/except a
-    conversations-store error thrown by the second source also threw away the
-    semantically relevant conversations the first source had already collected.
-    """
-    _setup_app_integrations_stubs()
-    _pass_all_three_steps()
-
-    mock_query_vectors.return_value = ['conv-vector-1']
-    mock_get_convos_by_id.return_value = [{'id': 'conv-vector-1', 'is_locked': False}]
-    mock_get_convos.reset_mock()
-    mock_get_convos.side_effect = RuntimeError("conversations store unavailable")
-    mock_convos_to_string.reset_mock()
-    mock_convos_to_string.return_value = 'last week: user set a 3x/week gym goal'
-
-    try:
-        result = app_int._process_mentor_proactive_notification(
-            "uid_convos_fail", [{"text": "I'll skip the gym today", "is_user": True}]
-        )
-    finally:
-        mock_query_vectors.return_value = []
-        mock_get_convos_by_id.return_value = []
-        mock_get_convos.side_effect = None
-        mock_convos_to_string.return_value = ''
-
-    assert result is not None
-    # The vector-search hit was still rendered into the prompt context.
-    mock_deserialize_convos.assert_called()
-    assert mock_deserialize_convos.call_args[0][0] == [{'id': 'conv-vector-1', 'is_locked': False}]
-    mock_convos_to_string.assert_called()
-
-
-def test_process_mentor_proactive_notification_gate_rejects():
-    """_process_mentor_proactive_notification should return None when gate rejects."""
-    _setup_app_integrations_stubs()
-
-    gate_result = RelevanceResult(
-        is_relevant=False,
-        relevance_score=0.20,
-        reasoning="Generic conversation, nothing actionable.",
-        context_summary="Casual chat.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=gate_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    messages = [{"text": "Just chatting about the weather", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_gate", messages)
-
-    assert result is None
-
-
-def test_process_mentor_proactive_notification_critic_rejects():
-    """_process_mentor_proactive_notification should return None when critic rejects."""
-    _setup_app_integrations_stubs()
-
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.80,
-        reasoning="Some connection found.",
-        context_summary="User discussing work.",
-    )
-    draft_result = NotificationDraft(
-        notification_text="Ensure you prioritize your tasks",
-        reasoning="User has goals.",
-        confidence=0.75,
-        category="productivity",
-    )
-    critic_result = ValidationResult(
-        approved=False,
-        reasoning="This is generic advice that applies to anyone. Rejected.",
-    )
-
-    call_count = [0]
-    results = [gate_result, draft_result, critic_result]
-
-    def side_effect(model_class):
-        parser = MagicMock()
-        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
-        call_count[0] += 1
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect)
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    messages = [{"text": "Working on stuff", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_critic", messages)
-
-    assert result is None
-
-
-def test_process_mentor_proactive_notification_rate_limited():
-    """_process_mentor_proactive_notification should return None when rate-limited."""
-    _setup_app_integrations_stubs()
-
-    # Set rate limit as hit
-    mem_mod.get_proactive_noti_sent_at.return_value = int(time.time())  # Just sent
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-
-    messages = [{"text": "test", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_rl", messages)
-
-    assert result is None
-
-    # Reset
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-
-
-def test_process_mentor_proactive_notification_daily_cap():
-    """_process_mentor_proactive_notification should return None when daily cap reached."""
-    _setup_app_integrations_stubs()
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 12  # At cap
-
-    messages = [{"text": "test", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_cap", messages)
-
-    assert result is None
-
-    # Reset
-    redis_mod.get_daily_notification_count.return_value = 0
-
-
-def test_process_mentor_proactive_notification_below_threshold():
-    """_process_mentor_proactive_notification should reject when gate score below threshold."""
-    _setup_app_integrations_stubs()
-
-    # Gate passes is_relevant=True but score is below threshold for frequency 3 (0.78)
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.50,  # Below threshold for frequency 3
-        reasoning="Marginal connection.",
-        context_summary="User chatting casually.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=gate_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    messages = [
-        {"text": "Just chatting", "is_user": True},
-        {"text": "Cool", "is_user": False},
-        {"text": "Yeah", "is_user": True},
-    ]
-
-    result = app_int._process_mentor_proactive_notification("test_uid_low", messages)
-
-    assert result is None
-
-
-def test_process_mentor_proactive_notification_disabled():
-    """_process_mentor_proactive_notification should return None when frequency is 0."""
-    _setup_app_integrations_stubs()
-
-    notifications_db.get_mentor_notification_frequency.return_value = 0
-
-    messages = [{"text": "test", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_off", messages)
-
-    assert result is None
-
-    # Reset
-    notifications_db.get_mentor_notification_frequency.return_value = 3
-
-
 # ── Frequency threshold tests ──
 
 
@@ -1187,80 +883,3 @@ def test_validation_result_model():
         reasoning="This would genuinely help the user.",
     )
     assert result.approved is True
-
-
-def _prompt_text(invoked):
-    """Flatten what the builder handed the LLM into the text the model actually reads.
-
-    The gate now sends its prompt as two content parts of one message so the stable
-    half can end on a cache breakpoint (see test_mentor_gate_prompt_cache); the other
-    builders still send a plain string. Both render to the same bytes.
-    """
-    if isinstance(invoked, str):
-        return invoked
-    parts = []
-    for message in invoked:
-        content = message.content
-        if isinstance(content, str):
-            parts.append(content)
-        else:
-            parts.extend(part["text"] for part in content)
-    return "".join(parts)
-
-
-def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
-    """All three pipeline prompts must carry the user's timezone date, not the UTC default.
-
-    SCA-358 sibling fix: the production caller never passed ``current_date``, so the
-    gate/generate/critic prompts silently fell back to ``current_date_in_tz(None)`` —
-    UTC — wrong by up to a day for non-UTC users and desyncing the never-say-the-year-
-    is-wrong guard near local midnight. The sentinel date proves the plumbing
-    end-to-end: a caller that dropped the parameter would render the runner's real
-    UTC date instead of 2031-02-03.
-    """
-    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2031-02-03')
-    _setup_app_integrations_stubs()
-
-    prompts: list = []
-    results = [
-        RelevanceResult(
-            is_relevant=True,
-            relevance_score=0.85,
-            reasoning="User is skipping gym despite their 3x/week goal.",
-            context_summary="User discussing skipping exercise.",
-        ),
-        NotificationDraft(
-            notification_text="You've been skipping gym — remember your 3x/week goal!",
-            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
-            confidence=0.82,
-            category="goal_connection",
-        ),
-        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
-    ]
-    call_count = [0]
-
-    def side_effect_structured_output(model_class):
-        parser = MagicMock()
-        idx = min(call_count[0], len(results) - 1)
-        call_count[0] += 1
-
-        def _invoke(prompt, *args, **kwargs):
-            prompts.append(prompt)
-            return results[idx]
-
-        parser.invoke = MagicMock(side_effect=_invoke)
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
-
-    messages = [
-        {"text": "I'll skip the gym today", "is_user": True},
-        {"text": "You sure?", "is_user": False},
-    ]
-
-    result = app_int._process_mentor_proactive_notification("test_uid_tz_date", messages)
-
-    assert result is not None
-    assert len(prompts) >= 3
-    for prompt in prompts:
-        assert "2031-02-03" in _prompt_text(prompt), "pipeline prompt lost the user-timezone date anchor"

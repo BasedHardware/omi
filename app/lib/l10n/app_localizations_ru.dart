@@ -12495,6 +12495,21 @@ class AppLocalizationsRu extends AppLocalizations {
   String get partialRecording => 'Частичная запись';
 
   @override
+  String get importTranscriptFiles => 'Файлы расшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберите расшифровки SRT, VTT или TXT либо ZIP-архив с ними';
+
+  @override
+  String get importTooManyAttempts => 'Сейчас слишком много импортов. Повторите попытку позже.';
+
+  @override
+  String get importFileTooLarge => 'Этот файл слишком большой для импорта.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы этого типа нельзя импортировать.';
+
+  @override
   String get thisWeek => 'Эта неделя';
 
   @override

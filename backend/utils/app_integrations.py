@@ -41,7 +41,7 @@ from database.webhook_health import (
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
-from database.users import get_user_language_preference
+from database.users import get_user_language_preference  # used via module attribute by proactivity_producers
 from utils.subscription import is_trial_paywalled
 from utils.mentor_admission import mentor_plan_allows_evaluation
 from database.redis_db import (
@@ -63,11 +63,9 @@ from utils.notification_dispatch import (
     dispatch_notification,
     dispatch_notification_async,
 )
+from config.proactivity_v2 import ProactivityDenied
 from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
-    evaluate_relevance,
-    generate_notification,
-    validate_notification,
     FREQUENCY_TO_BASE_THRESHOLD,
     MAX_DAILY_NOTIFICATIONS,
 )
@@ -765,197 +763,6 @@ def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tupl
     return frequency, base_threshold
 
 
-def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
-    """
-    Three-step proactive notification pipeline:
-      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
-      2. Generate — produce the actual notification (only if gate passes)
-      3. Critic — would a human actually want this on their phone? (final check)
-
-    Returns:
-        The notification text if sent, None otherwise.
-    """
-    admission = admit_mentor_evaluation(uid, conversation_messages)
-    if admission is None:
-        return None
-    frequency, base_threshold = admission
-
-    # 4. Gather lightweight context (no vector search yet — save for step 2)
-    try:
-        user_name, user_facts = get_prompt_memories(uid)
-    except Exception:
-        logger.error(f"mentor_proactive memories_failed uid={uid} reason=operation_failed")
-        user_name, user_facts = 'User', ''
-
-    try:
-        goals = get_user_goals(uid, limit=3)
-    except Exception:
-        logger.error(f"mentor_proactive goals_failed uid={uid} reason=operation_failed")
-        goals = []
-
-    # The pipeline's date anchor: without it the prompts fall back to UTC, which is
-    # wrong by up to a day for non-UTC users and desyncs the year guard near local
-    # midnight (SCA-358). Computed once so gate/generate/critic share one "today".
-    current_date = current_date_for_uid(uid)
-
-    try:
-        recent_notifications = get_app_messages(uid, 'mentor', limit=20)
-    except Exception:
-        logger.error(f"mentor_proactive recent_notis_failed uid={uid} reason=operation_failed")
-        recent_notifications = []
-
-    # ── Step 1: Gate ─────────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            relevance = evaluate_relevance(
-                user_name=user_name,
-                user_facts=user_facts,
-                goals=goals,
-                current_messages=conversation_messages,
-                recent_notifications=recent_notifications,
-                current_date=current_date,
-                # Routes this user's successive gate calls to the same cached
-                # prefix; the gate is evaluated repeatedly during one listening
-                # session and its facts/goals prefix does not change between them.
-                uid=uid,
-            )
-    except Exception:
-        logger.error(f"mentor_proactive gate_failed uid={uid} reason=operation_failed")
-        return None
-
-    if not relevance.is_relevant or relevance.relevance_score < base_threshold:
-        logger.info(
-            f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
-            f"reason={'not_relevant' if not relevance.is_relevant else 'below_threshold'}"
-        )
-        return None
-
-    logger.info(
-        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} " f"threshold={base_threshold}"
-    )
-
-    # ── Gather full context (expensive: vector search + recent convos) ───
-    #
-    # The two sources are guarded separately on purpose: semantic search needs an embedding
-    # provider and a vector store, recent-by-time needs neither. Under one shared try/except a
-    # single embedding failure (missing key, quota, provider outage) also took down the
-    # recent-conversations fetch that follows it, leaving the mentor with no past context at
-    # all — silently, because the draft is still written from the live transcript alone.
-    past_conversations_str = ''
-    all_past: list[dict] = []
-
-    # Vector search for semantically relevant conversations
-    try:
-        conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        if conversation_text.strip():
-            vector = generate_embedding(conversation_text[:2000])
-            memory_ids = query_vectors_by_metadata(
-                uid, vector, dates_filter=[None, None], people=[], topics=[], entities=[], dates=[], limit=3
-            )
-            if memory_ids:
-                vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
-                if vector_convos:
-                    all_past.extend([c for c in vector_convos if not c.get('is_locked')])
-    except Exception:
-        logger.error(f"mentor_proactive vector_search_failed uid={uid} reason=operation_failed")
-
-    # Also fetch recent conversations by time for additional context
-    try:
-        recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
-        if recent_convos:
-            existing_ids = {c.get('id') for c in all_past}
-            for rc in recent_convos:
-                if rc.get('id') not in existing_ids and not rc.get('is_locked'):
-                    all_past.append(rc)
-    except Exception:
-        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} reason=operation_failed")
-
-    try:
-        if all_past:
-            past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
-    except Exception:
-        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} reason=operation_failed")
-
-    # Resolve the user's output language once so the notification is generated in it, not English
-    # (the daily summary already respects this setting) (#5214).
-    try:
-        output_language = get_user_language_preference(uid) or 'en'
-    except Exception:
-        logger.error(f"mentor_proactive language_lookup_failed uid={uid} reason=operation_failed")
-        output_language = 'en'
-
-    # ── Step 2: Generate ─────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            draft = generate_notification(
-                user_name=user_name,
-                user_facts=user_facts,
-                goals=goals,
-                past_conversations_str=past_conversations_str,
-                current_messages=conversation_messages,
-                recent_notifications=recent_notifications,
-                frequency=frequency,
-                gate_reasoning=relevance.reasoning,
-                output_language=output_language,
-                current_date=current_date,
-            )
-    except Exception:
-        logger.error(f"mentor_proactive generate_failed uid={uid} reason=operation_failed")
-        return None
-
-    notification_text = draft.notification_text
-    if not notification_text or len(notification_text) < 5:
-        logger.info(f"mentor_proactive empty_draft uid={uid}")
-        return None
-
-    if draft.confidence < base_threshold:
-        logger.info(
-            f"mentor_proactive draft_below_threshold uid={uid} "
-            f"confidence={draft.confidence:.2f} threshold={base_threshold}"
-        )
-        return None
-
-    # ── Step 3: Critic ───────────────────────────────────────────────────
-    try:
-        with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
-            validation = validate_notification(
-                user_name=user_name,
-                notification_text=notification_text,
-                draft_reasoning=draft.reasoning,
-                current_messages=conversation_messages,
-                goals=goals,
-                output_language=output_language,
-                current_date=current_date,
-            )
-    except Exception:
-        logger.error(f"mentor_proactive critic_failed uid={uid} reason=operation_failed")
-        return None
-
-    if not validation.approved:
-        logger.info(
-            f"mentor_proactive critic_rejected uid={uid} " f"chars={len(notification_text)} reason=not_approved"
-        )
-        return None
-
-    # ── Send ─────────────────────────────────────────────────────────────
-    if len(notification_text) > 150:
-        notification_text = notification_text[:150]
-
-    logger.info(
-        f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
-        f"chars={len(notification_text)} reason=critic_approved"
-    )
-    send_app_notification(uid, 'Omi', 'mentor', notification_text)
-
-    # Update rate limit and daily count
-    ts = int(time.time())
-    mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    incr_daily_notification_count(uid, _user_day_zone(uid))
-
-    return notification_text
-
-
 def _process_proactive_notification(uid: str, app: App, data):
     """Process proactive notifications for external/third-party apps.
 
@@ -1155,24 +962,21 @@ async def _async_trigger_realtime_integrations(
     if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
-    # Both paths share buffering and deterministic admission. Invalid flips invoke neither.
-    mentor_results = {}
-    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
-    if pipeline in {'legacy', 'v2', 'cohort'}:
+    # The mentor lane is v2-only: the legacy mentor pipeline was deleted once
+    # v2 reached 100%. Shared buffering/admission still gates it, and any
+    # non-cohort env value (unset, stale legacy/v2, typo) invokes nothing.
+    if os.getenv('MENTOR_PIPELINE') == 'cohort':
         conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
-        if conversation_messages:
+        if conversation_messages and conversation_id:
             # Cohort selection can call PostHog: only resolve it after the shared
             # paid/opt-in/buffering/debounce gate has admitted actual messages.
-            if pipeline == 'cohort':
-                pipeline = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
-            if pipeline == 'legacy':
-                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                    mentor_message = await run_blocking(
-                        postprocess_executor, _process_mentor_proactive_notification, uid, conversation_messages
-                    )
-                if mentor_message:
-                    mentor_results['mentor'] = mentor_message
-            elif pipeline == 'v2' and conversation_id:
+            # A flag error denies the mentor lane (fail closed, rate-limited
+            # diagnostic in proactivity_flags) without touching app fanout.
+            try:
+                lane = await run_blocking(db_executor, proactivity_flags.mentor_pipeline, uid)
+            except ProactivityDenied:
+                lane = None
+            if lane == 'v2':
                 from utils.proactivity_producers import evaluate_mentor_event
 
                 await evaluate_mentor_event(uid, conversation_id, conversation_messages)
@@ -1180,15 +984,6 @@ async def _async_trigger_realtime_integrations(
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
-        # Return mentor results if any, even if no external apps
-        if mentor_results:
-            messages = []
-            for key, message in mentor_results.items():
-                messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
-                await run_blocking(
-                    db_executor, redis_db.publish_proactive_message, uid, key, 'Omi', message, conversation_id
-                )
-            return messages
         return {}
 
     results = {}
@@ -1303,17 +1098,21 @@ async def _async_trigger_realtime_integrations(
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10)
 
-    # Merge mentor results with app results
-    all_results = {**mentor_results, **results}
-
     app_name_by_id = {app.id: app.name for app in filtered_apps}
     messages = []
-    for key, message in all_results.items():
+    for key, message in results.items():
         if not message:
             continue
         messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
-        title = 'Omi' if key == 'mentor' else app_name_by_id.get(key, 'Omi')
-        await run_blocking(db_executor, redis_db.publish_proactive_message, uid, key, title, message, conversation_id)
+        await run_blocking(
+            db_executor,
+            redis_db.publish_proactive_message,
+            uid,
+            key,
+            app_name_by_id.get(key, 'Omi'),
+            message,
+            conversation_id,
+        )
 
     return messages
 

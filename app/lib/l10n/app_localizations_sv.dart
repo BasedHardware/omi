@@ -12457,6 +12457,21 @@ class AppLocalizationsSv extends AppLocalizations {
   String get partialRecording => 'Delvis inspelning';
 
   @override
+  String get importTranscriptFiles => 'Transkriptionsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Välj SRT-, VTT- eller TXT-transkriptioner eller en ZIP med dem';
+
+  @override
+  String get importTooManyAttempts => 'För många importer just nu. Försök igen senare.';
+
+  @override
+  String get importFileTooLarge => 'Den här filen är för stor för att importeras.';
+
+  @override
+  String get importUnsupportedFileType => 'Den här filtypen kan inte importeras.';
+
+  @override
   String get thisWeek => 'Den här veckan';
 
   @override

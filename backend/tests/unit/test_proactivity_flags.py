@@ -138,19 +138,36 @@ def test_concurrent_same_user_misses_share_one_request(cache, error):
 @pytest.mark.parametrize('status,expected', [(429, '429'), ('503', '503'), ('private-response', 'unknown')])
 def test_cohort_diagnostics_type_status_privacy_and_rate_limit(cache, monkeypatch, caplog, status, expected):
     monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
-    fallback = Mock()
-    monkeypatch.setattr(flags, 'record_fallback', fallback)
     cache.lookup.side_effect = APIError(status, 'private-response private-key')
-    assert flags.mentor_pipeline('private-uid') == 'legacy'
-    assert flags.mentor_pipeline('private-uid') == 'legacy'
-    assert flags.mentor_pipeline('another-private-uid') == 'legacy'
-    assert fallback.call_count == 3
+    # Flag errors deny (fail closed) instead of selecting the deleted legacy lane.
+    for uid in ('private-uid', 'private-uid', 'another-private-uid'):
+        with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+            flags.mentor_pipeline(uid)
     warnings = [record.message for record in caplog.records]
     assert warnings == [f'proactivity_v2_flag_unavailable error_type=APIError http_status={expected}']
     assert 'private' not in caplog.text
     cache.now[0] += 60
-    assert flags.mentor_pipeline('private-uid') == 'legacy'
+    with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+        flags.mentor_pipeline('private-uid')
     assert len(caplog.records) == 2
+
+
+@pytest.mark.parametrize('value', [True, False])
+def test_cohort_resolves_v2_only_for_flagged_users(cache, monkeypatch, value):
+    monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
+    cache.lookup.return_value = {'proactivity_v2': value}
+    assert flags.mentor_pipeline('synthetic') == ('v2' if value else None)
+    cache.lookup.assert_called_once_with('synthetic')
+
+
+@pytest.mark.parametrize('pipeline', ['legacy', 'v2', 'typo', None])
+def test_non_cohort_env_denies_without_flag_lookup(cache, monkeypatch, pipeline):
+    if pipeline is None:
+        monkeypatch.delenv('MENTOR_PIPELINE', raising=False)
+    else:
+        monkeypatch.setenv('MENTOR_PIPELINE', pipeline)
+    assert flags.mentor_pipeline('synthetic') is None
+    cache.lookup.assert_not_called()
 
 
 @pytest.mark.parametrize('value', [True, False, 'error'])
@@ -233,7 +250,6 @@ def test_unavailable_dedicated_token_never_falls_back_and_logs_once(monkeypatch,
     monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
     factory = Mock()
     monkeypatch.setattr(flags, 'importlib', SimpleNamespace(import_module=factory))
-    monkeypatch.setattr(flags, 'record_fallback', Mock())
     monkeypatch.setattr(flags, '_flag_cache', OrderedDict())
     monkeypatch.setattr(flags, '_next_warning_at', 0.0)
     now = [100.0]
@@ -245,7 +261,8 @@ def test_unavailable_dedicated_token_never_falls_back_and_logs_once(monkeypatch,
         for uid in ('private-uid', 'private-uid', 'another-private-uid'):
             with pytest.raises(ProactivityDenied, match='flag_unavailable'):
                 flags.enabled(uid)
-        assert flags.mentor_pipeline('private-uid') == 'legacy'
+        with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+            flags.mentor_pipeline('private-uid')
         assert len(caplog.records) == 1
         assert (
             caplog.records[0].message

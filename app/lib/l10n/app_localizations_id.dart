@@ -12464,6 +12464,22 @@ class AppLocalizationsId extends AppLocalizations {
   String get partialRecording => 'Rekaman sebagian';
 
   @override
+  String get importTranscriptFiles => 'File transkrip';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Pilih transkrip SRT, VTT, atau TXT, atau ZIP yang berisi transkrip tersebut';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak impor saat ini. Coba lagi nanti.';
+
+  @override
+  String get importFileTooLarge => 'File ini terlalu besar untuk diimpor.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis file ini tidak dapat diimpor.';
+
+  @override
   String get thisWeek => 'Minggu ini';
 
   @override

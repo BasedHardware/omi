@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/http/api/phone_calls.dart';
+import 'package:omi/backend/http/error_detail.dart';
 
 void main() {
   group('errorDetailMessage', () {
