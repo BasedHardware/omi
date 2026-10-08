@@ -42,7 +42,7 @@ async def test_paid_dispatch_never_reaches_shared_gemini(monkeypatch, anchor, st
 
     def handler(request):
         seen.append(request)
-        if request.url.host.endswith('aiplatform.googleapis.com'):
+        if request.url.host == 'us-central1-aiplatform.googleapis.com':
             assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
             assert ptr.PT_MODEL_CURRENT + ':' in request.url.path
             return httpx.Response(429, json={'error': {'message': 'Provisioned throughput exhausted'}})
