@@ -1541,7 +1541,7 @@ Task: {app.memory_prompt}'''
         return strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
 
     gateway_mode_enabled = should_route_features_through_gateway()
-    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled() and explicit_cache_switch_enabled()
     # Above the provider's floor the leading framing is a readable prefix: one write,
     # then a read on every later conversation this app summarizes inside the TTL.
     # Below it, marked_prefix_request declines and the request keeps its previous
@@ -1560,7 +1560,7 @@ Task: {app.memory_prompt}'''
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     _, marked_messages = (
         marked_prefix_request(APP_RESULT_CACHE_NAMESPACE, app_framing, app_conversation_block)
-        if explicit_cache_enabled and model_supports_explicit_cache(app_result_llm)
+        if explicit_cache_enabled and not has_byok_keys()
         else (None, None)
     )
     response = app_result_llm.invoke(marked_messages or prompt)

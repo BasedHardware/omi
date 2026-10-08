@@ -481,8 +481,9 @@ class TestGetLlm:
         # Gateway lane identity is feature-specific even when the upstream model matches.
         llm1 = get_llm('memories')
         llm2 = get_llm('goals')
-        assert llm1.metadata['omi_resolved_model'] == llm2.metadata['omi_resolved_model']
-        assert llm1._constructor_kwargs == llm2._constructor_kwargs
+        assert llm1 is not llm2
+        assert llm1.model_name == 'omi:auto:memories'
+        assert llm2.model_name == 'omi:auto:goals'
 
     def test_different_models_return_different_instances(self):
         llm1 = get_llm('memories')
@@ -518,7 +519,8 @@ class TestGetLlm:
         # Followup now uses Luna and supports OpenAI prompt-cache keys.
         llm_with_key = get_llm('followup', cache_key='omi-test-key')
         llm_without_key = get_llm('followup')
-        assert llm_with_key._constructor_kwargs == llm_without_key._constructor_kwargs
+        assert llm_with_key is not llm_without_key
+        assert getattr(llm_with_key, 'bound_kwargs', {}).get('prompt_cache_key') == 'omi-test-key'
 
     def test_new_features_return_clients(self):
         """New features should return valid LLM clients."""

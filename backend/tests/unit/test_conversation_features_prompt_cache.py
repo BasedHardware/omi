@@ -41,6 +41,7 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_BREAKPOINT,
     EXPLICIT_CACHE_MINIMUM_CHARACTERS,
     EXPLICIT_CACHE_OPTIONS,
+    GPT56_EXPLICIT_CACHE_ENABLED_ENV,
     gpt56_explicit_cache_enabled,
 )
 
