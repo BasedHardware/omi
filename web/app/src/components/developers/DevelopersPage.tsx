@@ -79,6 +79,11 @@ export function DevelopersPage() {
                   onCreateMcpKey={developer.handleCreateMcpKey}
                   onDeleteMcpKey={developer.handleDeleteMcpKey}
                   onWebhookChange={developer.handleWebhookChange}
+                  signingSecret={developer.signingSecret}
+                  signingSecretError={developer.signingSecretError}
+                  onRetrySigningSecret={developer.loadSigningSecretStatus}
+                  onIssueSigningSecret={developer.handleIssueSigningSecret}
+                  onDeleteSigningSecret={developer.handleDeleteSigningSecret}
                   onExportData={developer.handleExportData}
                   isExporting={developer.isExporting}
                   onDeleteKnowledgeGraph={developer.handleDeleteKnowledgeGraph}

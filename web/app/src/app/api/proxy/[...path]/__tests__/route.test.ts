@@ -39,6 +39,78 @@ describe('authenticated proxy handler', () => {
     );
   });
 
+  it('keeps the upstream no-store on JSON replies that carry a one-time secret', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ secret: 'whsec_once' }), {
+            headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+          }),
+      ),
+    );
+
+    const response = await POST(
+      new Request(
+        'https://app.example.com/api/proxy/v1/users/developer/webhook-signing-secret',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer test-token' },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ secret: 'whsec_once' });
+  });
+
+  it('does not forward a permissive upstream cache header on JSON replies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ok: true }), {
+            headers: {
+              'content-type': 'application/json',
+              'cache-control': 'public, max-age=3600',
+            },
+          }),
+      ),
+    );
+
+    const response = await GET(
+      new Request('https://app.example.com/api/proxy/v1/users/profile', {
+        headers: { Authorization: 'Bearer test-token' },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBeNull();
+  });
+
+  it('lets the static-endpoint cache policy win over an upstream no-store', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+          }),
+      ),
+    );
+
+    const response = await GET(
+      new Request('https://app.example.com/api/proxy/v1/app-categories', {
+        headers: { Authorization: 'Bearer test-token' },
+      }),
+    );
+
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=3600, stale-while-revalidate=86400',
+    );
+  });
+
   it('streams event-stream replies while the upstream is still sending', async () => {
     let upstream!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({
