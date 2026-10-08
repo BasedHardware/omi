@@ -39,6 +39,8 @@ import type {
   StoreRecordingPermissionResponse,
   ClientFlagsResponse,
   ConnectorAccess,
+  WebhookSigningSecretIssuedResponse,
+  WebhookSigningSecretStatusResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -1595,6 +1597,28 @@ export async function deleteApp(appId: string): Promise<void> {
   });
 }
 
+// Integration-app webhook signing secret; owner only (backend answers 403 otherwise).
+const appSigningSecretPath = (appId: string) =>
+  `/v1/apps/${encodeURIComponent(appId)}/webhook-signing-secret`;
+
+export async function getAppWebhookSigningSecretStatus(
+  appId: string,
+): Promise<WebhookSigningSecretStatusResponse> {
+  return fetchWithAuth<WebhookSigningSecretStatusResponse>(appSigningSecretPath(appId));
+}
+
+export async function issueAppWebhookSigningSecret(
+  appId: string,
+): Promise<WebhookSigningSecretIssuedResponse> {
+  return fetchWithAuth<WebhookSigningSecretIssuedResponse>(appSigningSecretPath(appId), {
+    method: 'POST',
+  });
+}
+
+export async function deleteAppWebhookSigningSecret(appId: string): Promise<void> {
+  await fetchWithAuth(appSigningSecretPath(appId), { method: 'DELETE' });
+}
+
 /**
  * Upload app thumbnail
  */
@@ -1892,6 +1916,28 @@ export async function disableDeveloperWebhook(type: WebhookType): Promise<void> 
  */
 export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
   return fetchWithAuth<DeveloperWebhooks>('/v1/users/developer/webhooks/status');
+}
+
+// Webhook signing secrets (X-Omi-Signature). POST issues a secret, or rotates the
+// existing one: the new secret signs immediately and the previous one stays valid
+// for 24 hours. The secret is in the POST response only; GET reports status.
+const DEVELOPER_SIGNING_SECRET_PATH = '/v1/users/developer/webhook-signing-secret';
+
+export async function getDeveloperWebhookSigningSecretStatus(): Promise<WebhookSigningSecretStatusResponse> {
+  return fetchWithAuth<WebhookSigningSecretStatusResponse>(DEVELOPER_SIGNING_SECRET_PATH);
+}
+
+export async function issueDeveloperWebhookSigningSecret(): Promise<WebhookSigningSecretIssuedResponse> {
+  return fetchWithAuth<WebhookSigningSecretIssuedResponse>(
+    DEVELOPER_SIGNING_SECRET_PATH,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export async function deleteDeveloperWebhookSigningSecret(): Promise<void> {
+  await fetchWithAuth(DEVELOPER_SIGNING_SECRET_PATH, { method: 'DELETE' });
 }
 
 /**
