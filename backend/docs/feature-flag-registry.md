@@ -497,7 +497,6 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
-| `MEETING_NOTES_EPISODE_EVIDENCE_PERCENT` | 2026-10-08 | Removed unconsumed episode evidence capture after legacy notes writer deletion |
 | `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` | 2026-10-08 | Removed unconsumed episode evidence capture after legacy notes writer deletion |
 | `autoCreateSpeakersEnabled` | 2026-09-26 | Shipped developer preference removed; create_speakers always true |
 | `context_buckets` | 2026-09-24 | Unused nominal enable row; bundle identity owns the active gate |
