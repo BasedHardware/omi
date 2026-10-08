@@ -200,6 +200,8 @@ env:
     value: "cohort"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "true"
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
