@@ -213,13 +213,13 @@ Your webhook receives real-time transcripts and returns notification prompts:
 
 **Incoming Request:**
 ```
-POST /your-webhook?session_id=abc123&uid=user123
+POST /your-webhook?uid=user123
 ```
 
 **Request Body:**
 ```json
 {
-  "session_id": "abc123",
+  "session_id": "user123",
   "segments": [
     {"text": "What do you think about this approach?", "speaker": "SPEAKER_01", "is_user": false}
   ]
@@ -229,7 +229,7 @@ POST /your-webhook?session_id=abc123&uid=user123
 **Response (when you want to send a notification):**
 ```json
 {
-  "session_id": "abc123",
+  "session_id": "user123",
   "notification": {
     "prompt": "You are mentoring {{user_name}}. Based on {{user_facts}} and {{user_context}}, provide brief actionable advice in 50 words.",
     "params": ["user_name", "user_facts", "user_context"]
@@ -240,7 +240,7 @@ POST /your-webhook?session_id=abc123&uid=user123
 **Response (when no notification needed):**
 ```json
 {
-  "session_id": "abc123"
+  "session_id": "user123"
 }
 ```
 
