@@ -25,12 +25,6 @@ Run the converter:
 python sdks/python-cli/examples/conversations_to_html.py --utc-offset +09:00 week.html week.json
 ```
 
-The alias `conversations_html.py` is also available:
-
-```sh
-python sdks/python-cli/examples/conversations_html.py week.html week.json
-```
-
 Open `week.html` in any browser; it also prints cleanly, one day per heading.
 The summary line counts conversations, recorded hours and days; each day
 section lists that day's conversations in start order with their duration
