@@ -35,13 +35,6 @@ GRANDCHILD = (
     "raise SystemExit(code)\n"
 )
 
-IGNORE_TERM = (
-    "import signal, time\n"
-    "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-    "time.sleep(120)\n"
-)
-
-
 def alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -79,7 +72,12 @@ class OwnedProcessTests(unittest.TestCase):
             self.foreign.kill()
             self.foreign.wait(timeout=5)
 
-    def supervise_cmd(self, command: list[str], run_deadline: str | None = None) -> list[str]:
+    def supervise_cmd(
+        self,
+        command: list[str],
+        run_deadline: str | None = None,
+        shutdown: str = "3",
+    ) -> list[str]:
         cmd = [
             sys.executable,
             str(SCRIPT),
@@ -89,7 +87,7 @@ class OwnedProcessTests(unittest.TestCase):
             "--label",
             "owned-process-test",
             "--shutdown-deadline",
-            "3",
+            shutdown,
             "--parent-poll",
             "0.05",
         ]
@@ -164,14 +162,38 @@ class OwnedProcessTests(unittest.TestCase):
         self.assert_reaped(grandchild)
 
     def test_ignored_sigterm_is_sigkilled(self):
+        code = (
+            "import os, pathlib, signal, sys, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()))\n"
+            "time.sleep(30)\n"
+        )
+
+        def _kill_recorded():
+            if not self.pidfile.is_file():
+                return
+            pid = int(self.pidfile.read_text())
+            if alive(pid):
+                os.kill(pid, signal.SIGKILL)
+
+        self.addCleanup(_kill_recorded)
         started = time.monotonic()
         finished = subprocess.run(
-            self.supervise_cmd([sys.executable, "-c", IGNORE_TERM], run_deadline="0.3"),
+            self.supervise_cmd(
+                [sys.executable, "-c", code, str(self.pidfile)],
+                run_deadline="0.4",
+                shutdown="2",
+            ),
             check=False,
             timeout=10,
         )
         self.assertEqual(finished.returncode, 124)
-        self.assertLess(time.monotonic() - started, 10)
+        self.assertLess(time.monotonic() - started, 8)
+        self.assertTrue(self.pidfile.is_file())
+        owned = int(self.pidfile.read_text())
+        self.assertFalse(alive(owned), "SIGTERM-ignoring owned child survived the shutdown deadline")
+        receipt = json.loads(self.receipt.read_text())
+        self.assertTrue(receipt["cleared"])
         self.assertTrue(alive(self.foreign.pid))
 
     def test_parent_death_reaps_grandchild(self):

@@ -386,33 +386,40 @@ def _alive_owned(pids: set[int], receipt: dict) -> set[int]:
     return {pid for pid in pids if _pid_owned_now(pid, receipt) and _pid_alive(pid)}
 
 
+def _force_reserve(shutdown_deadline: float) -> float:
+    """Seconds kept inside the caller's deadline for SIGKILL and a proof check.
+
+    The TERM wait must stop before this reserve, or a ps lookup at kill time
+    sees no time left and cannot authorize the signal.
+    """
+    if shutdown_deadline <= 0.2:
+        return shutdown_deadline / 2
+    return min(1.0, shutdown_deadline / 2)
+
+
 def reap(receipt: dict, first_signal: int, shutdown_deadline: float) -> bool:
     """Signal proven processes, then fail if an unproven group member remains."""
     if receipt_signal_error(receipt):
         return False
     deadline_at = time.monotonic() + shutdown_deadline
+    term_end = deadline_at - _force_reserve(shutdown_deadline)
     _DEADLINE["at"] = deadline_at
     try:
         targets = owned_pids(receipt)
         if targets is None:
             return False
         _signal_pids(targets, first_signal, receipt)
-        while time.monotonic() < deadline_at:
+        while time.monotonic() < term_end:
             targets = _alive_owned(targets, receipt)
             if not targets:
                 break
             time.sleep(0.05)
         else:
             _signal_pids(targets, signal.SIGKILL, receipt)
-            kill_end = time.monotonic() + min(1.0, max(0.0, deadline_at - time.monotonic()))
-            while time.monotonic() < kill_end:
-                targets = _alive_owned(targets, receipt)
-                if not targets:
-                    break
+            while time.monotonic() < deadline_at and any(_pid_alive(pid) for pid in targets):
                 time.sleep(0.05)
-            if _alive_owned(targets, receipt):
+            if any(_pid_alive(pid) for pid in targets):
                 return False
-        # One confirmation scan for a child that appeared during shutdown.
         confirmed = owned_pids(receipt)
         if confirmed is None:
             return False
