@@ -495,6 +495,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       fallback: classic,
       loading: loading,
       failed: failed,
+      // The Flutter typed status shows one generic copy for every failed phase.
+      errorMessage: failed ? l10n.somethingWentWrong : null,
       empty: provider.isSearching ? l10n.noResultsFound : l10n.noTasksYet,
       searchPlaceholder: l10n.searchActionItems,
       searchValue: provider.searchQuery,
@@ -603,7 +605,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 ? NativeRow('tasks_no_results', l10n.noResultsFound, kind: 'label')
                 : NativeRow('tasks_empty', l10n.noTasksYet, kind: 'label', subtitle: l10n.tasksEmptyStateMessage),
           ]),
-        if (provider.hasMore)
+        if (provider.hasMore && !failed)
           NativeSection('pagination', [
             NativeRow('tasks_load_more', l10n.showMore,
                 enabled: !provider.isFetching, action: (_) => provider.loadMoreActionItems())

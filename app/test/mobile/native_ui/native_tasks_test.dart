@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
@@ -85,6 +86,18 @@ class _FakeTasks extends ActionItemsProvider {
     endSelection();
     return true;
   }
+}
+
+/// A list whose last load ended in [phase] while more pages remained.
+class _FailedTasks extends _FakeTasks {
+  _FailedTasks(this.phase, _Calls calls) : super([], calls);
+  final ApiViewPhase phase;
+
+  @override
+  ApiViewState<List<ActionItemWithMetadata>> get apiViewState => ApiViewState(phase: phase);
+
+  @override
+  bool get hasMore => true;
 }
 
 class _Integrations extends TaskIntegrationProvider {
@@ -179,10 +192,11 @@ class _Page {
   }
 }
 
-Future<_Page> _pump(WidgetTester tester, {bool connected = false, List<ActionItemWithMetadata>? items}) async {
+Future<_Page> _pump(WidgetTester tester,
+    {bool connected = false, List<ActionItemWithMetadata>? items, ApiViewPhase? failedPhase}) async {
   final host = NativeTestHost.install();
   final calls = _Calls();
-  final provider = _FakeTasks(items ?? _fixture(), calls);
+  final provider = failedPhase == null ? _FakeTasks(items ?? _fixture(), calls) : _FailedTasks(failedPhase, calls);
   addTearDown(provider.dispose);
   await tester.pumpWidget(MultiProvider(
     providers: [
@@ -443,6 +457,17 @@ void main() {
       expect(page.row('tasks_empty').title, _l10n.noTasksYet);
       expect(page.row('tasks_empty').subtitle, _l10n.tasksEmptyStateMessage);
       expect(page.surface.empty, _l10n.noTasksYet);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'the empty projection stays native');
+    });
+
+    testWidgets('a failed load shows the Flutter status copy and no Show more', (tester) async {
+      for (final phase in [ApiViewPhase.error, ApiViewPhase.locked, ApiViewPhase.authenticationRequired]) {
+        final page = await _pump(tester, failedPhase: phase);
+        expect(page.surface.failed, isTrue);
+        expect(page.surface.errorMessage, _l10n.somethingWentWrong);
+        expect(page.surface.sections.map((section) => section.id), isNot(contains('pagination')));
+        expect(find.byType(UiKitView), findsOneWidget, reason: 'the failed projection stays native');
+      }
     });
 
     testWidgets('a search without matches says so', (tester) async {
@@ -451,6 +476,7 @@ void main() {
       expect(page.surface.sections.map((section) => section.id), ['empty']);
       expect(page.row('tasks_no_results').title, _l10n.noResultsFound);
       expect(page.surface.empty, _l10n.noResultsFound);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'the no-results projection stays native');
     });
 
     testWidgets('search results are one flat list of open and completed matches', (tester) async {
