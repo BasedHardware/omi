@@ -218,6 +218,7 @@ and an explicit empty literal renders as `''`.
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | — | — | — | — | pending | 2026-11-07 | dazheng |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | true | — | graduate | 2026-10-23 | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
@@ -415,6 +416,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
+- `REVIEW_SURFACE_MODE` — Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)
