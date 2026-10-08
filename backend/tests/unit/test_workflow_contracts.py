@@ -1812,7 +1812,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
     backend = BACKEND_DIR
     for name in ('reconcile_firestore_indexes.py', 'firestore_field_indexes.py'):
         (scripts_dir / name).write_text((backend / 'scripts' / name).read_text(encoding='utf-8'), encoding='utf-8')
-    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py'):
+    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py', 'review_queries.py'):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
     return control

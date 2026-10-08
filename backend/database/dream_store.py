@@ -15,7 +15,14 @@ from google.cloud import firestore
 from config.dream_agent import Caps, eligible, mode
 from config.plan_catalog import PAID_PLAN_IDS
 from database._client import get_firestore_client
-from database import review_store
+
+
+def _review_store():
+    # Keep Dream's cheap write-signal import independent from Review's Firestore
+    # query module. Callers that only need mark_dirty shouldn't load FieldFilter.
+    from database import review_store
+
+    return review_store
 
 
 def client(firestore_client=None):
@@ -130,7 +137,7 @@ def finish(uid, lease, report, *, success, watermark=None, release=True, firesto
     state = state_ref(database, uid)
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
     # Reuse encrypted content encoding; no private plaintext in run docs.
-    encoded = review_store.encode_doc(uid, {'source': report})
+    encoded = _review_store().encode_doc(uid, {'source': report})
 
     @firestore.transactional
     def complete(tx):
@@ -164,14 +171,14 @@ def finish(uid, lease, report, *, success, watermark=None, release=True, firesto
 
 def vocabulary(uid, *, firestore_client=None):
     ref = client(firestore_client).collection('users').document(uid).collection('dream_vocabulary').document('current')
-    return (review_store.decode_doc(uid, ref.get().to_dict()) or {}).get('source', [])
+    return (_review_store().decode_doc(uid, ref.get().to_dict()) or {}).get('source', [])
 
 
 def save_vocabulary(uid, terms, *, firestore_client=None):
     ref = client(firestore_client).collection('users').document(uid).collection('dream_vocabulary').document('current')
     merged = {row['spelling'].casefold(): row for row in vocabulary(uid, firestore_client=firestore_client)}
     merged.update({t.spelling.casefold(): t.model_dump() for t in terms})
-    ref.set(review_store.encode_doc(uid, {'source': list(merged.values())[-500:]}))
+    ref.set(_review_store().encode_doc(uid, {'source': list(merged.values())[-500:]}))
 
 
 def demoted_types(uid, caps, *, firestore_client=None):
@@ -185,7 +192,7 @@ def demoted_types(uid, caps, *, firestore_client=None):
     )
     counts = {}
     for snapshot in rows:
-        data = review_store.decode_doc(uid, snapshot.to_dict()) or {}
+        data = _review_store().decode_doc(uid, snapshot.to_dict()) or {}
         if not data.get('edit_key', '').startswith('dream:') or data.get('phase', 'applied') != 'applied':
             continue
         kind = data['edit_key'].split(':')[1]
