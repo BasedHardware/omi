@@ -27,18 +27,6 @@
     {
       "path": "desktop/windows/src/shared/agentControlTools.ts",
       "reason": "test-only contract module (AGENT_CONTROL_TOOL_NAMES assertions); the live IPC handler is self-contained in src/main/ipc/agentControl.ts"
-    },
-    {
-      "path": "desktop/windows/src/renderer/src/components/signLanguage/SignVideo.tsx",
-      "reason": "landed unreachable with the sign-language avatar (BasedHardware/omi#20946) and turned main red for every push; allowlisted to unblock, owner to wire up or delete"
-    },
-    {
-      "path": "desktop/windows/src/renderer/src/components/signLanguage/signAssets.ts",
-      "reason": "landed unreachable with the sign-language avatar (BasedHardware/omi#20946) and turned main red for every push; allowlisted to unblock, owner to wire up or delete"
-    },
-    {
-      "path": "desktop/windows/src/renderer/src/components/signLanguage/signPoses.ts",
-      "reason": "landed unreachable with the sign-language avatar (BasedHardware/omi#20946) and turned main red for every push; allowlisted to unblock, owner to wire up or delete"
     }
   ]
 }
