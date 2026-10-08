@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// The completion mark of a task row (Tasks page, Home's Today card): a quiet dashed ring while
 /// open, a filled amber disc with a check once done. Decorative — the tappable wrapper around it
@@ -31,6 +32,24 @@ class TaskCompletionMark extends StatelessWidget {
       size: Size(size, size),
       painter: _DashedCirclePainter(color: OmiColors.textTertiary, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
     );
+  }
+}
+
+/// The display name of a task app a task was exported to; unknown platforms keep their id.
+String taskExportPlatformLabel(String platform) {
+  switch (platform) {
+    case 'todoist':
+      return 'Todoist';
+    case 'asana':
+      return 'Asana';
+    case 'google_tasks':
+      return 'Google Tasks';
+    case 'clickup':
+      return 'ClickUp';
+    case 'apple_reminders':
+      return 'Reminders';
+    default:
+      return platform;
   }
 }
 
@@ -97,4 +116,64 @@ class _DashedCirclePainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth ||
       oldDelegate.dashLength != dashLength ||
       oldDelegate.gapLength != gapLength;
+}
+
+/// Vertical padding of a task section header: the space above the label line
+/// and the sliver of space between it and the first task row.
+const EdgeInsets taskSectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
+
+/// A section header's label ("TODAY", "OVERDUE").
+// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
+// size so the groups stay quieter than the page title.
+final TextStyle taskSectionLabelStyle = OmiType.footnote.copyWith(
+  color: OmiColors.textTertiary,
+  fontWeight: FontWeight.w600,
+);
+
+/// The count beside a section header, read out as "3 tasks" rather than a bare number.
+class TaskSectionCount extends StatelessWidget {
+  const TaskSectionCount(this.count, {super.key});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$count',
+      semanticsLabel: context.l10n.tasksCountLabel(count),
+      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+    );
+  }
+}
+
+/// A tappable part of a task section header.
+///
+/// Section headers are one 12pt line of text, which made the collapse chevrons
+/// ~19pt targets and the "clear completed" ✕ a 14pt one. A task row starts 4pt
+/// below the line, so there is no room to grow a target downwards. Instead the
+/// header's vertical padding moves inside each child ([taskSectionHeaderLinePadding])
+/// and the tappable ones own it, plus [reach] of width on the side that faces
+/// the header's Spacer. The child stays where it was on the text line and
+/// nothing in the list moves; the target becomes the header's full 36pt height.
+class TaskSectionHeaderTapTarget extends StatelessWidget {
+  const TaskSectionHeaderTapTarget(
+      {super.key, required this.onTap, required this.child, required this.reach, this.semanticLabel});
+
+  final VoidCallback onTap;
+  final Widget child;
+  final EdgeInsets reach;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(padding: taskSectionHeaderLinePadding + reach, child: child),
+      ),
+    );
+  }
 }

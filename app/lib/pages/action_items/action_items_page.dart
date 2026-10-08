@@ -1,5 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/home_provider.dart';
 
@@ -12,23 +13,32 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
+import 'task_hierarchy.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
+import 'widgets/task_selection_action_bar.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
 class ActionItemsPage extends StatefulWidget {
-  const ActionItemsPage({super.key});
+  const ActionItemsPage({super.key, this.selectionBarInFallback = false});
+
+  /// Mounts [TaskSelectionActionBar] over the Flutter presentation, for hosts (the native shell) that
+  /// have no outer Stack carrying it. The native presentation has its own bottom bar.
+  final bool selectionBarInFallback;
 
   @override
   State<ActionItemsPage> createState() => _ActionItemsPageState();
@@ -59,6 +69,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   bool _noDeadlineExpanded = true;
 
+  // Native edit mode: each category section takes a reorder permutation. Never while searching or
+  // selecting.
+  bool _nativeReorderMode = false;
+
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -73,9 +87,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
+  late final ActionItemsProvider _selectionOwner;
+
   @override
   void initState() {
     super.initState();
+    _selectionOwner = Provider.of<ActionItemsProvider>(context, listen: false);
     _scrollController.addListener(_onScroll);
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -136,6 +153,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   @override
   void dispose() {
+    // The native selection has no route of its own: leaving the page ends it, after this frame.
+    final owner = _selectionOwner;
+    if (widget.selectionBarInFallback && nativePresentationEnabled && owner.isSelectionMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => owner.endSelection());
+    }
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
@@ -304,23 +326,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
-    final now = DateTime.now();
-    switch (category) {
-      case TaskCategory.today:
-        return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.tomorrow:
-        return DateTime(now.year, now.month, now.day + 1, 23, 59);
-      case TaskCategory.noDeadline:
-        return null;
-      case TaskCategory.later:
-        // Day after tomorrow
-        return DateTime(now.year, now.month, now.day + 2, 23, 59);
-      case TaskCategory.overdue:
-        // Yesterday, so the task stays in overdue after rebuild
-        return DateTime(now.year, now.month, now.day - 1, 23, 59);
-    }
-  }
+  DateTime? _getDefaultDueDateForCategory(TaskCategory category) => defaultDueDateForCategory(category, DateTime.now());
 
   void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
@@ -370,26 +376,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Get ordered items for a category, respecting sort_order from model
-  List<ActionItemWithMetadata> _getOrderedItems(TaskCategory category, List<ActionItemWithMetadata> items) {
-    final sorted = List<ActionItemWithMetadata>.from(items);
-    sorted.sort((a, b) {
-      // Items with sortOrder > 0 come first, sorted ascending
-      if (a.sortOrder > 0 && b.sortOrder > 0) {
-        return a.sortOrder.compareTo(b.sortOrder);
-      }
-      if (a.sortOrder > 0) return -1;
-      if (b.sortOrder > 0) return 1;
-      // Fallback: sort by dueAt then createdAt
-      final aDue = a.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bDue = b.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final dueCmp = aDue.compareTo(bDue);
-      if (dueCmp != 0) return dueCmp;
-      final aCreated = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bCreated = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return aCreated.compareTo(bCreated);
-    });
-    return sorted;
-  }
+  List<ActionItemWithMetadata> _getOrderedItems(TaskCategory category, List<ActionItemWithMetadata> items) =>
+      orderedTaskItems(items);
 
   // Reorder item within category
   void _reorderItemInCategory(
@@ -412,12 +400,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
 
     // Assign sequential sort_order values
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    final Map<String, int> updates = {};
-    for (int i = 0; i < order.length; i++) {
-      updates[order[i]] = (i + 1) * 1000;
-    }
-    provider.batchUpdateSortOrders(updates);
+    Provider.of<ActionItemsProvider>(context, listen: false).batchUpdateSortOrders(taskSortOrders(order));
 
     setState(() {
       _hoveredItemId = null;
@@ -477,92 +460,294 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ),
               // The empty state points to conversation capture on Home.
               if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
-              // Selection-mode action bar is mounted at the home page's outer
-              // Stack so it paints above the BottomNavBar (mirrors the
-              // conversations merge bar). Don't mount it here.
+              // The classic shell mounts the selection action bar at the home page's outer Stack so it
+              // paints above the BottomNavBar (mirrors the conversations merge bar). The native shell has
+              // no such Stack, so its fallback carries the bar itself.
+              if (widget.selectionBarInFallback)
+                const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
             ],
           ),
         );
-        if (provider.isSelectionMode) return classic;
-        return IosNativeSurface(
-          title: context.l10n.tasks,
-          fallback: classic,
-          loading: provider.isLoading && provider.actionItems.isEmpty,
-          failed: showTypedStatus,
-          empty: context.l10n.noTasksYet,
-          searchPlaceholder: context.l10n.searchActionItems,
-          searchValue: provider.searchQuery,
-          search: (value) => provider.setSearchQuery(value as String),
-          onRefresh: (_) => provider.forceRefreshActionItems(),
-          toolbar: [
-            NativeRow('tasks_home', context.l10n.home,
-                symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
-            NativeRow('tasks_add', context.l10n.newTask,
-                symbol: 'plus',
-                action: (_) =>
-                    _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today))),
-            NativeRow('tasks_menu', context.l10n.moreOptions, kind: 'menu', symbol: 'ellipsis', options: {
-              'completed':
-                  provider.showCompletedView ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
-              'select': context.l10n.selectActionItems,
-              'selectAll': context.l10n.selectAllTasksMenu,
-            }, action: (value) {
-              if (value == 'completed') {
-                provider.toggleShowCompletedView();
-              }
-              if (value == 'select') {
-                _searchFocusNode.unfocus();
-                provider.startSelection();
-              }
-              if (value == 'selectAll') {
-                provider.startSelection();
-                provider.selectAllItems();
-              }
-            }),
-          ],
-          sections: [
-            for (final category in TaskCategory.values)
-              NativeSection(
-                  category.name,
-                  [
-                    for (final item in _getOrderedItems(category, categorizedItems[category] ?? []))
-                      if (!provider.isSearching || provider.filteredActionItems.any((match) => match.id == item.id))
-                        NativeRow('task_${item.id}', item.description,
-                            kind: 'task',
-                            value: item.completed,
-                            subtitle: [
-                              if (item.dueAt != null) OmiDateFormat.of(context).dateTime(item.dueAt!),
-                              if (_getGoalTitleForTask(item) != null) _getGoalTitleForTask(item)!
-                            ].join(' · '),
-                            options: {
-                              'open': context.l10n.open,
-                              'select': context.l10n.selectOption,
-                              'delete': context.l10n.delete,
-                              if (item.indentLevel > 0) 'outdent': context.l10n.outdentTask
-                            }, action: (value) async {
-                          if (value is bool) {
-                            await _toggleCompleted(provider, item);
-                          } else if (value == 'open') {
-                            _showEditSheet(item);
-                          } else if (value == 'delete') {
-                            _deleteTask(item);
-                          } else if (value == 'select') {
-                            provider.startSelectionWithItem(item.id);
-                          } else if (value == 'outdent') {
-                            _decrementIndent(item.id);
-                          }
-                        }),
-                  ],
-                  title: _getCategoryTitle(context, category)),
-            if (provider.hasMore)
-              NativeSection('pagination', [
-                NativeRow('tasks_load_more', context.l10n.showMore,
-                    enabled: !provider.isFetching, action: (_) => provider.loadMoreActionItems())
-              ]),
-          ],
-        );
+        return _buildNativeTasks(provider, categorizedItems, classic, failed: showTypedStatus);
       },
     );
+  }
+
+  /// The native Tasks list over the same provider and callbacks; [classic] is its complete fallback.
+  /// Selection uses the system edit mode with a bottom bar, and Edit reorders a category in place.
+  Widget _buildNativeTasks(
+    ActionItemsProvider provider,
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
+    Widget classic, {
+    required bool failed,
+  }) {
+    final l10n = context.l10n;
+    final selecting = provider.isSelectionMode;
+    final reordering = _nativeReorderMode && !provider.isSearching && !selecting;
+    final loading = provider.isLoading && provider.actionItems.isEmpty;
+    final selectedCount = provider.selectedCount;
+    final allSelected = provider.actionItems.isNotEmpty && selectedCount == provider.actionItems.length;
+    final visible =
+        failed ? const <String, List<ActionItemWithMetadata>>{} : _nativeVisibleTasks(provider, categorizedItems);
+    final taskIds = {for (final items in visible.values) ...items.map((item) => 'task_${item.id}')};
+    return IosNativeSurface(
+      title: selecting ? l10n.selectedCount(selectedCount) : l10n.tasks,
+      fallback: classic,
+      loading: loading,
+      failed: failed,
+      empty: provider.isSearching ? l10n.noResultsFound : l10n.noTasksYet,
+      searchPlaceholder: l10n.searchActionItems,
+      searchValue: provider.searchQuery,
+      search: (value) {
+        if (_nativeReorderMode) setState(() => _nativeReorderMode = false);
+        provider.setSearchQuery(value as String);
+      },
+      onRefresh: (_) => provider.forceRefreshActionItems(),
+      toolbar: [
+        if (selecting) ...[
+          NativeRow('tasks_cancel', l10n.cancel, symbol: 'xmark', action: (_) => provider.endSelection()),
+          NativeRow('tasks_select_all', allSelected ? l10n.deselectAllTasksMenu : l10n.selectAllTasksMenu,
+              action: (_) => allSelected ? provider.clearSelection() : provider.selectAllItems()),
+          NativeRow('tasks_completed', provider.showCompletedView ? l10n.hideCompletedTasks : l10n.showCompletedTasks,
+              action: (_) => provider.toggleShowCompletedView()),
+        ] else if (reordering) ...[
+          NativeRow('tasks_home', l10n.home,
+              symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
+          NativeRow('tasks_reorder_done', l10n.done,
+              symbol: 'checkmark', action: (_) => setState(() => _nativeReorderMode = false)),
+        ] else ...[
+          NativeRow('tasks_home', l10n.home,
+              symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
+          NativeRow('tasks_integrations', l10n.exportButton, symbol: 'square.and.arrow.up', action: (_) {
+            OmiHaptics.selection();
+            PlatformManager.instance.analytics.exportTasksBannerClicked();
+            routeToPage(context, const TaskIntegrationsPage());
+          }),
+          NativeRow('tasks_add', l10n.newTask,
+              symbol: 'plus',
+              action: (_) =>
+                  _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today))),
+          NativeRow('tasks_menu', l10n.moreOptions, kind: 'menu', symbol: 'ellipsis', options: {
+            'completed': provider.showCompletedView ? l10n.hideCompletedTasks : l10n.showCompletedTasks,
+            'select': l10n.selectActionItems,
+            'selectAll': allSelected ? l10n.deselectAllTasksMenu : l10n.selectAllTasksMenu,
+            if (!provider.isSearching) 'reorder': l10n.edit,
+          }, action: (value) {
+            if (value == 'completed') provider.toggleShowCompletedView();
+            if (value == 'select') {
+              _searchFocusNode.unfocus();
+              provider.startSelection();
+            }
+            if (value == 'selectAll') {
+              _searchFocusNode.unfocus();
+              if (allSelected) {
+                provider.clearSelection();
+              } else {
+                if (!provider.isSelectionMode) provider.startSelection();
+                provider.selectAllItems();
+              }
+            }
+            if (value == 'reorder' && !provider.isSearching && !provider.isSelectionMode) {
+              setState(() => _nativeReorderMode = true);
+            }
+          }),
+        ],
+      ],
+      selection: selecting
+          ? NativeSelection(
+              selectable: taskIds,
+              selected: {
+                for (final id in provider.selectedItems)
+                  if (taskIds.contains('task_$id')) 'task_$id',
+              },
+              action: (value) => _applyNativeSelection(provider, value as List<String>),
+            )
+          : null,
+      bottomBar: selecting
+          ? [
+              NativeRow('tasks_selected_count', l10n.selectedCount(selectedCount), kind: 'label'),
+              NativeRow('tasks_delete', l10n.deleteSelected,
+                  symbol: 'trash',
+                  destructive: true,
+                  enabled: selectedCount > 0,
+                  action: (_) => confirmAndDeleteSelectedTasks(context, provider)),
+              NativeRow('tasks_export', selectedCount > 0 ? '${l10n.exportButton} · $selectedCount' : l10n.exportButton,
+                  symbol: 'square.and.arrow.up',
+                  enabled: selectedCount > 0,
+                  action: (_) => exportSelectedTasks(context, provider)),
+            ]
+          : const [],
+      sections: [
+        for (final MapEntry(key: id, value: items) in visible.entries)
+          if (TaskCategory.values.asNameMap()[id] case final category?)
+            NativeSection(
+              id,
+              [
+                for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting),
+                if (provider.showCompletedView && !reordering)
+                  NativeRow('tasks_clear_$id', l10n.tasksClearCompleted,
+                      destructive: true, action: (_) => _confirmClearCompleted(provider, items)),
+              ],
+              title: _getCategoryTitle(context, category),
+              footer: l10n.tasksCountLabel(items.length),
+              collapsible: category == TaskCategory.overdue || category == TaskCategory.noDeadline,
+              reorder: reordering ? (value) => _applyNativeReorder(provider, category, value) : null,
+            )
+          else
+            // Search results are one flat list in match order, open and completed alike, as in Flutter.
+            NativeSection(id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
+                footer: l10n.tasksCountLabel(items.length)),
+        if (visible.isEmpty && !loading && !failed)
+          NativeSection('empty', [
+            provider.isSearching
+                ? NativeRow('tasks_no_results', l10n.noResultsFound, kind: 'label')
+                : NativeRow('tasks_empty', l10n.noTasksYet, kind: 'label', subtitle: l10n.tasksEmptyStateMessage),
+          ]),
+        if (provider.hasMore)
+          NativeSection('pagination', [
+            NativeRow('tasks_load_more', l10n.showMore,
+                enabled: !provider.isFetching, action: (_) => provider.loadMoreActionItems())
+          ]),
+      ],
+    );
+  }
+
+  /// The displayed rows by section id: each non-empty category in order, or while searching every match
+  /// in one 'search' section, as the Flutter list shows them.
+  Map<String, List<ActionItemWithMetadata>> _nativeVisibleTasks(
+    ActionItemsProvider provider,
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
+  ) {
+    if (provider.isSearching) {
+      final matches = provider.filteredActionItems;
+      return {if (matches.isNotEmpty) 'search': matches};
+    }
+    return {
+      for (final category in TaskCategory.values)
+        if (_getOrderedItems(category, categorizedItems[category] ?? []) case final items when items.isNotEmpty)
+          category.name: items,
+    };
+  }
+
+  NativeRow _nativeTaskRow(
+    ActionItemsProvider provider,
+    ActionItemWithMetadata item,
+    List<ActionItemWithMetadata> rows, {
+    required bool selecting,
+  }) {
+    final l10n = context.l10n;
+    final goalTitle = _getGoalTitleForTask(item);
+    final indent = item.indentLevel.clamp(0, maxTaskIndent);
+    final subtitle = [
+      if (item.dueAt != null) OmiDateFormat.of(context).dateTime(item.dueAt!),
+      if (goalTitle != null) goalTitle,
+      if (item.exported && item.exportPlatform != null)
+        l10n.exportedToPlatform(taskExportPlatformLabel(item.exportPlatform!)),
+    ].join(' · ');
+    if (selecting) {
+      return NativeRow('task_${item.id}', item.description,
+          kind: 'label', symbol: item.completed ? 'checkmark.circle' : 'circle', indent: indent, subtitle: subtitle);
+    }
+    return NativeRow('task_${item.id}', item.description,
+        kind: 'task',
+        value: item.completed,
+        indent: indent,
+        subtitle: subtitle,
+        options: {
+          'open': l10n.open,
+          'select': l10n.selectOption,
+          if (item.indentLevel < maxIndentFor(item, rows)) 'indent': l10n.indentTask,
+          if (item.indentLevel > 0) 'outdent': l10n.outdentTask,
+          'due': l10n.setDueDate,
+          'complete': item.completed ? l10n.markIncomplete : l10n.markComplete,
+          'delete': l10n.delete,
+        },
+        swipeLeading: const [
+          'complete'
+        ],
+        swipeTrailing: const [
+          'delete'
+        ], action: (value) async {
+      if (value is bool || value == 'complete') {
+        await _toggleCompleted(provider, item);
+      } else if (value == 'open') {
+        _showEditSheet(item);
+      } else if (value == 'delete') {
+        _deleteTask(item);
+      } else if (value == 'select') {
+        _searchFocusNode.unfocus();
+        if (_nativeReorderMode) setState(() => _nativeReorderMode = false);
+        provider.startSelectionWithItem(item.id);
+      } else if (value == 'indent') {
+        _incrementIndent(item.id);
+      } else if (value == 'outdent') {
+        _decrementIndent(item.id);
+      } else if (value == 'due') {
+        // The choice applies only for the page and account that asked.
+        final owner = AuthService.instance.captureSessionSnapshot();
+        bool current() => mounted && owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
+        await showOmiRowMenu(context, title: l10n.setDueDate, actions: [
+          // The categories a drop could reach: the completed view has no Overdue section.
+          for (final target in TaskCategory.values)
+            if (target != _getCategoryForItem(item) && !(target == TaskCategory.overdue && provider.showCompletedView))
+              OmiMenuAction(
+                  icon: Icons.event_outlined,
+                  label: _getCategoryTitle(context, target),
+                  onSelected: () {
+                    if (current()) _updateTaskCategory(item, target);
+                  }),
+        ]);
+      }
+    });
+  }
+
+  /// '_selection' is the complete desired set of visible rows. Rows it adds or drops select or deselect
+  /// with their visible descendants, as a tap with cascade does; removals apply first.
+  void _applyNativeSelection(ActionItemsProvider provider, List<String> desired) {
+    final visible = _nativeVisibleTasks(provider, _categorizeItems(provider.actionItems, provider.showCompletedView));
+    final wanted = desired.toSet();
+    final changes = [
+      for (final items in visible.values)
+        for (final item in items)
+          if (provider.isItemSelected(item.id) != wanted.contains('task_${item.id}'))
+            (item, visibleDescendantIds(item, items), wanted.contains('task_${item.id}')),
+    ];
+    for (final (item, descendants, _) in changes.where((change) => !change.$3)) {
+      for (final id in [item.id, ...descendants]) {
+        provider.deselectItem(id);
+      }
+    }
+    for (final (item, descendants, _) in changes.where((change) => change.$3)) {
+      for (final id in [item.id, ...descendants]) {
+        provider.selectItem(id);
+      }
+    }
+  }
+
+  /// '_reorder:<category>' is an exact permutation of the category's current rows. The new order is
+  /// stored as sort orders, and a moved row deeper than its new predecessor allows is clamped, the same
+  /// as a drop without horizontal travel. Category moves go through Set Due Date.
+  void _applyNativeReorder(ActionItemsProvider provider, TaskCategory category, Object? value) {
+    final current =
+        orderedTaskItems(_categorizeItems(provider.actionItems, provider.showCompletedView)[category] ?? []);
+    final byId = {for (final item in current) 'task_${item.id}': item};
+    if (value is! List ||
+        value.length != current.length ||
+        value.toSet().length != value.length ||
+        !value.every(byId.containsKey) ||
+        provider.isSearching ||
+        provider.isSelectionMode) {
+      throw PlatformException(code: 'invalid_native_action');
+    }
+    final reordered = [for (final id in value) byId[id]!];
+    provider.batchUpdateSortOrders(taskSortOrders([for (final item in reordered) item.id]));
+    final moved = movedTaskIds(current.map((item) => item.id).toList(), reordered.map((item) => item.id).toList());
+    for (final (index, item) in reordered.indexed) {
+      if (!moved.contains(item.id)) continue;
+      final maxIndent = maxIndentForDrop(draggedItem: item, targetIdx: index, isAbove: true, categoryItems: reordered);
+      if (item.indentLevel > maxIndent) provider.updateItemIndentLevel(item.id, maxIndent);
+    }
+    OmiHaptics.medium();
   }
 
   Widget _buildLoadingState() {
@@ -695,7 +880,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     children: [
                       if (category == TaskCategory.noDeadline)
-                        _SectionHeaderTapTarget(
+                        TaskSectionHeaderTapTarget(
                           reach: const EdgeInsets.only(right: 24),
                           onTap: () => setState(() => _noDeadlineExpanded = !_noDeadlineExpanded),
                           child: Row(
@@ -707,40 +892,40 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title, style: _sectionLabelStyle),
+                              Text(title, style: taskSectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
-                                _SectionCount(orderedItems.length),
+                                TaskSectionCount(orderedItems.length),
                               ],
                             ],
                           ),
                         )
                       else
                         Padding(
-                          padding: _sectionHeaderLinePadding,
-                          child: Text(title, style: _sectionLabelStyle),
+                          padding: taskSectionHeaderLinePadding,
+                          child: Text(title, style: taskSectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
                         if (provider.showCompletedView && orderedItems.isNotEmpty)
                           // The count and the ✕ are one control: "clear these N".
-                          _SectionHeaderTapTarget(
+                          TaskSectionHeaderTapTarget(
                             semanticLabel: context.l10n.tasksClearCompleted,
                             reach: const EdgeInsets.only(left: 16),
                             onTap: () => _confirmClearCompleted(provider, orderedItems),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _SectionCount(orderedItems.length),
+                                TaskSectionCount(orderedItems.length),
                                 const SizedBox(width: 8),
                                 Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                               ],
                             ),
                           )
                         else if (orderedItems.isNotEmpty)
-                          Padding(padding: _sectionHeaderLinePadding, child: _SectionCount(orderedItems.length)),
+                          Padding(padding: taskSectionHeaderLinePadding, child: TaskSectionCount(orderedItems.length)),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
-                        _SectionHeaderTapTarget(
+                        TaskSectionHeaderTapTarget(
                           semanticLabel: context.l10n.tasksClearCompleted,
                           reach: const EdgeInsets.only(left: 30),
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
@@ -782,7 +967,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
               children: [
-                _SectionHeaderTapTarget(
+                TaskSectionHeaderTapTarget(
                   reach: const EdgeInsets.only(right: 24),
                   onTap: () {
                     setState(() {
@@ -798,9 +983,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         size: 16,
                       ),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
+                      Text(context.l10n.tasksOverdue, style: taskSectionLabelStyle),
                       const SizedBox(width: 8),
-                      _SectionCount(orderedItems.length),
+                      TaskSectionCount(orderedItems.length),
                     ],
                   ),
                 ),
@@ -884,12 +1069,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     order.remove(draggedItem.id);
     order.insert(0, draggedItem.id);
 
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    final Map<String, int> updates = {};
-    for (int i = 0; i < order.length; i++) {
-      updates[order[i]] = (i + 1) * 1000;
-    }
-    provider.batchUpdateSortOrders(updates);
+    Provider.of<ActionItemsProvider>(context, listen: false).batchUpdateSortOrders(taskSortOrders(order));
 
     setState(() {
       _hoveredItemId = null;
@@ -949,7 +1129,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final deltaX = details.offset.dx - _dragStartX!;
         final draggedItem = details.data;
         final targetIdx = categoryItems.indexWhere((i) => i.id == item.id);
-        final maxIndent = _maxIndentForDrop(
+        final maxIndent = maxIndentForDrop(
           draggedItem: draggedItem,
           targetIdx: targetIdx,
           isAbove: isAbove,
@@ -999,40 +1179,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         );
       },
     );
-  }
-
-  /// Walks the displayed [categoryItems] forward from [parent] and returns
-  /// every contiguous descendant — rows with strictly greater indent_level,
-  /// stopping at the first sibling/ancestor. The data model is flat (no
-  /// parent_id), so the page is the right layer to compute this: it owns the
-  /// category-grouped display order; the provider does not.
-  List<String> _visibleDescendantIds(ActionItemWithMetadata parent, List<ActionItemWithMetadata> categoryItems) {
-    final idx = categoryItems.indexWhere((i) => i.id == parent.id);
-    if (idx < 0) return const [];
-    final ids = <String>[];
-    for (int i = idx + 1; i < categoryItems.length; i++) {
-      if (categoryItems[i].indentLevel <= parent.indentLevel) break;
-      ids.add(categoryItems[i].id);
-    }
-    return ids;
-  }
-
-  /// Caps the drop indent at one level deeper than the row immediately
-  /// preceding the drop slot (skipping the dragged row itself). Without this,
-  /// a user could indent past a parent that doesn't exist yet.
-  int _maxIndentForDrop({
-    required ActionItemWithMetadata draggedItem,
-    required int targetIdx,
-    required bool isAbove,
-    required List<ActionItemWithMetadata> categoryItems,
-  }) {
-    if (targetIdx < 0) return 3;
-    int idx = isAbove ? targetIdx - 1 : targetIdx;
-    while (idx >= 0 && categoryItems[idx].id == draggedItem.id) {
-      idx--;
-    }
-    if (idx < 0) return 0;
-    return (categoryItems[idx].indentLevel + 1).clamp(0, 3);
   }
 
   Widget _buildDraggableTaskItem(
@@ -1148,8 +1294,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void _showTaskMenu(ActionItemWithMetadata item, List<ActionItemWithMetadata> categoryItems) {
     final l10n = context.l10n;
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    final index = categoryItems.indexWhere((i) => i.id == item.id);
-    final maxIndent = index <= 0 ? 0 : (categoryItems[index - 1].indentLevel + 1).clamp(0, 3);
+    final maxIndent = maxIndentFor(item, categoryItems);
     showOmiRowMenu(
       context,
       title: item.description,
@@ -1208,7 +1353,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () {
         if (provider.isSelectionMode) {
           OmiHaptics.selection();
-          provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
+          provider.toggleItemSelection(item.id, cascadeIds: visibleDescendantIds(item, categoryItems));
         } else {
           _showEditSheet(item);
         }
@@ -1280,7 +1425,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
                             const SizedBox(width: 4),
                             Text(
-                              context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
+                              context.l10n.exportedToPlatform(taskExportPlatformLabel(item.exportPlatform!)),
                               style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                             ),
                           ],
@@ -1305,83 +1450,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  String _exportPlatformLabel(String platform) {
-    switch (platform) {
-      case 'todoist':
-        return 'Todoist';
-      case 'asana':
-        return 'Asana';
-      case 'google_tasks':
-        return 'Google Tasks';
-      case 'clickup':
-        return 'ClickUp';
-      case 'apple_reminders':
-        return 'Reminders';
-      default:
-        return platform;
-    }
-  }
-
   void _showEditSheet(ActionItemWithMetadata item) {
     showActionItemFormSheet(context, actionItem: item);
-  }
-}
-
-/// Vertical padding of a task section header: the space above the label line
-/// and the sliver of space between it and the first task row.
-const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
-
-/// A section header's label ("TODAY", "OVERDUE").
-// Title Case like OmiSectionHeader (the contract's section header is not all caps), at a label's
-// size so the groups stay quieter than the page title.
-final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
-  color: OmiColors.textTertiary,
-  fontWeight: FontWeight.w600,
-);
-
-/// The count beside a section header, read out as "3 tasks" rather than a bare number.
-class _SectionCount extends StatelessWidget {
-  const _SectionCount(this.count);
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '$count',
-      semanticsLabel: context.l10n.tasksCountLabel(count),
-      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-    );
-  }
-}
-
-/// A tappable part of a task section header.
-///
-/// Section headers are one 12pt line of text, which made the collapse chevrons
-/// ~19pt targets and the "clear completed" ✕ a 14pt one. A task row starts 4pt
-/// below the line, so there is no room to grow a target downwards. Instead the
-/// header's vertical padding moves inside each child ([_sectionHeaderLinePadding])
-/// and the tappable ones own it, plus [reach] of width on the side that faces
-/// the header's Spacer. The child stays where it was on the text line and
-/// nothing in the list moves; the target becomes the header's full 36pt height.
-class _SectionHeaderTapTarget extends StatelessWidget {
-  const _SectionHeaderTapTarget({required this.onTap, required this.child, required this.reach, this.semanticLabel});
-
-  final VoidCallback onTap;
-  final Widget child;
-  final EdgeInsets reach;
-  final String? semanticLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(padding: _sectionHeaderLinePadding + reach, child: child),
-      ),
-    );
   }
 }

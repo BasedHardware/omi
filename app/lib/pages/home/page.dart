@@ -903,10 +903,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       onHomeReselected: () => _scrollToTop(HomeProvider.homeTab),
                       pages: {
                         'home': _buildNativeHome,
-                        'tasks': (_) => Stack(children: [
-                              ActionItemsPage(key: _actionItemsPageKey),
-                              const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
-                            ]),
+                        // The native Tasks list has its own selection bar; its Flutter fallback mounts the classic one.
+                        'tasks': (_) => ActionItemsPage(key: _actionItemsPageKey, selectionBarInFallback: true),
                         'memories': (_) => const MemoriesPage(asRoot: true),
                         'apps': (_) => const AppsPage(),
                         'settings': (_) => const SettingsDrawer(asRoot: true),
