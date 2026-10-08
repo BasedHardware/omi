@@ -442,6 +442,12 @@ void main() {
 
       final gain = _rows(tester)['device_mic_gain']!;
       expect((gain.kind, gain.value, gain.maximumValue), ('level', 5.0, 8.0));
+      // The level row keeps a short value; the description is its own label row before the presets.
+      expect(gain.subtitle, '+10dB');
+      final description = _rows(tester)['device_mic_gain_description']!;
+      expect((description.kind, description.title), ('label', 'Boosted - for quiet environments'));
+      expect(_rows(tester).keys.skipWhile((id) => id != 'device_mic_gain').take(3),
+          ['device_mic_gain', 'device_mic_gain_description', 'device_mic_gain_quiet']);
       for (final preset in ['device_mic_gain_quiet', 'device_mic_gain_normal', 'device_mic_gain_high']) {
         _send(host, preset, null);
         await tester.pump();
@@ -456,6 +462,8 @@ void main() {
       expect(connection.gainWrites, [2, 4, 6, 2]);
       expect(_rows(tester)['device_mic_gain_quiet']!.symbol, 'checkmark');
       expect(_rows(tester)['device_mic_gain_high']!.symbol, isNull);
+      expect(_rows(tester)['device_mic_gain']!.subtitle, '-10dB');
+      expect(_rows(tester)['device_mic_gain_description']!.title, 'Quiet - for moderate noise');
     });
 
     testWidgets('the disconnected explanation appears only while disconnected', (tester) async {
@@ -464,6 +472,7 @@ void main() {
       addTearDown(provider.dispose);
       await _pumpSettings(tester, provider, _FakeOmiConnection());
 
+      expect(find.byType(UiKitView), findsOneWidget);
       final disconnected = _rows(tester)['device_disconnected'];
       expect(disconnected?.title, 'Device Not Connected');
       expect(disconnected?.kind, 'label');
@@ -472,6 +481,7 @@ void main() {
         ..connected = true
         ..notifyListeners();
       await NativeTestHost.settle(tester);
+      expect(find.byType(UiKitView), findsOneWidget);
       expect(_rows(tester).containsKey('device_disconnected'), isFalse);
     });
   });

@@ -695,17 +695,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               action: (value) => _setNativeDimRatio(value! as num));
         case 'device_mic_gain':
           final gain = _micGain.round().clamp(0, 8);
+          // The level row draws its subtitle as a short value beside the title, so the longer
+          // description gets a row of its own.
           yield NativeRow(row.id, row.title,
               kind: 'level',
               symbol: row.symbol,
-              subtitle: [micGainLevelLabel(context, gain), micGainDescription(context, gain)]
-                  .where((text) => text.isNotEmpty)
-                  .join(' · '),
+              subtitle: micGainLevelLabel(context, gain),
               value: gain.toDouble(),
               minimumValue: 0,
               maximumValue: 8,
               step: 1,
               action: (value) => _setNativeMicGain(value! as num));
+          final description = micGainDescription(context, gain);
+          if (description.isNotEmpty) yield NativeRow('device_mic_gain_description', description, kind: 'label');
           for (final (id, label, level) in [
             ('device_mic_gain_quiet', l10n.quiet, 2),
             ('device_mic_gain_normal', l10n.normal, 4),
