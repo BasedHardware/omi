@@ -163,7 +163,7 @@ final class ExtensionInstallSessionTests: XCTestCase {
   }
 
   @MainActor
-  func testCloseDuringInstallIgnoresLateCommittedReceiptWithoutRefreshing() async {
+  func testCloseDuringInstallRefreshesLateCommitWithoutReopeningSetup() async {
     let gate = InstallGate()
     var refreshCalls = 0
     let session = ExtensionInstallSession(
@@ -179,7 +179,7 @@ final class ExtensionInstallSessionTests: XCTestCase {
     XCTAssertEqual(session.phase, .closed)
     XCTAssertNil(session.installedServer)
     XCTAssertNil(session.errorText)
-    XCTAssertEqual(refreshCalls, 0)
+    XCTAssertEqual(refreshCalls, 1, "A closed sheet must not leave the underlying installed list stale")
     await session.install(Self.entry(), secrets: [:])
     XCTAssertEqual(gate.callCount, 1, "A dismissed sheet cannot start another install")
   }
@@ -298,7 +298,7 @@ final class ExtensionInstallSessionTests: XCTestCase {
     XCTAssertFalse(session.canInstall)
     XCTAssertNil(session.errorText)
     XCTAssertEqual(committedWrites, 1)
-    XCTAssertEqual(refreshCalls, 0, "Cancellation may skip projection refresh, but cannot erase a committed install")
+    XCTAssertEqual(refreshCalls, 1, "A committed install must refresh the projection even after cancellation")
     await session.install(Self.entry(), secrets: [:])
     XCTAssertEqual(committedWrites, 1)
     XCTAssertEqual(gate.callCount, 1)

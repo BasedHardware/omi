@@ -63,8 +63,10 @@ final class ExtensionInstallSession: ObservableObject {
     phase = .installing
     do {
       let receipt = try await installOperation(entry, secrets)
-      guard isCurrent(lease) else { return }
-      if !Task.isCancelled { await refreshOperation() }
+      // A receipt means configuration already committed. Refresh the underlying
+      // Apps projection even if closing/cancellation revoked this sheet's lease.
+      // Otherwise that mounted list can still offer the same entry for install.
+      await refreshOperation()
       guard isCurrent(lease) else { return }
       switch receipt {
       case .mcpServer(let server): phase = .serverSetup(server)

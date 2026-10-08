@@ -153,6 +153,67 @@ final class ExtensionCatalogTests: XCTestCase {
 
   // MARK: - Install receipts
 
+  @MainActor
+  private final class CommittedReceiptGate {
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var commitWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func suspendAfterCommit() async {
+      await withCheckedContinuation { continuation in
+        releaseContinuation = continuation
+        let waiters = commitWaiters
+        commitWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+      }
+    }
+
+    func waitUntilCommitted() async {
+      guard releaseContinuation == nil else { return }
+      await withCheckedContinuation { commitWaiters.append($0) }
+    }
+
+    func release() {
+      guard let continuation = releaseContinuation else {
+        XCTFail("Expected a committed install awaiting receipt delivery")
+        return
+      }
+      releaseContinuation = nil
+      continuation.resume()
+    }
+  }
+
+  @MainActor
+  func testDismissedCommittedInstallRefreshesActualLocalProjection() async throws {
+    let provider = AppProvider()
+    let gate = CommittedReceiptGate()
+    let entry = ExtensionCatalog.Entry(
+      id: "com.example/example", name: "Example", subtitle: "Remote", detail: "",
+      install: .mcpRemote(url: "https://example.test/mcp", transport: "http", secretHeader: nil))
+    let session = ExtensionInstallSession(
+      install: { entry, secrets in
+        let receipt = try await ExtensionCatalogService.install(entry, secrets: secrets)
+        await gate.suspendAfterCommit()
+        return receipt
+      },
+      refresh: { await provider.fetchUserExtensions() })
+    let pending = Task { await session.install(entry, secrets: [:]) }
+    await gate.waitUntilCommitted()
+
+    XCTAssertEqual(LocalMcpStore.listServers().map(\.name), ["example"])
+    XCTAssertTrue(provider.localMcpServers.isEmpty, "The mounted list has not consumed the committed receipt yet")
+    session.close()
+    pending.cancel()
+    gate.release()
+    await pending.value
+
+    XCTAssertEqual(session.phase, .closed)
+    XCTAssertEqual(provider.localMcpServers, LocalMcpStore.listServers())
+    XCTAssertEqual(provider.localMcpServers.map(\.name), [LocalSkillsStore.slugify(entry.name)])
+    XCTAssertNil(session.installedServer, "Refreshing the underlying list must not reopen dismissed setup")
+    await session.install(entry, secrets: [:])
+    XCTAssertEqual(LocalMcpStore.listServers().map(\.name), ["example"], "The dismissed session cannot install again")
+  }
+
   func testRemoteInstallReceiptUsesPersistedCollisionResolvedName() async throws {
     try LocalMcpStore.upsertServer(
       "linear", entry: ["url": "https://existing.example/mcp", "custom": "preserve"])
