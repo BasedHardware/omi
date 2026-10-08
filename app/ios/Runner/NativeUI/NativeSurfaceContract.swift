@@ -229,3 +229,25 @@ private extension NativeSurfaceRow {
             || (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/"))
     }
 }
+
+/// A blocking activity overlay request from the config channel. Dart applies the same label rule
+/// before it sends one; the presenter refuses anything else and shows nothing.
+struct NativeActivityRequest: Equatable {
+    let id: Int
+    let label: String
+    let appearance: String
+    let locale: String
+    let direction: String
+
+    static func decode(_ input: Any?) throws -> Self {
+        guard let args = input as? [String: Any],
+              let id = args["requestId"] as? Int, id >= 0,
+              let label = args["label"] as? String, !label.isEmpty, label.count <= 200,
+              let appearance = args["appearance"] as? String, ["system", "light", "dark"].contains(appearance),
+              let locale = args["locale"] as? String, !locale.isEmpty,
+              let direction = args["direction"] as? String, ["ltr", "rtl"].contains(direction)
+        else { throw ContractError.invalidRequest }
+        return Self(id: id, label: label, appearance: appearance, locale: locale, direction: direction)
+    }
+    enum ContractError: Error { case invalidRequest }
+}

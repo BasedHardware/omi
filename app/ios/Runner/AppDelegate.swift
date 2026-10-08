@@ -213,6 +213,7 @@ final class QuickActionsIconPatcher: NSObject {
           switch call.method {
           case "isSupported": result(true)
           case "present": try presentations.present(call.arguments, completion: result)
+          case "presentActivity": try presentations.presentActivity(call.arguments, completion: result)
           case "dismissPresentation":
             if let id = call.arguments as? Int { presentations.dismiss(id: id) }
             result(nil)

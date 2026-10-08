@@ -180,6 +180,7 @@ final class PreviewUITests: XCTestCase {
         field.typeText("Avery final edit")
         app.buttons["save"].tap()
         XCTAssertTrue(app.staticTexts["saved:Avery final edit:false"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["reason:action"].exists)
         XCTAssertFalse(field.exists)
         capture(app, "native-modal-explicit-save")
     }
@@ -482,4 +483,94 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(app.buttons["chat_voice_stop"].exists)
     }
 
+    func testNativeModalReportsCancelAndSwipeReasons() {
+        let app = start(["modal"])
+        app.buttons["modal-open"].tap()
+        XCTAssertTrue(app.textFields["draft"].waitForExistence(timeout: 10))
+        app.buttons["cancel"].tap()
+        XCTAssertTrue(app.staticTexts["reason:cancel"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["modal-receipt"].label, "Cancelled without saving")
+        app.buttons["modal-open"].tap()
+        let field = app.textFields["draft"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        // Drag the clean sheet down by its grabber.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        XCTAssertTrue(app.staticTexts["reason:dismissed"].waitForExistence(timeout: 10))
+        XCTAssertFalse(field.exists)
+        capture(app, "native-modal-swipe-dismissed")
+    }
+
+    func testNonDismissibleSheetIgnoresSwipes() {
+        let app = start(["modal", "locked"])
+        app.buttons["modal-open"].tap()
+        let field = app.textFields["draft"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["reason:dismissed"].exists)
+        app.buttons["cancel"].tap()
+        XCTAssertTrue(app.staticTexts["reason:cancel"].waitForExistence(timeout: 10))
+    }
+
+    func testNativeAlertCancelAndProgrammaticDismissalReportReasons() {
+        let alert = start(["modal", "alert"])
+        alert.buttons["modal-open"].tap()
+        XCTAssertTrue(alert.alerts["Edit Person"].waitForExistence(timeout: 5))
+        alert.alerts.buttons["Cancel"].tap()
+        XCTAssertTrue(alert.staticTexts["reason:cancel"].waitForExistence(timeout: 10))
+        alert.terminate()
+        let expired = start(["modal", "expire"])
+        expired.buttons["modal-open"].tap()
+        XCTAssertTrue(expired.textFields["draft"].waitForExistence(timeout: 5))
+        XCTAssertTrue(expired.staticTexts["reason:programmatic"].waitForExistence(timeout: 10))
+        XCTAssertFalse(expired.textFields["draft"].exists)
+    }
+
+    func testForeignDismissalReleasesTheSlotAsDismissed() {
+        let app = start(["modal", "foreign-dismiss"])
+        app.buttons["modal-open"].tap()
+        XCTAssertTrue(app.textFields["draft"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["reason:dismissed"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.textFields["draft"].exists)
+        // The presenter's single slot is free again.
+        app.buttons["modal-open"].tap()
+        XCTAssertTrue(app.textFields["draft"].waitForExistence(timeout: 5))
+        XCTAssertNotEqual(app.staticTexts["modal-receipt"].label, "Presentation failed")
+    }
+
+    func testActivityBlocksContentAndDismissesProgrammatically() {
+        let app = start(["modal"])
+        let beneath = app.buttons["activity-beneath"]
+        XCTAssertTrue(beneath.waitForExistence(timeout: 10))
+        // A screen point, because the modal overlay hides the content beneath from accessibility.
+        let frame = beneath.frame
+        let target = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+        app.buttons["activity-open"].tap()
+        let activity = app.descendants(matching: .any)["native-activity"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        target.tap()
+        XCTAssertTrue(activity.exists, "The tap landed while the overlay was up")
+        capture(app, "native-activity")
+        XCTAssertTrue(app.staticTexts["reason:programmatic"].waitForExistence(timeout: 15))
+        XCTAssertFalse(activity.exists)
+        XCTAssertEqual(app.staticTexts["activity-beneath-count"].label, "beneath:0", "The overlay took the tap")
+        XCTAssertEqual(app.staticTexts["modal-receipt"].label, "Second presentation refused")
+        beneath.tap()
+        XCTAssertEqual(app.staticTexts["activity-beneath-count"].label, "beneath:1")
+    }
+
+    func testActivityLargeTextLabelStaysVisible() {
+        let app = start(["modal", "large", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        app.buttons["activity-open"].tap()
+        // The card is one accessibility element whose label is the activity label.
+        let card = app.descendants(matching: .any)["native-activity"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Saving your changes to this conversation summary"))
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(card.frame))
+        XCTAssertGreaterThan(card.frame.height, 100, "The label wraps instead of truncating")
+        capture(app, "native-activity-large-text")
+        XCTAssertTrue(app.staticTexts["reason:programmatic"].waitForExistence(timeout: 15))
+    }
 }

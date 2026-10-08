@@ -191,7 +191,35 @@ struct NativeSurfaceTests {
         wave["points"] = [["x": 0, "y": 2, "label": ""]]
         input["sections"] = [["id": "settings", "title": "", "footer": "", "rows": [wave]]]
         rejects(input)
+        try activityRequests()
         print("Native surface contract: typed values, command IDs, uniqueness and invalidation passed")
+    }
+    /// The activity overlay accepts exactly the request Dart validates: a label of 1...200 characters.
+    static func activityRequests() throws {
+        let request: [String: Any] = ["requestId": 3, "label": "Saving", "appearance": "system",
+            "locale": "en", "direction": "rtl"]
+        let decoded = try NativeActivityRequest.decode(request)
+        precondition(decoded == NativeActivityRequest(id: 3, label: "Saving", appearance: "system", locale: "en", direction: "rtl"))
+        var longest = request
+        longest["label"] = String(repeating: "👨‍👩‍👧‍👦", count: 200)
+        _ = try NativeActivityRequest.decode(longest)
+        let invalid: [(String, Any)] = [("requestId", -1), ("requestId", "3"), ("label", ""),
+            ("label", String(repeating: "a", count: 201)), ("label", 7), ("appearance", "sepia"),
+            ("locale", ""), ("direction", "up")]
+        for (key, value) in invalid {
+            var refused = request
+            refused[key] = value
+            rejectsActivity(refused)
+            refused.removeValue(forKey: key)
+            rejectsActivity(refused)
+        }
+        rejectsActivity(nil)
+        rejectsActivity("Saving")
+    }
+    static func rejectsActivity(_ input: Any?) {
+        do { _ = try NativeActivityRequest.decode(input) }
+        catch { return }
+        preconditionFailure("Invalid native activity accepted")
     }
     static func rejects(_ input: Any) {
         do { _ = try NativeSurfaceSnapshot.decode(input) }

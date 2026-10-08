@@ -60,6 +60,9 @@ private struct ModalFixture: UIViewControllerRepresentable {
 private final class ModalFixtureModel: ObservableObject {
     @Published var receipt = "No changes saved"
     var open: () -> Void = {}
+    @Published var reason = ""
+    @Published var beneath = 0
+    var activity: () -> Void = {}
 }
 
 @MainActor
@@ -76,6 +79,29 @@ private final class ModalFixtureController: UIViewController {
         view.addSubview(child.view)
         child.didMove(toParent: self)
         model.open = { [weak self] in self?.open() }
+        model.activity = { [weak self] in self?.showActivity() }
+    }
+
+    /// The production activity overlay, which only a programmatic dismissal ends.
+    private func showActivity() {
+        let label = ProcessInfo.processInfo.arguments.contains("large")
+            ? "Saving your changes to this conversation summary" : "Saving"
+        var request: [String: Any] = ["requestId": 2, "label": label, "appearance": "dark", "locale": "en", "direction": "ltr"]
+        do {
+            try presenter.presentActivity(request) { [weak self] response in
+                self?.model.reason = "reason:\((response as? [String: Any])?["reason"] as? String ?? "")"
+            }
+        } catch { model.receipt = "Presentation failed"; return }
+        // The single slot refuses a second presentation while the activity is up.
+        request["requestId"] = 3
+        do {
+            try presenter.presentActivity(request) { _ in }
+            model.receipt = "Second presentation shown"
+        } catch { model.receipt = "Second presentation refused" }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            self?.presenter.dismiss(id: 2)
+        }
     }
 
     private func open() {
@@ -95,7 +121,7 @@ private final class ModalFixtureController: UIViewController {
             ? [row("message", "Delete the selected person?", "label")]
             : [row("draft", "Name", "text", ""), row("opt_out", "Do not ask again", "toggle", false)]]]
         let args: [String: Any] = ["requestId": 1, "cancelId": "cancel", "snapshot": snapshot,
-            "alert": alert, "dismissible": true, "guardEdits": true,
+            "alert": alert, "dismissible": !ProcessInfo.processInfo.arguments.contains("locked"), "guardEdits": true,
             "discard": ["title": "Discard Changes?", "message": "Your changes have not been saved.",
                 "confirm": "Discard", "cancel": "Keep Editing"]]
         do {
@@ -105,11 +131,19 @@ private final class ModalFixtureController: UIViewController {
                    let values = response["values"] as? [String: Any] {
                     self.model.receipt = "saved:\(values["draft"] as? String ?? ""):\(values["opt_out"] as? Bool ?? false)"
                 } else { self.model.receipt = "Cancelled without saving" }
+                self.model.reason = "reason:\((response as? [String: Any])?["reason"] as? String ?? "")"
             }
             if ProcessInfo.processInfo.arguments.contains("expire") {
                 Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                     self?.presenter.dismiss(id: 1)
+                }
+            }
+            if ProcessInfo.processInfo.arguments.contains("foreign-dismiss") {
+                // Another owner dismisses the sheet without telling the presenter.
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    self?.view.window?.rootViewController?.dismiss(animated: true)
                 }
             }
         } catch { model.receipt = "Presentation failed" }
@@ -122,6 +156,10 @@ private struct ModalFixtureControls: View {
         VStack(spacing: 20) {
             Button("Open Editor", action: model.open).accessibilityIdentifier("modal-open")
             Text(model.receipt).accessibilityIdentifier("modal-receipt")
+            Text(model.reason).accessibilityIdentifier("modal-reason")
+            Button("Show Activity", action: model.activity).accessibilityIdentifier("activity-open")
+            Button("Content Beneath") { model.beneath += 1 }.accessibilityIdentifier("activity-beneath")
+            Text("beneath:\(model.beneath)").accessibilityIdentifier("activity-beneath-count")
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

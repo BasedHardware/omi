@@ -48,6 +48,12 @@ containment. Both Runner targets compile the same renderer.
 - `com.omi.native_ui/config`: `isSupported` gates the OS before constructing a native view;
   `present`/`dismissPresentation` own temporary system alerts and SwiftUI input sheets. Explicit
   selection returns validated input to the current Dart owner; cancellation returns no mutation.
+  `presentActivity` shows a blocking activity overlay in the same single slot; callers dismiss it
+  before awaiting any route or sheet, and it ends on its own after 120 s. Swift reports 'action',
+  'cancel' and 'dismissed' itself, and 'programmatic' when it closes a presentation for
+  `dismissPresentation`. Dart sends that only for its own reason (a dismissal signal or activity
+  dismissal: 'programmatic'; a session change: 'invalidated'; an unmounted caller: 'unmounted') and
+  reports that reason in place of Swift's reply.
 - `com.omi.native_ui/home/<view id>`: localized Home/read snapshots and existing read/navigation
   callbacks (`detail`, `open`, `browse`, `refresh`, `loadMore`, capture and chrome actions).
 - `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`/bounded explicit `captureImage`
