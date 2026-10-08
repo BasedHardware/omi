@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం ❤️",
     "onboardingRatingPromptYes": "అవును, నేను మీకు మద్దతు ఇవ్వాలనుకుంటున్నాను!",
     "onboardingRatingPromptNo": "అంతగా లేదు",
-    "partialRecording": "పాక్షిక రికార్డింగ్"
+    "partialRecording": "పాక్షిక రికార్డింగ్",
+    "importTranscriptFiles": "ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు",
+    "importTranscriptFilesDescription": "SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి",
+    "importTooManyAttempts": "ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "importFileTooLarge": "ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.",
+    "importUnsupportedFileType": "ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు."
 }

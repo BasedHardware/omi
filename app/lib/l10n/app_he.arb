@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
     "onboardingRatingPromptYes": "כן, אני רוצה לתמוך בכם!",
     "onboardingRatingPromptNo": "לא ממש",
-    "partialRecording": "הקלטה חלקית"
+    "partialRecording": "הקלטה חלקית",
+    "importTranscriptFiles": "קובצי תמלול",
+    "importTranscriptFilesDescription": "בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם",
+    "importTooManyAttempts": "יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.",
+    "importFileTooLarge": "הקובץ גדול מדי לייבוא.",
+    "importUnsupportedFileType": "לא ניתן לייבא סוג קובץ זה."
 }

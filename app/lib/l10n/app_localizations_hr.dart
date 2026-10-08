@@ -12486,4 +12486,19 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get partialRecording => 'Djelomična snimka';
+
+  @override
+  String get importTranscriptFiles => 'Datoteke transkripata';
+
+  @override
+  String get importTranscriptFilesDescription => 'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
+
+  @override
+  String get importTooManyAttempts => 'Trenutačno ima previše uvoza. Pokušajte ponovno kasnije.';
+
+  @override
+  String get importFileTooLarge => 'Ova je datoteka prevelika za uvoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Ova vrsta datoteke ne može se uvesti.';
 }

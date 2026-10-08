@@ -12384,4 +12384,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get partialRecording => 'การบันทึกบางส่วน';
+
+  @override
+  String get importTranscriptFiles => 'ไฟล์ถอดเสียง';
+
+  @override
+  String get importTranscriptFilesDescription => 'เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้';
+
+  @override
+  String get importTooManyAttempts => 'มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get importFileTooLarge => 'ไฟล์นี้ใหญ่เกินไปที่จะนำเข้า';
+
+  @override
+  String get importUnsupportedFileType => 'ไม่สามารถนำเข้าไฟล์ประเภทนี้ได้';
 }

@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "Ocena s 5 zvezdicami nam res zelo pomaga ❤️",
     "onboardingRatingPromptYes": "Ja, želim vas podpreti!",
     "onboardingRatingPromptNo": "Ne ravno",
-    "partialRecording": "Delni posnetek"
+    "partialRecording": "Delni posnetek",
+    "importTranscriptFiles": "Datoteke prepisov",
+    "importTranscriptFilesDescription": "Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi",
+    "importTooManyAttempts": "Trenutno je preveč uvozov. Poskusite znova pozneje.",
+    "importFileTooLarge": "Ta datoteka je prevelika za uvoz.",
+    "importUnsupportedFileType": "Te vrste datoteke ni mogoče uvoziti."
 }

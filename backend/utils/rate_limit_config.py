@@ -74,8 +74,9 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 # exempt too — they are the shared hourly ceilings the dedicated policies
 # compose with; exempting only the dedicated budgets would leave the aggregate
 # hourly caps boosted into no-ops.
+# Transcript uploads keep their storage budget even on boosted environments.
 _BOOST_EXEMPT_DEFAULT = (
-    "action_items:list,action_items:list_hot_client,static_map:get,"
+    "import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
     "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily"
 )
@@ -114,6 +115,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "voice:transcribe_stream": (60, 3600),
     "voice:message": (60, 3600),
     "file:upload": (40, 3600),
+    # Imports have their own bucket, separate from chat file uploads.
+    # The picker sends one request per loose file; 30 covers a month of meetings unzipped.
+    "import:upload": (30, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may

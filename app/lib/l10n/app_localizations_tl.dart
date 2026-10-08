@@ -12551,4 +12551,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Bahagyang pagrekord';
+
+  @override
+  String get importTranscriptFiles => 'Mga file ng transcript';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito';
+
+  @override
+  String get importTooManyAttempts => 'Masyadong maraming pag-import ngayon. Subukan ulit mamaya.';
+
+  @override
+  String get importFileTooLarge => 'Masyadong malaki ang file na ito para i-import.';
+
+  @override
+  String get importUnsupportedFileType => 'Hindi ma-import ang ganitong uri ng file.';
 }

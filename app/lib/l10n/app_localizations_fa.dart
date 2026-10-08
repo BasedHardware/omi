@@ -12448,4 +12448,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get partialRecording => 'ضبط ناقص';
+
+  @override
+  String get importTranscriptFiles => 'فایل‌های رونوشت';
+
+  @override
+  String get importTranscriptFilesDescription => 'رونوشت‌های SRT، VTT یا TXT یا یک فایل ZIP از آن‌ها را انتخاب کنید';
+
+  @override
+  String get importTooManyAttempts => 'در حال حاضر تعداد وارد کردن‌ها بیش از حد است. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get importFileTooLarge => 'این فایل برای وارد کردن بیش از حد بزرگ است.';
+
+  @override
+  String get importUnsupportedFileType => 'این نوع فایل را نمی‌توان وارد کرد.';
 }

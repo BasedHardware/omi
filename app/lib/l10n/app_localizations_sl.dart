@@ -12480,4 +12480,19 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get partialRecording => 'Delni posnetek';
+
+  @override
+  String get importTranscriptFiles => 'Datoteke prepisov';
+
+  @override
+  String get importTranscriptFilesDescription => 'Izberite prepise SRT, VTT ali TXT ali datoteko ZIP z njimi';
+
+  @override
+  String get importTooManyAttempts => 'Trenutno je preveč uvozov. Poskusite znova pozneje.';
+
+  @override
+  String get importFileTooLarge => 'Ta datoteka je prevelika za uvoz.';
+
+  @override
+  String get importUnsupportedFileType => 'Te vrste datoteke ni mogoče uvoziti.';
 }
