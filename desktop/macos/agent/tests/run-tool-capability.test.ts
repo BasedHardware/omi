@@ -1470,6 +1470,12 @@ describe("desktop approval set and sensitive policy bundles", () => {
     }
     expect(relayCallable("get_screenshot")).toBe(false);
   });
+
+  it("gives every gated tool the long model-side wait so a person has time to answer the card", () => {
+    for (const name of DESKTOP_APPROVAL_TOOLS) {
+      expect(allOmiToolManifest.find((tool) => tool.name === name)?.timeoutClass, name).toBe("long");
+    }
+  });
 });
 
 describe("RunToolCapabilityBroker spawn-time tool policy", () => {
