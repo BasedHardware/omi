@@ -4,6 +4,7 @@ import copy
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
+from routers.desktop_proxy import _DesktopProactivityStreamOutcome
 
 import httpx
 import pytest
@@ -19,6 +20,7 @@ from llm_gateway.gateway.vertex_wire import (
 )
 from utils.llm import desktop_gemini_gateway as dgg
 from utils.llm import vertex_pt_routing as ptr
+from config.vertex_reservations import State
 
 
 def _swift_request():
@@ -75,10 +77,10 @@ def _chat(payload, stream=False):
 def test_signed_tool_history_survives_both_hops_and_old_client_history_is_admitted(streaming, legacy_client):
     payload = _swift_request()
     # Gemini 2.5 Pro is only the requested model; the real attempt serves 3.1.
-    served = ptr.desktop_serving_model('gemini-2.5-pro')
-    assert served == 'gemini-3.1-flash-lite'
+    served = ptr.reserved_generation_model('gemini-2.5-pro', {ptr.PT_MODEL_TARGET: State.ACTIVE})
+    assert served == ptr.PT_MODEL_TARGET
     initial = ptr.model_payload(_vertex_request(_chat(payload)), served)
-    assert initial['generationConfig']['thinkingConfig'] == {'thinkingBudget': 1024}
+    assert initial['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
     assert initial['generationConfig']['maxOutputTokens'] == 2048
     assert initial['toolConfig']['functionCallingConfig']['mode'] == 'ANY'
     if streaming:
@@ -202,12 +204,12 @@ async def test_vertex_400_logs_only_bounded_reason_and_dispatches_once(monkeypat
             )
     assert error.value.failure_class == FailureClass.PROVIDER_INVALID_REQUEST
     assert len(sent) == 1
-    assert 'gemini-3.1-flash-lite:generateContent' in str(sent[0].url)
+    assert 'gemini-2.5-flash:generateContent' in str(sent[0].url)
     logged = capsys.readouterr().out
     assert json.loads(logged) == {
         'severity': 'WARNING',
         'event': 'vertex_provider_rejection',
-        'served_model': 'gemini-3.1-flash-lite',
+        'served_model': 'gemini-2.5-flash',
         'status': 400,
         'reason': 'missing_thought_signature',
     }
@@ -217,7 +219,11 @@ async def test_vertex_400_logs_only_bounded_reason_and_dispatches_once(monkeypat
 
 def test_proxy_rejected_gateway_request_is_nonretryable():
     telemetry = SimpleNamespace(complete=Mock())
-    envelope = SimpleNamespace(error_response=Mock(), provider_unavailable_retry_after=30)
+    envelope = SimpleNamespace(
+        stream_observation_factory=_DesktopProactivityStreamOutcome,
+        error_response=Mock(),
+        provider_unavailable_retry_after=30,
+    )
     dgg._gateway_error_response(
         dgg.DesktopGeminiGatewayError(status_code=400, code='provider_rejected', message='synthetic'),
         telemetry,
@@ -241,7 +247,11 @@ async def test_streamed_provider_400_stays_nonretryable(monkeypatch):
     telemetry = SimpleNamespace(
         complete=Mock(), request_id='c168e257-0ec6-4451-8aa9-b00bc0e322d9', lane='insight', client_platform='macos'
     )
-    envelope = SimpleNamespace(response_headers=Mock(return_value={}), stream_error_event=Mock(return_value=b'error'))
+    envelope = SimpleNamespace(
+        stream_observation_factory=_DesktopProactivityStreamOutcome,
+        response_headers=Mock(return_value={}),
+        stream_error_event=Mock(return_value=b'error'),
+    )
     response = await dgg.proxy_company_paid_via_gateway(
         None,
         b'{}',
@@ -256,3 +266,8 @@ async def test_streamed_provider_400_stays_nonretryable(monkeypatch):
     assert telemetry.complete.call_args.kwargs['status_code'] == 400
     assert telemetry.complete.call_args.kwargs['upstream_status'] == 400
     assert telemetry.complete.call_args.kwargs['retryable'] is False
+
+
+@pytest.fixture(autouse=True)
+def active_reservation(monkeypatch):
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', '{"gemini-2.5-flash":"active","gemini-3.8-flash":"inactive"}')

@@ -336,7 +336,6 @@ and an explicit empty literal renders as `''`.
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
-| `OMI_MODEL_TIER` | Select proxy budget tier | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
@@ -409,7 +408,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)
-- `OMI_MODEL_TIER` — Select proxy budget tier (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
