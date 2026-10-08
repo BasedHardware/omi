@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat billing errors incorrectly claiming your API key was ignored or directing you to the wrong billing account"
+}
