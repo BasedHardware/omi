@@ -134,17 +134,15 @@ class ReviewQuestionCard extends StatelessWidget {
 /// Sends [answer] for [item] through the shared provider; says so if it did not save.
 Future<bool> answerReviewItem(BuildContext context, ReviewItem item, ReviewAnswer answer) async {
   final provider = context.read<ReviewProvider>();
-  final messenger = ScaffoldMessenger.maybeOf(context);
+  // A sheet may close before the answer settles; the root navigator outlives it.
+  final host = Navigator.of(context, rootNavigator: true).context;
   final failedMessage = context.l10n.reviewAnswerFailed;
   OmiHaptics.light();
   final saved = await provider.answer(item, answer);
   if (!saved) {
     OmiHaptics.error();
-    if (context.mounted) {
-      OmiFeedback.error(context, failedMessage);
-    } else {
-      messenger?.showSnackBar(SnackBar(content: Text(failedMessage)));
-    }
+    final target = context.mounted ? context : host;
+    if (target.mounted) OmiFeedback.error(target, failedMessage);
   }
   return saved;
 }

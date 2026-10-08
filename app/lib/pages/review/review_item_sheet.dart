@@ -324,7 +324,7 @@ class _TranscriptLineView extends StatelessWidget {
             ),
             child: Text(
               line.isTarget ? '?' : (label.isEmpty ? '?' : label.characters.first.toUpperCase()),
-              style: OmiType.footnote.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+              style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 10),

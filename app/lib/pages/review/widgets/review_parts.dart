@@ -141,7 +141,6 @@ class ReviewLinkChip extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: OmiType.footnote.copyWith(
-                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: onTap == null ? OmiColors.textSecondary : OmiColors.textPrimary,
                     ),
