@@ -4,20 +4,11 @@ import copy
 from google.cloud import firestore
 import config.speaker_match_scores as match_scores
 from database import conversations
-from database.conversations import (
-    _prepare_conversation_for_write as prepare_conversation_for_identity_write,
-    _reapply_current_manual_assignments as reapply_manual_identity,
-    _sync_conversation_search_index as sync_identity_search_projection,
-)
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.conversation_revisions import firestore_revision_datetime
-from database.helpers import prepare_for_write
 
 
-@prepare_for_write(
-    data_arg_name='conversation_data', prepare_func=prepare_conversation_for_identity_write, preserve_result=True
-)
 def persist_speaker_resolution_if_current(uid: str, conversation_data: dict, *, expected_updated_at) -> bool:
     """Identity-only commit: refuse every intervening write, including manual edits.
 
@@ -51,12 +42,19 @@ def persist_speaker_resolution_if_current(uid: str, conversation_data: dict, *, 
             return False
         fields = ('transcript_segments', 'transcript_segments_compressed', 'speaker_resolution', match_scores.FIELD)
         patch = {key: copy.deepcopy(conversation_data[key]) for key in fields if key in conversation_data}
-        reapply_manual_identity(uid, patch, current)
-        transaction.update(ref, patch)
+        receipt = conversations.decode_manual_speaker_assignments(
+            uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
+        )
+        patch['transcript_segments'] = conversations.apply_manual_assignments(patch['transcript_segments'], receipt)
+        prepared = conversations.encode_conversation_for_write(
+            uid, patch, current.get('data_protection_level') or 'standard'
+        )
+        transaction.update(ref, {key: prepared[key] for key in fields if key in prepared})
         return True
 
     written = persist(client.transaction())
     if written:
         conversations.invalidate_people_stats_cache(uid)
-        sync_identity_search_projection(uid, conversation_data['id'])
+        # Typesense explicitly excludes transcript/identity fields. This update
+        # changes none of its allow-listed projection inputs.
     return written
