@@ -371,7 +371,14 @@ raise SystemExit(2)
                 proc.wait(timeout=5)
 
         self.addCleanup(_stop)
-        self.assertTrue(mod._exact_env(child.pid, token))
+        seen = False
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if mod._exact_env(child.pid, token):
+                seen = True
+                break
+            time.sleep(0.05)
+        self.assertTrue(seen, "exact trailing token was not visible to a bounded ps read")
         self.assertFalse(mod._exact_env(child.pid, "ab" * 16))
 
     def test_expired_probe_does_not_report_success(self):
