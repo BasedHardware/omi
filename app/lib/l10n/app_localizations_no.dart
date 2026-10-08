@@ -12437,16 +12437,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Tilpasser opplevelsen din';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mens du venter, har Omi vært fin å bruke?';
+  String get onboardingRatingPromptTitle => 'Liker du Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 stjerner hjelper oss virkelig mye ❤️';
+  String get onboardingRatingPromptYes => 'Ja';
 
   @override
-  String get onboardingRatingPromptYes => 'Ja, jeg vil støtte dere!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ikke egentlig';
+  String get onboardingRatingPromptNo => 'Nei';
 
   @override
   String get partialRecording => 'Delvis opptak';

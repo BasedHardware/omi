@@ -12366,16 +12366,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'تخصيص تجربتك';
 
   @override
-  String get onboardingRatingPromptTitle => 'بينما تنتظر، هل كان استخدام Omi ممتعًا؟';
+  String get onboardingRatingPromptTitle => 'هل تستمتع باستخدام Omi؟';
 
   @override
-  String get onboardingRatingPromptBody => 'تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️';
+  String get onboardingRatingPromptYes => 'نعم';
 
   @override
-  String get onboardingRatingPromptYes => 'نعم، أريد أن أدعمكم!';
-
-  @override
-  String get onboardingRatingPromptNo => 'ليس تمامًا';
+  String get onboardingRatingPromptNo => 'لا';
 
   @override
   String get partialRecording => 'تسجيل جزئي';

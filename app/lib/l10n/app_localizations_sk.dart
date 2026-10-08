@@ -12433,16 +12433,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Prispôsobujeme váš zážitok';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kým čakáte, páči sa vám používanie Omi?';
+  String get onboardingRatingPromptTitle => 'Páči sa vám Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️';
+  String get onboardingRatingPromptYes => 'Áno';
 
   @override
-  String get onboardingRatingPromptYes => 'Áno, chcem vás podporiť!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nie celkom';
+  String get onboardingRatingPromptNo => 'Nie';
 
   @override
   String get partialRecording => 'Čiastočná nahrávka';

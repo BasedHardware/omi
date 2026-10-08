@@ -12473,16 +12473,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Je ervaring wordt gepersonaliseerd';
 
   @override
-  String get onboardingRatingPromptTitle => 'Terwijl je wacht: vind je Omi fijn om te gebruiken?';
+  String get onboardingRatingPromptTitle => 'Bevalt Omi je?';
 
   @override
-  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm ❤️';
+  String get onboardingRatingPromptYes => 'Ja';
 
   @override
-  String get onboardingRatingPromptYes => 'Ja, ik wil jullie steunen!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Niet echt';
+  String get onboardingRatingPromptNo => 'Nee';
 
   @override
   String get partialRecording => 'Gedeeltelijke opname';

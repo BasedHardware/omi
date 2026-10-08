@@ -113,7 +113,6 @@ class _OnboardingSetupPageState extends State<OnboardingSetupPage> with SingleTi
       barrierDismissible: false,
       builder: (dialogContext) => OmiAlertDialog(
         title: l10n.onboardingRatingPromptTitle,
-        message: l10n.onboardingRatingPromptBody,
         actions: [
           OmiDialogAction(
             key: const Key('onboarding_rating_yes'),
