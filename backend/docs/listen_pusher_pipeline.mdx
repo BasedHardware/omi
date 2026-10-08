@@ -3582,3 +3582,12 @@ level migrations. Standard protection stores compressed JSON. Both segment and
 conversation fields are excluded from OpenAPI, JSON responses, list/detail dict
 views and integration/webhook payloads; backend Python
 models retain the evidence before relevance and for offline reads. No backfill runs.
+
+### Automatic owner continuity
+
+A same-provider-stream rollover retains an accepted automatic owner match only
+when its provider scope and loaded owner voiceprint remain unchanged. Donor
+locks, deletion, manual decisions and owner rejection prevent adoption. This
+state stays in the listen matcher; it never creates a manual receipt or
+training authorization. Reconnects and provider stream reconstructions start a
+new scope and must establish acoustic evidence again.

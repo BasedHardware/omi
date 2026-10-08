@@ -116,14 +116,60 @@ class SpeakerMatcher:
         self.owner_name: Optional[str] = None
         self._owner_name_resolved = False
 
-    async def refresh_for_conversation(self, conversation_id: str) -> None:
+    async def refresh_for_conversation(
+        self,
+        conversation_id: str,
+        *,
+        owner_carry_scope: Optional[str] = None,
+        owner_carry_donor: Optional[Mapping] = None,
+    ) -> None:
         async with self._profile_lock:
             if self._profile_conversation_id == conversation_id:
                 return
+            # Automatic continuity has no receipt/training authority. Only a
+            # still-current provider stream and an unchanged owner print qualify.
+            donor = owner_carry_donor or {}
+            receipt = donor.get('manual_speaker_assignments') or {}
+            old_owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
+            candidates = {}
+            if owner_carry_scope and donor and not any(donor.get(k) for k in ('deleted', 'discarded', 'is_locked')):
+                for voice, decision in self._voice_decisions.items():
+                    manual = self._manual_voice_decision(receipt, voice)
+                    if (
+                        decision.person_id == USER_SELF_PERSON_ID
+                        and self.speaker_to_person.get(voice, (None,))[0] == USER_SELF_PERSON_ID
+                        and self._voice_scopes.get(voice) == owner_carry_scope
+                        and not manual_owner_reserved(receipt)
+                        and voice not in manual_rejected_speakers(receipt)
+                        and manual is None
+                    ):
+                        candidates[voice] = (
+                            self._voice_distances[voice],
+                            decision,
+                            self._voice_centroids[voice],
+                            self.speaker_evidence[voice],
+                        )
             self.clear()
             self._profile_conversation_id = conversation_id
             if self.host.state.speaker_id_enabled:
                 await self._load_profiles()
+            epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
+            owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
+            if (
+                owner is not None
+                and old_owner is not None
+                and np.array_equal(owner['embedding'], old_owner['embedding'])
+                and getattr(epoch, 'current_scope', None) == owner_carry_scope
+            ):
+                for voice, (distances, decision, centroid, evidence) in candidates.items():
+                    self.speaker_to_person[voice] = (USER_SELF_PERSON_ID, owner['name'])
+                    self.voice_identity_status[voice] = SpeakerIdentityStatus.user
+                    self._voice_distances[voice] = distances
+                    self._voice_decisions[voice] = decision
+                    self._voice_centroids[voice] = centroid
+                    self.speaker_evidence[voice] = evidence
+                    self._voice_scopes[voice] = owner_carry_scope
+                    self._voice_segments[voice] = ''
 
     async def resolve_owner_name(self) -> Optional[str]:
         """The account owner's first name, resolved at most once per session.
@@ -246,6 +292,8 @@ class SpeakerMatcher:
         state.speaker_id_done.set()
 
     def observe_segment(self, speaker_id: int, scope: str, segment_id: str) -> None:
+        if speaker_id in self._voice_decisions and self._voice_scopes.get(speaker_id) == scope:
+            self._voice_segments[speaker_id] = segment_id
         if self.collapse_monitor.observe(speaker_id, scope, segment_id):
             self._record_collapse()
 
