@@ -57,7 +57,7 @@ def excerpts(records, *, chars):
 
 def evidence_message(records, schema, budget, *, chars, clusters=None, vocabulary=None):
     while True:
-        payload = {'records': excerpts(records, chars=chars)}
+        payload: dict[str, Any] = {'records': excerpts(records, chars=chars)}
         if vocabulary:
             payload['vocabulary'] = [row.get('spelling', '')[:100] for row in vocabulary[:20]]
         if clusters is not None:
