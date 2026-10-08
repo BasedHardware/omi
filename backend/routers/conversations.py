@@ -1329,6 +1329,11 @@ def delete_conversation(
                 )
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
+    # Preserve the user decision before removing the identity that idempotent
+    # desktop/sync uploads use. Failed processing cleanup must remain retryable
+    # and therefore never writes this permanent receipt.
+    conversations_db.mark_conversation_deleted(uid, conversation_id)
+
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
     # and synchronously — unlike audio_files above, a conversation typically

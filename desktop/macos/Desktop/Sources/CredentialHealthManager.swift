@@ -298,3 +298,35 @@ struct APIErrorPayload: Decodable, Equatable {
     detail ?? message ?? error ?? code
   }
 }
+
+extension APIErrorPayload {
+  private struct StructuredDetail: Decodable {
+    let code: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey { case code, message }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      code = try? container.decode(String.self, forKey: .code)
+      message = try? container.decode(String.self, forKey: .message)
+    }
+  }
+
+  /// FastAPI may return a structured detail without changing the top-level error schema.
+  /// Keep this initializer in the extension so existing memberwise construction remains available.
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let structuredDetail = try? container.decode(StructuredDetail.self, forKey: .detail)
+    error = try container.decodeIfPresent(String.self, forKey: .error)
+    code = try container.decodeIfPresent(String.self, forKey: .code) ?? structuredDetail?.code
+    message = try container.decodeIfPresent(String.self, forKey: .message)
+    detail = (try? container.decode(String.self, forKey: .detail)) ?? structuredDetail?.message
+    provider = try container.decodeIfPresent(String.self, forKey: .provider)
+    reason = try container.decodeIfPresent(String.self, forKey: .reason)
+    backendRoute = try container.decodeIfPresent(String.self, forKey: .backendRoute)
+    upstreamStatusCode = try container.decodeIfPresent(Int.self, forKey: .upstreamStatusCode)
+    retryable = try container.decodeIfPresent(Bool.self, forKey: .retryable)
+    retryAfterSeconds = try container.decodeIfPresent(Int.self, forKey: .retryAfterSeconds)
+  }
+}

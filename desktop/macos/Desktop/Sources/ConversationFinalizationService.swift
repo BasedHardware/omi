@@ -1,5 +1,11 @@
 import Foundation
 
+private enum ConversationFinalizationAuthorization {
+  // Reconciliation can fall back to upload through several helpers. All of them inherit
+  // the attempt's original generation rather than capturing whichever account is current later.
+  @TaskLocal static var snapshot: RuntimeOwnerAuthorizationSnapshot?
+}
+
 actor ConversationFinalizationService {
   static let shared = ConversationFinalizationService()
 
@@ -59,17 +65,29 @@ actor ConversationFinalizationService {
     reason: TranscriptionFinalizationReason,
     allowCloudForceProcess: Bool = false
   ) async {
+    guard let sessionOwner = RewindDatabase.currentUserId else { return }
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: sessionOwner) else {
+      return
+    }
     do {
       guard let session = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
         return
       }
-      await finalizeSession(session, reason: reason, allowCloudForceProcess: allowCloudForceProcess)
+      guard RewindDatabase.currentUserId == sessionOwner else { return }
+      await ConversationFinalizationAuthorization.$snapshot.withValue(snapshot) {
+        await self.finalizeSession(
+          session, reason: reason, allowCloudForceProcess: allowCloudForceProcess, expectedOwner: sessionOwner)
+      }
     } catch {
       logError("ConversationFinalization: Failed to load session \(sessionId)", error: error)
     }
   }
 
   func recoverPendingFinalizations() async {
+    guard let sessionOwner = RewindDatabase.currentUserId else { return }
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: sessionOwner) else {
+      return
+    }
     do {
       let sessions = try await TranscriptionStorage.shared.getSessionsNeedingFinalization(maxRetries: maxRetries)
       let exhaustedLocalFallbackSessions = try await TranscriptionStorage.shared
@@ -103,15 +121,19 @@ actor ConversationFinalizationService {
       let recoveryTime = clock()
       for session in sessionsById
       where Self.isDueForRecovery(session, now: recoveryTime, maxRetries: maxRetries) {
-        if let sessionId = session.id, exhaustedLocalFallbackIds.contains(sessionId) {
-          await finalizeExhaustedCloudSessionFromLocalSegments(session)
-          continue
+        guard RewindDatabase.currentUserId == sessionOwner else { return }
+        await ConversationFinalizationAuthorization.$snapshot.withValue(snapshot) {
+          if let sessionId = session.id, exhaustedLocalFallbackIds.contains(sessionId) {
+            await self.finalizeExhaustedCloudSessionFromLocalSegments(session, expectedOwner: sessionOwner)
+            return
+          }
+          await self.finalizeSession(
+            session,
+            reason: .retry,
+            allowCloudForceProcess: session.backendId?.isEmpty == false,
+            expectedOwner: sessionOwner
+          )
         }
-        await finalizeSession(
-          session,
-          reason: .retry,
-          allowCloudForceProcess: session.backendId?.isEmpty == false
-        )
       }
     } catch {
       logError("ConversationFinalization: Recovery failed", error: error)
@@ -121,6 +143,7 @@ actor ConversationFinalizationService {
   /// Unfinished work is always due. Failed sessions wait out their backoff, except exhausted cloud
   /// sessions, which get their bounded local-fallback attempts on the next tick.
   static func isDueForRecovery(_ session: TranscriptionSessionRecord, now: Date, maxRetries: Int) -> Bool {
+    guard !session.deleted else { return false }
     guard session.status == .failed else { return true }
     if session.isReadyForRetry(now: now) {
       return true
@@ -128,14 +151,22 @@ actor ConversationFinalizationService {
     return session.effectiveFinalizationStrategy == .cloudReconcile && session.retryCount >= maxRetries
   }
 
-  private func finalizeExhaustedCloudSessionFromLocalSegments(_ session: TranscriptionSessionRecord) async {
+  private func finalizeExhaustedCloudSessionFromLocalSegments(
+    _ session: TranscriptionSessionRecord, expectedOwner sessionOwner: String
+  ) async {
     guard let sessionId = session.id else { return }
-    guard session.status != .completed && !session.backendSynced else { return }
+    guard RewindDatabase.currentUserId == sessionOwner else { return }
+    let expectedSessionId = Self.localClientConversationId(session: session, sessionId: sessionId)
+    guard !session.deleted, session.status != .completed && !session.backendSynced else { return }
 
     log("ConversationFinalization: Retrying exhausted cloud session \(sessionId) from saved local segments")
 
     do {
-      guard try await TranscriptionStorage.shared.markSessionUploading(id: sessionId) else {
+      guard
+        try await TranscriptionStorage.shared.markSessionUploading(
+          id: sessionId, expectedOwner: sessionOwner, expectedSessionId: expectedSessionId,
+          authorizationSnapshot: ConversationFinalizationAuthorization.snapshot)
+      else {
         return
       }
       guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
@@ -154,17 +185,21 @@ actor ConversationFinalizationService {
         meetingTreatmentEligible: outcome.meetingTreatmentEligible
       )
     } catch {
-      await markRetryableFailure(sessionId: sessionId, error: error)
+      await markRetryableFailure(
+        sessionId: sessionId, error: error, expectedOwner: sessionOwner, expectedSessionId: expectedSessionId)
     }
   }
 
   private func finalizeSession(
     _ session: TranscriptionSessionRecord,
     reason: TranscriptionFinalizationReason,
-    allowCloudForceProcess: Bool
+    allowCloudForceProcess: Bool,
+    expectedOwner sessionOwner: String
   ) async {
     guard let sessionId = session.id else { return }
-    guard session.status != .completed && !session.backendSynced else { return }
+    guard RewindDatabase.currentUserId == sessionOwner else { return }
+    let expectedSessionId = Self.localClientConversationId(session: session, sessionId: sessionId)
+    guard !session.deleted, session.status != .completed && !session.backendSynced else { return }
 
     let strategy = session.finalizationStrategy ?? defaultStrategy(for: session)
     log(
@@ -173,7 +208,11 @@ actor ConversationFinalizationService {
 
     do {
       await storeMeetingContextIfEnabled(for: session)
-      guard try await TranscriptionStorage.shared.markSessionUploading(id: sessionId) else {
+      guard
+        try await TranscriptionStorage.shared.markSessionUploading(
+          id: sessionId, expectedOwner: sessionOwner, expectedSessionId: expectedSessionId,
+          authorizationSnapshot: ConversationFinalizationAuthorization.snapshot)
+      else {
         return
       }
       let meetingTreatmentEligible: Bool?
@@ -200,7 +239,8 @@ actor ConversationFinalizationService {
         meetingTreatmentEligible: meetingTreatmentEligible
       )
     } catch {
-      await markRetryableFailure(sessionId: sessionId, error: error)
+      await markRetryableFailure(
+        sessionId: sessionId, error: error, expectedOwner: sessionOwner, expectedSessionId: expectedSessionId)
     }
   }
 
@@ -258,9 +298,16 @@ actor ConversationFinalizationService {
   }
 
   private func uploadLocalSegments(sessionId: Int64, allowBackendIdOverride: Bool = false) async throws -> Bool {
+    guard let snapshot = ConversationFinalizationAuthorization.snapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot), RewindDatabase.currentUserId == snapshot.ownerID
+    else { throw CancellationError() }
+    let sessionOwner = snapshot.ownerID
     guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId) else {
-      throw TranscriptionStorageError.sessionNotFound
+      // Deleted local sessions deliberately expose neither their transcript nor an upload bundle.
+      throw CancellationError()
     }
+    guard !bundle.session.deleted else { throw CancellationError() }
+    let uploadIdentity = Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
     guard !bundle.segments.isEmpty else {
       log("ConversationFinalization: Deleting empty local session \(sessionId)")
       try await TranscriptionStorage.shared.deleteSession(id: sessionId)
@@ -343,19 +390,41 @@ actor ConversationFinalizationService {
       started_at: iso.string(from: bundle.session.startedAt),
       finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
       language: bundle.session.language,
-      client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
+      client_conversation_id: uploadIdentity,
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
       client_processing: clientProcessing,
       captureEvidence: captureEvidence
     )
-    let response = try await apiClient.createConversationFromSegments(request)
+    guard RewindDatabase.currentUserId == sessionOwner,
+      let latest = try await TranscriptionStorage.shared.getSession(id: sessionId), !latest.deleted,
+      Self.localClientConversationId(session: latest, sessionId: sessionId) == uploadIdentity
+    else { throw CancellationError() }
+    let response: APIClient.CreateConversationFromSegmentsResponse
+    do {
+      response = try await apiClient.createConversationFromSegments(
+        request, expectedOwnerID: sessionOwner, authorizationSnapshot: snapshot)
+    } catch ConversationSegmentUploadError.userDeleted {
+      // Only this endpoint's documented deletion outcome retires a recording. Ordinary
+      // provider/network failures still preserve its only transcript for recovery.
+      try await TranscriptionStorage.shared.confirmSessionDeletion(
+        id: sessionId, expectedOwner: sessionOwner, expectedSessionId: uploadIdentity,
+        authorizationSnapshot: snapshot)
+      throw CancellationError()
+    }
+    guard RewindDatabase.currentUserId == sessionOwner,
+      let latest = try await TranscriptionStorage.shared.getSession(id: sessionId), !latest.deleted,
+      Self.localClientConversationId(session: latest, sessionId: sessionId) == uploadIdentity
+    else { throw CancellationError() }
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
     let completed = try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId,
       backendId: response.id,
       conversationStatus: status,
-      allowBackendIdOverride: allowBackendIdOverride
+      allowBackendIdOverride: allowBackendIdOverride,
+      expectedOwner: sessionOwner,
+      expectedSessionId: uploadIdentity,
+      authorizationSnapshot: snapshot
     )
     guard completed else {
       if let latest = try await TranscriptionStorage.shared.getSession(id: sessionId),
@@ -593,7 +662,10 @@ actor ConversationFinalizationService {
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,
           backendId: conversation.id,
-          conversationStatus: status
+          conversationStatus: status,
+          expectedOwner: ConversationFinalizationAuthorization.snapshot?.ownerID,
+          expectedSessionId: Self.localClientConversationId(session: session, sessionId: sessionId),
+          authorizationSnapshot: ConversationFinalizationAuthorization.snapshot
         )
         log("ConversationFinalization: Finalized cloud session \(sessionId) by backend id \(conversation.id)")
         return nil
@@ -631,7 +703,10 @@ actor ConversationFinalizationService {
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,
           backendId: conversation.id,
-          conversationStatus: status
+          conversationStatus: status,
+          expectedOwner: ConversationFinalizationAuthorization.snapshot?.ownerID,
+          expectedSessionId: Self.localClientConversationId(session: session, sessionId: sessionId),
+          authorizationSnapshot: ConversationFinalizationAuthorization.snapshot
         )
         log("ConversationFinalization: Force-processed unbound cloud session \(sessionId) -> \(conversation.id)")
         return nil
@@ -707,7 +782,10 @@ actor ConversationFinalizationService {
     try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId,
       backendId: conversation.id,
-      conversationStatus: status
+      conversationStatus: status,
+      expectedOwner: ConversationFinalizationAuthorization.snapshot?.ownerID,
+      expectedSessionId: Self.localClientConversationId(session: session, sessionId: sessionId),
+      authorizationSnapshot: ConversationFinalizationAuthorization.snapshot
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by timestamp \(conversation.id)")
     return true
@@ -803,36 +881,57 @@ actor ConversationFinalizationService {
       id: sessionId,
       backendId: conversation.id,
       conversationStatus: status,
-      allowBackendIdOverride: allowBackendIdOverride
+      allowBackendIdOverride: allowBackendIdOverride,
+      expectedOwner: ConversationFinalizationAuthorization.snapshot?.ownerID,
+      expectedSessionId: Self.localClientConversationId(session: session, sessionId: sessionId),
+      authorizationSnapshot: ConversationFinalizationAuthorization.snapshot
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by conversation id \(conversation.id)")
     return true
   }
 
-  private func markRetryableFailure(sessionId: Int64, error: Error) async {
+  private func markRetryableFailure(
+    sessionId: Int64, error: Error, expectedOwner: String, expectedSessionId: String
+  ) async {
+    guard !(error is CancellationError), !Task.isCancelled else { return }
+    if case AuthError.userChangedDuringRequest = error { return }
+    guard let snapshot = ConversationFinalizationAuthorization.snapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    else { return }
+    guard RewindDatabase.currentUserId == expectedOwner else { return }
     let failureClass = FinalizationFailureClass.classify(error)
     let message = error.localizedDescription
     do {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
+      guard RewindDatabase.currentUserId == expectedOwner, let session,
+        Self.localClientConversationId(session: session, sessionId: sessionId) == expectedSessionId
+      else { return }
+      guard !session.deleted else { return }
       if failureClass == .offline {
         // Release the upload claim without spending budget: no path to the backend says nothing
         // about whether this session can finalize.
         log("ConversationFinalization: Session \(sessionId) attempt failed offline; retry budget unchanged")
-        try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: message)
+        try await TranscriptionStorage.shared.markSessionFailed(
+          id: sessionId, error: message, expectedOwner: expectedOwner, expectedSessionId: expectedSessionId,
+          authorizationSnapshot: snapshot)
         return
       }
-      let retryCount = (session?.retryCount ?? 0) + 1
-      if let session, session.effectiveFinalizationStrategy == .localSegments {
+      let retryCount = session.retryCount + 1
+      if session.effectiveFinalizationStrategy == .localSegments {
         // The local transcript is the only copy and from-segments is idempotent on
         // client_conversation_id, so there is no exhausted state: keep retrying on the capped backoff.
         if failureClass == .permanent {
           if !session.hasPermanentFinalizationFailure {
             await reportPermanentLocalUploadRejection(session: session, error: error, retryCount: retryCount)
           }
-          try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+          try await TranscriptionStorage.shared.incrementRetryCount(
+            id: sessionId, expectedOwner: expectedOwner, expectedSessionId: expectedSessionId,
+            authorizationSnapshot: snapshot)
           try await TranscriptionStorage.shared.markSessionFailed(
             id: sessionId,
-            error: FinalizationRetryPolicy.permanentFailurePrefix + message
+            error: FinalizationRetryPolicy.permanentFailurePrefix + message,
+            expectedOwner: expectedOwner, expectedSessionId: expectedSessionId,
+            authorizationSnapshot: snapshot
           )
           return
         }
@@ -842,7 +941,7 @@ actor ConversationFinalizationService {
         // (backend/network error), we land here instead and would abandon the session, dropping any
         // recorded audio/transcript we still hold locally (#9083). Try to finalize from saved local
         // segments first so the recording is not lost.
-        if let session {
+        do {
           do {
             let outcome = try await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId)
             if outcome.handled {
@@ -874,17 +973,21 @@ actor ConversationFinalizationService {
         await AnalyticsManager.shared.conversationReconciliationFailed(
           error: "session_reconciliation_failed",
           reason: "cloud_reconcile_exhausted",
-          source: session?.source,
-          stage: session?.finalizationStrategy?.rawValue,
+          source: session.source,
+          stage: session.finalizationStrategy?.rawValue,
           retryCount: retryCount,
-          hasBackendId: session?.backendId?.isEmpty == false,
-          hasClientConversationId: session?.clientConversationId?.isEmpty == false,
+          hasBackendId: session.backendId?.isEmpty == false,
+          hasClientConversationId: session.clientConversationId?.isEmpty == false,
           segmentCount: segmentCount,
           diagnostics: diagnostics
         )
       }
-      try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-      try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: message)
+      try await TranscriptionStorage.shared.incrementRetryCount(
+        id: sessionId, expectedOwner: expectedOwner, expectedSessionId: expectedSessionId,
+        authorizationSnapshot: snapshot)
+      try await TranscriptionStorage.shared.markSessionFailed(
+        id: sessionId, error: message, expectedOwner: expectedOwner, expectedSessionId: expectedSessionId,
+        authorizationSnapshot: snapshot)
     } catch {
       logError("ConversationFinalization: Failed to record finalization failure for session \(sessionId)", error: error)
     }

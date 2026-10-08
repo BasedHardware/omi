@@ -40,6 +40,8 @@ class _Ref:
         return self._snapshot
 
     def collection(self, _name):
+        if _name in {'conversation_deletions', 'conversation_deletion_state'}:
+            return _Ref(_Snapshot(None))
         return self
 
     def document(self, _name):

@@ -722,6 +722,12 @@ extension APIClient {
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
 
+enum ConversationSegmentUploadError: LocalizedError, Equatable {
+  case userDeleted
+
+  var errorDescription: String? { "Conversation was deleted" }
+}
+
 extension APIClient {
   /// One transcript segment for the from-segments upload (matches backend DevTranscriptSegment).
   struct UploadSegment: Encodable, Sendable {
@@ -841,15 +847,30 @@ extension APIClient {
   /// persisted, processed (memories/summaries), and synced to every device — the same pipeline a
   /// cloud-transcribed conversation goes through, without the live `/v4/listen` websocket.
   /// Endpoint: POST /v1/conversations/from-segments (Firebase-authed).
-  func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
-    async throws -> CreateConversationFromSegmentsResponse
-  {
+  func createConversationFromSegments(
+    _ request: CreateConversationFromSegmentsRequest,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> CreateConversationFromSegmentsResponse {
+    let snapshot: RuntimeOwnerAuthorizationSnapshot?
+    if let authorizationSnapshot {
+      snapshot = authorizationSnapshot
+    } else if expectedOwnerID != nil || testAuthHeader == nil {
+      guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID) else {
+        throw AuthError.userChangedDuringRequest
+      }
+      snapshot = captured
+    } else {
+      // Header-only transport fixtures have no authenticated owner unless the caller supplies one.
+      snapshot = nil
+    }
     // The backend runs the full summarization pipeline synchronously inside
     // this request, which routinely exceeds the transport's 30s default; a
     // short timeout here turns every slower meeting into a fail-then-retry
     // loop that delays the post-meeting notification by minutes.
     let response: CreateConversationFromSegmentsResponse = try await post(
-      "v1/conversations/from-segments", body: request, customBaseURL: nil, requestTimeout: 180)
+      "v1/conversations/from-segments", body: request, customBaseURL: nil,
+      expectedOwnerId: expectedOwnerID, authorizationSnapshot: snapshot, requestTimeout: 180)
     invalidateConversationsCountCache()
     return response
   }

@@ -278,7 +278,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   /// Check if this session can be retried. Local-segment uploads hold the only copy of the
   /// transcript and are idempotent server-side, so they never exhaust.
   var canRetry: Bool {
-    effectiveFinalizationStrategy == .localSegments || retryCount < 5
+    !deleted && (effectiveFinalizationStrategy == .localSegments || retryCount < 5)
   }
 
   /// The last attempt was rejected by the backend rather than failing in transit.
@@ -293,6 +293,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
 
   /// Whether a completion event can attach this backend conversation ID.
   func canAcceptCompletion(backendId incomingBackendId: String) -> Bool {
+    guard !deleted else { return false }
     guard let existingBackendId = backendId, !existingBackendId.isEmpty else {
       return true
     }
@@ -512,6 +513,7 @@ extension TranscriptionSessionRecord {
 
   /// Update this record from a versioned server snapshot while preserving its local id.
   mutating func updateFrom(_ conversation: ServerConversation) {
+    guard !deleted else { return }
     let encoder = JSONEncoder()
 
     // `updatedAt` is local cache bookkeeping. Server freshness is tracked
@@ -576,6 +578,7 @@ extension TranscriptionSessionRecord {
   /// Enrich an unversioned or older projection without allowing it to
   /// overwrite fields from a newer canonical snapshot.
   mutating func hydrateMissingFields(from conversation: ServerConversation) {
+    guard !deleted else { return }
     let encoder = JSONEncoder()
     if canHydrateSummary(from: conversation), conversation.localSummary != nil {
       updateSummary(from: conversation)
@@ -623,7 +626,7 @@ extension TranscriptionSessionRecord {
 
   /// True when the server response can fill at least one empty local server-owned field.
   func hasHydratableServerFields(from conversation: ServerConversation) -> Bool {
-    guard backendSynced, backendId == conversation.id else { return false }
+    guard !deleted, backendSynced, backendId == conversation.id else { return false }
     return canHydrateSummary(from: conversation)
       && (Self.isEmpty(title) && !conversation.structured.title.isEmpty
         || Self.isEmpty(overview) && !conversation.structured.overview.isEmpty
@@ -724,7 +727,7 @@ extension TranscriptionSessionRecord {
     segments: [TranscriptionSegmentRecord],
     transcriptIncluded: Bool? = nil
   ) -> ServerConversation? {
-    guard let backendId = backendId else { return nil }
+    guard !deleted, let backendId = backendId else { return nil }
 
     let decoder = JSONDecoder()
 

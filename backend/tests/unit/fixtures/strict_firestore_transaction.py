@@ -10,7 +10,9 @@ proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
-It deliberately does not model other queries, deletes, commit/rollback visibility,
+Conversation-deletion emulator proofs additionally cover one projected
+``sync_merged_from array_contains`` ancestry scan and transaction parent deletes.
+It deliberately does not model other queries, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
 
@@ -79,6 +81,8 @@ class StrictFirestoreDocument:
                 ["is_locked"],
                 ["folder_id"],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+                ['deleted', 'user_deleted'],
+                ['sync_merged_from'],
             ):
                 raise UnsupportedFirestoreOperationError(
                     "only privacy, folder membership and speaker-receipt projections are supported"
@@ -120,16 +124,26 @@ class StrictFirestoreIdQuery:
         self._path = path
         self._filters: tuple[tuple[str, Any], ...] = ()
         self._ids_only = False
+        self._projection: tuple[str, ...] = ()
+        self._array_contains: tuple[str, Any] | None = None
         self._limit: int | None = None
 
     def _copy(self) -> StrictFirestoreIdQuery:
         result = StrictFirestoreIdQuery(self._database, self._path)
         result._filters = self._filters
         result._ids_only = self._ids_only
+        result._projection = self._projection
+        result._array_contains = self._array_contains
         result._limit = self._limit
         return result
 
     def where(self, *, filter: Any) -> StrictFirestoreIdQuery:
+        if filter.op_string == 'array_contains' and filter.field_path == 'sync_merged_from':
+            if self._path[-1] != 'conversations' or self._array_contains is not None:
+                raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+            result = self._copy()
+            result._array_contains = (filter.field_path, filter.value)
+            return result
         if filter.op_string != '==':
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
@@ -137,10 +151,11 @@ class StrictFirestoreIdQuery:
         return result
 
     def select(self, fields: tuple[str, ...]) -> StrictFirestoreIdQuery:
-        if fields:
+        if fields and tuple(fields) != ('user_deleted',):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         result = self._copy()
-        result._ids_only = True
+        result._ids_only = not fields
+        result._projection = tuple(fields)
         return result
 
     def limit(self, count: int) -> StrictFirestoreIdQuery:
@@ -151,17 +166,26 @@ class StrictFirestoreIdQuery:
         return result
 
     def stream(self, *, transaction: StrictFirestoreTransaction):
-        if not self._filters or not self._ids_only or self._limit is None:
+        ancestry = self._array_contains is not None and self._projection == ('user_deleted',) and not self._filters
+        if not ancestry and (not self._filters or not self._ids_only or self._limit is None):
             raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
         if transaction._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and query must belong to the same store')
         transaction._assert_read_allowed()
         rows = []
         for path, value in sorted(self._database.rows.items()):
-            if path[:-1] == self._path and all(
-                field in value and value[field] == expected for field, expected in self._filters
+            if (
+                path[:-1] == self._path
+                and all(field in value and value[field] == expected for field, expected in self._filters)
+                and (
+                    self._array_contains is None
+                    or (
+                        isinstance(value.get(self._array_contains[0]), list)
+                        and self._array_contains[1] in value[self._array_contains[0]]
+                    )
+                )
             ):
-                snapshot = StrictFirestoreSnapshot({})
+                snapshot = StrictFirestoreSnapshot({key: value[key] for key in self._projection if key in value})
                 snapshot.reference = StrictFirestoreDocument(self._database, path)
                 rows.append(snapshot)
         return iter(rows[: self._limit])
@@ -175,6 +199,7 @@ class StrictFirestoreTransaction:
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+        self.deletes: list[tuple[str, ...]] = []
         self.has_written = False
         self._read_only = False
         self._max_attempts = 1
@@ -228,8 +253,11 @@ class StrictFirestoreTransaction:
         self.updates.append((ref.path, payload))
         self._database.rows[ref.path].update(payload)
 
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def delete(self, ref: StrictFirestoreDocument) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.deletes.append(ref.path)
+        self._database.rows.pop(ref.path, None)
 
     def get(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')

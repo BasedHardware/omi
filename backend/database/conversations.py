@@ -49,6 +49,7 @@ from .firestore_index_registry import (
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
+from . import conversation_deletions
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
 from .read_boundary import parse_payload_strict
@@ -874,6 +875,9 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
+        conversation_deletions.require_conversation_not_deleted(
+            user_ref, conversation_data['id'], transaction=transaction
+        )
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
@@ -964,6 +968,8 @@ def persist_processing_result_with_lifecycle(
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
+        if conversation_deletions.is_conversation_deleted(user_ref, conversation_data['id'], transaction=transaction):
+            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
@@ -1109,16 +1115,44 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+
+    @firestore.transactional
+    def create(transaction) -> bool:
+        conversation_deletions.require_conversation_not_deleted(
+            user_ref, conversation_data['id'], transaction=transaction
+        )
+        if conversation_ref.get(transaction=transaction).exists:
+            return False
+        transaction.create(conversation_ref, conversation_data)
+        return True
+
     try:
-        conversation_ref.create(conversation_data)
+        created = create(db.transaction())
     except (AlreadyExists, Conflict):
         # The conversation exists but may be new to the search index (writer
         # lag, backfill gap); the read-back sync converges it either way.
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
+    if not created:
+        _sync_conversation_search_index(uid, conversation_data['id'])
+        return False
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
     return True
+
+
+def ensure_conversation_not_deleted(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversation_deletions.require_conversation_not_deleted(user_ref, conversation_id)
+
+
+def mark_conversation_deleted(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Explicit user-delete fence; generic physical cleanup deliberately does not call this."""
+    marked = conversation_deletions.mark_conversation_deleted(uid, conversation_id, firestore_client=firestore_client)
+    invalidate_people_stats_cache(uid)
+    _delete_conversation_search_index(uid, conversation_id)
+    return marked
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -1224,6 +1258,8 @@ def get_public_shared_conversation_bounded(
         field_paths=[
             'visibility',
             'is_locked',
+            'deleted',
+            'user_deleted',
             'transcript_segments_compressed',
             'transcript_segments',
         ]
@@ -1232,6 +1268,8 @@ def get_public_shared_conversation_bounded(
         return None
     raw = snapshot.to_dict()
     if not isinstance(raw, dict):
+        return None
+    if is_soft_deleted(raw) or raw.get('user_deleted'):
         return None
 
     visibility = raw.get('visibility')
@@ -1906,7 +1944,7 @@ def delete_conversation(uid, conversation_id):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
-    conversation_ref.delete()
+    conversation_deletions.delete_conversation_parent(uid, conversation_id, firestore_client=db)
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 

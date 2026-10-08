@@ -124,6 +124,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversation_deletions.is_conversation_deleted': '1d44ada81d833ecf1d1567ab1a74395ef9ea8a1619abca6c5b3b8074d11a475f',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -163,6 +164,35 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+
+_add(
+    DriverEntry(
+        'database.conversation_deletions._has_user_deleted_ancestor',
+        base={'user_ref': ref_document(f'users/{UID}'), 'conversation_id': 'source'},
+        neutrals={'transaction': (ref_transaction(), 'all ancestry reads share the caller content transaction')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_deletions.require_conversation_not_deleted',
+        base={'user_ref': ref_document(f'users/{UID}'), 'conversation_id': 'source'},
+        profiles=(
+            CallerProfile('lifecycle_and_sync_content_write', {'transaction': [ref_transaction()]}),
+            CallerProfile('from_segments_deletion_replay_check', {'transaction': [None]}),
+        ),
+        setup=_seed(f'users/{UID}/conversation_deletion_state/fanout', {'pending_fanouts': 1}),
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_deletions.is_conversation_deleted',
+        covered_by=('database.conversation_deletions.require_conversation_not_deleted',),
+        reason='authority wrapper is exercised by the content-writer and segment-replay witnesses; '
+        'the terminal stream is recorded under _has_user_deleted_ancestor',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_deletions.is_conversation_deleted'],
+    )
+)
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 

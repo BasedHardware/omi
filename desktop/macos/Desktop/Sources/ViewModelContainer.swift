@@ -111,6 +111,10 @@ class ViewModelContainer: ObservableObject {
     let dbAvailable = !databaseInitFailed
     if dbAvailable {
       await homeStatusStore.databaseDidBecomeReady()
+      Task { @MainActor in
+        guard RuntimeOwnerIdentity.currentOwnerId() == currentUserId else { return }
+        await AppState.current?.resumePendingConversationDeletions()
+      }
     }
 
     schedulePostInteractiveWarmup(dbAvailable: dbAvailable)

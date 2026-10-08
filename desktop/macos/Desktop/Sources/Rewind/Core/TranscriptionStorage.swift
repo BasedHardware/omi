@@ -1,6 +1,42 @@
 import Foundation
 @preconcurrency import GRDB
 
+private let visibleConversationSessionSQL = """
+  deleted = 0 AND NOT EXISTS (
+    SELECT 1 FROM conversation_deletions
+    WHERE conversation_deletions.backendId = transcription_sessions.backendId
+  )
+  """
+
+private func hasConversationDeletion(_ backendId: String, in database: Database) throws -> Bool {
+  try Bool.fetchOne(
+    database,
+    sql: "SELECT EXISTS (SELECT 1 FROM conversation_deletions WHERE backendId = ?)",
+    arguments: [backendId]
+  ) ?? false
+}
+
+private func isConversationDeleted(_ session: TranscriptionSessionRecord, in database: Database) throws -> Bool {
+  if session.deleted { return true }
+  guard let backendId = session.backendId else { return false }
+  return try hasConversationDeletion(backendId, in: database)
+}
+
+private func persistConfirmedConversationDeletion(_ backendId: String, in database: Database) throws {
+  try database.execute(
+    sql: """
+      INSERT INTO conversation_deletions (backendId, pending, restorableSessionIds)
+      VALUES (?, 0, '[]')
+      ON CONFLICT(backendId) DO UPDATE SET pending = 0, restorableSessionIds = '[]'
+      """,
+    arguments: [backendId]
+  )
+  try database.execute(
+    sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
+    arguments: [Date(), backendId]
+  )
+}
+
 private func withConversationCacheScope<T>(
   _ scope: ConversationCacheWriteScope?,
   generation: Int?,
@@ -10,6 +46,43 @@ private func withConversationCacheScope<T>(
     return try scope.withCurrent(generation, operation)
   }
   return try operation()
+}
+
+/// The lease covers GRDB's physical commit, after its updates closure has returned.
+/// Superseded commits may remain durable for their original owner but cannot publish a result.
+private func authorizedConversationWrite<T: Sendable>(
+  _ db: DatabasePool,
+  cacheScope: ConversationCacheWriteScope? = nil,
+  cacheGeneration: Int? = nil,
+  expectedOwner: String? = nil,
+  authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+  operation: @escaping @Sendable (Database) throws -> T
+) async throws -> T {
+  let authorization = LocalMutationAuthorization {
+    if let cacheScope, let cacheGeneration, !cacheScope.isCurrent(cacheGeneration) { return false }
+    if let expectedOwner, RewindDatabase.currentUserId != expectedOwner { return false }
+    if let authorizationSnapshot {
+      if let expectedOwner, authorizationSnapshot.ownerID != expectedOwner { return false }
+      if RewindDatabase.currentUserId != authorizationSnapshot.ownerID { return false }
+      return RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    }
+    return true
+  }
+  do {
+    try authorization.require()
+    let value = try await authorization.withCommitLeaseSuppressingSupersededResult {
+      try await db.write { database in
+        try authorization.require()
+        let value = try operation(database)
+        try authorization.require()
+        return value
+      }
+    }
+    try authorization.require()
+    return value
+  } catch LocalMutationAuthorizationError.revoked {
+    throw CancellationError()
+  }
 }
 
 /// Actor-based storage manager for transcription sessions and segments
@@ -86,6 +159,7 @@ actor TranscriptionStorage {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      guard try !isConversationDeleted(record, in: database) else { return false }
       guard record.status != .completed && !record.backendSynced else {
         log("TranscriptionStorage: Skipping finishSession for completed backend-synced session \(id)")
         return false
@@ -152,6 +226,9 @@ actor TranscriptionStorage {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      guard try !isConversationDeleted(record, in: database),
+        try !hasConversationDeletion(backendId, in: database)
+      else { return }
       guard record.canAcceptCompletion(backendId: backendId) else {
         log(
           "TranscriptionStorage: Skipping conflicting backend bind for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))"
@@ -175,14 +252,23 @@ actor TranscriptionStorage {
 
   /// Mark session as currently uploading
   @discardableResult
-  func markSessionUploading(id: Int64) async throws -> Bool {
+  func markSessionUploading(
+    id: Int64, expectedOwner: String? = nil, expectedSessionId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> Bool {
+    try ensureFinalizationOwner(expectedOwner)
     let db = try await ensureInitialized()
+    try ensureFinalizationOwner(expectedOwner)
 
-    let claimed = try await db.write { database -> Bool in
+    let claimed = try await authorizedConversationWrite(
+      db, expectedOwner: expectedOwner, authorizationSnapshot: authorizationSnapshot
+    ) { database -> Bool in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
       }
+      try self.validateFinalizationIdentity(record, id: id, expectedSessionId: expectedSessionId)
 
+      guard try !isConversationDeleted(record, in: database) else { return false }
       let now = Date()
       let staleUploadingCutoff = now.addingTimeInterval(-300)
       guard record.status != .uploading || record.updatedAt < staleUploadingCutoff else {
@@ -214,15 +300,27 @@ actor TranscriptionStorage {
     id: Int64,
     backendId: String,
     conversationStatus: LocalConversationStatus = .completed,
-    allowBackendIdOverride: Bool = false
+    allowBackendIdOverride: Bool = false,
+    expectedOwner: String? = nil,
+    expectedSessionId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Bool {
+    try ensureFinalizationOwner(expectedOwner)
     let db = try await ensureInitialized()
+    try ensureFinalizationOwner(expectedOwner)
 
-    let result = try await db.write { database -> (accepted: Bool, telemetry: ConversationCreatedTelemetry?) in
+    let result = try await authorizedConversationWrite(
+      db, expectedOwner: expectedOwner, authorizationSnapshot: authorizationSnapshot
+    ) { database -> (accepted: Bool, telemetry: ConversationCreatedTelemetry?) in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      try self.validateFinalizationIdentity(record, id: id, expectedSessionId: expectedSessionId)
+
+      guard try !isConversationDeleted(record, in: database),
+        try !hasConversationDeletion(backendId, in: database)
+      else { return (false, nil) }
       if record.status == .completed, record.backendSynced, record.backendId == backendId {
         log("TranscriptionStorage: Skipping duplicate completion for session \(id)")
         return (false, nil)
@@ -271,14 +369,24 @@ actor TranscriptionStorage {
 
   /// Mark session as failed with error.
   /// No-op if the session is already completed (prevents race with concurrent completion).
-  func markSessionFailed(id: Int64, error: String) async throws {
+  func markSessionFailed(
+    id: Int64, error: String, expectedOwner: String? = nil, expectedSessionId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    try ensureFinalizationOwner(expectedOwner)
     let db = try await ensureInitialized()
+    try ensureFinalizationOwner(expectedOwner)
 
-    try await db.write { database in
+    try await authorizedConversationWrite(
+      db, expectedOwner: expectedOwner, authorizationSnapshot: authorizationSnapshot
+    ) { database in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      try self.validateFinalizationIdentity(record, id: id, expectedSessionId: expectedSessionId)
+
+      guard try !isConversationDeleted(record, in: database) else { return }
       // Don't regress a completed session back to failed
       guard record.status != .completed else {
         log("TranscriptionStorage: Skipping markSessionFailed for already-completed session \(id)")
@@ -300,14 +408,24 @@ actor TranscriptionStorage {
 
   /// Increment retry count for a session.
   /// No-op if the session is already completed (prevents race with concurrent completion).
-  func incrementRetryCount(id: Int64) async throws {
+  func incrementRetryCount(
+    id: Int64, expectedOwner: String? = nil, expectedSessionId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    try ensureFinalizationOwner(expectedOwner)
     let db = try await ensureInitialized()
+    try ensureFinalizationOwner(expectedOwner)
 
-    try await db.write { database in
+    try await authorizedConversationWrite(
+      db, expectedOwner: expectedOwner, authorizationSnapshot: authorizationSnapshot
+    ) { database in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      try self.validateFinalizationIdentity(record, id: id, expectedSessionId: expectedSessionId)
+
+      guard try !isConversationDeleted(record, in: database) else { return }
       // Don't modify a completed session
       guard record.status != .completed else {
         log("TranscriptionStorage: Skipping incrementRetryCount for already-completed session \(id)")
@@ -324,6 +442,20 @@ actor TranscriptionStorage {
     }
 
     log("TranscriptionStorage: Incremented retry count for session \(id)")
+  }
+
+  private nonisolated func ensureFinalizationOwner(_ expectedOwner: String?) throws {
+    if let expectedOwner, RewindDatabase.currentUserId != expectedOwner { throw CancellationError() }
+  }
+
+  private nonisolated func validateFinalizationIdentity(
+    _ record: TranscriptionSessionRecord, id: Int64, expectedSessionId: String?
+  ) throws {
+    if let expectedSessionId,
+      ConversationFinalizationService.localClientConversationId(session: record, sessionId: id) != expectedSessionId
+    {
+      throw CancellationError()
+    }
   }
 
   /// Delete a session and its segments
@@ -352,6 +484,7 @@ actor TranscriptionStorage {
         throw TranscriptionStorageError.sessionNotFound
       }
 
+      guard try !isConversationDeleted(record, in: database) else { return }
       guard record.status != .completed && !record.backendSynced else {
         log("TranscriptionStorage: Skipping status update for completed backend-synced session \(id)")
         return
@@ -392,16 +525,30 @@ actor TranscriptionStorage {
     SiriIndexHooks.conversationChanged(backendId)
   }
 
-  /// Soft-delete by backend conversation ID
-  func deleteByBackendId(
-    _ backendId: String,
+  /// Persist intent before dispatching a delete. Only row IDs are retained for rollback;
+  /// the marker survives even if this owner has never cached the conversation.
+  func prepareConversationDeletion(
+    backendId: String,
     cacheScope: ConversationCacheWriteScope? = nil,
     cacheGeneration: Int? = nil
   ) async throws {
     let db = try await ensureInitialized()
-
-    try await db.write { database in
+    try await authorizedConversationWrite(db, cacheScope: cacheScope, cacheGeneration: cacheGeneration) { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        let restorableIDs = try Int64.fetchAll(
+          database,
+          sql: "SELECT id FROM transcription_sessions WHERE backendId = ? AND deleted = 0",
+          arguments: [backendId]
+        )
+        let restorableJSON = String(decoding: try JSONEncoder().encode(restorableIDs), as: UTF8.self)
+        // Repeated attempts preserve the original rollback boundary and cannot demote a confirmed delete.
+        try database.execute(
+          sql: """
+            INSERT OR IGNORE INTO conversation_deletions (backendId, pending, restorableSessionIds)
+            VALUES (?, 1, ?)
+            """,
+          arguments: [backendId, restorableJSON]
+        )
         try database.execute(
           sql: "UPDATE transcription_sessions SET deleted = 1, updatedAt = ? WHERE backendId = ?",
           arguments: [Date(), backendId]
@@ -409,6 +556,126 @@ actor TranscriptionStorage {
       }
     }
     await SiriIndexHooks.conversationDeleted(backendId)
+  }
+
+  /// Confirmed deletion is permanent cache authority, including after the session row is removed.
+  func confirmConversationDeletion(
+    backendId: String,
+    cacheScope: ConversationCacheWriteScope? = nil,
+    cacheGeneration: Int? = nil
+  ) async throws {
+    let db = try await ensureInitialized()
+    try await authorizedConversationWrite(db, cacheScope: cacheScope, cacheGeneration: cacheGeneration) { database in
+      try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        try persistConfirmedConversationDeletion(backendId, in: database)
+      }
+    }
+    await SiriIndexHooks.conversationDeleted(backendId)
+  }
+
+  /// A from-segments tombstone response may precede local backend-ID persistence. Retire the
+  /// actual recording so its saved transcript cannot be retried into a fresh server conversation.
+  func confirmSessionDeletion(
+    id: Int64,
+    expectedOwner: String,
+    expectedSessionId: String,
+    cacheScope: ConversationCacheWriteScope? = nil,
+    cacheGeneration: Int? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    guard RewindDatabase.currentUserId == expectedOwner else { throw CancellationError() }
+    let db = try await ensureInitialized()
+    guard RewindDatabase.currentUserId == expectedOwner else { throw CancellationError() }
+    let backendId = try await authorizedConversationWrite(
+      db, cacheScope: cacheScope, cacheGeneration: cacheGeneration, expectedOwner: expectedOwner,
+      authorizationSnapshot: authorizationSnapshot
+    ) { database -> String? in
+      try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard var session = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
+          throw TranscriptionStorageError.sessionNotFound
+        }
+        guard
+          ConversationFinalizationService.localClientConversationId(session: session, sessionId: id)
+            == expectedSessionId
+        else { throw CancellationError() }
+        session.deleted = true
+        session.updatedAt = Date()
+        try session.update(database)
+        guard let backendId = session.backendId, !backendId.isEmpty else { return nil }
+        try persistConfirmedConversationDeletion(backendId, in: database)
+        return backendId
+      }
+    }
+    if let backendId { await SiriIndexHooks.conversationDeleted(backendId) }
+  }
+
+  /// Explicit remote failure may undo only a pending intent, restoring only rows that were live
+  /// before that intent. Cancellation leaves intent pending for the next owner-scoped retry.
+  func rollbackConversationDeletion(
+    backendId: String,
+    cacheScope: ConversationCacheWriteScope? = nil,
+    cacheGeneration: Int? = nil
+  ) async throws {
+    let db = try await ensureInitialized()
+    let restored = try await authorizedConversationWrite(
+      db, cacheScope: cacheScope, cacheGeneration: cacheGeneration
+    ) { database -> Bool in
+      try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard
+          let marker = try Row.fetchOne(
+            database,
+            sql: "SELECT restorableSessionIds FROM conversation_deletions WHERE backendId = ? AND pending = 1",
+            arguments: [backendId]
+          )
+        else { return false }
+        let restorableJSON: String = marker["restorableSessionIds"]
+        let restorableIDs = try JSONDecoder().decode([Int64].self, from: Data(restorableJSON.utf8))
+        for id in restorableIDs {
+          try database.execute(
+            sql: "UPDATE transcription_sessions SET deleted = 0, updatedAt = ? WHERE backendId = ? AND id = ?",
+            arguments: [Date(), backendId, id]
+          )
+        }
+        try database.execute(
+          sql: "DELETE FROM conversation_deletions WHERE backendId = ? AND pending = 1",
+          arguments: [backendId]
+        )
+        return !restorableIDs.isEmpty
+      }
+    }
+    if restored { SiriIndexHooks.conversationChanged(backendId) }
+  }
+
+  func getConversationDeletionIDs() async throws -> Set<String> {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      Set(
+        try String.fetchAll(
+          database,
+          sql: """
+            SELECT backendId FROM conversation_deletions
+            UNION SELECT backendId FROM transcription_sessions
+            WHERE deleted = 1 AND backendId IS NOT NULL AND backendId != ''
+            """
+        ))
+    }
+  }
+
+  func getPendingConversationDeletionIDs() async throws -> Set<String> {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      Set(try String.fetchAll(database, sql: "SELECT backendId FROM conversation_deletions WHERE pending = 1"))
+    }
+  }
+
+  /// Existing callers already hold remote acknowledgement or authoritative absence.
+  func deleteByBackendId(
+    _ backendId: String,
+    cacheScope: ConversationCacheWriteScope? = nil,
+    cacheGeneration: Int? = nil
+  ) async throws {
+    try await confirmConversationDeletion(
+      backendId: backendId, cacheScope: cacheScope, cacheGeneration: cacheGeneration)
   }
 
   /// Update folder by backend conversation ID
@@ -699,6 +966,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("status") == TranscriptionSessionStatus.recording.rawValue)
         .order(Column("createdAt").desc)
         .fetchOne(database)
@@ -711,6 +979,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue)
         .filter(Column("backendSynced") == false)
         .order(Column("createdAt").asc)
@@ -724,6 +993,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
         .filter(Column("retryCount") < maxRetries)
         .filter(Column("backendSynced") == false)
@@ -743,6 +1013,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == false)
         .filter(
           sql: """
@@ -787,6 +1058,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == false)
         .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
         .filter(Column("retryCount") >= maxRetries)
@@ -824,6 +1096,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("status") == TranscriptionSessionStatus.recording.rawValue)
         .filter(Column("backendSynced") == false)
         .order(Column("createdAt").asc)
@@ -839,6 +1112,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("status") == TranscriptionSessionStatus.uploading.rawValue)
         .filter(Column("updatedAt") < cutoff)
         .filter(Column("backendSynced") == false)
@@ -855,6 +1129,7 @@ actor TranscriptionStorage {
       guard let session = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         return nil
       }
+      guard try !isConversationDeleted(session, in: database) else { return nil }
 
       let segments =
         try TranscriptionSegmentRecord
@@ -872,6 +1147,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(
           Column("status") == TranscriptionSessionStatus.recording.rawValue
             || Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue
@@ -937,12 +1213,14 @@ actor TranscriptionStorage {
 
     return try await db.write { database -> (Int64, Bool) in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard try !hasConversationDeletion(conversation.id, in: database) else { throw CancellationError() }
         // Check if session already exists by backendId
         if var existingSession =
           try TranscriptionSessionRecord
           .filter(Column("backendId") == conversation.id)
           .fetchOne(database)
         {
+          guard !existingSession.deleted else { throw CancellationError() }
           // Firestore update_time is the only server freshness authority.
           // Local cache-write time and recording timestamps are unrelated clocks.
           let incomingIsOlder: Bool
@@ -1006,6 +1284,12 @@ actor TranscriptionStorage {
 
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
+        guard let session = try TranscriptionSessionRecord.fetchOne(database, key: sessionId) else {
+          throw TranscriptionStorageError.sessionNotFound
+        }
+        guard try !isConversationDeleted(session, in: database),
+          try !hasConversationDeletion(conversation.id, in: database)
+        else { throw CancellationError() }
         let existingSegments =
           try TranscriptionSegmentRecord
           .filter(Column("sessionId") == sessionId)
@@ -1080,6 +1364,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)
@@ -1094,6 +1379,7 @@ actor TranscriptionStorage {
     let db = try await ensureInitialized()
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true && Column("backendId") != nil && Column("backendId") != "")
         .filter(Column("deleted") == false && Column("discarded") == false)
         .filter(Column("isLocked") == false)
@@ -1129,6 +1415,7 @@ actor TranscriptionStorage {
 
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("starred") == true)
         .filter(Column("deleted") == false)
         .order(Column("startedAt").desc)
@@ -1150,6 +1437,7 @@ actor TranscriptionStorage {
     return try await db.read { database in
       var query =
         TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)
@@ -1189,6 +1477,7 @@ actor TranscriptionStorage {
     return try await db.read { database in
       let sessions =
         try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)
@@ -1209,11 +1498,22 @@ actor TranscriptionStorage {
 
   /// Read the richest cached projection for a detail screen.
   func getCachedConversation(id: String) async throws -> ServerConversation? {
-    guard let session = try await getSessionByBackendId(id), let sessionId = session.id else {
-      return nil
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      guard
+        let session =
+          try TranscriptionSessionRecord
+          .filter(Column("backendId") == id)
+          .fetchOne(database), let sessionId = session.id,
+        try !isConversationDeleted(session, in: database)
+      else { return nil }
+      let segments =
+        try TranscriptionSegmentRecord
+        .filter(Column("sessionId") == sessionId)
+        .order(Column("segmentOrder").asc)
+        .fetchAll(database)
+      return session.toServerConversation(segments: segments)
     }
-    let segments = try await getSegments(sessionId: sessionId)
-    return session.toServerConversation(segments: segments)
   }
 
   /// Get count of local conversations
@@ -1223,6 +1523,7 @@ actor TranscriptionStorage {
     return try await db.read { database in
       var query =
         TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)
@@ -1245,6 +1546,7 @@ actor TranscriptionStorage {
     let db = try await ensureInitialized()
     return try await db.read { database in
       try TranscriptionSessionRecord
+        .filter(sql: visibleConversationSessionSQL)
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)

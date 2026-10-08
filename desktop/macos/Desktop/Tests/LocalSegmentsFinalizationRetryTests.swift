@@ -6,6 +6,7 @@ import XCTest
 private enum LocalUploadStubMode: Sendable {
   case offline
   case httpStatus(Int)
+  case conversationDeleted
   case success
 }
 
@@ -85,6 +86,10 @@ private final class LocalUploadRetryURLStub: URLProtocol, @unchecked Sendable {
       client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     case .httpStatus(let statusCode):
       respond(url: url, statusCode: statusCode, body: Data(#"{"detail":"stubbed upload failure"}"#.utf8))
+    case .conversationDeleted:
+      respond(
+        url: url, statusCode: 410,
+        body: Data(#"{"detail":{"code":"conversation_deleted","message":"Conversation was deleted"}}"#.utf8))
     case .success:
       let json = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
       let clientConversationId = json?["client_conversation_id"] as? String ?? "unknown"
@@ -137,6 +142,7 @@ private actor NetworkPathFlag {
 
 final class LocalSegmentsFinalizationRetryTests: XCTestCase {
   private var userDir: URL?
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
   private let clock = ElapsedTimeClock()
   private let network = NetworkPathFlag()
 
@@ -148,6 +154,9 @@ final class LocalSegmentsFinalizationRetryTests: XCTestCase {
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
     try await RewindDatabase.shared.initialize()
+    let ownerFixture = await MainActor.run { RuntimeOwnerAuthorityTestFixture() }
+    await ownerFixture.establish(authOwnerID: testUserId)
+    self.ownerFixture = ownerFixture
 
     let appSupport = try XCTUnwrap(
       FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -181,6 +190,8 @@ final class LocalSegmentsFinalizationRetryTests: XCTestCase {
     await RewindDatabase.shared.close()
     await TranscriptionStorage.shared.invalidateCache()
     RewindDatabase.currentUserId = nil
+    await ownerFixture?.restore()
+    ownerFixture = nil
     if let userDir {
       try? FileManager.default.removeItem(at: userDir)
     }
@@ -384,6 +395,48 @@ final class LocalSegmentsFinalizationRetryTests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  func testDeletedLocalSessionNeverEntersRecoveryOrDirectFinalization() async throws {
+    let id = try await makeFinishedLocalSession(clientConversationId: "deleted-old-recording")
+    try await TranscriptionStorage.shared.bindBackendConversation(id: id, backendId: "deleted-backend")
+    try await TranscriptionStorage.shared.deleteByBackendId("deleted-backend")
+
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    await ConversationFinalizationService.shared.finalizeSession(id: id, reason: .retry)
+
+    XCTAssertTrue(LocalUploadRetryURLStub.uploadBodies.isEmpty)
+    let session = try await requireSession(id)
+    XCTAssertTrue(session.deleted)
+    XCTAssertEqual(session.retryCount, 0)
+  }
+
+  func testServerDeletedSegmentReplayRetiresLocalCopyWithoutFurtherUploads() async throws {
+    let id = try await makeFinishedLocalSession(clientConversationId: "server-deleted-recording")
+    LocalUploadRetryURLStub.setMode(.conversationDeleted)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    let retired = try await requireSession(id)
+    XCTAssertTrue(retired.deleted)
+    XCTAssertEqual(retired.retryCount, 0)
+    XCTAssertEqual(LocalUploadRetryURLStub.uploadBodies.count, 1)
+
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+    clock.setElapsed(86_400)
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    XCTAssertEqual(LocalUploadRetryURLStub.uploadBodies.count, 1, "A confirmed deletion is terminal after restart too")
+  }
+
+  func testUnknownGoneResponseDoesNotRetireTheOnlyLocalTranscript() async throws {
+    let id = try await makeFinishedLocalSession(clientConversationId: "unknown-gone-recording")
+    LocalUploadRetryURLStub.setMode(.httpStatus(410))
+    await ConversationFinalizationService.shared.recoverPendingFinalizations()
+    let session = try await requireSession(id)
+    XCTAssertFalse(session.deleted, "Only a confirmed user-deletion outcome may retire saved content")
+    XCTAssertFalse(session.backendSynced)
+    let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: id)
+    XCTAssertEqual(bundle?.segments.count, 1)
+  }
 
   private func makeFinishedLocalSession(clientConversationId: String) async throws -> Int64 {
     let sessionId = try await TranscriptionStorage.shared.startSession(

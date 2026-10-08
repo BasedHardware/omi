@@ -683,6 +683,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
             trigger: .appBecameActive,
             auth: AuthService.shared
           )
+          await AppState.current?.resumePendingConversationDeletions()
         }
       })
     windowObservers.append(

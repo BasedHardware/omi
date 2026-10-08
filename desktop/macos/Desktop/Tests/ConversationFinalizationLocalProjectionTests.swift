@@ -151,6 +151,7 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
   final class ConversationFinalizationLocalProjectionTests: XCTestCase {
     private var testUserId = ""
     private var userDir: URL?
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
     override func setUp() async throws {
       try await super.setUp()
@@ -160,6 +161,9 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
       RewindDatabase.currentUserId = testUserId
       await RewindDatabase.shared.configure(userId: testUserId)
       try await RewindDatabase.shared.initialize()
+      let ownerFixture = await MainActor.run { RuntimeOwnerAuthorityTestFixture() }
+      await ownerFixture.establish(authOwnerID: testUserId)
+      self.ownerFixture = ownerFixture
 
       let appSupport = try XCTUnwrap(
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -179,6 +183,8 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
       await RewindDatabase.shared.close()
       await TranscriptionStorage.shared.invalidateCache()
       RewindDatabase.currentUserId = nil
+      await ownerFixture?.restore()
+      ownerFixture = nil
       if let userDir {
         try? FileManager.default.removeItem(at: userDir)
       }

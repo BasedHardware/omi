@@ -750,6 +750,12 @@ actor APIClient {
     )
 
     guard (200...299).contains(httpResponse.statusCode) else {
+      let payload = OmiHTTPTransport.extractErrorPayload(from: data)
+      if httpResponse.statusCode == 410, request.httpMethod == "POST",
+        request.url?.path == "/v1/conversations/from-segments", payload?.code == "conversation_deleted"
+      {
+        throw ConversationSegmentUploadError.userDeleted
+      }
       let detail = OmiHTTPTransport.extractErrorDetail(from: data)
       throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
@@ -946,8 +952,31 @@ extension APIClient {
   }
 
   /// Deletes a conversation by ID
-  func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)?cascade=true")
+  func deleteConversation(
+    id: String,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    let snapshot: RuntimeOwnerAuthorizationSnapshot?
+    if let authorizationSnapshot {
+      snapshot = authorizationSnapshot
+    } else if expectedOwnerID != nil || testAuthHeader == nil {
+      guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID) else {
+        throw AuthError.userChangedDuringRequest
+      }
+      snapshot = captured
+    } else {
+      // Header-only transport fixtures have no authenticated owner unless the caller supplies one.
+      snapshot = nil
+    }
+    do {
+      try await delete(
+        "v1/conversations/\(id)?cascade=true",
+        expectedAuthOwnerId: expectedOwnerID,
+        authorizationSnapshot: snapshot)
+    } catch APIError.httpError(statusCode: 404, _) {
+      // The canonical row is already absent; let the caller retire its stale cache projection.
+    }
     invalidateConversationsCountCache()
   }
 

@@ -30,6 +30,12 @@ extension AppState {
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
+  /// A delete interrupted by quit/sign-out must converge even if the next session stays in Chat.
+  func resumePendingConversationDeletions() async {
+    guard AuthState.shared.isSignedIn else { return }
+    await conversationRepository.retryPendingDeletions()
+  }
+
   var canLoadMoreConversations: Bool {
     conversationRepository.hasMore
   }

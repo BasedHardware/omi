@@ -211,6 +211,81 @@ def _eligible_meeting_request(**overrides):
     return _request(**data)
 
 
+@pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
+@pytest.mark.parametrize('phase', ['before_read', 'existing_tombstone', 'create_race', 'persist_race', 'process_error'])
+def test_deleted_session_upload_is_terminal_in_each_replay_boundary(monkeypatch, path, phase):
+    expected_id = developer._from_segments_conversation_id('uid1', 'deleted-session')
+    deleted = developer.ConversationDeletedError('Conversation was deleted')
+    ensure = MagicMock(return_value=None)
+    if phase == 'before_read':
+        ensure.side_effect = deleted
+    elif phase in {'persist_race', 'process_error'}:
+        ensure.side_effect = [None, deleted]
+    monkeypatch.setattr(conversations_db, 'ensure_conversation_not_deleted', ensure)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(
+            return_value=(
+                {'id': expected_id, 'deleted': True, 'user_deleted': True} if phase == 'existing_tombstone' else None
+            )
+        ),
+    )
+    create = MagicMock(return_value=True)
+    if phase == 'create_race':
+        create.side_effect = deleted
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=False))
+
+    def process(_uid, _language, conversation):
+        if phase == 'process_error':
+            raise RuntimeError('processing failed during user deletion')
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    response = TestClient(app).post(path, json=_request(client_session_id='deleted-session').model_dump(mode='json'))
+
+    assert response.status_code == 410
+    assert response.json()['detail']['code'] == 'conversation_deleted'
+
+
+def test_unconfirmed_failed_persistence_does_not_acknowledge_a_completed_upload(monkeypatch):
+    monkeypatch.setattr(conversations_db, 'ensure_conversation_not_deleted', MagicMock(return_value=None))
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=False))
+
+    def process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    with pytest.raises(HTTPException) as error:
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='unconfirmed-session'))
+    assert error.value.status_code == 503
+
+
+def test_merge_redirect_without_user_deletion_authority_cannot_retire_the_local_transcript(monkeypatch):
+    monkeypatch.setattr(conversations_db, 'ensure_conversation_not_deleted', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(return_value={'id': 'source', 'deleted': True, 'sync_merged_into': 'survivor'}),
+    )
+    with pytest.raises(HTTPException) as error:
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='merged-session'))
+    assert error.value.status_code == 409
+
+
 def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     captured = {}
 

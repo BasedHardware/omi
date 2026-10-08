@@ -16,6 +16,7 @@ from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
+from database.conversation_deletions import is_conversation_deleted
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
@@ -225,7 +226,10 @@ def assign_in_transaction(
 
     def load(cid: str) -> dict | None:
         if cid not in read:
-            read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
+            deleted = is_conversation_deleted(user_ref, cid, transaction=transaction)
+            if deleted and cid in (incoming['id'], target_id):
+                raise SyncAssignmentSuperseded('sync conversation was user deleted')
+            read[cid] = None if deleted else collection.document(cid).get(transaction=transaction).to_dict()
         return read[cid]
 
     # Read the incoming key too: retries and deleted canonical anchors must never

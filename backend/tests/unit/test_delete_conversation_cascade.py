@@ -74,7 +74,7 @@ class _FakeDocumentReference:
         # Firestore only lists subcollections that still hold documents.
         return [sub for sub in self.subcollections.values() if any(d.exists for d in sub.documents.values())]
 
-    def get(self):
+    def get(self, transaction=None):
         return self
 
     def to_dict(self):
@@ -94,6 +94,8 @@ class _FakeCollectionReference:
     def document(self, doc_id: str) -> _FakeDocumentReference:
         if doc_id not in self.documents:
             self.documents[doc_id] = _FakeDocumentReference(f"{self.path}/{doc_id}", self._store)
+            if self.path.endswith('/conversation_deletions'):
+                self.documents[doc_id].exists = False
         return self.documents[doc_id]
 
     def limit(self, count: int) -> _FakeQuery:
@@ -123,6 +125,13 @@ class _FakeFirestore:
     def batch(self) -> _FakeBatch:
         return _FakeBatch(self)
 
+    def transaction(self):
+        class DeleteTransaction:
+            def delete(self, ref):
+                ref.delete()
+
+        return DeleteTransaction()
+
 
 def _seed_conversation(store: _FakeFirestore) -> _FakeDocumentReference:
     conversation = store.collection('users').document('uid-1').collection('conversations').document('conv-1')
@@ -139,6 +148,7 @@ def _seed_conversation(store: _FakeFirestore) -> _FakeDocumentReference:
 def store(monkeypatch) -> _FakeFirestore:
     fake = _FakeFirestore()
     monkeypatch.setattr(conversations_db, 'db', fake)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     return fake
 
 

@@ -676,7 +676,7 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.count, 0)
   }
 
-  func testDeleteWaitsForServerSuccessBeforeRemovingVisibleAndCachedState() async throws {
+  func testDeleteConfirmsDurableIntentAfterServerSuccess() async throws {
     let conversation = makeConversation(revision: 1)
     let remote = FakeConversationRemote(
       listResult: .success([conversation]),
@@ -714,6 +714,223 @@ final class ConversationRepositoryTests: XCTestCase {
       XCTAssertTrue(local.deletedIds.isEmpty)
       XCTAssertEqual(repository.count, 1)
     }
+  }
+
+  func testRefreshStartedBeforeDeletionCannotRestoreDeletedConversation() async throws {
+    let old = makeConversation(id: "may-recording", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+    let lists = SuspendedConversationLists()
+    remote.listHandler = { _ in await lists.result(for: "refresh") }
+
+    let refresh = Task { await repository.refresh(query: .all) }
+    await lists.waitUntilRequested("refresh")
+    try await repository.delete(id: old.id)
+    await lists.resume("refresh", with: [old])
+    await refresh.value
+
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertEqual(repository.count, 0)
+    XCTAssertTrue(local.stored.isEmpty, "A pre-delete snapshot must not be cached again")
+  }
+
+  func testSearchStartedBeforeDeletionExcludesDeletedResults() async throws {
+    let old = makeConversation(id: "june-recording", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+    let searches = SuspendedConversationLists()
+    remote.searchHandler = { text in await searches.result(for: text) }
+
+    let search = Task { try await repository.search(text: "old meeting") }
+    await searches.waitUntilRequested("old meeting")
+    try await repository.delete(id: old.id)
+    await searches.resume("old meeting", with: [old])
+    let results = try await search.value
+
+    XCTAssertTrue(results.isEmpty)
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
+  func testDetailStartedBeforeDeletionCannotReturnOrCacheDeletedContent() async throws {
+    let old = makeConversation(revision: 1, transcript: "previous recording")
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    local.stored.removeAll()
+    let details = SuspendedConversationResults()
+    remote.detailHandler = { id in try await details.result(for: id) }
+
+    let detail = Task { try await repository.detail(id: old.id, seed: old) }
+    await details.waitUntilRequested(old.id)
+    try await repository.delete(id: old.id)
+    await details.resume(old.id, with: .success(old))
+    do {
+      _ = try await detail.value
+      XCTFail("A deleted detail must not fall back to its old seed")
+    } catch is CancellationError {
+      // Deletion invalidated the detail, including its offline fallback.
+    }
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertTrue(local.stored.isEmpty)
+  }
+
+  func testDeletionPersistenceFailureIsSurfacedBeforeRemoteDelete() async throws {
+    let old = makeConversation(revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    local.deleteHandler = { throw TestFailure.offline }
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+
+    do {
+      try await repository.delete(id: old.id)
+      XCTFail("Deletion must not report success when its durable intent cannot be saved")
+    } catch {
+      XCTAssertEqual(repository.conversations, [old])
+      XCTAssertTrue(remote.deletedIds.isEmpty)
+    }
+  }
+
+  func testDeletedServerRowsDoNotEndPaginationBeforeRemainingLiveRows() async {
+    let rows = (0..<150).map { makeConversation(id: "row-\($0)", revision: 1) }
+    let remote = FakeConversationRemote(listResult: .success([]), countResult: .success(150))
+    remote.pageHandler = { offset, limit in Array(rows.dropFirst(offset).prefix(limit)) }
+    let local = FakeConversationLocal()
+    local.confirmedDeletionIDs = Set(rows.prefix(50).map(\.id))
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    XCTAssertTrue(repository.conversations.isEmpty)
+    XCTAssertEqual(repository.count, 100)
+    XCTAssertTrue(repository.hasMore)
+    await repository.loadMore()
+    XCTAssertEqual(repository.conversations.count, 50)
+    XCTAssertTrue(repository.hasMore, "The filtered display count must not truncate raw server paging")
+    await repository.loadMore()
+    XCTAssertEqual(repository.conversations, Array(rows.suffix(100)))
+    XCTAssertFalse(repository.hasMore)
+  }
+
+  func testDeletionDuringFailedDetailFallbackCannotReturnCachedContent() async throws {
+    let old = makeConversation(id: "deleted-fallback", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    remote.detailResult = .failure(TestFailure.offline)
+    let local = FakeConversationLocal()
+    let fallback = SuspendedConversationResults()
+    var reads = 0
+    local.detailHandler = { id in
+      reads += 1
+      if reads == 1 { return nil }
+      return try await fallback.result(for: id)
+    }
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let detail = Task { try await repository.detail(id: old.id, seed: old) }
+    await fallback.waitUntilRequested(old.id)
+    try await repository.delete(id: old.id)
+    await fallback.resume(old.id, with: .success(old))
+    do {
+      _ = try await detail.value
+      XCTFail("A fallback read cannot bypass a deletion committed while it was suspended")
+    } catch is CancellationError {
+      // Expected.
+    }
+  }
+
+  func testPendingDeleteRetriesOnStartupWithoutLoadingConversations() async {
+    let local = FakeConversationLocal()
+    local.pendingDeletionIDsValue = ["interrupted-delete"]
+    let remote = FakeConversationRemote(deleteResult: .success(()))
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.retryPendingDeletions()
+    XCTAssertEqual(remote.deletedIds, ["interrupted-delete"])
+    XCTAssertEqual(local.confirmedDeletionIDs, ["interrupted-delete"])
+    XCTAssertTrue(local.pendingDeletionIDsValue.isEmpty)
+    XCTAssertTrue(remote.listRequests.isEmpty)
+  }
+
+  func testAcknowledgedDeleteWithLocalConfirmationFailureRemainsPendingForRestart() async throws {
+    let old = makeConversation(id: "acknowledged-delete", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([old]), countResult: .success(1), deleteResult: .success(()))
+    let local = FakeConversationLocal()
+    local.confirmDeletionHandler = { throw TestFailure.offline }
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    do {
+      try await repository.delete(id: old.id)
+      XCTFail("Local confirmation failure must be surfaced")
+    } catch {
+      XCTAssertEqual(local.pendingDeletionIDsValue, [old.id])
+      XCTAssertTrue(repository.conversations.isEmpty)
+    }
+    local.confirmDeletionHandler = nil
+    let restarted = ConversationRepository(remote: remote, local: local)
+    await restarted.retryPendingDeletions()
+    XCTAssertEqual(local.confirmedDeletionIDs, [old.id])
+    XCTAssertTrue(local.pendingDeletionIDsValue.isEmpty)
+  }
+
+  func testCancelledDeleteRemainsHiddenAndIsRetriedByNextRepository() async throws {
+    let old = makeConversation(id: "cancelled-delete", revision: 1)
+    let local = FakeConversationLocal()
+    let remote = FakeConversationRemote(listResult: .success([old]), countResult: .success(1))
+    let deletes = SuspendedVoidResults()
+    remote.deleteHandler = { id in try await deletes.result(for: id) }
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+    let deletion = Task { try await repository.delete(id: old.id) }
+    await deletes.waitUntilRequested(old.id)
+    XCTAssertTrue(repository.conversations.isEmpty)
+    deletion.cancel()
+    await deletes.resume(old.id, with: .failure(CancellationError()))
+    _ = try? await deletion.value
+    XCTAssertEqual(local.pendingDeletionIDsValue, [old.id])
+    remote.deleteHandler = nil
+    remote.deleteResult = .success(())
+    let restarted = ConversationRepository(remote: remote, local: local)
+    await restarted.retryPendingDeletions()
+    XCTAssertEqual(local.confirmedDeletionIDs, [old.id])
+  }
+
+  func testFailedRetryDoesNotRollBackAnExistingDurableIntent() async {
+    let local = FakeConversationLocal()
+    local.pendingDeletionIDsValue = ["prior-delete"]
+    let remote = FakeConversationRemote(deleteResult: .failure(TestFailure.offline))
+    let repository = ConversationRepository(remote: remote, local: local)
+    do {
+      try await repository.delete(id: "prior-delete")
+      XCTFail("Expected failure")
+    } catch {
+      XCTAssertEqual(local.pendingDeletionIDsValue, ["prior-delete"])
+      XCTAssertTrue(repository.conversations.isEmpty)
+    }
+  }
+
+  func testBoundedRecoveryDoesNotStarveLaterDeletesBehindFailingIntents() async {
+    let local = FakeConversationLocal()
+    local.pendingDeletionIDsValue = Set((0..<51).map { String(format: "pending-%02d", $0) })
+    let remote = FakeConversationRemote(deleteResult: .success(()))
+    remote.deleteHandler = { id in
+      if id != "pending-50" { throw TestFailure.offline }
+    }
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.retryPendingDeletions()
+    XCTAssertTrue(remote.deletedIds.isEmpty)
+    await repository.retryPendingDeletions()
+    XCTAssertEqual(remote.deletedIds, ["pending-50"])
+    XCTAssertEqual(local.pendingDeletionIDsValue.count, 50)
   }
 
   func testDeleteSerializesBehindMutationAndCannotBeUndoneByItsAcknowledgement() async throws {
@@ -926,6 +1143,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var searchResult: Result<[ServerConversation], Error>
   var deleteResult: Result<Void, Error>
   var listHandler: ((ConversationListQuery) async throws -> [ServerConversation])?
+  var pageHandler: ((Int, Int) async throws -> [ServerConversation])?
   var searchHandler: ((String) async throws -> [ServerConversation])?
   var detailHandler: ((String) async throws -> ServerConversation)?
   var starHandler: ((Bool) async throws -> ServerConversation)?
@@ -956,6 +1174,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
 
   func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
     listRequests.append((offset: offset, limit: limit))
+    if let pageHandler { return try await pageHandler(offset, limit) }
     if let listHandler { return try await listHandler(query) }
     return try listResult.get()
   }
@@ -977,7 +1196,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     return try titleResult.get()
   }
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation { try folderResult.get() }
-  func delete(id: String) async throws {
+  func delete(id: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws {
     if let deleteHandler {
       try await deleteHandler(id)
       deletedIds.append(id)
@@ -993,11 +1212,16 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   var listResult: [ServerConversation]
   var countValue: Int
   var detailResult: ServerConversation?
+  var detailHandler: ((String) async throws -> ServerConversation?)?
   var stored: [ServerConversation] = []
   var storeBatchCalls = 0
   var deletedIds: [String] = []
   var events: [String] = []
+  var confirmedDeletionIDs = Set<String>()
+  var pendingDeletionIDsValue = Set<String>()
   var storeHandler: ((ServerConversation) async throws -> Void)?
+  var deleteHandler: (() throws -> Void)?
+  var confirmDeletionHandler: (() throws -> Void)?
 
   init(
     listResult: [ServerConversation] = [],
@@ -1011,7 +1235,10 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
 
   func list(query: ConversationListQuery) async throws -> [ServerConversation] { listResult }
   func count(query: ConversationListQuery) async throws -> Int { countValue }
-  func detail(id: String) async throws -> ServerConversation? { detailResult }
+  func detail(id: String) async throws -> ServerConversation? {
+    if let detailHandler { return try await detailHandler(id) }
+    return detailResult
+  }
   func store(
     _ conversation: ServerConversation,
     scope: ConversationCacheWriteScope,
@@ -1019,6 +1246,9 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   ) async throws {
     if let storeHandler { try await storeHandler(conversation) }
     try scope.withCurrent(generation) {
+      guard !confirmedDeletionIDs.contains(conversation.id), !pendingDeletionIDsValue.contains(conversation.id) else {
+        throw CancellationError()
+      }
       stored.append(conversation)
       events.append("store:\(conversation.id)")
     }
@@ -1035,15 +1265,31 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
     }
   }
 
-  func delete(
-    id: String,
-    scope: ConversationCacheWriteScope,
-    generation: Int
-  ) async throws {
+  func deletionIDs() async throws -> Set<String> {
+    confirmedDeletionIDs.union(pendingDeletionIDsValue)
+  }
+
+  func pendingDeletionIDs() async throws -> Set<String> { pendingDeletionIDsValue }
+
+  func prepareDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try deleteHandler?()
     try scope.withCurrent(generation) {
+      if !confirmedDeletionIDs.contains(id) { pendingDeletionIDsValue.insert(id) }
+    }
+  }
+
+  func confirmDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try confirmDeletionHandler?()
+    try scope.withCurrent(generation) {
+      confirmedDeletionIDs.insert(id)
+      pendingDeletionIDsValue.remove(id)
       deletedIds.append(id)
       events.append("delete:\(id)")
     }
+  }
+
+  func rollbackDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try scope.withCurrent(generation) { _ = pendingDeletionIDsValue.remove(id) }
   }
 }
 

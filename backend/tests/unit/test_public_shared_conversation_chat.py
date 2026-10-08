@@ -359,6 +359,8 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
     assert firestore.field_paths == [
         'visibility',
         'is_locked',
+        'deleted',
+        'user_deleted',
         'transcript_segments_compressed',
         'transcript_segments',
     ]
@@ -373,6 +375,23 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
             }
         ],
     }
+
+
+@pytest.mark.parametrize('deletion_field', ['deleted', 'user_deleted'])
+def test_bounded_public_reader_rejects_retained_deleted_parent_before_decoding(monkeypatch, deletion_field):
+    firestore = _PublicConversationFirestore(
+        {'visibility': 'shared', 'is_locked': False, deletion_field: True, 'transcript_segments': 'private payload'}
+    )
+
+    def unexpected_decode(*_args, **_kwargs):
+        raise AssertionError('A user-deleted parent must not be decoded for public chat')
+
+    monkeypatch.setattr(conversations_db, '_decode_public_transcript_segments_bounded', unexpected_decode)
+    assert (
+        conversations_db.get_public_shared_conversation_bounded('owner-1', 'conversation-1', firestore_client=firestore)
+        is None
+    )
+    assert deletion_field in firestore.field_paths
 
 
 def test_transcript_prompt_is_deterministic_bounded_and_keeps_segment_boundaries():

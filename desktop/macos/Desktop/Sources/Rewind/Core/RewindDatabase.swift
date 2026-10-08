@@ -2468,7 +2468,27 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
+    Self.registerConversationDeletionMigration(on: &migrator)
     return migrator
+  }
+
+  /// Deletion authority belongs to the owner database, independently of cached content.
+  /// Existing soft-deleted recordings were already acknowledged by the remote-first delete path.
+  static func registerConversationDeletionMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationDeletionLedger") { db in
+      try db.create(table: "conversation_deletions") { table in
+        table.column("backendId", .text).notNull().primaryKey()
+        table.column("pending", .boolean).notNull().defaults(to: false)
+        table.column("restorableSessionIds", .text).notNull().defaults(to: "[]")
+      }
+      try db.execute(
+        sql: """
+          INSERT INTO conversation_deletions (backendId, pending, restorableSessionIds)
+          SELECT DISTINCT backendId, 0, '[]'
+          FROM transcription_sessions
+          WHERE deleted = 1 AND backendId IS NOT NULL AND backendId != ''
+          """)
+    }
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a

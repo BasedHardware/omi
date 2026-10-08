@@ -203,6 +203,44 @@ transcript segments regardless of the source label. Only an
 Segment validation continues to return 422, and processing failures keep the
 existing privacy-safe 5xx / BYOK 429 contract.
 
+Explicit `DELETE /v1/conversations/{id}` commits a permanent, content-free
+`users/{uid}/conversation_deletions/{sha256(id)}` receipt after cascade
+preconditions succeed and before physical content cleanup. The same transaction
+hides an existing parent with `deleted=True` and `user_deleted=True` and fences
+its declared retained sync source IDs. Small source sets commit atomically;
+large sets retain that parent/ancestry and a shared per-user fanout hint while
+resumable batches write at most 400 receipt/source mutations each. Receipt-miss
+writers read the hint in their content transaction, and while it is active
+inspect every parent matching the single-field `sync_merged_from array_contains`
+query for explicit `user_deleted` authority. Ordinary merge redirects do not
+grant that authority. Missing source rows are therefore fenced before their own
+receipt exists, while unrelated captures remain admissible. Physical parent
+cleanup refuses an unfinished fanout, so retry cannot lose its ancestry. Only
+after every source receipt is durable does that root clear its pending flag and
+decrement the shared hint. Receipts contain opaque identity/deletion bookkeeping
+only, have no TTL, and are removed by the recursive account wipe.
+Explicit developer conversation deletion uses the same fence before content cleanup.
+Lifecycle create/upsert/processing and sync assignment read these receipts
+inside their content transactions, so an old upload cannot recreate a deleted
+identity or recover a deleted explicit sync target through temporal fallback.
+Segment-upload replay and races with user deletion return terminal HTTP 410
+with `detail.code=conversation_deleted`; an unconfirmed persistence failure
+returns 503. Generic physical deletion used for stale-claim or failed-ingestion
+cleanup does not create a receipt and continues to allow retry.
+
+The macOS consumer stores confirmed deletions and pending delete intents in a
+persistent owner-scoped SQLite ledger, including IDs that have no cached content
+row. Startup and foreground recovery retry pending DELETEs for that owner;
+ordinary explicit failures roll back the pending local intent, while interrupted
+requests retain it because acceptance is unknown. Conversation DELETE 404 means
+the canonical row is already absent and completes local deletion. A confirmed
+user-deletion HTTP 410 from `/from-segments` permanently retires that recording
+from local upload/recovery queues. A generic merged `deleted` redirect without
+user-deletion authority instead returns 409 and preserves the local transcript.
+The receipts protect new deletion decisions and subsequent replay; neither
+backend nor desktop can infer already-erased historical IDs, reconstruct missing
+deletion evidence, or recover audio that is no longer retained.
+
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
 supports the requested mode wins: Parakeet's live RNNT model is English-only,

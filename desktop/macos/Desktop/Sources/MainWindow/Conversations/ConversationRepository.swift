@@ -77,7 +77,7 @@ protocol ConversationRemoteDataSource: Sendable {
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation
   func updateTitle(id: String, title: String) async throws -> ServerConversation
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation
-  func delete(id: String) async throws
+  func delete(id: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws
 }
 
 protocol ConversationLocalDataSource: Sendable {
@@ -94,11 +94,11 @@ protocol ConversationLocalDataSource: Sendable {
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
-  func delete(
-    id: String,
-    scope: ConversationCacheWriteScope,
-    generation: Int
-  ) async throws
+  func deletionIDs() async throws -> Set<String>
+  func pendingDeletionIDs() async throws -> Set<String>
+  func prepareDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws
+  func confirmDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws
+  func rollbackDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws
 }
 
 extension ConversationLocalDataSource {
@@ -161,12 +161,36 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
     try await APIClient.shared.moveConversationToFolder(conversationId: id, folderId: folderId)
   }
 
-  func delete(id: String) async throws {
-    try await APIClient.shared.deleteConversation(id: id)
+  func delete(id: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws {
+    guard let authorizationSnapshot else { throw AuthError.userChangedDuringRequest }
+    try await APIClient.shared.deleteConversation(id: id, authorizationSnapshot: authorizationSnapshot)
   }
 }
 
 struct LiveConversationLocalDataSource: ConversationLocalDataSource {
+  func deletionIDs() async throws -> Set<String> {
+    try await TranscriptionStorage.shared.getConversationDeletionIDs()
+  }
+
+  func pendingDeletionIDs() async throws -> Set<String> {
+    try await TranscriptionStorage.shared.getPendingConversationDeletionIDs()
+  }
+
+  func prepareDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try await TranscriptionStorage.shared.prepareConversationDeletion(
+      backendId: id, cacheScope: scope, cacheGeneration: generation)
+  }
+
+  func confirmDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try await TranscriptionStorage.shared.confirmConversationDeletion(
+      backendId: id, cacheScope: scope, cacheGeneration: generation)
+  }
+
+  func rollbackDeletion(id: String, scope: ConversationCacheWriteScope, generation: Int) async throws {
+    try await TranscriptionStorage.shared.rollbackConversationDeletion(
+      backendId: id, cacheScope: scope, cacheGeneration: generation)
+  }
+
   func list(query: ConversationListQuery) async throws -> [ServerConversation] {
     guard query.date == nil else { return [] }
     return try await TranscriptionStorage.shared.getLocalConversations(
@@ -214,17 +238,6 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
     if scope.isCurrent(generation) { SiriIndexHooks.conversationsChanged(committed) }
   }
 
-  func delete(
-    id: String,
-    scope: ConversationCacheWriteScope,
-    generation: Int
-  ) async throws {
-    try await TranscriptionStorage.shared.deleteByBackendId(
-      id,
-      cacheScope: scope,
-      cacheGeneration: generation
-    )
-  }
 }
 
 /// Sole owner of desktop Conversations cache/network reconciliation.
@@ -281,13 +294,18 @@ final class ConversationRepository {
   private var activeMutationTokens: [String: UUID] = [:]
   private var mutationWaiters: [String: [MutationWaiter]] = [:]
   private var deletionTokens: [String: UUID] = [:]
+  private var deletedIDs = Set<String>()
+  private var deletionStateRevision = 0
+  private var deletionRecoveryTask: Task<Void, Never>?
+  private var deletionRecoveryCursor: String?
   private var currentQuery: ConversationListQuery?
   private var nextPageOffset = 0
+  private var serverPagingCount: Int?
+  private var excludedServerIDs = Set<String>()
   private var isLoadingMore = false
 
   private(set) var conversations: [ServerConversation] = []
   private(set) var count: Int?
-  private var isCountAuthoritative = false
   private(set) var hasMore = false
   private(set) var isLoading = false
   private(set) var error: String?
@@ -312,6 +330,7 @@ final class ConversationRepository {
   }
 
   deinit {
+    deletionRecoveryTask?.cancel()
     if let ownerChangeObserver {
       NotificationCenter.default.removeObserver(ownerChangeObserver)
     }
@@ -341,7 +360,8 @@ final class ConversationRepository {
     error = nil
     // A cached count is useful for display but must never suppress a full
     // server page when the authoritative count request is unavailable.
-    isCountAuthoritative = false
+    serverPagingCount = nil
+    excludedServerIDs = []
     if queryChanged {
       conversations = []
       count = nil
@@ -350,22 +370,36 @@ final class ConversationRepository {
       emit(.cache)
     }
 
+    do {
+      try await reloadDeletionState(session: session)
+      guard generation == requestGeneration else { return }
+      scheduleDeletionRecovery(session: session)
+    } catch {
+      guard generation == requestGeneration else { return }
+      isLoading = false
+      self.error = UserFacingErrorPresentation.message(for: error, while: .conversations)
+      emit(.server)
+      return
+    }
+
     if includeCache && query.date == nil {
       do {
         let cached = try await local.list(query: query)
         guard generation == requestGeneration else { return }
         if !cached.isEmpty {
           let cachedCount = try? await local.count(query: query)
+          try await reloadDeletionState(session: session)
           guard generation == requestGeneration else { return }
           // Overlay in-flight optimistic mutations before publishing, mirroring
           // the server merge path (mergeList → apply). Without this, a load()
           // that races a pending star/title/folder edit (e.g. the user toggles a
           // filter mid-mutation) paints the bare cached rows and visually reverts
           // the edit until the remote call lands.
-          conversations = cached.map {
+          let visible = visibleConversations(cached)
+          conversations = visible.map {
             ConversationReconciliationPolicy.apply(mutation: pendingMutations[$0.id], to: $0)
           }
-          count = cachedCount
+          count = cachedCount.map { max(0, $0 - (cached.count - visible.count)) }
           emit(.cache)
         }
       } catch {
@@ -378,33 +412,37 @@ final class ConversationRepository {
       async let countTask = remote.count(query: query)
       let server = try await listTask
       let serverCount = try? await countTask
+      try await reloadDeletionState(session: session)
       guard generation == requestGeneration else { return }
 
+      let visible = visibleConversations(server)
+
       let result = ConversationReconciliationPolicy.mergeList(
-        server: server,
+        server: visible,
         current: conversations,
         pendingMutations: pendingMutations,
         pendingMutationTTL: .greatestFiniteMagnitude
       )
-      for conversation in server where result.pendingMutations[conversation.id] != nil {
+      for conversation in visible where result.pendingMutations[conversation.id] != nil {
         updateMutationBaseline(id: conversation.id, canonical: conversation)
       }
       pendingMutations = result.pendingMutations
       mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
       conversations = result.conversations
       if let serverCount {
-        count = serverCount
-        isCountAuthoritative = true
+        serverPagingCount = serverCount
+        excludedServerIDs.formUnion(server.filter { isDeleted($0.id) || $0.deleted }.map(\.id))
+        count = max(0, serverCount - excludedServerIDs.count)
       }
       nextPageOffset = server.count
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
-        totalCount: isCountAuthoritative ? count : nil,
+        totalCount: serverPagingCount,
         received: server.count
       )
       isLoading = false
       emit(.server)
-      await storeInBackground(server, session: session)
+      await storeInBackground(visible, session: session)
     } catch {
       guard generation == requestGeneration else { return }
       isLoading = false
@@ -433,28 +471,33 @@ final class ConversationRepository {
 
     do {
       let server = try await remote.list(query: query, offset: offset, limit: Self.pageSize)
+      try await reloadDeletionState(session: session)
       guard generation == requestGeneration, currentQuery == query else { return }
 
+      let visible = visibleConversations(server)
+
       let result = ConversationReconciliationPolicy.mergeList(
-        server: server,
+        server: visible,
         current: [],
         pendingMutations: pendingMutations,
         pendingMutationTTL: .greatestFiniteMagnitude
       )
-      for conversation in server where result.pendingMutations[conversation.id] != nil {
+      for conversation in visible where result.pendingMutations[conversation.id] != nil {
         updateMutationBaseline(id: conversation.id, canonical: conversation)
       }
       pendingMutations = result.pendingMutations
       mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
       mergeNextPage(result.conversations)
+      excludedServerIDs.formUnion(server.filter { isDeleted($0.id) || $0.deleted }.map(\.id))
+      if let serverPagingCount { count = max(0, serverPagingCount - excludedServerIDs.count) }
       nextPageOffset = offset + server.count
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
-        totalCount: isCountAuthoritative ? count : nil,
+        totalCount: serverPagingCount,
         received: server.count
       )
       emit(.server)
-      await storeInBackground(server, session: session)
+      await storeInBackground(visible, session: session)
     } catch {
       guard generation == requestGeneration else { return }
       emit(.server)
@@ -467,8 +510,12 @@ final class ConversationRepository {
     let generation = searchGeneration
     let results = try await remote.search(text: text)
     guard generation == searchGeneration else { throw CancellationError() }
-    await storeInBackground(results, session: session)
-    return results
+    try await reloadDeletionState(session: session)
+    let visible = visibleConversations(results)
+    await storeInBackground(visible, session: session)
+    try ensureCurrentSession(session)
+    guard generation == searchGeneration else { throw CancellationError() }
+    return visibleConversations(visible)
   }
 
   func cancelSearch() {
@@ -498,16 +545,22 @@ final class ConversationRepository {
     onCached: ((ServerConversation) -> Void)?
   ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
+    try await reloadDeletionState(session: session)
+    try ensureNotDeleted(id)
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
+      try ensureNotDeleted(id)
       onCached?(cached)
     }
 
     do {
       let server = try await remote.detail(id: id)
       try ensureCurrentSession(session)
+      try await reloadDeletionState(session: session)
+      try ensureNotDeleted(id)
       try? await local.store(server, scope: cacheWriteScope, generation: session)
       try ensureCurrentSession(session)
+      try ensureNotDeleted(id)
       if pendingMutations[id] != nil {
         updateMutationBaseline(id: id, canonical: server)
       }
@@ -519,11 +572,14 @@ final class ConversationRepository {
       throw CancellationError()
     } catch {
       try ensureCurrentSession(session)
+      try ensureNotDeleted(id)
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
+        try ensureNotDeleted(id)
         return cached
       }
       try ensureCurrentSession(session)
+      try ensureNotDeleted(id)
       guard let seed else { throw error }
       return seed
     }
@@ -548,6 +604,7 @@ final class ConversationRepository {
   /// `structured` payload (not just title), which matters when reprocess
   /// transitions a `.failed` conversation back to `.completed`.
   func replace(_ conversation: ServerConversation) {
+    guard !isDeleted(conversation.id) else { return }
     let session = cacheWriteScope.capture()
     replaceVisible(conversation)
     emit(.server)
@@ -567,6 +624,7 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
+    mutationBaselines.removeValue(forKey: id)
     if removedVisibleRow, let count {
       self.count = max(0, count - 1)
     }
@@ -576,6 +634,7 @@ final class ConversationRepository {
   func delete(id: String) async throws {
     guard deletionTokens[id] == nil else { throw CancellationError() }
     let session = cacheWriteScope.capture()
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     let deletionToken = UUID()
     deletionTokens[id] = deletionToken
     let token = await acquireMutationSlot(id: id)
@@ -586,13 +645,50 @@ final class ConversationRepository {
       }
     }
 
-    try ensureCurrentSession(session)
-    try Task.checkCancellation()
-    try await remote.delete(id: id)
-    try ensureCurrentSession(session)
-    try? await local.delete(id: id, scope: cacheWriteScope, generation: session)
-    try ensureCurrentSession(session)
-    remove(id: id)
+    let baseline = mutationBaselines[id] ?? conversations.first { $0.id == id }
+    let baselineIndex = conversations.firstIndex { $0.id == id }
+    var prepared = false
+    var acknowledged = false
+    var hadPriorDeletion = false
+    do {
+      try ensureCurrentSession(session)
+      try Task.checkCancellation()
+      hadPriorDeletion = try await local.deletionIDs().contains(id)
+      try ensureCurrentSession(session)
+      try await local.prepareDeletion(id: id, scope: cacheWriteScope, generation: session)
+      try ensureCurrentSession(session)
+      prepared = true
+      deletionStateRevision += 1
+      deletedIDs.insert(id)
+      remove(id: id)
+      try await remote.delete(id: id, authorizationSnapshot: authorizationSnapshot)
+      acknowledged = true
+      try ensureCurrentSession(session)
+      try await local.confirmDeletion(id: id, scope: cacheWriteScope, generation: session)
+      try ensureCurrentSession(session)
+    } catch is CancellationError {
+      // Cancellation cannot prove the server did not accept the request. Keep durable
+      // intent so the next foreground/restart can safely retry it for this owner.
+      throw CancellationError()
+    } catch {
+      try ensureCurrentSession(session)
+      guard !Task.isCancelled else { throw CancellationError() }
+      if prepared && !acknowledged && !hadPriorDeletion {
+        try await local.rollbackDeletion(id: id, scope: cacheWriteScope, generation: session)
+        try ensureCurrentSession(session)
+        deletionStateRevision += 1
+        deletedIDs.remove(id)
+        try await reloadDeletionState(session: session)
+        if !deletedIDs.contains(id), let baseline, matchesCurrentQuery(baseline),
+          !conversations.contains(where: { $0.id == id })
+        {
+          conversations.insert(baseline, at: min(baselineIndex ?? 0, conversations.count))
+          if let count { self.count = count + 1 }
+          emit(.rollback)
+        }
+      }
+      throw error
+    }
   }
 
   func reset() {
@@ -607,10 +703,16 @@ final class ConversationRepository {
     mutationWaiters = [:]
     activeMutationTokens = [:]
     deletionTokens = [:]
+    deletedIDs = []
+    deletionStateRevision += 1
+    deletionRecoveryTask?.cancel()
+    deletionRecoveryTask = nil
+    deletionRecoveryCursor = nil
     conversations = []
     count = nil
-    isCountAuthoritative = false
     nextPageOffset = 0
+    serverPagingCount = nil
+    excludedServerIDs = []
     hasMore = false
     isLoadingMore = false
     error = nil
@@ -640,7 +742,7 @@ final class ConversationRepository {
     operation: MutationOperation,
     remotely: () async throws -> ServerConversation
   ) async throws {
-    guard deletionTokens[id] == nil else { throw CancellationError() }
+    guard !isDeleted(id), deletionTokens[id] == nil else { throw CancellationError() }
     let session = cacheWriteScope.capture()
     if mutationBaselines[id] == nil {
       mutationBaselines[id] = conversations.first { $0.id == id }
@@ -718,7 +820,7 @@ final class ConversationRepository {
   }
 
   private func discardMutationBaselineIfSettled(id: String) {
-    if pendingMutations[id] == nil {
+    if pendingMutations[id] == nil && deletionTokens[id] == nil {
       mutationBaselines.removeValue(forKey: id)
     }
   }
@@ -767,6 +869,7 @@ final class ConversationRepository {
   }
 
   private func replaceVisible(_ conversation: ServerConversation) {
+    guard !isDeleted(conversation.id) else { return }
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
@@ -801,7 +904,96 @@ final class ConversationRepository {
   }
 
   private func storeInBackground(_ server: [ServerConversation], session: Int) async {
-    try? await local.storeMany(server, scope: cacheWriteScope, generation: session)
+    try? await local.storeMany(visibleConversations(server), scope: cacheWriteScope, generation: session)
+  }
+
+  private func isDeleted(_ id: String) -> Bool {
+    deletedIDs.contains(id)
+  }
+
+  private func ensureNotDeleted(_ id: String) throws {
+    guard !isDeleted(id) else { throw CancellationError() }
+  }
+
+  private func visibleConversations(_ rows: [ServerConversation]) -> [ServerConversation] {
+    rows.filter { !$0.deleted && !isDeleted($0.id) }
+  }
+
+  private func reloadDeletionState(session: Int) async throws {
+    let revision = deletionStateRevision
+    let ids = try await local.deletionIDs()
+    try ensureCurrentSession(session)
+    // A read started before a delete/rollback must not replace its newer local state.
+    if revision == deletionStateRevision { deletedIDs.formUnion(ids) }
+  }
+
+  private func scheduleDeletionRecovery(session: Int) {
+    guard deletionRecoveryTask == nil else { return }
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    deletionRecoveryTask = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        if self.cacheWriteScope.isCurrent(session) { self.deletionRecoveryTask = nil }
+      }
+      do {
+        let ids = try await self.local.pendingDeletionIDs()
+        try self.ensureCurrentSession(session)
+        let ordered = ids.sorted()
+        let cursor = self.deletionRecoveryCursor
+        let remaining = ordered.filter { id in cursor.map { id > $0 } ?? true }
+        let wrapped = ordered.filter { id in cursor.map { id <= $0 } ?? false }
+        // Rotate bounded batches so an old failing delete cannot starve later valid intents.
+        for id in (remaining + wrapped).prefix(Self.pageSize) {
+          try Task.checkCancellation()
+          try self.ensureCurrentSession(session)
+          guard self.deletionTokens[id] == nil else { continue }
+          self.deletionRecoveryCursor = id
+          let deletionToken = UUID()
+          self.deletionTokens[id] = deletionToken
+          let token = await self.acquireMutationSlot(id: id)
+          defer {
+            self.releaseMutationSlot(id: id, token: token)
+            if self.deletionTokens[id] == deletionToken { self.deletionTokens.removeValue(forKey: id) }
+          }
+          do {
+            try self.ensureCurrentSession(session)
+            try Task.checkCancellation()
+            try await self.remote.delete(id: id, authorizationSnapshot: authorizationSnapshot)
+            try self.ensureCurrentSession(session)
+            try await self.local.confirmDeletion(id: id, scope: self.cacheWriteScope, generation: session)
+          } catch is CancellationError {
+            throw CancellationError()
+          } catch {
+            try self.ensureCurrentSession(session)
+            self.error = UserFacingErrorPresentation.message(for: error, while: .conversations)
+            self.emit(.server)
+            // Leave the marker pending; another refresh or foreground retries the intent.
+          }
+        }
+      } catch is CancellationError {
+        // The original owner's durable intent survives a reset or cancellation.
+      } catch {
+        guard self.cacheWriteScope.isCurrent(session) else { return }
+        self.error = UserFacingErrorPresentation.message(for: error, while: .conversations)
+        self.emit(.server)
+      }
+    }
+  }
+
+  /// Foreground recovery is owned by the same repository as user-initiated deletion.
+  func retryPendingDeletions() async {
+    let session = cacheWriteScope.capture()
+    do {
+      try await reloadDeletionState(session: session)
+      scheduleDeletionRecovery(session: session)
+      await deletionRecoveryTask?.value
+    } catch is CancellationError {
+      // The original owner's durable intent survives a reset or cancellation.
+    } catch {
+      guard cacheWriteScope.isCurrent(session) else { return }
+      self.error = UserFacingErrorPresentation.message(for: error, while: .conversations)
+      emit(.server)
+    }
   }
 
   private func emit(_ source: ConversationSnapshotSource) {

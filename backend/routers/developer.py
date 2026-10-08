@@ -17,6 +17,7 @@ import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database.firestore_read_metrics import FirestoreReadSite
+from database.conversation_deletions import ConversationDeletedError
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -1757,6 +1758,22 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
     )
 
 
+def _reject_deleted_segment_upload(uid: str, conversation_id: str, conversation: Optional[dict] = None) -> None:
+    try:
+        conversations_db.ensure_conversation_not_deleted(uid, conversation_id)
+        if conversation and conversation.get('user_deleted') is True:
+            raise ConversationDeletedError('Conversation was deleted')
+    except ConversationDeletedError as error:
+        raise HTTPException(
+            status_code=410,
+            detail={'code': 'conversation_deleted', 'message': 'Conversation was deleted'},
+        ) from error
+    if conversation and conversation.get('deleted'):
+        # Merge redirects are not proof of a user deletion. Keep the only local
+        # transcript recoverable instead of granting terminal 410 authority.
+        raise HTTPException(status_code=409, detail='Conversation identity was merged, please refresh')
+
+
 def _projection_provenance_for_log(raw: Any) -> tuple[str, str, str]:
     """Pull and sanitize provenance for logs. Never raises; never returns body text.
 
@@ -1970,10 +1987,12 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        _reject_deleted_segment_upload(uid, conversation_id)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
         if existing_conversation:
+            _reject_deleted_segment_upload(uid, conversation_id, existing_conversation)
             if _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
@@ -2068,8 +2087,16 @@ def _create_conversation_from_segments(
         create_payload = omit_null_processing_state(strip_client_processing(create_conversation_obj.model_dump()))
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
-        if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
+        try:
+            created = lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True)
+        except ConversationDeletedError as error:
+            raise HTTPException(
+                status_code=410,
+                detail={'code': 'conversation_deleted', 'message': 'Conversation was deleted'},
+            ) from error
+        if not created:
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            _reject_deleted_segment_upload(uid, conversation_id, existing_conversation)
             if existing_conversation:
                 logger.info(
                     "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -2124,6 +2151,7 @@ def _create_conversation_from_segments(
             conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
     except Exception:
         if request.client_session_id and conversation_id:
+            _reject_deleted_segment_upload(uid, conversation_id)
             conversations_db.delete_conversation(uid, conversation_id)
         raise
     # Non-idempotent ingest: the coordinator's generic persist stripped the
@@ -2139,9 +2167,14 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        lifecycle_service.persist_processed_conversation(
+        persisted = lifecycle_service.persist_processed_conversation(
             uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
         )
+        _reject_deleted_segment_upload(uid, conversation_id)
+        if not persisted:
+            latest = conversations_db.get_conversation(uid, conversation_id)
+            _reject_deleted_segment_upload(uid, conversation_id, latest)
+            raise HTTPException(status_code=503, detail='Conversation persistence unavailable, please retry')
 
     conversation.external_data = {
         **(conversation.external_data or {}),
@@ -2283,6 +2316,8 @@ def delete_conversation_endpoint(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
+    conversations_db.mark_conversation_deleted(uid, conversation_id)
 
     # Lazy: keep developer routes off the merge/memory import graph so stubbed
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
