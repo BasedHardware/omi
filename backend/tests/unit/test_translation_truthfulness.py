@@ -23,6 +23,16 @@ from utils.translation_core.planner import fingerprint_text
 from utils.translation_core.providers import NllbTranslationProvider, TranslationProviderChain
 from utils.translation_core.quality import lexical_overlap, output_rejection_reason
 
+
+@pytest.fixture(scope='module', autouse=True)
+def _load_local_detector_profiles():
+    # Profile loading is setup; retain cold result caches for admission checks.
+    from utils.translation_language import detect_language_with_confidence, detection_cache
+
+    detect_language_with_confidence('A synthetic sentence initializes the local language detector.')
+    detection_cache.clear()
+
+
 # Authored here; no account transcripts or screenshot text.
 ENGLISH = (
     'Please try again.',
