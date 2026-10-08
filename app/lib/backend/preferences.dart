@@ -889,6 +889,12 @@ class SharedPreferencesUtil {
 
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
+  /// Set when onboarding completes; the first conversation summary the user then opens asks
+  /// "Are you enjoying Omi?" once and clears it.
+  bool get firstSummaryRatingPending => getBool('firstSummaryRatingPending');
+
+  set firstSummaryRatingPending(bool value) => saveBool('firstSummaryRatingPending', value);
+
   bool get onboardingCompleted => getBool('onboardingCompleted');
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
