@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-06 -->
+<!-- feature-flag-registry as-of: 2026-10-08 -->
 
 # Feature-flag authority registry
 
@@ -110,7 +110,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-06.
+None as of 2026-10-08.
 
 ## Flags
 
@@ -208,6 +208,7 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | dazheng |
+| `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | — | — | — | — | pending | 2026-11-07 | dazheng |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | true | — | graduate | 2026-10-23 | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
@@ -325,7 +326,6 @@ and an explicit empty literal renders as `''`.
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
-| `OMI_MODEL_TIER` | Select proxy budget tier | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
@@ -398,13 +398,13 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)
-- `OMI_MODEL_TIER` — Select proxy budget tier (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
+- `REVIEW_SURFACE_MODE` — Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)

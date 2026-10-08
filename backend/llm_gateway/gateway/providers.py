@@ -534,6 +534,8 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
     ):
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
         self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
+        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
         endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
@@ -587,7 +589,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         payload = _vertex_embedding_predict_request(request)
         parsed: Mapping[str, Any] | None = None
         try:
-            headers = _vertex_headers(await self._vertex_access_token(), self._capacity_for(provider_ref.model))
+            headers = _vertex_headers(await self._vertex_access_token(), ptr.REQUEST_TYPE_SHARED)
             async with self._http_client.stream(
                 'POST',
                 endpoint,
@@ -692,6 +694,8 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
     ) -> Mapping[str, Any]:
         observation_deadline = self._now() + max(timeout_ms, 0) / 1000
         self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
+        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
         endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)

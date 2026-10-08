@@ -11408,5 +11408,10 @@
     "onboardingRatingPromptBody": "५ स्टार रेटिंग दिल्याने आम्हाला खरोखर खूप मदत होते ❤️",
     "onboardingRatingPromptYes": "हो, मला तुम्हाला पाठिंबा द्यायचा आहे!",
     "onboardingRatingPromptNo": "फारसं नाही",
-    "partialRecording": "अंशतः रेकॉर्डिंग"
+    "partialRecording": "अंशतः रेकॉर्डिंग",
+    "importTranscriptFiles": "प्रतिलेख फाइल्स",
+    "importTranscriptFilesDescription": "SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा",
+    "importTooManyAttempts": "सध्या खूप जास्त आयात होत आहेत. नंतर पुन्हा प्रयत्न करा.",
+    "importFileTooLarge": "ही फाइल आयात करण्यासाठी खूप मोठी आहे.",
+    "importUnsupportedFileType": "या प्रकारची फाइल आयात करता येत नाही."
 }

@@ -12446,4 +12446,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get partialRecording => 'Čiastočná nahrávka';
+
+  @override
+  String get importTranscriptFiles => 'Súbory prepisov';
+
+  @override
+  String get importTranscriptFilesDescription => 'Vyberte prepisy SRT, VTT alebo TXT, alebo ZIP s nimi';
+
+  @override
+  String get importTooManyAttempts => 'Práve prebieha príliš veľa importov. Skúste to neskôr.';
+
+  @override
+  String get importFileTooLarge => 'Tento súbor je príliš veľký na import.';
+
+  @override
+  String get importUnsupportedFileType => 'Tento typ súboru nie je možné importovať.';
 }

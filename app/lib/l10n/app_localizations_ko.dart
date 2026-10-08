@@ -12263,4 +12263,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get partialRecording => '부분 녹음';
+
+  @override
+  String get importTranscriptFiles => '녹취록 파일';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT, VTT 또는 TXT 녹취록이나 이를 묶은 ZIP 파일을 선택하세요';
+
+  @override
+  String get importTooManyAttempts => '지금은 가져오기 요청이 너무 많습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get importFileTooLarge => '이 파일은 너무 커서 가져올 수 없습니다.';
+
+  @override
+  String get importUnsupportedFileType => '이 파일 형식은 가져올 수 없습니다.';
 }

@@ -3851,5 +3851,10 @@
     "onboardingRatingPromptBody": "تقييمك لنا بخمس نجوم يساعدنا كثيرًا ❤️",
     "onboardingRatingPromptYes": "نعم، أريد أن أدعمكم!",
     "onboardingRatingPromptNo": "ليس تمامًا",
-    "partialRecording": "تسجيل جزئي"
+    "partialRecording": "تسجيل جزئي",
+    "importTranscriptFiles": "ملفات النصوص",
+    "importTranscriptFilesDescription": "اختر نصوصًا بصيغة SRT أو VTT أو TXT، أو ملف ZIP يضمها",
+    "importTooManyAttempts": "عدد كبير جدًا من عمليات الاستيراد حاليًا. حاول مرة أخرى لاحقًا.",
+    "importFileTooLarge": "هذا الملف كبير جدًا بحيث لا يمكن استيراده.",
+    "importUnsupportedFileType": "لا يمكن استيراد هذا النوع من الملفات."
 }

@@ -241,22 +241,25 @@ def test_byok_direct_construction_never_drops_below_the_foreground_deadline(monk
     assert captured["kwargs"]["request_timeout"] >= model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
 
 
-def test_direct_route_no_byok_carries_the_foreground_deadline(monkeypatch):
+def test_managed_route_uses_gateway_with_foreground_deadline_even_when_optional_gateway_is_off(monkeypatch):
     import utils.llm.clients as clients
 
     captured: dict = {}
     monkeypatch.setattr("utils.llm.clients.should_route_features_through_gateway", lambda: False)
+    monkeypatch.setattr("utils.llm.clients.should_route_company_paid_features_through_gateway", lambda: True)
     monkeypatch.setattr("utils.llm.clients.get_byok_key", lambda *_a, **_k: None)
 
-    def fake_default_client(model, provider, streaming, options=None):
-        captured.update(options=dict(options or {}))
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, options=dict(options or {}), feature=feature)
+        return object()
 
-    monkeypatch.setattr(clients, "get_default_client", fake_default_client)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
     monkeypatch.setattr(clients, "maybe_wrap_dev_gateway_shadow", lambda **kwargs: kwargs["legacy_model"])
 
     clients.get_llm("memory_l1")
 
     assert captured["options"]["request_timeout"] == model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    assert captured["feature"] == "memory_l1"
 
 
 # ---------------------------------------------------------------------------
