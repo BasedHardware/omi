@@ -266,6 +266,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get askAnything => 'ถามอะไรก็ได้';
 
   @override
+  String get askAnythingButton => 'ถามอะไรก็ได้';
+
+  @override
   String get noMessagesYet => 'ยังไม่มีข้อความ!\nลองเริ่มบทสนทนาสิ';
 
   @override

@@ -83,6 +83,7 @@
     "mergingInBackground": "Menggabungkan di latar belakang. Ini mungkin memakan waktu sebentar.",
     "failedToStartMerge": "Gagal memulai penggabungan",
     "askAnything": "Tanyakan apa saja",
+    "askAnythingButton": "Tanyakan apa saja",
     "noMessagesYet": "Belum ada pesan!\nMengapa tidak memulai percakapan?",
     "deletingMessages": "Menghapus pesan Anda dari memori Omi…",
     "messageCopied": "✨ Pesan disalin ke clipboard",

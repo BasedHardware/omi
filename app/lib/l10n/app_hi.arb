@@ -83,6 +83,7 @@
     "mergingInBackground": "बैकग्राउंड में विलय हो रहा है। इसमें थोड़ा समय लग सकता है।",
     "failedToStartMerge": "विलय शुरू करने में विफल",
     "askAnything": "कुछ भी पूछें",
+    "askAnythingButton": "कुछ भी पूछें",
     "noMessagesYet": "अभी तक कोई संदेश नहीं!\nबातचीत क्यों नहीं शुरू करते?",
     "deletingMessages": "Omi की मेमोरी से आपके संदेशों को हटा रहा है…",
     "messageCopied": "✨ संदेश क्लिपबोर्ड पर कॉपी किया गया",

@@ -269,6 +269,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get askAnything => 'Întreabă orice';
 
   @override
+  String get askAnythingButton => 'Întreabă orice';
+
+  @override
   String get noMessagesYet => 'Încă nu există mesaje!\nDe ce nu începi o conversație?';
 
   @override

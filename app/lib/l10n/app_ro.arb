@@ -83,6 +83,7 @@
     "mergingInBackground": "Se combină în fundal. Acest lucru poate dura câteva momente.",
     "failedToStartMerge": "Nu s-a putut inițializa combinarea",
     "askAnything": "Întreabă orice",
+    "askAnythingButton": "Întreabă orice",
     "noMessagesYet": "Încă nu există mesaje!\nDe ce nu începi o conversație?",
     "deletingMessages": "Ștergerea mesajelor din memoria Omi…",
     "messageCopied": "✨ Mesaj copiat în clipboard",

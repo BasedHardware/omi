@@ -268,6 +268,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get askAnything => 'Спросите что угодно';
 
   @override
+  String get askAnythingButton => 'Спросите что угодно';
+
+  @override
   String get noMessagesYet => 'Сообщений пока нет!\nПочему бы не начать разговор?';
 
   @override

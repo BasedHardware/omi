@@ -83,6 +83,7 @@
     "mergingInBackground": "Yhdistetään taustalla. Tämä voi kestää hetken.",
     "failedToStartMerge": "Yhdistämisen aloitus epäonnistui",
     "askAnything": "Kysy mitä tahansa",
+    "askAnythingButton": "Kysy mitä tahansa",
     "noMessagesYet": "Ei vielä viestejä!\nMikset aloittaisi keskustelua?",
     "deletingMessages": "Poistetaan viestejäsi Omin muistista…",
     "messageCopied": "✨ Viesti kopioitu leikepöydälle",

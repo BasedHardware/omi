@@ -268,6 +268,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get askAnything => 'Запитайте що завгодно';
 
   @override
+  String get askAnythingButton => 'Запитайте що завгодно';
+
+  @override
   String get noMessagesYet => 'Повідомлень поки немає!\nЧому б не почати розмову?';
 
   @override

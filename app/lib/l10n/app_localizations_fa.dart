@@ -267,6 +267,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get askAnything => 'هر چیزی بپرسید';
 
   @override
+  String get askAnythingButton => 'هر چیزی بپرسید';
+
+  @override
   String get noMessagesYet => 'هنوز پیامی وجود ندارد!\nچرا یک گفتگو شروع نمی‌کنید؟';
 
   @override

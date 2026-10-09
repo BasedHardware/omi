@@ -266,6 +266,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get askAnything => 'Запытайцеся чаго-небудзь';
 
   @override
+  String get askAnythingButton => 'Спытайце што заўгодна';
+
+  @override
   String get noMessagesYet => 'Пакі нета паведамленняў!\nЧаму б вам не пачаць размову?';
 
   @override

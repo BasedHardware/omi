@@ -83,6 +83,7 @@
     "mergingInBackground": "กำลังรวมในเบื้องหลัง อาจใช้เวลาสักครู่",
     "failedToStartMerge": "ไม่สามารถเริ่มการรวมได้",
     "askAnything": "ถามอะไรก็ได้",
+    "askAnythingButton": "ถามอะไรก็ได้",
     "noMessagesYet": "ยังไม่มีข้อความ!\nลองเริ่มบทสนทนาสิ",
     "deletingMessages": "กำลังลบข้อความของคุณจากหน่วยความจำของ Omi…",
     "messageCopied": "✨ คัดลอกข้อความไปยังคลิปบอร์ดแล้ว",

@@ -268,6 +268,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get askAnything => 'Spýtajte sa na čokoľvek';
 
   @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
+
+  @override
   String get noMessagesYet => 'Zatiaľ žiadne správy!\nPrečo nespustíte konverzáciu?';
 
   @override

@@ -83,6 +83,7 @@
     "mergingInBackground": "Fusionant en segon pla. Això pot trigar una mica.",
     "failedToStartMerge": "No s'ha pogut iniciar la fusió",
     "askAnything": "Pregunta qualsevol cosa",
+    "askAnythingButton": "Pregunta qualsevol cosa",
     "noMessagesYet": "Encara no hi ha missatges!\nPer què no comenceu una conversa?",
     "deletingMessages": "Suprimint els teus missatges de la memòria d'Omi…",
     "messageCopied": "✨ Missatge copiat al porta-retalls",

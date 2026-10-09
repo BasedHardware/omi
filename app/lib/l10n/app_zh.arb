@@ -83,6 +83,7 @@
     "mergingInBackground": "后台合并中。这可能需要一点时间。",
     "failedToStartMerge": "无法开始合并",
     "askAnything": "随便问问",
+    "askAnythingButton": "随便问问",
     "noMessagesYet": "还没有消息！\n为什么不开始一段对话呢？",
     "deletingMessages": "正在从 Omi 的内存中删除您的消息…",
     "messageCopied": "✨ 消息已复制到剪贴板",

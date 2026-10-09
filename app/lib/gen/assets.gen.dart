@@ -25,6 +25,22 @@ class $AssetsCompetitorLogosGen {
 class $AssetsFontsGen {
   const $AssetsFontsGen();
 
+  /// File path: assets/fonts/InstrumentSans-Bold.ttf
+  String get instrumentSansBold => 'assets/fonts/InstrumentSans-Bold.ttf';
+
+  /// File path: assets/fonts/InstrumentSans-Medium.ttf
+  String get instrumentSansMedium => 'assets/fonts/InstrumentSans-Medium.ttf';
+
+  /// File path: assets/fonts/InstrumentSans-OFL.txt
+  String get instrumentSansOFL => 'assets/fonts/InstrumentSans-OFL.txt';
+
+  /// File path: assets/fonts/InstrumentSans-Regular.ttf
+  String get instrumentSansRegular => 'assets/fonts/InstrumentSans-Regular.ttf';
+
+  /// File path: assets/fonts/InstrumentSans-SemiBold.ttf
+  String get instrumentSansSemiBold =>
+      'assets/fonts/InstrumentSans-SemiBold.ttf';
+
   /// File path: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
   String get sfprodisplayblackitalic =>
       'assets/fonts/SFPRODISPLAYBLACKITALIC.OTF';
@@ -56,6 +72,11 @@ class $AssetsFontsGen {
 
   /// List of all assets
   List<String> get values => [
+        instrumentSansBold,
+        instrumentSansMedium,
+        instrumentSansOFL,
+        instrumentSansRegular,
+        instrumentSansSemiBold,
         sfprodisplayblackitalic,
         sfprodisplaybold,
         sfprodisplayheavyitalic,

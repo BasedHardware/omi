@@ -266,6 +266,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get askAnything => 'Kysy mitä tahansa';
 
   @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
+
+  @override
   String get noMessagesYet => 'Ei vielä viestejä!\nMikset aloittaisi keskustelua?';
 
   @override

@@ -83,6 +83,7 @@
     "mergingInBackground": "جاري الدمج في الخلفية. قد يستغرق هذا لحظة.",
     "failedToStartMerge": "فشل بدء الدمج",
     "askAnything": "اسأل أي شيء",
+    "askAnythingButton": "اسأل أي شيء",
     "noMessagesYet": "لا توجد رسائل بعد!\nلماذا لا تبدأ محادثة؟",
     "deletingMessages": "حذف رسائلك من ذاكرة Omi…",
     "messageCopied": "✨ تم نسخ الرسالة إلى الحافظة",

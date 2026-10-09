@@ -83,6 +83,7 @@
     "mergingInBackground": "Arka planda birleştiriliyor. Bu biraz zaman alabilir.",
     "failedToStartMerge": "Birleştirme başlatılamadı",
     "askAnything": "Her şeyi sor",
+    "askAnythingButton": "Her şeyi sor",
     "noMessagesYet": "Henüz mesaj yok!\nNeden bir konuşma başlatmıyorsunuz?",
     "deletingMessages": "Mesajlarınız Omi'nin hafızasından siliniyor…",
     "messageCopied": "✨ Mesaj panoya kopyalandı",

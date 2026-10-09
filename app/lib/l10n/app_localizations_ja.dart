@@ -266,6 +266,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get askAnything => '何でも聞いてください';
 
   @override
+  String get askAnythingButton => '何でも聞いてください';
+
+  @override
   String get noMessagesYet => 'まだメッセージがありません！\n会話を始めてみませんか？';
 
   @override

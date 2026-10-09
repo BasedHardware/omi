@@ -83,6 +83,7 @@
     "mergingInBackground": "Összevonás a háttérben. Ez eltarthat egy pillanatig.",
     "failedToStartMerge": "Az összevonás indítása sikertelen",
     "askAnything": "Kérdezz bármit",
+    "askAnythingButton": "Kérdezz bármit",
     "noMessagesYet": "Még nincsenek üzenetek!\nMiért nem kezdesz egy beszélgetést?",
     "deletingMessages": "Üzenetek törlése az Omi memóriájából…",
     "messageCopied": "✨ Üzenet vágólapra másolva",

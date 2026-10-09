@@ -268,6 +268,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get askAnything => 'Hỏi bất cứ điều gì';
 
   @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
+
+  @override
   String get noMessagesYet => 'Chưa có tin nhắn nào!\nHãy bắt đầu cuộc trò chuyện nhé?';
 
   @override

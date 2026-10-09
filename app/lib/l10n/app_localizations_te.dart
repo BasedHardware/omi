@@ -268,6 +268,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get askAnything => 'ఏదైనా అడగండి';
 
   @override
+  String get askAnythingButton => 'ఏదైనా అడగండి';
+
+  @override
   String get noMessagesYet => 'ఇంకా సందేశాలు లేవు!\nసంభాషణను ప్రారంభించడానికి ఎందుకు?';
 
   @override

@@ -355,6 +355,10 @@
     "@askAnything": {
         "description": "Chat input placeholder"
     },
+    "askAnythingButton": "Ask anything",
+    "@askAnythingButton": {
+        "description": "Home button that opens AI chat, beside a speech-bubble icon"
+    },
     "noMessagesYet": "No messages yet!\nWhy don't you start a conversation?",
     "@noMessagesYet": {
         "description": "Empty chat state message"
