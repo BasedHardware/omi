@@ -70,7 +70,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       isSubmitting.value = true;
       try {
         final sent = await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
-            widget.app.id, controller.text.trim(), review.uid);
+          widget.app.id,
+          controller.text.trim(),
+          review.uid,
+        );
         // replyToAppReview answers false instead of throwing; keep the dialog and its text open.
         if (!sent) {
           if (mounted) {
@@ -79,11 +82,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           return;
         }
         if (mounted) {
-          context.read<AppProvider>().updateLocalAppReviewResponse(
-                widget.app.id,
-                controller.text.trim(),
-                review.uid,
-              );
+          context.read<AppProvider>().updateLocalAppReviewResponse(widget.app.id, controller.text.trim(), review.uid);
         }
         review.response = controller.text.trim();
         review.respondedAt = DateTime.now();
@@ -218,10 +217,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             const SizedBox(height: OmiSpacing.xl),
             // Reviews List
             filteredReviews.isEmpty
-                ? OmiEmptyState(
-                    glyph: const FaIcon(FontAwesomeIcons.star),
-                    title: context.l10n.noReviewsFound,
-                  )
+                ? OmiEmptyState(glyph: const FaIcon(FontAwesomeIcons.star), title: context.l10n.noReviewsFound)
                 : ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -271,10 +267,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
 
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1.withValues(alpha: 0.8),
-        borderRadius: OmiRadius.lgAll,
-      ),
+      decoration: BoxDecoration(color: OmiColors.surface1.withValues(alpha: 0.8), borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -343,10 +336,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        widget.app.author,
-                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
-                      ),
+                      Text(widget.app.author, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
                       if (review.respondedAt != null) ...[
                         const SizedBox(width: OmiSpacing.xs),
                         Text(

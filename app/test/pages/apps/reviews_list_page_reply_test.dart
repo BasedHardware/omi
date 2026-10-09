@@ -15,23 +15,23 @@ import 'package:omi/utils/platform/platform_manager.dart';
 final _l10n = lookupAppLocalizations(const Locale('en'));
 
 App _app(AppReview review) => App(
-      id: 'reviewed-app',
-      uid: 'owner',
-      name: 'Reviewed app',
-      author: 'Omi',
-      description: 'An app with one review.',
-      image: 'https://example.invalid/app.png',
-      capabilities: {'chat'},
-      status: 'approved',
-      category: 'productivity',
-      approved: true,
-      ratingCount: 1,
-      ratingAvg: 4,
-      enabled: false,
-      deleted: false,
-      isPaid: false,
-      isUserPaid: false,
-    )..reviews = [review];
+  id: 'reviewed-app',
+  uid: 'owner',
+  name: 'Reviewed app',
+  author: 'Omi',
+  description: 'An app with one review.',
+  image: 'https://example.invalid/app.png',
+  capabilities: {'chat'},
+  status: 'approved',
+  category: 'productivity',
+  approved: true,
+  ratingCount: 1,
+  ratingAvg: 4,
+  enabled: false,
+  deleted: false,
+  isPaid: false,
+  isUserPaid: false,
+)..reviews = [review];
 
 /// Records local reply updates so a failed send is observably not applied.
 class _RecordingAppProvider extends AppProvider {
@@ -53,7 +53,13 @@ void main() {
     PlatformManager.initializeForLocalHarness();
     SharedPreferencesUtil().uid = 'owner';
     review = AppReview(
-        uid: 'reviewer', ratedAt: DateTime.now(), score: 4, review: 'Nice app', username: 'reviewer', response: '');
+      uid: 'reviewer',
+      ratedAt: DateTime.now(),
+      score: 4,
+      review: 'Nice app',
+      username: 'reviewer',
+      response: '',
+    );
     provider = _RecordingAppProvider();
     sent = [];
   });
@@ -72,15 +78,21 @@ void main() {
       return answer;
     };
     addTearDown(provider.dispose);
-    await tester.pumpWidget(MultiProvider(
+    await tester.pumpWidget(
+      MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => AppearanceProvider(read: () => 'dark', write: (_) async {})),
+          ChangeNotifierProvider(
+            create: (_) => AppearanceProvider(read: () => 'dark', write: (_) async {}),
+          ),
           ChangeNotifierProvider<AppProvider>.value(value: provider),
         ],
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: const [Locale('en')],
-            home: Scaffold(body: ReviewsListPage(app: _app(review))))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(body: ReviewsListPage(app: _app(review))),
+        ),
+      ),
+    );
     await settle(tester);
     await tester.tap(find.text(_l10n.reply));
     await settle(tester);
