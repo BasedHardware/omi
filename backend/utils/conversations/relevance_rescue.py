@@ -42,7 +42,7 @@ def rescue_decision(score_call: Callable[[], Optional[float]]) -> RescueDecision
         )
     except Exception:
         valid, score = False, None
-    if not valid:
+    if not valid or score is None:
         return RescueDecision(True, None, 'error_keep')
     return RescueDecision(score < THRESHOLD, float(score), 'rescue' if score < THRESHOLD else 'discard_stands')
 
