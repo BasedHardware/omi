@@ -31,6 +31,16 @@ from pathlib import Path
 
 COLUMNS = ("Start", "Duration", "Title", "Category", "Folder", "Source", "Language", "ID")
 
+
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    encoding the rendered HTML report raises UnicodeEncodeError on them. Dropping
+    them keeps the remaining text and lets the report write cleanly.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
 STYLE = """
 body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 70rem; padding: 0 1rem; color: #1a1a1a; background: #fff; }
 h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid #ccc; }
@@ -47,7 +57,7 @@ def text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    return " ".join(value.split())
+    return " ".join(strip_surrogates(value).split())
 
 
 def parse_time(value):
@@ -171,7 +181,7 @@ def report(conversations, offset, offset_label):
 
 
 def convert(sources, destination, offset, offset_label):
-    payload = report(load(sources), offset, offset_label).encode("utf-8")
+    payload = strip_surrogates(report(load(sources), offset, offset_label)).encode("utf-8")
     output_path = Path(destination)
     # Exclusive creation protects an existing report; a failed write leaves no partial file.
     try:
