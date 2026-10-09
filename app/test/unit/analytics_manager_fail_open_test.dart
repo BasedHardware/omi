@@ -64,6 +64,31 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 
+  test('capture-wedge family events copy app_build onto build', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Local WAL Stuck', properties: {'pending_wal_count': 2});
+    AnalyticsManager().track('Recording Start Failed', properties: {'failure_class': 'capture_unavailable'});
+    AnalyticsManager().track('Capture Recovery Resolved', properties: {'trigger': 'upload_silence'});
+    AnalyticsManager().track('Device Connected', properties: {'type': 'omi'});
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.map((event) => event.eventName), [
+      'Local WAL Stuck',
+      'Recording Start Failed',
+      'Capture Recovery Resolved',
+      'Device Connected',
+    ]);
+    for (final event in adapter.events.take(3)) {
+      expect(event.properties['build'], '567', reason: event.eventName);
+      expect(event.properties['app_build'], '567', reason: event.eventName);
+    }
+    expect(adapter.events.last.properties.containsKey('build'), isFalse);
+    expect(adapter.events.last.properties['app_build'], '567');
+  });
+
   test('SDK setup completing after caller deadline recovers queued events', () async {
     final adapter = _DelayedAdapter();
     AnalyticsManager.configure(adapter);

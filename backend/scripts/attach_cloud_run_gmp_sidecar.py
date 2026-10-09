@@ -479,6 +479,133 @@ def patch_service(
     return patched
 
 
+JOB_DONE_VOLUME = 'gmp-job-lifecycle'
+JOB_DONE_FILE = '/var/run/gmp-job/done'
+JOB_COLLECTOR_COMMAND = (
+    'export K_SERVICE="${CLOUD_RUN_JOB:?Cloud Run job identity missing}"; '
+    '/run-gmp-entrypoint & collector=$!; '
+    'trap "kill -TERM $collector; wait $collector" TERM INT; '
+    'while [ ! -f /var/run/gmp-job/done ]; do '
+    'kill -0 "$collector" || { wait "$collector"; exit 1; }; sleep 1; done; '
+    'sleep 35; kill -TERM "$collector"; wait "$collector"'
+)
+
+
+def patch_job(
+    job: Mapping[str, Any], *, project_number: str, config_secret: str, config_secret_version: str
+) -> ConfigDict:
+    """Reuse the service patch for the Job's nested task template, without traffic."""
+    patched = cast(ConfigDict, json.loads(json.dumps(job)))
+    if patched.get('kind') != 'Job':
+        raise ValueError('expected a Cloud Run Job export')
+    execution_template = patched['spec']['template']
+    task_template = execution_template['spec']['template']
+    containers = task_template['spec']['containers']
+    applications = [c for c in containers if c.get('name') != SIDECAR_NAME]
+    if len(applications) != 1:
+        raise ValueError('job must have exactly one application container')
+    application_name = applications[0].get('name') or 'notifications-job'
+    # Jobs put annotations on the execution template, containers on the task.
+    # https://cloud.google.com/run/docs/reference/yaml/v1#cloud_run_job_yaml
+    synthetic = {
+        'spec': {'template': {'metadata': execution_template.get('metadata', {}), 'spec': task_template['spec']}}
+    }
+    rendered = patch_service(
+        synthetic,
+        project_number=project_number,
+        base_revision='job',
+        latest_created_revision='job',
+        final_revision='job',
+        ingress_container_name=application_name,
+        config_secret=config_secret,
+        config_secret_version=config_secret_version,
+    )['spec']['template']
+    rendered['metadata'].pop('name', None)
+    rendered['metadata']['annotations'].pop('run.googleapis.com/cpu-throttling', None)
+    rendered['metadata']['annotations'].pop('run.googleapis.com/execution-environment', None)
+    app, collector = rendered['spec']['containers']
+    env = [
+        e for e in app.get('env', []) if e['name'] not in ('PROMETHEUS_SIDECAR_PORT', 'PROMETHEUS_SIDECAR_DONE_FILE')
+    ]
+    app['env'] = [
+        *env,
+        {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'},
+        {'name': 'PROMETHEUS_SIDECAR_DONE_FILE', 'value': JOB_DONE_FILE},
+    ]
+    # Job probes cannot reach the loopback metrics listener. Also remove any
+    # probe retained from an earlier attachment so it cannot terminate the task.
+    app.pop('startupProbe', None)
+    app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
+    app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
+    # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.
+    # Set K_SERVICE inside the process, not the deployed env (reserved on services).
+    # CLOUD_RUN_JOB is supplied by Cloud Run to every job container.
+    collector.pop('livenessProbe', None)
+    collector['command'] = ['/bin/sh', '-c']
+    collector['args'] = [JOB_COLLECTOR_COMMAND]
+    collector['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
+    rendered['spec']['volumes'] = [v for v in rendered['spec']['volumes'] if v['name'] != JOB_DONE_VOLUME]
+    rendered['spec']['volumes'].append({'name': JOB_DONE_VOLUME, 'emptyDir': {'medium': 'Memory', 'sizeLimit': '1Mi'}})
+    execution_template['metadata'] = rendered['metadata']
+    task_template['spec'] = rendered['spec']
+    patched.pop('status', None)
+    for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
+        patched['metadata'].pop(field, None)
+    return patched
+
+
+def attach_job_sidecar(args: argparse.Namespace) -> None:
+    export = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'describe',
+                args.service,
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                '--format=export',
+            ],
+            capture_output=True,
+        ),
+        action='exporting job',
+    )
+    job = yaml.load(export, Loader=GcloudExportLoader)
+    version = ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
+    patched = patch_job(
+        job,
+        project_number=_project_number(args.project),
+        config_secret=args.config_secret,
+        config_secret_version=version,
+    )
+    # Exports include secret references and literal env: keep the temporary file private.
+    with tempfile.TemporaryDirectory(prefix='gmp-job-') as directory:
+        target = Path(directory) / 'job.yaml'
+        target.write_text(yaml.safe_dump(patched, sort_keys=False), encoding='utf-8')
+        target.chmod(0o600)
+        _check(
+            _run(
+                [
+                    'gcloud',
+                    'run',
+                    'jobs',
+                    'replace',
+                    str(target),
+                    '--project',
+                    args.project,
+                    '--region',
+                    args.region,
+                    '--quiet',
+                ],
+                capture_output=True,
+            ),
+            action='attaching job sidecar',
+        )
+
+
 def attach_sidecar(args: argparse.Namespace) -> None:
     expected_env = _expected_literal_env(args.expected_env_state, service_name=args.service)
     export = _run(
@@ -783,6 +910,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
     parser.add_argument('--service', required=True)
+    parser.add_argument('--job', action='store_true', help='Attach to a Cloud Run Job, not a service revision.')
     # Attach-only. Not argparse-required so --repair-secret-annotations can run
     # standalone; main() enforces them for the attach path instead.
     parser.add_argument('--base-revision')
@@ -807,6 +935,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.job:
+        if args.repair_secret_annotations or args.dry_run or args.config is None or not args.config.is_file():
+            raise SystemExit('--job requires an existing --config and cannot repair service annotations')
+        attach_job_sidecar(args)
+        return 0
     if args.repair_secret_annotations:
         return repair_secret_annotations(args)
     if args.dry_run:

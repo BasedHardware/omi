@@ -777,3 +777,66 @@ def test_dropping_a_pin_that_is_absent_is_not_an_error():
     service = {'spec': {'template': {'metadata': {'annotations': {}}}}}
     assert module._drop_pinned_revision_name(service) is None
     assert module._drop_pinned_revision_name({}) is None
+
+
+@pytest.mark.parametrize('existing_startup_probe', [False, True])
+def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_probes(existing_startup_probe):
+    module = _load_module()
+    job = {
+        'apiVersion': 'run.googleapis.com/v1',
+        'kind': 'Job',
+        'metadata': {'name': 'notifications-job'},
+        'spec': {
+            'template': {
+                'metadata': {
+                    'annotations': {
+                        'run.googleapis.com/vpc-access-connector': 'keep',
+                        'run.googleapis.com/secrets': 'existing:projects/123/secrets/existing',
+                    }
+                },
+                'spec': {
+                    'taskCount': 1,
+                    'template': {
+                        'spec': {
+                            'timeoutSeconds': '600',
+                            'maxRetries': 0,
+                            'serviceAccountName': 'runtime',
+                            'containers': [{'image': 'app:sha', 'env': [{'name': 'FLAG', 'value': 'on'}]}],
+                        },
+                    },
+                },
+            }
+        },
+    }
+    if existing_startup_probe:
+        job['spec']['template']['spec']['template']['spec']['containers'][0]['startupProbe'] = {
+            'tcpSocket': {'port': 9090},
+            'periodSeconds': 1,
+            'timeoutSeconds': 1,
+            'failureThreshold': 240,
+        }
+    kwargs = dict(project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7')
+    patched = module.patch_job(job, **kwargs)
+    assert module.patch_job(patched, **kwargs) == patched
+    task = patched['spec']['template']['spec']['template']
+    assert task['spec']['timeoutSeconds'] == '600'
+    assert task['spec']['serviceAccountName'] == 'runtime'
+    app, collector = task['spec']['containers']
+    assert all('startupProbe' not in container for container in task['spec']['containers'])
+    assert {'name': 'FLAG', 'value': 'on'} in app['env']
+    assert {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'} in app['env']
+    assert collector['image'] == module.SIDECAR_IMAGE
+    assert not collector.get('env'), 'do not deploy reserved service environment variables on a job'
+    assert 'export K_SERVICE="${CLOUD_RUN_JOB:?' in collector['args'][0]
+    assert 'sleep 35; kill -TERM' in collector['args'][0]
+    assert (
+        patched['spec']['template']['metadata']['annotations']['run.googleapis.com/container-dependencies']
+        == '{"collector":["notifications-job"]}'
+    )
+    assert job['spec']['template']['spec']['template']['spec']['containers'][0].get('name') is None
+    assert 'metadata' not in task, 'job task templates must not acquire service annotations'
+    annotations = patched['spec']['template']['metadata']['annotations']
+    assert annotations['run.googleapis.com/vpc-access-connector'] == 'keep'
+    assert annotations['run.googleapis.com/secrets'] == (
+        'cloud-run-gmp-config:projects/123/secrets/cloud-run-gmp-config,existing:projects/123/secrets/existing'
+    )

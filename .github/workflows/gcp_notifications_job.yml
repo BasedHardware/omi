@@ -181,7 +181,15 @@ jobs:
           flags: >-
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
             ${{ steps.runtime-env.outputs.notifications_job_flags }}
+            --container=notifications-job
             --remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,MEMORY_CANONICAL_MAINTENANCE_ENABLED,MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,TYPESENSE_HOST_PORT,TYPESENSE_API_KEY,HOSTED_PUSHER_API_URL,DAILY_SUMMARY_SELECTION_MODE,GOOGLE_APPLICATION_CREDENTIALS,${{ steps.runtime-env.outputs.notifications_job_secret_names }}
+
+      - name: Attach Managed Prometheus sidecar to notifications job
+        run: |
+          python3 backend/scripts/attach_cloud_run_gmp_sidecar.py \
+            --job --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" --service="$SERVICE" \
+            --config=backend/deploy/cloud_run_gmp_sidecar.yaml
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
@@ -301,6 +309,107 @@ jobs:
           test -n "$policy"
           gcloud monitoring policies describe "$policy" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(notificationChannels)' | grep -q .
+
+      - name: Provision daily_summary_cohort_incomplete
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          test -n "$ALERT_CHANNELS"
+          metric='daily_summary_cohort_incomplete'
+          display_name='Daily recap cohort incomplete for 3 hours'
+          documentation='Daily recaps may be stalled. See backend/docs/runbooks/daily-summary-cutover.md. Oct 3 cohort stayed pinned for six days by a persistently failing recipient; fix 071ff86cdc abandons any cohort older than 7200 seconds. Inspect incomplete summaries and cursor_age_seconds; require three hours of sustained incomplete ticks.'
+          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "daily_summary_job_summary" "complete=False"'
+          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud logging metrics update "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" --log-filter="$log_filter"
+          else
+            gcloud logging metrics create "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" --log-filter="$log_filter"
+          fi
+          policy="$(gcloud monitoring policies list --project="${{ vars.GCP_PROJECT_ID }}" \
+            --filter="displayName=\"${display_name}\"" --format='value(name)' --limit=1)"
+          export RECAP_METRIC="$metric" RECAP_DISPLAY_NAME="$display_name" RECAP_DOCUMENTATION="$documentation" RECAP_POLICY="$policy"
+          policy_file="$RUNNER_TEMP/daily_summary_cohort_incomplete.json"
+          python3 - "$policy_file" <<'PY_POLICY'
+          import json, os, sys
+          metric_filter = 'metric.type="logging.googleapis.com/user/' + os.environ['RECAP_METRIC'] + '" AND resource.type="cloud_run_job"'
+          condition = {'conditionThreshold': {
+              'filter': metric_filter, 'comparison': 'COMPARISON_GT', 'thresholdValue': 0,
+              'duration': '10800s', 'evaluationMissingData': 'EVALUATION_MISSING_DATA_INACTIVE',
+              'aggregations': [{'alignmentPeriod': '900s', 'perSeriesAligner': 'ALIGN_RATE',
+                                'crossSeriesReducer': 'REDUCE_SUM'}], 'trigger': {'count': 1}}}
+          condition['displayName'] = os.environ['RECAP_DISPLAY_NAME']
+          body = {'displayName': os.environ['RECAP_DISPLAY_NAME'], 'enabled': True, 'combiner': 'OR',
+                  'notificationChannels': os.environ['ALERT_CHANNELS'].split(','),
+                  'documentation': {'content': os.environ['RECAP_DOCUMENTATION'], 'mimeType': 'text/markdown'},
+                  'conditions': [condition]}
+          if os.environ['RECAP_POLICY']:
+              body['name'] = os.environ['RECAP_POLICY']
+          with open(sys.argv[1], 'w') as output:
+              json.dump(body, output)
+          PY_POLICY
+          if [[ -z "$policy" ]]; then
+            policy="$(gcloud monitoring policies create --project="${{ vars.GCP_PROJECT_ID }}" \
+              --policy-from-file="$policy_file" --format='value(name)')"
+          else
+            gcloud monitoring policies update "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --policy-from-file="$policy_file"
+          fi
+          test -n "$policy"
+          gcloud monitoring policies describe "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(notificationChannels)' | grep -q .
+
+      - name: Provision daily_summary_job_heartbeat_missing
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          test -n "$ALERT_CHANNELS"
+          metric='daily_summary_job_heartbeat_missing'
+          display_name='Daily recap job heartbeat missing for 60 minutes'
+          documentation='Daily recaps may be stalled. See backend/docs/runbooks/daily-summary-cutover.md. Oct 3 cohort stayed pinned for six days by a persistently failing recipient; fix 071ff86cdc abandons any cohort older than 7200 seconds. Check notifications-job execution errors and the enabled every-15-minute Scheduler trigger.'
+          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "daily_summary_job_summary"'
+          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud logging metrics update "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" --log-filter="$log_filter"
+          else
+            gcloud logging metrics create "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" --log-filter="$log_filter"
+          fi
+          policy="$(gcloud monitoring policies list --project="${{ vars.GCP_PROJECT_ID }}" \
+            --filter="displayName=\"${display_name}\"" --format='value(name)' --limit=1)"
+          export RECAP_METRIC="$metric" RECAP_DISPLAY_NAME="$display_name" RECAP_DOCUMENTATION="$documentation" RECAP_POLICY="$policy"
+          policy_file="$RUNNER_TEMP/daily_summary_job_heartbeat_missing.json"
+          python3 - "$policy_file" <<'PY_POLICY'
+          import json, os, sys
+          metric_filter = 'metric.type="logging.googleapis.com/user/' + os.environ['RECAP_METRIC'] + '" AND resource.type="cloud_run_job"'
+          condition = {'conditionAbsent': {
+              'filter': metric_filter, 'duration': '3600s',
+              'aggregations': [{'alignmentPeriod': '900s', 'perSeriesAligner': 'ALIGN_SUM',
+                                'crossSeriesReducer': 'REDUCE_SUM'}], 'trigger': {'count': 1}}}
+          condition['displayName'] = os.environ['RECAP_DISPLAY_NAME']
+          body = {'displayName': os.environ['RECAP_DISPLAY_NAME'], 'enabled': True, 'combiner': 'OR',
+                  'notificationChannels': os.environ['ALERT_CHANNELS'].split(','),
+                  'documentation': {'content': os.environ['RECAP_DOCUMENTATION'], 'mimeType': 'text/markdown'},
+                  'conditions': [condition]}
+          if os.environ['RECAP_POLICY']:
+              body['name'] = os.environ['RECAP_POLICY']
+          with open(sys.argv[1], 'w') as output:
+              json.dump(body, output)
+          PY_POLICY
+          if [[ -z "$policy" ]]; then
+            policy="$(gcloud monitoring policies create --project="${{ vars.GCP_PROJECT_ID }}" \
+              --policy-from-file="$policy_file" --format='value(name)')"
+          else
+            gcloud monitoring policies update "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --policy-from-file="$policy_file"
+          fi
+          test -n "$policy"
+          gcloud monitoring policies describe "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
             --format='value(notificationChannels)' | grep -q .
 
       - name: Reconcile notifications Scheduler trigger

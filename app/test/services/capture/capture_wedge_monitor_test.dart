@@ -81,6 +81,7 @@ void main() {
     expect(retriedDevices, isEmpty, reason: 'banner must not bypass native persistent budget');
     monitor.observeIngressHealth('dev-a', health('flowing'));
     expect(monitor.visiblePrompt, isNull);
+    expect(forEvent('Capture Ingress Health').singleWhere((e) => e['phase'] == 'actionRequired')['build'], '987');
     expect(forEvent('Capture Ingress Health').map((e) => e['phase']), [
       'unverified',
       'repairing',
@@ -146,7 +147,10 @@ void main() {
       expect(detected.single['source'], 'omi');
       expect(detected.single['consecutive_zero_byte_sessions'], 3);
       expect(detected.single['app_build'], '987');
+      expect(detected.single['build'], '987');
       expect(detected.single['platform'], 'ios');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
     });
 
     test('three zero-byte sessions exactly 10 minutes apart declare', () async {
@@ -301,6 +305,9 @@ void main() {
       final detected = forEvent('Capture Wedge Detected');
       expect(detected.single['trigger'], 'rapid_reconnects');
       expect(detected.single['source'], 'omi');
+      expect(detected.single['build'], '987');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
       expect(retriedDevices, ['dev-a']);
     });
 
@@ -606,7 +613,9 @@ void main() {
       final detected = forEvent('Capture Wedge Detected');
       expect(detected, hasLength(1));
       expect(detected.single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
-      expect(detected.single['seconds_since_last_ingress_byte'], 300);
+      expect(detected.single['build'], '987');
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
+      expect(detected.single['seconds_since_last_transcript'], -1);
       expect(detected.single['ingress_bytes'], 0);
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
       monitor.dispose();
@@ -663,6 +672,40 @@ void main() {
       expect(forEvent('Capture Wedge Detected'), isEmpty);
       monitor.dispose();
     });
+
+    test('a late check reports the age of the last ingress byte', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor);
+      now = now.add(const Duration(minutes: 1));
+      monitor.onBleIngressBytes('dev-a', 80);
+      now = now.add(const Duration(minutes: 6));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      expect(detected['build'], '987');
+      expect(detected['seconds_since_last_ingress_byte'], 360);
+      expect(detected['seconds_since_last_transcript'], -1);
+      monitor.dispose();
+    });
+
+    test('transcript age is measured from the transcript observation', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final handle = connectedSession(monitor);
+      monitor.onTranscriptObserved('dev-a');
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(detected['seconds_since_last_transcript'], 120);
+      expect(detected['seconds_since_last_ingress_byte'], -1);
+      expect(detected['build'], '987');
+      monitor.dispose();
+    });
   });
 
   group('upload silence', () {
@@ -679,6 +722,9 @@ void main() {
       final detected = forEvent('Capture Wedge Detected').single;
       expect(detected['pending_wal_count'], 4);
       expect(detected['oldest_pending_age_seconds'], 7200);
+      expect(detected['build'], '987');
+      expect(detected['seconds_since_last_ingress_byte'], -1);
+      expect(detected['seconds_since_last_transcript'], -1);
     });
 
     test('recent backlog stays quiet and a successful upload resolves an active episode', () async {
@@ -812,6 +858,7 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
       expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+      expect(forEvent('Capture Recovery Resolved').single['build'], '987');
     });
 
     test('resolved fires once on the first positive session within 30 minutes', () async {
@@ -852,12 +899,14 @@ void main() {
       monitor.markPromptShown();
       monitor.markPromptShown();
       expect(forEvent('Capture Recovery Prompt Shown'), hasLength(1));
+      expect(forEvent('Capture Recovery Prompt Shown').single['build'], '987');
     });
 
     test('actioned telemetry records the surface', () {
       final monitor = makeMonitor();
       monitor.onRecoveryActioned(surface: 'banner');
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
+      expect(forEvent('Capture Recovery Actioned').single['build'], '987');
     });
   });
 

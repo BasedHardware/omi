@@ -257,13 +257,13 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
 
 def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
-    assert set(rules) == set(verifier.LIVE_STT_IMPORT_UIDS)
+    assert set(rules) == set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS)
     assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
-    assert set(rules) | set(verifier.LIVE_STT_PENDING_UIDS) == {
+    assert (set(rules) - set(verifier.REDIS_CACHE_IMPORT_UIDS)) | set(verifier.LIVE_STT_PENDING_UIDS) == {
         rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
     }
     gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
-    assert set(verifier.LIVE_STT_IMPORT_UIDS) <= set(gated)
+    assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) <= set(gated)
 
 
 def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_route(
@@ -294,7 +294,7 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
     monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_request_json", fake_request)
     monkeypatch.setitem(verifier._run_live_stt_import.__globals__, "_write_rule", fake_write)
     assert verifier._run_live_stt_import("https://monitor.omi.me", "secret") == []
-    assert {uid for uid, _exists in calls} == set(verifier.LIVE_STT_IMPORT_UIDS)
+    assert {uid for uid, _exists in calls} == set(rules)
     assert (existing_uid, True) in calls
     assert all(exists for uid, exists in calls if uid == existing_uid)
     assert not any(uid in verifier.LIVE_STT_PENDING_UIDS for uid, _exists in calls)
@@ -328,7 +328,7 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
     assert failures == []
-    assert report[0] == "FLEET committed=26 live=26 gated=26 matching=26 gated_matching=26"
+    assert report[0] == "FLEET committed=28 live=28 gated=28 matching=28 gated_matching=28"
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
 
@@ -564,3 +564,28 @@ def test_main_fleet_gated_fails_when_a_gated_uid_is_missing(
     output = capsys.readouterr().out
     assert f"FAIL: live alert rule {verifier.RULE_UIDS[0]} is absent from Grafana" in output
     assert "COMMITTED_BUT_ABSENT" in output
+
+
+def test_redis_import_rules_match_emitted_cache_write_labels(verifier: SimpleNamespace) -> None:
+    from utils.observability.fallback import bucket_component
+
+    rules = verifier.load_live_stt_import_rules()
+    for uid in verifier.REDIS_CACHE_IMPORT_UIDS:
+        expressions = [item.get("model", {}).get("expr", "") for item in rules[uid]["data"]]
+        expression = next(expr for expr in expressions if "omi_fallback_total" in expr)
+        assert f'component="{bucket_component("redis_cache")}"' in expression
+        assert 'from_mode="cache_write"' in expression
+        assert 'outcome="degraded"' in expression
+        assert 'auth_error|connection_error|timeout' in expression
+
+
+@pytest.mark.parametrize("uid", ["omi-redis-cache-conn-warn", "omi-redis-cache-conn-page"])
+def test_missing_redis_rule_fails_live_import_scope(verifier: SimpleNamespace, monkeypatch, uid) -> None:
+    rules = verifier.load_live_stt_import_rules()
+    monkeypatch.setitem(
+        verifier._run_fleet_coverage.__globals__,
+        "_request_json",
+        lambda *_args, **_kwargs: [rule for key, rule in rules.items() if key != uid],
+    )
+    failures, _ = verifier._run_fleet_coverage("https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt")
+    assert any(uid in failure for failure in failures)

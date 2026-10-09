@@ -47,6 +47,18 @@ class AnalyticsManager {
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+
+  /// Events whose PostHog rows were missing the release build. The value is
+  /// the same `app_build` super-property Device Connected already flushes.
+  static const Set<String> _captureWedgeFamilyEvents = {
+    'Capture Wedge Detected',
+    'Local WAL Stuck',
+    'Recording Start Failed',
+    'Capture Recovery Prompt Shown',
+    'Capture Recovery Actioned',
+    'Capture Recovery Resolved',
+    'Capture Ingress Health',
+  };
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -640,7 +652,14 @@ class AnalyticsManager {
         final event = _queuedEvents.removeAt(0);
         try {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
-          final properties = {...event.properties, ..._globalEventProperties};
+          final properties = <String, Object>{...event.properties, ..._globalEventProperties};
+          // Device lifecycle events already carry this value as `app_build`.
+          // Capture-wedge events were emitted without it, so fleet queries on
+          // `build` could not attribute a wedge to a release.
+          final build = _globalEventProperties['app_build'];
+          if (build != null && _captureWedgeFamilyEvents.contains(event.eventName)) {
+            properties['build'] = build;
+          }
           if (adapter is AnalyticsDeliveryAdapter) {
             await (adapter as AnalyticsDeliveryAdapter).deliver(
               eventName: event.eventName,

@@ -3863,3 +3863,19 @@ mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
 those pages; observers that lose the same cursor generation cannot multiply a
 single refusal into a fleet-wide alarm burst. Standalone verification pages
 immediately. Recovery never regenerates admitted audio from old chunk snapshots.
+
+### Live capture inactivity observation
+
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.

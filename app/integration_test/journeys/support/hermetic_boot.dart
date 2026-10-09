@@ -62,6 +62,12 @@ final class JourneyHermeticBoot {
 
     await resetAppState(uid: uid, email: email, extraPrefs: extraPrefs);
     Env.overrideApiBaseUrl(server.baseUrl);
+    // The fixture is a loopback override. Register it as a debug journey
+    // authority so the harness bearer survives the custom-backend strip and
+    // the wrong-owner fault can swap it. User-configured overrides never arm
+    // this registry. Cleared with the override in [stop].
+    Env.armDebugJourneyCredentialTrust();
+    Env.addDebugTrustedAuthority(Uri.parse(server.baseUrl).host);
     PlatformManager.initializeForLocalHarness();
     AuthService.installLocalHarnessTokenGateway(_SyntheticGateway(uid, email));
     return server;
