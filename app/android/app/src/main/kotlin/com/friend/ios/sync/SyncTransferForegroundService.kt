@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -17,8 +18,6 @@ import androidx.annotation.MainThread
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.friend.ios.fgs.ForegroundStartContract
-import java.time.LocalDate
-import java.time.ZoneOffset
 
 /**
  * Thin lifecycle shell that keeps Dart WAL file transfers alive when the
@@ -37,7 +36,11 @@ class SyncTransferForegroundService : Service() {
         private const val EXTRA_TEXT = "notification_text"
         private const val ACTION_STOP = "com.friend.ios.sync.STOP"
         @Volatile private var cancellationRequested = false
-        internal var timeoutPolicy = DataSyncTimeoutPolicy()
+        internal const val TIMEOUT_PREFS = "sync_transfer_timeout"
+
+        private fun timeoutPolicy(context: Context) = DataSyncTimeoutPolicy(
+            context.getSharedPreferences(TIMEOUT_PREFS, Context.MODE_PRIVATE)
+        )
 
         /**
          * Promote the service to the foreground and hold a partial wake lock.
@@ -46,8 +49,8 @@ class SyncTransferForegroundService : Service() {
          */
         @MainThread
         fun start(context: Context, text: String? = null): Boolean {
-            if (!timeoutPolicy.canStart()) {
-                Log.w(TAG, "dataSync timed out today; refusing sync keep-alive restart")
+            if (!timeoutPolicy(context).canStart()) {
+                Log.w(TAG, "dataSync timeout refusal window active; refusing sync keep-alive restart")
                 return false
             }
             return try {
@@ -85,6 +88,7 @@ class SyncTransferForegroundService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private val timeoutPolicy by lazy { timeoutPolicy(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -117,6 +121,13 @@ class SyncTransferForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Do not re-promote a refused queued restart. onCreate still satisfies
+        // the foreground deadline for an already-accepted cold start.
+        if (!timeoutPolicy.canStart()) {
+            Log.w(TAG, "dataSync timeout refusal window active; stopping queued sync keep-alive start")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // Each accepted start has a foreground obligation, including a start
         // delivered to an existing instance or immediately followed by stop.
         promoteColdStart()
@@ -124,11 +135,6 @@ class SyncTransferForegroundService : Service() {
             // A newer queued start owns the service; an older cancellation
             // must not tear down its notification or wake lock.
             stopSelfResult(startId)
-            return START_NOT_STICKY
-        }
-        if (!timeoutPolicy.canStart()) {
-            Log.w(TAG, "dataSync timed out today; stopping queued sync keep-alive start")
-            stopSelf()
             return START_NOT_STICKY
         }
         // Replace the immediate shortService notification with dataSync for
@@ -179,8 +185,9 @@ class SyncTransferForegroundService : Service() {
     }
 
     // Android 14+ limits shortService to about 3 minutes and Android 15+ limits dataSync to about
-    // 6 hours a day. When a limit is reached the system calls onTimeout and, if the service is still
-    // running a few seconds later, crashes the process with ForegroundServiceDidNotStopInTimeException.
+    // 6 hours in a rolling 24-hour period. When a limit is reached the system calls onTimeout;
+    // if the service is still running a few seconds later, it crashes the process with
+    // ForegroundServiceDidNotStopInTimeException.
     // Stop here; the Dart transfer continues without the keep-alive, as it does when a start is refused.
     override fun onTimeout(startId: Int) {
         stopForTimeout()
@@ -255,19 +262,23 @@ class SyncTransferForegroundService : Service() {
     }
 }
 
-/** Process-wide refusal window. UTC rollover permits another attempt; it does not
- * claim that Android's rolling 24-hour budget has replenished.
- */
-internal class DataSyncTimeoutPolicy {
-    private var dataSyncTimedOutAt: LocalDate? = null
-
-    fun onTimeout(today: LocalDate = LocalDate.now(ZoneOffset.UTC)) {
-        dataSyncTimedOutAt = today
+/** Persisted refusal window survives service and process recreation. */
+internal class DataSyncTimeoutPolicy(private val preferences: SharedPreferences) {
+    companion object {
+        internal const val TIMED_OUT_AT_KEY = "data_sync_fgs_timed_out_at_ms"
+        private const val REFUSAL_WINDOW_MS = 24L * 60 * 60 * 1000
     }
 
-    fun canStart(today: LocalDate = LocalDate.now(ZoneOffset.UTC)): Boolean {
-        if (dataSyncTimedOutAt == today) return false
-        dataSyncTimedOutAt = null
-        return true
+    fun onTimeout(nowMs: Long = System.currentTimeMillis()) {
+        // Finish the durable write before timeout teardown can end the process.
+        if (!preferences.edit().putLong(TIMED_OUT_AT_KEY, nowMs).commit()) {
+            Log.e("SyncTransfer.FgService", "Failed to persist dataSync timeout timestamp")
+        }
+    }
+
+    fun canStart(nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (!preferences.contains(TIMED_OUT_AT_KEY)) return true
+        val timedOutAtEpochMs = preferences.getLong(TIMED_OUT_AT_KEY, 0L)
+        return nowMs >= timedOutAtEpochMs && nowMs - timedOutAtEpochMs >= REFUSAL_WINDOW_MS
     }
 }

@@ -9,7 +9,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.Before
 import org.junit.After
-import java.time.LocalDate
+import android.content.Context
+import java.time.Instant
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -24,30 +25,56 @@ class SyncTransferForegroundServiceTest {
     @Before
     @After
     fun resetTimeoutPolicy() {
-        SyncTransferForegroundService.timeoutPolicy = DataSyncTimeoutPolicy()
+        preferences().edit().clear().commit()
     }
+
+    private fun preferences() = RuntimeEnvironment.getApplication().getSharedPreferences(
+        SyncTransferForegroundService.TIMEOUT_PREFS, Context.MODE_PRIVATE
+    )
 
     @Test
     fun `absent timeout marker permits normal starts`() {
-        assertTrue(DataSyncTimeoutPolicy().canStart(LocalDate.of(2026, 10, 9)))
+        assertTrue(DataSyncTimeoutPolicy(preferences()).canStart(1_000L))
     }
 
     @Test
-    fun `timeout refuses repeated starts on the same UTC day`() {
-        val policy = DataSyncTimeoutPolicy()
-        val today = LocalDate.of(2026, 10, 9)
-        policy.onTimeout(today)
-        assertFalse(policy.canStart(today))
-        assertFalse(policy.canStart(today))
+    fun `timeout refuses repeated starts across UTC midnight`() {
+        val policy = DataSyncTimeoutPolicy(preferences())
+        val timeout = Instant.parse("2026-10-09T23:50:00Z").toEpochMilli()
+        policy.onTimeout(timeout)
+        assertFalse(policy.canStart(timeout))
+        assertFalse(policy.canStart(Instant.parse("2026-10-10T00:01:00Z").toEpochMilli()))
     }
 
     @Test
-    fun `UTC day rollover clears timeout marker`() {
-        val policy = DataSyncTimeoutPolicy()
-        val today = LocalDate.of(2026, 12, 31)
-        policy.onTimeout(today)
-        assertTrue(policy.canStart(today.plusDays(1)))
-        assertTrue(policy.canStart(today.plusDays(1)))
+    fun `timeout permits restart at exactly 24 hours without an extra buffer`() {
+        val policy = DataSyncTimeoutPolicy(preferences())
+        val timeout = 1_000L
+        val dayMs = 24L * 60 * 60 * 1000
+        policy.onTimeout(timeout)
+        assertFalse(policy.canStart(timeout + dayMs - 1))
+        assertTrue(policy.canStart(timeout + dayMs))
+        assertTrue(policy.canStart(timeout + dayMs + 1))
+    }
+
+    @Test
+    fun `persisted timeout survives policy re-instantiation`() {
+        val timeout = 1_000L
+        DataSyncTimeoutPolicy(preferences()).onTimeout(timeout)
+        val reopenedPreferences = RuntimeEnvironment.getApplication().getSharedPreferences(
+            SyncTransferForegroundService.TIMEOUT_PREFS, Context.MODE_PRIVATE
+        )
+        assertEquals(timeout, reopenedPreferences.getLong(DataSyncTimeoutPolicy.TIMED_OUT_AT_KEY, -1))
+        assertFalse(DataSyncTimeoutPolicy(reopenedPreferences).canStart(timeout + 1))
+    }
+
+    @Test
+    fun `non-dataSync typed timeout does not stamp persisted marker`() {
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        controller.get().onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
+        assertFalse(preferences().contains(DataSyncTimeoutPolicy.TIMED_OUT_AT_KEY))
+        assertTrue(DataSyncTimeoutPolicy(preferences()).canStart())
+        controller.destroy()
     }
 
     @Test
@@ -59,11 +86,15 @@ class SyncTransferForegroundServiceTest {
         val service = controller.get()
         service.onStartCommand(start, 0, 1)
         val wakeLock = ShadowPowerManager.getLatestWakeLock()
+        val notification = shadowOf(service).lastForegroundNotification
         service.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        assertTrue(preferences().contains(DataSyncTimeoutPolicy.TIMED_OUT_AT_KEY))
         assertFalse(SyncTransferForegroundService.start(context))
         assertNull(shadowOf(context).getNextStartedService())
         assertEquals(android.app.Service.START_NOT_STICKY, service.onStartCommand(start, 0, 2))
         assertTrue(shadowOf(service).isStoppedBySelf)
+        assertSame(notification, shadowOf(service).lastForegroundNotification)
+        assertTrue(shadowOf(service).isForegroundStopped)
         assertSame(wakeLock, ShadowPowerManager.getLatestWakeLock())
         assertFalse(wakeLock.isHeld)
         controller.destroy()
@@ -145,7 +176,8 @@ class SyncTransferForegroundServiceTest {
         val service = controller.get()
 
         service.onTimeout(1)
-        assertTrue(SyncTransferForegroundService.timeoutPolicy.canStart())
+        assertTrue(DataSyncTimeoutPolicy(preferences()).canStart())
+        assertFalse(preferences().contains(DataSyncTimeoutPolicy.TIMED_OUT_AT_KEY))
 
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(shadowOf(service).isForegroundStopped)
