@@ -3866,3 +3866,7 @@ receiving receipt, original acoustic donor and immediate rollover donor (at most
 three projected documents). Live arbitration/publication runs synchronously after
 the snapshot and generation check, so a receiving correction during earlier
 awaits cannot be replaced by a stale automatic owner suggestion.
+
+Snapshot unavailability is kept separate from the receiving receipt. A failed
+final transaction vetoes automatic owner claims and shortened proofs while still
+applying known receiving rejections, including retraction of manual owner maps.

@@ -19,6 +19,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from database import _client as firestore_client_module
 from database import conversations as db
 from database import live_owner_continuity as continuity_cache
 from database import voice_profiles as voice_profiles_db
@@ -71,6 +72,7 @@ def _segment(seg_id, start, end, *, speaker_id=4, is_user=False, person_id=None,
 @pytest.fixture
 def world(monkeypatch):
     store = StrictFirestore()
+    monkeypatch.setattr(firestore_client_module, 'get_firestore_client', lambda: store)
     path = ('users', UID, 'conversations', CONV)
     segments = [
         _segment('s0', 0, 5, is_user=False, person_id='p1', match='live_embedding'),
@@ -949,5 +951,97 @@ def test_immediate_rollover_donor_correction_during_snapshot_blocks_carry(world,
         assert not visible_owner(
             new, 0
         ), 'the immediate donor is part of the same snapshot even for a five-second owner'
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('origin', ['manual', 'automatic'])
+def test_failed_authority_snapshot_preserves_known_receiving_rejection(world, monkeypatch, origin):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        receiving = 'conversation'
+        world.store.rows[('users', UID, 'conversations', receiving)]['transcript_segments'] = [
+            _segment('current', 0, 5, speaker_id=0, scope='new-socket')
+        ]
+        if origin == 'manual':
+            db.assign_conversation_speaker(UID, receiving, speaker_id=0, is_user=True, use_for_speech_training=False)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, emitted = await connect(monkeypatch, [OWNER, noisy, noisy], uid=UID)
+        reads = []
+
+        async def read(fn, *args, **kwargs):
+            reads.append(fn.__name__)
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        await speak(new, 0, 5)
+        assert visible_owner(new, 0) and new._mapping_origin[0] == origin
+        await speak(new, 1, 2, start=6)
+        assert visible_owner(new, 0)
+        assert sum(seconds for _, seconds in new.speaker_evidence[1]) == 2
+        response = world.client.post(f'/v1/conversations/{receiving}/speakers/0/reject', json={'kind': 'not_me'})
+        assert response.status_code == 200
+        known = db.get_manual_speaker_receipt(UID, receiving)
+        assert known['generation'] == (2 if origin == 'manual' else 1)
+        assert 0 in manual_rejected_speakers(known)
+        reference_type = type(world.store.collection('users').document(UID))
+        original_read = reference_type.get
+        failures = []
+
+        def fail_transaction(ref, *args, **kwargs):
+            if kwargs.get('transaction') is not None:
+                failures.append(ref)
+                raise ConnectionError('injected authority transaction failure')
+            return original_read(ref, *args, **kwargs)
+
+        monkeypatch.setattr(reference_type, 'get', fail_transaction)
+        reads.clear()
+        emitted.clear()
+        if origin == 'manual':
+            # An ordinary peer match must retract the corrected manual map too.
+            await speak(new, 2, 5, start=9)
+        else:
+            # Five-second owners have no shortened proof whose revocation could hide this bug.
+            await new.match(0, {'id': 'current'})
+        assert reads == ['get_manual_speaker_receipt', 'authority_snapshot']
+        assert failures
+        assert not visible_owner(new, 0), 'unavailable authority must not erase a known receiving rejection'
+        assert 0 not in new._mapping_origin and new._suggested_person.get(0) != 'user'
+        assert new.host.state.speaker_map_dirty
+        assert any(args[0] == 0 and args[1] == '' for args in emitted)
+        assert not any(args[1] == 'user' for args in emitted)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('seconds', [2, 5])
+def test_failed_authority_snapshot_vetoes_new_owner_claim(world, monkeypatch, seconds):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, _ = await connect(monkeypatch, [noisy, OWNER], uid=UID)
+
+        async def read(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        await speak(new, 1, 2)
+        assert new.continuity.donor is not None
+        # Retained short evidence requires the final snapshot even for a fresh five-second query.
+        reference_type = type(world.store.collection('users').document(UID))
+        original_read = reference_type.get
+        failures = []
+
+        def fail_transaction(ref, *args, **kwargs):
+            if kwargs.get('transaction') is not None:
+                failures.append(ref)
+                raise ConnectionError('injected authority transaction failure')
+            return original_read(ref, *args, **kwargs)
+
+        monkeypatch.setattr(reference_type, 'get', fail_transaction)
+        await speak(new, 0, seconds, start=3)
+        assert failures and not visible_owner(new, 0)
+        assert new.continuity.donor is None and not new.continuity.accepted
+        assert new._voice_distances.keys() <= new._voice_decisions.keys()
 
     asyncio.run(run())

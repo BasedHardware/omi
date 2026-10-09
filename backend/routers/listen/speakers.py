@@ -7,7 +7,7 @@ import io
 import logging
 import time
 from collections import deque
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
@@ -99,6 +99,20 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'embedding_budget',
     }
 )
+
+
+@dataclass(frozen=True)
+class FinalSpeakerAuthority:
+    roster: tuple[bool, set[tuple[str, int]]]
+    receipt: Mapping[str, Any]
+    rollover_donor_receipt: Optional[dict] = None
+    unavailable: bool = False
+
+    @property
+    def owner_reserved(self) -> bool:
+        # An unavailable snapshot vetoes automatic claims without erasing
+        # explicit corrections in the independently read receiving receipt.
+        return self.unavailable or manual_owner_reserved(self.receipt)
 
 
 def _read_file(path: str) -> bytes:
@@ -253,6 +267,7 @@ class SpeakerMatcher:
                 await self._load_profiles()
                 await self.continuity.start()
             current_receipt = {}
+            current_receipt_unavailable = False
             read_failed = False
             if candidates:
                 try:
@@ -274,16 +289,20 @@ class SpeakerMatcher:
                     )
                 except Exception:
                     read_failed = True
-                    current_receipt = {'segments': {'reserved': {'is_user': True}}}
+                    current_receipt_unavailable = True
             receipt = donor.get('manual_speaker_assignments') or {}
-            authority, current_receipt, final_donor_receipt = await self._final_authority(
+            final_authority = await self._final_authority(
                 current_receipt,
+                receipt_unavailable=current_receipt_unavailable,
                 rollover_donor=donor.get('id') if candidates else None,
                 include_short=any(
                     sum(seconds for _, seconds in evidence) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
                     for _, evidence, _ in retained.values()
                 ),
             )
+            authority, current_receipt = final_authority.roster, final_authority.receipt
+            final_donor_receipt = final_authority.rollover_donor_receipt
+            read_failed = read_failed or final_authority.unavailable
             if candidates:
                 if final_donor_receipt is None:
                     read_failed = True
@@ -350,7 +369,7 @@ class SpeakerMatcher:
                 decisions = arbitrate_owner_matches(
                     {v: d for v, d in self._voice_distances.items() if v not in rejected},
                     {v: d for v, d in self._voice_decisions.items() if v not in rejected},
-                    owner_reserved=manual_owner_reserved(current_receipt),
+                    owner_reserved=final_authority.owner_reserved,
                     voice_groups=self._provider_epoch_voice_groups(),
                 )
                 # Runner-up evidence constrains the owner but never automatically
@@ -529,7 +548,8 @@ class SpeakerMatcher:
                 return
         if generation != self._generation or conversation_id != self._profile_conversation_id:
             return
-        authority, receipt, _ = await self._final_authority(receipt)
+        final_authority = await self._final_authority(receipt)
+        authority, receipt = final_authority.roster, final_authority.receipt
         if generation != self._generation or conversation_id != self._profile_conversation_id:
             return
         rejected = manual_rejected_speakers(receipt)
@@ -542,7 +562,7 @@ class SpeakerMatcher:
         decisions = arbitrate_owner_matches(
             {v: self._voice_distances[v] for v in automatic},
             automatic,
-            owner_reserved=manual_owner_reserved(receipt),
+            owner_reserved=final_authority.owner_reserved,
             voice_groups=self._provider_epoch_voice_groups(),
         )
         self._publish_decisions(decisions, rejected)
@@ -732,7 +752,8 @@ class SpeakerMatcher:
             return
         if generation != self._generation or self._profile_conversation_id != conversation_id:
             return
-        authority, receipt, _ = await self._final_authority(receipt)
+        final_authority = await self._final_authority(receipt)
+        authority, receipt = final_authority.roster, final_authority.receipt
         revoked = (
             self._mapping_origin.get(speaker_id) == 'automatic'
             and self.speaker_to_person.get(speaker_id, (None,))[0] == USER_SELF_PERSON_ID
@@ -774,8 +795,9 @@ class SpeakerMatcher:
         receipt: Mapping[str, Any],
         *,
         include_short: bool = False,
+        receipt_unavailable: bool = False,
         rollover_donor: Optional[str] = None,
-    ) -> tuple[tuple[bool, set[tuple[str, int]]], Mapping[str, Any], Optional[dict]]:
+    ) -> FinalSpeakerAuthority:
         if (
             rollover_donor
             or include_short
@@ -789,12 +811,18 @@ class SpeakerMatcher:
             )
             if snapshots is not None:
                 current = snapshots.get(self._profile_conversation_id or '')
-                # A missing/ineligible receiving document or a failed snapshot
-                # cannot authorize an automatic owner decision.
-                receipt = current if current is not None else {'segments': {'reserved': {'is_user': True}}}
-                return authority, receipt, snapshots.get(rollover_donor) if rollover_donor else None
-            return authority, receipt, None
-        return (False, set()), receipt, None
+                unavailable = current is None
+                # Failed/missing authority supplies no positive short proof.
+                # Keep known receiving corrections rather than substituting an
+                # empty reservation receipt that would protect stale manual maps.
+                return FinalSpeakerAuthority(
+                    (False, set()) if unavailable else authority,
+                    receipt if current is None else current,
+                    snapshots.get(rollover_donor) if rollover_donor else None,
+                    unavailable=unavailable,
+                )
+            return FinalSpeakerAuthority(authority, receipt, unavailable=receipt_unavailable)
+        return FinalSpeakerAuthority((False, set()), receipt, unavailable=receipt_unavailable)
 
     def _rebuild_voice_decisions(self, authority: tuple[bool, set[tuple[str, int]]]) -> set[int]:
         """Recompute the current roster after the final authority await, without yielding."""
@@ -1025,6 +1053,7 @@ class SpeakerMatcher:
             owner_reserved = False
             rejected: Dict[int, dict] = {}
             receipt: Mapping[str, Any] = {}
+            receipt_unavailable = False
             if conversation_id:
                 try:
                     receipt = await self.host.persistence.call(
@@ -1034,19 +1063,25 @@ class SpeakerMatcher:
                     rejected = manual_rejected_speakers(receipt)
                 except Exception as error:
                     logger.warning('Speaker ID receipt load failed type=%s', type(error).__name__)
-                    receipt = {'segments': {'reserved': {'is_user': True}}}
-            authority, receipt, _ = await self._final_authority(receipt, include_short=short_reconnect)
-            owner_reserved = manual_owner_reserved(receipt)
+                    receipt_unavailable = True
+            final_authority = await self._final_authority(
+                receipt, include_short=short_reconnect, receipt_unavailable=receipt_unavailable
+            )
+            authority, receipt = final_authority.roster, final_authority.receipt
+            owner_reserved = final_authority.owner_reserved
             rejected = manual_rejected_speakers(receipt)
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
-            if speaker_id in rejected:
-                for voice in rejected:
-                    self._retract_rejected_voice(
-                        voice, segment['id'] if voice == speaker_id else self._voice_segments.get(voice)
-                    )
+            # Apply known corrections before either a manual-query return or
+            # the conservative automatic-arbitration fallback can preserve a map.
+            for voice in rejected:
+                self._retract_rejected_voice(
+                    voice, segment['id'] if voice == speaker_id else self._voice_segments.get(voice)
+                )
+            if rejected:
                 self.host.state.speaker_map_dirty = True
+            if speaker_id in rejected:
                 self._record_match_score(
                     speaker_id,
                     query_decision,
