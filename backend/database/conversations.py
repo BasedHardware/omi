@@ -170,6 +170,10 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
+    if isinstance(segments := data.get('transcript_segments'), list):
+        from utils.conversations.speaker_grouping_storage import reveal_segments
+
+        reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
@@ -277,6 +281,9 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
             segment.pop(match_scores.FIELD, None)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
+        from utils.conversations.speaker_grouping_storage import protect_segments
+
+        protect_segments(data['transcript_segments'], uid)
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
@@ -334,6 +341,16 @@ def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
 
 
 def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
+    from utils.conversations.speaker_grouping_storage import reveal_segments
+
+    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    reveal_segments(segments, uid)
+    return segments
+
+
+def _decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
@@ -516,6 +533,10 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
                 logger.error(e)
                 pass
 
+    if isinstance(segments := data.get('transcript_segments'), list):
+        from utils.conversations.speaker_grouping_storage import reveal_segments
+
+        reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
     return data

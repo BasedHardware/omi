@@ -32,11 +32,16 @@ def test_invalid_receipt_rejected_only_at_write_boundary(value):
 
 @pytest.mark.parametrize('source,target', [('standard', 'enhanced'), ('enhanced', 'standard')])
 @pytest.mark.parametrize('receipt_present', [False, True])
+@pytest.mark.parametrize('grouping_present', [False, True])
 def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
-    world, monkeypatch, source, target, receipt_present
+    world, monkeypatch, source, target, receipt_present, grouping_present
 ):
     store, path, _ = world
     store.rows[path]['data_protection_level'] = source
+    if grouping_present:
+        store.rows[path]['transcript_segments'][1]['provider_speaker'] = {'scope': 'epoch:a', 'id': 43}
+        store.rows[path]['transcript_segments'][1]['speaker_grouping_shadow'] = {'provider_strict': 'user'}
+        store.rows[path] = db._prepare_conversation_for_write(store.rows[path], 'u', source)
     if receipt_present:
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     store.rows[path] = db._prepare_conversation_for_write(
@@ -69,6 +74,10 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
     assert saved['manual_speaker_assignments'] == expected['manual_speaker_assignments']
     raw = store.rows[path]
     assert raw['data_protection_level'] == target
+    if grouping_present:
+        encoded_rows = db._reveal_json_value(raw['transcript_segments'], 'u', True)
+        assert 'speaker_grouping_internal' in encoded_rows[1]
+        assert 'provider_speaker' not in encoded_rows[1] and 'speaker_grouping_shadow' not in encoded_rows[1]
     assert isinstance(raw['transcript_segments'], str if target == 'enhanced' else bytes)
     if receipt_present:
         assert isinstance(raw['manual_speaker_assignments'], str if target == 'enhanced' else bytes)
@@ -137,3 +146,33 @@ def test_shadow_agreement_only_after_committed_correction(world, monkeypatch, le
     with pytest.raises(ValueError):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['missing'])
     assert not events
+
+
+@pytest.mark.parametrize('kind', ['not_me', 'not_person', 'not_a_person'])
+@pytest.mark.parametrize('selection', ['speaker', 'segment_spillover', 'segment_only'])
+def test_negative_corrections_never_enter_exact_identity_denominator(world, monkeypatch, kind, selection):
+    from utils.conversations import speaker_grouping_shadow as shadow
+
+    store, path, _ = world
+    # Same voice: selected rejection may spill over to the other saved segment.
+    rows = store.rows[path]['transcript_segments']
+    for s in rows[:2]:
+        s['speaker_id'] = 0
+        s['speaker_grouping_shadow'] = {'provider_strict': 'user', 'owner_link': 'unknown'}
+    store.rows[path] = db._prepare_conversation_for_write(store.rows[path], 'u', 'standard')
+    events = []
+    monkeypatch.setattr(shadow, 'count', lambda variant, outcome, amount=1: events.append((variant, outcome)))
+    kwargs = {'speaker_id': 0} if selection == 'speaker' else {'segment_ids': ['s0']}
+    if selection == 'segment_only':
+        kwargs['time_range'] = (0, 1)
+    rejection = {'kind': kind, 'person_id': 'new'}
+    _, selected, _, _ = db.assign_conversation_speaker('u', 'c', rejection=rejection, **kwargs)
+    assert len(selected) == (1 if selection == 'segment_only' else 2)
+    assert len(events) == len(selected) * 2
+    assert all(outcome == 'correction_negative_skipped' for _, outcome in events)
+    # A newer positive identity wins over the prior rejection for scoring too.
+    events.clear()
+    db.assign_conversation_speaker('u', 'c', is_user=True, speaker_id=0)
+    assert ('provider_strict', 'correction_agreed') in events
+    assert ('owner_link', 'correction_disagreed') in events
+    assert all(outcome != 'correction_negative_skipped' for _, outcome in events)

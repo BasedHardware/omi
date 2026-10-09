@@ -3862,7 +3862,8 @@ and backend-integration. Defaults on other environments remain off. These are
 source declarations, not proof that the image/config has been deployed. Rollback:
 set shadow `off` on all six hosts. `SPEAKER_GROUPING_MODE` remains `incumbent` in
 all declarations and code. Only David's post-shadow decision may switch it to
-`provider_strict`, `provider_cannot_link`, or `owner_link`. Invalid mode keeps the
+`provider_strict` or `provider_cannot_link`. `owner_link` is shadow-only and is
+rejected by authoritative configuration regardless of shadow enrollment. Invalid mode keeps the
 incumbent; missing provenance, limits, and errors fall back to the incumbent even
 when an alternative is configured as authoritative.
 
@@ -3892,10 +3893,22 @@ processing. No alternative can overwrite a manual decision.
 
 **Rewrite safety and provenance limits.** Before `assign_resolved_speaker`
 rewrites the public speaker ID/scope, it preserves the minimal original ID,
-scope and provider as `provider_speaker` inside the existing protected transcript
-blob. It uses the same compression/encryption and protection level as transcript
-storage, with no separate audio/vector store. These fields are storage-only,
-excluded from OpenAPI and JSON responses. This small mapping is necessary:
+scope and provider as `provider_speaker`. Stored integers are conversation-local
+renumberings that preserve the provider partition, not raw provider integers;
+provider plus original epoch/scope fences reused numbering. Before persistence,
+the codec removes all plaintext grouping fields and seals an internal per-segment
+sidecar with the existing per-user AES-GCM key, for **both standard and enhanced**
+accounts. The sidecars travel inside the same transcript write, independently of
+transcript protection. Maximum 256 sidecars and 64 KiB total plaintext (96 KiB
+ciphertext); on capacity or encryption failure, drop the optional evidence.
+Provenance follows transcript deletion/retention for safe reprocessing; frozen
+identity predictions stop participating in scoring after 30 days, without
+extension by corrections or protection migrations, and are removed on the next
+decoded transcript rewrite. Existing encrypted blobs follow transcript retention;
+there is no new purge worker. Historical plaintext extras and failed authentication are
+never trusted. No separate audio/vector store or key/network lookup. Public
+JSON/OpenAPI, client segment projections, raw list/detail projections, and the
+common app/developer webhook redactor remove all grouping metadata and sidecars. This small mapping is necessary:
 conversation-wide rewriting irreversibly merges provider partitions and neither
 `conversation:{id}` nor acoustic groups can recover them on reprocessing. It is
 preserved even with shadow off, so future cohort enrollment can reuse it. Never
@@ -3926,7 +3939,7 @@ vocabularies and no UID, conversation, provider or source labels. Outcomes count
 owner_same, owner_gained, owner_lost, owner_changed_segments; incumbent_mixed_proxy/incumbent_owner_fragmented
 paired denominators; group-count deltas
 (same, up/down 1–4, up/down 5+); mixed_proxy; owner_fragmented; error/budget/limit/
-missing_provenance; correction_agreed/disagreed. Mixed proxy counts original
+missing_provenance; correction_agreed/disagreed; correction_negative_skipped. Mixed proxy counts original
 provider partitions in automatic owner groups whose own pooled >=5s evidence
 rejects owner under the admitted print policy; missing evidence is not rejection.
 Fragmentation counts groups below 5s whose pooled vector would otherwise accept
@@ -3936,10 +3949,15 @@ segment counts, group counts, incumbent and variant proxies, provider, source an
 surface. No transcript, names, vectors or audio paths are logged.
 
 `speaker_grouping_shadow` stores only each variant's frozen identity decision per
-segment inside the same protected transcript, including person IDs solely for
+segment in an always-encrypted sidecar, including person IDs solely for
 exact paid-person correction agreement; never API responses or metric labels.
 After a user commits a later assignment, the shared transaction boundary counts
-agreement/disagreement on the explicitly selected surviving segments. This is
+exact agreement/disagreement on the explicitly selected surviving segments.
+Projection and scoring share the same winning scoped/generation receipt.
+`not_me`, `not_person`, and `not_a_person` (including selected-rejection spillover)
+count only `correction_negative_skipped`, outside the exact-identity denominator: a
+partial negative edit does not establish an anonymous identity. Newer positive
+receipts resume exact agreement scoring. This is
 agreement with an edit, not independently labeled ground truth; repeated edits
 are events, and reprocessing replaces the frozen predictions. A rejected/failed
 assignment emits no agreement. Text-changed/absorbed segments lose their frozen
@@ -3953,7 +3971,9 @@ Stratify by Soniox/Deepgram/Parakeet, source and capture surface; missing provid
 strata remain unqualified. Include skip rates, evidence coverage, latency and
 paid/free slices. The parallel offline benchmark warns that G4 introduced new
 wrong-owner decisions and that stored-label purity has provenance/selection bias:
-G4 remains experimental and cannot be promoted merely for recall gains. Shadow
+The offline owner evaluation introduced about 10.6 new false-owner clips per
+repeat for G4. G4 remains shadow-only and cannot be selected for authoritative
+processing, even through configuration; recall gains cannot authorize promotion. Shadow
 counts cannot establish false-owner safety by themselves; David gates shipping
 only after label review and consistent provider/source results. Set authoritative
 mode back to `incumbent` for rollback; existing manual assignments still win.

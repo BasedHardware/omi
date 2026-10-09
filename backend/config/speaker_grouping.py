@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from config.jev_decisions import percentage, uid_bucket
 
 VARIANTS = ('provider_strict', 'provider_cannot_link', 'owner_link')
+AUTHORITATIVE_MODES = ('incumbent', 'provider_strict', 'provider_cannot_link')
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class GroupingConfig:
 
 def configuration(uid: str) -> GroupingConfig:
     mode = os.getenv('SPEAKER_GROUPING_MODE', 'incumbent').strip().lower()
-    if mode not in VARIANTS:
+    if mode not in AUTHORITATIVE_MODES:
         mode = 'incumbent'
     shadow_mode = os.getenv('SPEAKER_GROUPING_SHADOW', 'off').strip().lower()
     allowlist = {s.strip() for s in os.getenv('SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST', '').split(',') if s.strip()}

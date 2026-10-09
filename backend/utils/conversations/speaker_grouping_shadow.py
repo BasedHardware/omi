@@ -1,6 +1,6 @@
 """Bounded cached-vector alternatives and content-free comparison receipts.
 
-No I/O or models: persistence rides inside the existing protected transcript blob.
+No I/O or models: persistence uses always-encrypted sidecars in the existing write.
 The caller owns profile admission, the incumbent and final transcript publication.
 """
 
@@ -21,7 +21,11 @@ from prometheus_client import Counter, REGISTRY
 
 from config.speaker_grouping import VARIANTS, configuration
 from utils.log_sanitizer import sanitize
-from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.manual_speaker_assignments import (
+    apply_manual_assignments,
+    manual_assignment_decision,
+    manual_rejected_speakers,
+)
 from utils.observability.fallback import record_fallback
 from utils.observability.owner_recognition import surface_label
 from utils.stt.conversation_speakers import (
@@ -56,6 +60,7 @@ OUTCOMES = frozenset(
         'groups_up_5_plus',
         'correction_agreed',
         'correction_disagreed',
+        'correction_negative_skipped',
         'error',
         'budget',
         'missing_provenance',
@@ -199,6 +204,7 @@ def compare_and_select(
     """Failures cannot escape into finalization or replace the incumbent."""
     for segment in conversation.transcript_segments:
         segment.speaker_grouping_shadow = None
+        segment.speaker_grouping_shadow_expires_at = None
     config = configuration(uid)
     if not config.shadow and config.mode == 'incumbent':
         return incumbent
@@ -340,6 +346,7 @@ def compare_and_select(
         )
         for segment in conversation.transcript_segments:
             segment.speaker_grouping_shadow = None
+            segment.speaker_grouping_shadow_expires_at = None
         try:
             for variant in variants:
                 count(variant, reason)
@@ -371,9 +378,13 @@ def record_correction(raw: Mapping[str, Any], resolved: list[str]) -> None:
     """
     try:
         selected = set(resolved)
+        receipt = raw.get('manual_speaker_assignments') or {}
+        rejected = manual_rejected_speakers(receipt)
         for segment in raw.get('transcript_segments') or []:
             if segment.get('id') not in selected:
                 continue
+            decision = manual_assignment_decision(segment, receipt, rejected)
+            negative = bool(decision and decision.get('rejection'))
             target = (
                 'user'
                 if segment.get('is_user')
@@ -381,7 +392,12 @@ def record_correction(raw: Mapping[str, Any], resolved: list[str]) -> None:
             )
             for variant, token in (segment.get('speaker_grouping_shadow') or {}).items():
                 if variant in VARIANTS:
-                    count(variant, 'correction_agreed' if token == target else 'correction_disagreed')
+                    outcome = (
+                        'correction_negative_skipped'
+                        if negative
+                        else 'correction_agreed' if token == target else 'correction_disagreed'
+                    )
+                    count(variant, outcome)
     except Exception as error:
         record_fallback(
             component='other',
