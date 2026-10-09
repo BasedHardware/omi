@@ -200,24 +200,42 @@ class MirrorTests(unittest.TestCase):
         self.assertEqual(phone["datasource"]["uid"], "omi-admin-api")
         self.assertEqual(pendant["targets"][0]["root_selector"], "pendant_health")
         self.assertEqual(phone["targets"][0]["root_selector"], "phone_health.series")
-        for panel, value_field in (
-            (pendant, "p50_drain_valid"),
-            (phone, "p50_drain_per_hour"),
-        ):
-            self.assertIn(
-                "/api/omi/stats/device-health?days=14",
-                panel["targets"][0]["url"],
-            )
-            selectors = [column["selector"] for column in panel["targets"][0]["columns"]]
-            self.assertIn(value_field, selectors)
+        self.assertIn(
+            "/api/omi/stats/device-health?days=7",
+            pendant["targets"][0]["url"],
+        )
+        self.assertIn(
+            "/api/omi/stats/device-health?days=14",
+            phone["targets"][0]["url"],
+        )
+        self.assertNotIn("days=14", pendant["targets"][0]["url"])
         self.assertEqual(
             [column["selector"] for column in pendant["targets"][0]["columns"]],
-            ["firmware", "p50_drain_valid"],
+            ["firmware_label", "p50_drain_valid", "p90_drain_valid", "users"],
         )
         self.assertEqual(
             [column["selector"] for column in phone["targets"][0]["columns"]],
-            ["label", "p50_drain_per_hour"],
+            ["label", "p50_drain_per_hour", "p90_drain_per_hour", "users"],
         )
+        for panel in (pendant, phone):
+            defaults = panel["fieldConfig"]["defaults"]
+            self.assertNotIn("max", defaults)
+            self.assertEqual(defaults["custom"]["barWidth"], 0.62)
+            self.assertEqual(panel["options"]["orientation"], "horizontal")
+            self.assertEqual(panel["options"]["tooltip"]["mode"], "multi")
+            hidden = [
+                override for override in panel["fieldConfig"]["overrides"]
+                if override["matcher"]["options"] == "users"
+            ]
+            self.assertEqual(
+                hidden[0]["properties"][1]["value"],
+                {"tooltip": False, "viz": True, "legend": True},
+            )
+            p90 = [
+                override for override in panel["fieldConfig"]["overrides"]
+                if override["matcher"]["options"] == "p90 drain %/h"
+            ]
+            self.assertTrue(p90)
         for uid in ("omi-tv", "omi-tv-macos"):
             titles = {build_dashboards.base_title(panel) for panel in load(uid)["panels"]}
             self.assertTrue(build_dashboards.MOBILE_BATTERY_TITLES.isdisjoint(titles), uid)
