@@ -38,7 +38,7 @@ def _unavailable(outcome: str) -> None:
     logger.warning('event=speaker_grouping_storage outcome=%s', outcome)
 
 
-def protect_segments(segments: list[dict[str, Any]], uid: str) -> None:
+def protect_segments(segments: list[Any], uid: str) -> None:
     """Remove plaintext first; any optional encryption failure drops the evidence."""
     pending: list[tuple[dict[str, Any], dict[str, Any] | None, Any]] = []
     now = time.time()
@@ -86,7 +86,7 @@ def protect_segments(segments: list[dict[str, Any]], uid: str) -> None:
         _unavailable('evidence_dropped')
 
 
-def reveal_segments(segments: list[dict[str, Any]], uid: str) -> None:
+def reveal_segments(segments: list[Any], uid: str) -> None:
     now = time.time()
     total = 0
     decoded_bytes = 0
