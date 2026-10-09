@@ -874,3 +874,22 @@ def test_verification_refusal_pages_only_after_winning_cursor_cas(reason, advanc
     if advances:
         assert f'reason={reason}' in criticals[0]
     assert state['finalization_calls'] == []
+
+
+@pytest.mark.parametrize('reason', ['verify_content_mismatch', 'verify_job_binding', 'dead_letter'])
+def test_dry_run_pages_verification_refusals_without_mutating_cursor(reason, caplog):
+    state, kwargs = _harness([], mode='heal', dry_run=True)
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation()
+    if reason == 'verify_content_mismatch':
+        state['conversations']['c1']['audio_files'] = []
+    elif reason == 'verify_job_binding':
+        state['conversations']['c1']['finalization_job_id'] = 'other-job'
+    else:
+        state['jobs']['job-1']['status'] = 'dead_letter'
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['refused'] == 1 and state['advances'] == []
+    criticals = [r.getMessage() for r in caplog.records if r.levelname == 'CRITICAL']
+    assert len(criticals) == 1 and f'reason={reason}' in criticals[0]

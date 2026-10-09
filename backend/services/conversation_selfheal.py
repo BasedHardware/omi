@@ -395,7 +395,11 @@ def run_selfheal_tick(
                 counters=counters,
                 now=now,
             )
-            if not dry_run:
+            if dry_run:
+                # A read-only preview must still page a real safety violation.
+                for entry, reason in verification_refusals:
+                    _page_verification_refusal(entry, reason)
+            else:
                 try:
                     advanced = cursor_advancer(
                         int(cursor.get('generation') or 0),
