@@ -282,7 +282,7 @@ def test_cas_refusal_is_terminal_and_never_a_repair(env, monkeypatch, change, re
 def baseline_module(monkeypatch):
     # Pin to the task's origin/main base. Compare the exact pre-telemetry
     # implementation, not a mock mirroring the new code.
-    base = '7834485cd99884d6fabaea6a95075245f08207b3'
+    base = 'a1cfd2683b38cff64522a890acb5ea8467ef0567'
     source = subprocess.run(
         ['git', 'show', f'{base}:backend/utils/conversations/speaker_resolution.py'],
         cwd=Path(__file__).resolve().parents[3],
