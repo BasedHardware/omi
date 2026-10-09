@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/dream_report.dart';
+import 'package:omi/backend/schema/gen/dream_wire.g.dart' as dream_wire;
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
@@ -410,6 +411,7 @@ Map<String, dynamic> _dreamRun(String id, String at, {String trigger = 'schedule
               {
                 'kind': 'merge_memories',
                 'target_label': 'Prefers morning meetings',
+                'before': '',
                 'after': 'Prefers meetings before 11am',
                 'reason': 'Two memories say the same thing',
                 'evidence_count': 2,
@@ -418,6 +420,8 @@ Map<String, dynamic> _dreamRun(String id, String at, {String trigger = 'schedule
               {
                 'kind': 'close_task',
                 'target_label': 'Send the SOW to Paraform',
+                'before': '',
+                'after': '',
                 'reason': 'You said it was sent in Thursday\'s call',
                 'evidence_count': 1,
                 'outcome': 'shadow',
@@ -456,7 +460,8 @@ Map<String, dynamic> _dreamRun(String id, String at, {String trigger = 'schedule
       'privacy_rejected': status == 'failed' ? 0 : 1,
     };
 
-DreamReport _dreamReport({bool empty = false}) => DreamReport.fromJson({
+DreamReport _dreamReport({bool empty = false}) =>
+    DreamReport.fromGenerated(dream_wire.GeneratedDreamRunsResponse.fromJson({
       'mode': 'shadow',
       'passes_today': 2,
       'passes_limit': 4,
@@ -470,7 +475,7 @@ DreamReport _dreamReport({bool empty = false}) => DreamReport.fromJson({
               _dreamRun('r2', '2026-10-09T11:00:47Z'),
               _dreamRun('r1', '2026-10-09T06:00:05Z', status: 'failed'),
             ],
-    });
+    }));
 
 final reviewScenarios = <AuditScenario>[
   AuditScenario(
@@ -704,7 +709,9 @@ final reviewScenarios = <AuditScenario>[
       await a.pump(
         DreamReportPage(
           loadReport: () async => ApiSuccess(_dreamReport()),
-          runNow: () async => ApiSuccess(DreamRun.fromJson(_dreamRun('r4', '2026-10-09T12:30:00Z'))!),
+          runNow: () async => ApiSuccess(
+            DreamRun.fromGenerated(dream_wire.GeneratedDreamRun.fromJson(_dreamRun('r4', '2026-10-09T12:30:00Z'))),
+          ),
         ),
         scaffold: false,
       );
