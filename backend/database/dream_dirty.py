@@ -9,9 +9,11 @@ from contextvars import ContextVar
 from config.dream_agent import mode
 from database.dream_store import mark_dirty
 from utils.observability.fallback import record_fallback
+from utils.observability.dream import DIRTY
 
 logger = logging.getLogger(__name__)
 dream_writing = ContextVar('dream_writing', default=False)
+canary_writing = ContextVar('dream_canary_writing', default=False)
 
 
 def after_write(collection: str):
@@ -51,8 +53,10 @@ def notify(uid: str, refs: list[tuple[str, str]]) -> None:
     if mode() == 'off' or dream_writing.get() or not refs:
         return
     try:
-        mark_dirty(uid, refs)
+        if mark_dirty(uid, refs, canary=True) if canary_writing.get() else mark_dirty(uid, refs):
+            DIRTY.labels('ok').inc()
     except Exception as exc:
+        DIRTY.labels('failed').inc()
         record_fallback(
             component='agent_tools',
             from_mode='dream_dirty_signal',

@@ -1,0 +1,6 @@
+{
+  "name": "dream_canary_consecutive_failures",
+  "description": "Dream canary has failed at least twice consecutively; resets only on a complete verified synthetic pass.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync\" AND (textPayload =~ \"Dream canary status=fail .*consecutive_failures=([2-9]|[1-9][0-9]+)( |$)\" OR jsonPayload.message =~ \"Dream canary status=fail .*consecutive_failures=([2-9]|[1-9][0-9]+)( |$)\")",
+  "metricDescriptor": {"metricKind": "DELTA", "valueType": "INT64", "unit": "1"}
+}

@@ -11,6 +11,7 @@ from models.dream_agent import Triage, Plan
 from utils import dream_reads, dream_tools, dream_transport
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
+from utils.observability.dream import record_pass
 
 from utils.dream_prompt import mount, evidence_message
 
@@ -24,7 +25,9 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             result = (
                 await turn(uid, lane, mount, messages)
                 if turn is not None
-                else await dream_transport.model_turn(uid, lane, mount, messages, usage_sink=usage_sink)
+                else await dream_transport.model_turn(
+                    uid, lane, mount, messages, usage_sink=usage_sink, completion_limit=caps.completion_tokens
+                )
             )
         except (dream_transport.PreTokenFailure, dream_transport.httpx.HTTPStatusError):
             if usage_sink is not None:
@@ -75,11 +78,13 @@ class IdlePass(Exception):
     """No visible evidence was selected; release the provisional admission."""
 
 
-async def run_pass(uid, *, caps=None, turn=None):
+async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None):
     caps = caps or Caps.from_env()
-    lease = await run_blocking(db_executor, dream_store.acquire, uid, caps)
+    lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
     if lease is None:
-        return {'status': 'not_admitted'}
+        report = {'status': 'not_admitted'}
+        record_pass(report)
+        return report
     report: dict[str, Any] = {
         'status': 'failed',
         'tokens': 0,
@@ -88,18 +93,24 @@ async def run_pass(uid, *, caps=None, turn=None):
         'usage_complete': False,
         'usage_unknown': False,
         'run_id': lease['run_id'],
+        'trigger': trigger,
+        'records_read': 0,
+        'cost_usd': 0.0,
     }
     consumed = []
     refund = False
     success = False
     release = True
     try:
-        async with asyncio.timeout(180):
+        async with asyncio.timeout(timeout_seconds):
             vocabulary = await run_blocking(db_executor, dream_store.vocabulary, uid)
             records, consumed = await run_blocking(db_executor, dream_reads.read_changes, uid, lease, caps, vocabulary)
             report['dirty_read'] = len(consumed)
+            report['records_read'] = len(records)
             if not records:
                 raise IdlePass()
+            if progress is not None:
+                progress['stage'] = 'model'
             # Gate against all private input, including names not yet in the vocabulary doc.
             names = list(vocabulary)
             for row in records.values():
@@ -204,6 +215,9 @@ async def run_pass(uid, *, caps=None, turn=None):
         if refund:
             report['cost_usd_reserved'] = 0
         # No raw exception strings: provider bodies or user text may be embedded.
+    report['cost_usd'] = report['tokens'] * caps.max_usd_per_token
+    if progress is not None:
+        progress['stage'] = 'report'
     await run_blocking(
         db_executor,
         dream_store.finish,
@@ -215,6 +229,7 @@ async def run_pass(uid, *, caps=None, turn=None):
         release=release,
         refund=refund,
     )
+    record_pass(report)
     return report
 
 

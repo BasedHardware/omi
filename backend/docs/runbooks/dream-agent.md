@@ -197,3 +197,105 @@ also checked against a local Firestore emulator by
 `tests/integration/test_dream_queue_emulator.py`, selected explicitly through
 `backend/test.sh` with `BACKEND_PYTEST_MARK_EXPR=integration`. Use only a loopback
 emulator and the synthetic `demo-dream-coalesce` project.
+
+## Owner reports and manual runs
+
+`DREAM_SELF_REPORT_MODE=on` enables Firebase-authenticated `GET /v1/dream/runs`
+and `POST /v1/dream/runs` only for the existing allowlisted or gated TestFlight
+cohort. Off, invalid, dream-off and callers outside the cohort return
+`404 {"detail":"dream_report_disabled"}`. GET defaults to 10 newest runs, at most
+20. Server-side projection decrypts only the caller's reports using the same
+Review codec as the writer. It resolves short labels through owner-visible
+record readers; missing, locked or invisible targets become `Deleted item`.
+Evidence refs, document IDs, frame requests, reproductions, usage ambiguity and
+reserved spend never enter this wire projection.
+
+POST accepts `{}` and uses the same persistent lease, mode, token/edit limits
+and global spend reservation as scheduled passes. `DREAM_AGENT_MANUAL_RUNS_PER_DAY`
+defaults to 3 and uses a separate UTC counter; it never consumes scheduled passes.
+A held lease returns 409 `dream_run_in_progress`; exhausted manual allowance
+returns 429 `dream_manual_limit`. Empty queues return an empty `idle` run without
+admission. Invisible/deleted-only evidence refunds the provisional manual count.
+Unavailable global spend or invalid admission budgets return 503
+`dream_budget_unavailable`. The request has an 85-second application deadline
+and a 90-second middleware deadline, including admission/report reads; its worker
+has a 70-second planning bound. A deadline returns a `deadline` run and retains
+ambiguous leases/reservations for the existing operator recovery procedure.
+When report settlement itself times out, its empty run ID indicates that no
+settled report could be retrieved; query GET after storage settles.
+
+New run docs carry plaintext numeric `records_read`, `records_queued_after`,
+`tokens`, and `cost_usd`, plus `trigger=schedule|manual`. Content remains encrypted.
+`cost_usd` is the conservative token-price estimate, not an invoiced provider
+charge; the reservation ceiling still drives admission. Older reports default
+to scheduled trigger and use their encrypted counters where available.
+
+The bounded API schema is `backend/docs/api/dream-openapi.json`; generated mobile
+DTOs are `app/lib/backend/schema/gen/dream_wire.g.dart`. It is a separate export
+surface to avoid growing the existing 79,000-line app-client schema and large
+client artifacts. Regenerate/check using:
+
+```bash
+cd backend
+scripts/openapi_runner.sh scripts/export_openapi.py --surface dream --write
+.venv/bin/python scripts/generate_dart_models.py --group dream
+scripts/openapi_runner.sh scripts/export_openapi.py --surface dream --check
+.venv/bin/python scripts/generate_dart_models.py --all --check
+```
+
+## Synthetic end-to-end canary
+
+`POST /v2/dream-agent/canary` uses the sweep's service OIDC verifier. Configure
+`DREAM_AGENT_CANARY_UID=dream-canary-<dedicated-synthetic-name>` on backend-sync;
+never add it to `DREAM_AGENT_UID_ALLOWLIST`. The reserved namespace and a
+`dream_canary=true` owner marker are required. The route creates an absent
+synthetic owner atomically; it refuses to overwrite any existing unmarked owner.
+Ordinary user eligibility rejects this identity even if mistakenly allowlisted
+or marked TestFlight. No ordinary user is a canary fallback.
+
+Each check replaces one fixed, encrypted synthetic conversation using the
+product conversation serializer and `after_write` dirty hook. It verifies dirty
+enqueue, transactional admission, paid responses through both real dream lanes,
+and the persisted/decryptable shadow report. Empty triage fails the model stage;
+a triage-only response cannot certify the reasoning lane. Canary leases are
+always shadow, including when global mode is on. No product effects execute.
+The maximum pass cap is 16,000 tokens (or a smaller global per-pass cap), with
+at most 256 completion tokens per lane and a 65-second worker bound. Its 96/day
+synthetic admission allowance permits the half-hour schedule and bounded retries;
+all reservations count toward the same global daily USD ceiling. At defaults,
+48 checks reserve at most $7.68/day; observed token-price cost is much smaller.
+The schema's conservative byte ceiling explains the input cap. The 88-second
+route bound includes a three-second durable health-write attempt.
+
+Scheduler declares `dream-agent-canary-half-hourly` at `*/30 * * * *` UTC:
+prod ENABLED with sweep OIDC/retry bindings, dev PAUSED because it shares prod
+Firestore. Configure the synthetic UID and deploy the source before separately
+reconciling this entry. Enabling owner reports also requires the flag on the
+user-serving backend hosts; manual runs need their authenticated gateway bindings
+and the existing dream mode/cohort configuration there. Nothing in this change
+applies env, Scheduler, alerts, TTL, secrets, or deployments.
+
+One counts-only log line reports `Dream canary status=pass|fail
+stage=enqueue|admit|model|report error_type=<class>` plus the durable consecutive
+failure count. A verified success resets `dream_canary_health/current.canary_failures`.
+Prometheus exports `omi_dream_dirty_enqueue_total{outcome=ok|failed}`,
+`omi_dream_pass_total{status,error_type}`, `omi_dream_tokens_total`, and
+`omi_dream_canary_total{status,stage}`. Exception labels use a closed allowlist,
+otherwise `other`; no metric labels contain a UID or arbitrary provider error.
+
+`backend/deploy/monitoring/dream-canary-failures.metric.json` and
+`dream-canary.alert.json` declare the log-based counter and alert for the second
+consecutive failure, across Cloud Run instances. Before an authorized apply,
+bind the approved notification channel IDs; no resources are created here.
+If Firestore itself cannot persist the streak, counts-only failures still log
+but cannot advance that counter. Configure a complementary missing-success
+alert at 65 minutes to cover that outage and a stopped scheduler.
+
+Local coverage includes owner API projection, manual allowance/lease/spend
+behavior, real serialized synthetic evidence and transport requests, counts-only
+stage/streak reporting, gateway lane membership, and local emulator contention.
+These are offline checks; a deployed canary remains separate acceptance evidence.
+
+User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
+sweep host (currently 4 in the production source declarations), along with the
+same global spend/token-price limits, so GET presents the scheduler's allowance.
