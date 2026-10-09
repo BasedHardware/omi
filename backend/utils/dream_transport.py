@@ -24,6 +24,30 @@ class PreTokenFailure(RuntimeError):
     """The gateway rejected a call before producing any billable model output."""
 
 
+def _truncate_arrays(value, schema, root):
+    """Keep ordered prefixes at the original Plan/Triage Pydantic array bounds.
+
+    These schemas contain objects, arrays, local refs and nullable anyOf arms.
+    Only arrays are capped; minima, types, extras and model validators still
+    belong to Pydantic. Traverse retained items only, including nested ReviewItem
+    payloads, so an oversized model response does not discard the entire pass.
+    """
+    if '$ref' in schema:
+        target = root
+        for part in schema['$ref'][2:].split('/'):
+            target = target[part.replace('~1', '/').replace('~0', '~')]
+        schema = {**target, **{key: item for key, item in schema.items() if key != '$ref'}}
+    for arm in schema.get('anyOf', []):
+        value = _truncate_arrays(value, arm, root)
+    if isinstance(value, list) and schema.get('type') == 'array':
+        bounded = value[: schema['maxItems']] if 'maxItems' in schema else value
+        return [_truncate_arrays(item, schema.get('items', {}), root) for item in bounded]
+    if isinstance(value, dict) and schema.get('type') == 'object':
+        properties = schema.get('properties', {})
+        return {key: _truncate_arrays(item, properties.get(key, {}), root) for key, item in value.items()}
+    return value
+
+
 async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
     if usage_sink is not None:
         usage_sink['usage_unknown'] = False
@@ -68,5 +92,7 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
         usage_sink['tokens'] += tokens
         usage_sink['usage_unknown'] = False
         usage_sink.setdefault('model_lanes', []).append(lane)
-    value = mount.schema.model_validate_json(body['choices'][0]['message']['content'])
+    content = json.loads(body['choices'][0]['message']['content'])
+    bounded = _truncate_arrays(content, schema, schema)
+    value = mount.schema.model_validate_json(json.dumps(bounded))
     return Turn(value=value, tokens=tokens)
