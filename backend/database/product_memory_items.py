@@ -43,11 +43,25 @@ class DefaultProductMemoryReadReport:
     lifecycle_audit_metadata: Dict[str, LifecycleAuditMetadata] = field(default_factory=_empty_lifecycle_audit_metadata)
 
 
-def _current_time(now: Optional[datetime]) -> datetime:
-    current_time = now or datetime.now(timezone.utc)
-    if current_time.tzinfo is None or current_time.utcoffset() is None:
-        raise ValueError('product memory read timestamp must be timezone-aware')
-    return current_time.astimezone(timezone.utc)
+def _current_time(now: Optional[datetime | str]) -> datetime:
+    if now is None:
+        return datetime.now(timezone.utc)
+    if isinstance(now, str):
+        cleaned = now.strip()
+        if not cleaned:
+            raise ValueError("timestamp string cannot be empty or whitespace")
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid ISO timestamp string: {now}") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    if isinstance(now, datetime):
+        if now.tzinfo is None or now.utcoffset() is None:
+            return now.replace(tzinfo=timezone.utc)
+        return now.astimezone(timezone.utc)
+    raise TypeError("now must be a datetime, ISO timestamp string, or None")
 
 
 def _decision_from_access(access: AccessDecision) -> ProductMemoryItemDecision:
@@ -57,7 +71,8 @@ def _decision_from_access(access: AccessDecision) -> ProductMemoryItemDecision:
 def _decision_from_lifecycle(
     access: AccessDecision, lifecycle: ShortTermLifecycleDecision
 ) -> ProductMemoryItemDecision:
-    lifecycle_reason = str(lifecycle.audit_metadata['decision_reason'])
+    audit_meta = lifecycle.audit_metadata if isinstance(lifecycle.audit_metadata, dict) else {}
+    lifecycle_reason = str(audit_meta.get("decision_reason", "unknown"))
     if not lifecycle.default_access_allowed:
         return ProductMemoryItemDecision(
             allowed=False,
@@ -81,7 +96,7 @@ def _decision_from_lifecycle(
 
 
 def filter_default_product_memory_items(
-    items: Iterable[MemoryItem], *, policy: MemoryAccessPolicy, now: Optional[datetime] = None
+    items: Iterable[MemoryItem], *, policy: MemoryAccessPolicy, now: Optional[datetime | str] = None
 ) -> DefaultProductMemoryReadReport:
     """Filter authoritative memory memory items for default product reads.
 
@@ -91,6 +106,10 @@ def filter_default_product_memory_items(
     freshness/L2/source-tombstone handling is delegated to the deterministic
     lifecycle evaluator so later workers can persist the exposed audit metadata.
     """
+    if items is None or not hasattr(items, "__iter__"):
+        raise TypeError("items must be an iterable of MemoryItem")
+    if policy is None or not isinstance(policy, MemoryAccessPolicy):
+        raise TypeError("policy must be a MemoryAccessPolicy instance")
 
     current_time = _current_time(now)
     visible_items: List[MemoryItem] = []
@@ -98,13 +117,18 @@ def filter_default_product_memory_items(
     lifecycle_audit_metadata: Dict[str, LifecycleAuditMetadata] = {}
 
     for item in items:
+        if not isinstance(item, MemoryItem):
+            raise TypeError(f"Expected MemoryItem instance, got {type(item).__name__}")
+        if not isinstance(item.memory_id, str) or not item.memory_id.strip():
+            raise ValueError("memory_id must be a non-empty, non-whitespace string")
+
         access = is_default_access_eligible(item, policy, now=current_time)
         if item.tier == MemoryTier.short_term:
             lifecycle = evaluate_short_term_lifecycle(item, now=current_time)
-            audit_metadata = dict(lifecycle.audit_metadata)
-            audit_metadata['requires_lifecycle_decision'] = lifecycle.requires_lifecycle_decision
-            audit_metadata['default_access_allowed'] = lifecycle.default_access_allowed
-            audit_metadata['outcome'] = lifecycle.outcome.value
+            audit_metadata = dict(lifecycle.audit_metadata) if isinstance(lifecycle.audit_metadata, dict) else {}
+            audit_metadata["requires_lifecycle_decision"] = lifecycle.requires_lifecycle_decision
+            audit_metadata["default_access_allowed"] = lifecycle.default_access_allowed
+            audit_metadata["outcome"] = lifecycle.outcome.value
             lifecycle_audit_metadata[item.memory_id] = audit_metadata
             decision = _decision_from_lifecycle(access, lifecycle)
         else:
@@ -119,3 +143,4 @@ def filter_default_product_memory_items(
         decisions=decisions,
         lifecycle_audit_metadata=lifecycle_audit_metadata,
     )
+
