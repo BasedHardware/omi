@@ -37,6 +37,7 @@ from utils.stt.speaker_match import (
     SpeakerMatchDecision,
     arbitrate_owner_matches,
     mean_embedding,
+    owner_near_miss,
     select_speaker_match,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
@@ -901,14 +902,17 @@ class SpeakerMatcher:
                 voice_groups=voice_groups,
             )
             decision = decisions.get(speaker_id)
+            decision_kind = 'rejected'
             if decision is not None:
                 decision_target, decision_kind = live_decision_labels(
                     decision, owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings
                 )
+                if owner_near_miss(decision):
+                    decision_kind = 'pending'
                 record_live_speaker_decision(decision_target, decision_kind)
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s decision=%s '
                 'session=%s conversation=%s',
                 speaker_id,
                 len(evidence),
@@ -918,6 +922,7 @@ class SpeakerMatcher:
                 decision.runner_up_distance if decision else 0.0,
                 decision.accepted if decision else False,
                 decision.owner_contended if decision else False,
+                decision_kind,
                 self._session_log_id(),
                 conversation_id,
             )
@@ -995,7 +1000,11 @@ class SpeakerMatcher:
                             voice,
                             self._session_log_id(),
                         )
-                status = SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
+                status = (
+                    SpeakerIdentityStatus.ambiguous
+                    if result.owner_contended
+                    else SpeakerIdentityStatus.unknown if owner_near_miss(result) else SpeakerIdentityStatus.no_match
+                )
                 if prior:
                     self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
             self._record_match_score(voice, result)
@@ -1024,6 +1033,9 @@ class SpeakerMatcher:
                     scope=self._voice_scopes.get(voice, ''),
                     outcome=outcome,
                 )
+                if outcome is None and owner_near_miss(decision):
+                    row['status'] = 'unknown'
+                    row['decision'] = 'pending'
                 if outcome == 'manual_rejected':
                     row['accepted_person_id'] = None
                     row['status'] = 'no_match'
