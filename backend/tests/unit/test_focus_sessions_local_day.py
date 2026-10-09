@@ -97,3 +97,20 @@ def test_stats_label_the_local_day_when_no_date_is_given(filters, monkeypatch):
 
     expected = datetime.now(ZoneInfo("Pacific/Kiritimati")).strftime("%Y-%m-%d")
     assert stats["date"] == expected
+
+
+def test_stats_query_the_local_day_when_no_date_is_given(filters, monkeypatch):
+    class _Noon(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 20, 12, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(focus_sessions, "datetime", _Noon)
+    zone = ZoneInfo("Pacific/Kiritimati")
+
+    stats = focus_sessions.get_focus_stats("uid", tz=zone)
+
+    start, end = _window(filters)
+    assert stats["date"] == "2026-09-21"
+    assert start == datetime(2026, 9, 21, tzinfo=zone)
+    assert (end - start).total_seconds() == 24 * 3600
