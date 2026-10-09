@@ -12674,5 +12674,150 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tasksGroupByDate => 'Tarihe göre grupla';
 
   @override
+  String get dreamReportTitle => 'Dream Raporu';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Önizleme modu: Dream neyi değiştireceğini gösterir, ancak hesabında henüz hiçbir şey değişmez.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream bu değişiklikleri kendisi uygular. Hepsini Son Değişiklikler\'den geri alabilirsin.';
+
+  @override
+  String get dreamReportRunNow => 'Şimdi Çalıştır';
+
+  @override
+  String get dreamReportRunLimit => 'Bugün manuel çalıştırma hakkı kalmadı';
+
+  @override
+  String get dreamReportRunInProgress => 'Bir tur zaten çalışıyor. Bir dakika sonra tekrar dene.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream çalıştırılamadı. Tekrar dene.';
+
+  @override
+  String get dreamReportIdle => 'Henüz bakılacak yeni bir şey yok.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream raporu yüklenemedi.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Henüz tur yok';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream, hesabında nelerin değiştiğine yaklaşık saatte bir bakar.';
+
+  @override
+  String get dreamReportScheduled => 'Zamanlanmış';
+
+  @override
+  String get dreamReportManual => 'Manuel';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Başarısız ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Süre sınırında durdu';
+
+  @override
+  String get dreamReportNothingFound => 'Düzeltilecek bir şey yok';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records öğe okundu · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Düzeltirdi';
+
+  @override
+  String get dreamReportFixed => 'Düzeltildi';
+
+  @override
+  String get dreamReportWouldAsk => 'Sana sorardı';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Görev önerirdi';
+
+  @override
+  String get dreamReportLearnedWords => 'Öğrendiği kelimeler';
+
+  @override
+  String get dreamReportFeedback => 'Omi ekibine bildirildi';
+
+  @override
+  String get dreamReportDeletedItem => 'Silinen öğe';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Bugün $count/$limit tur';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count değişiklik bekliyor',
+      one: '1 değişiklik bekliyor',
+      zero: 'Bekleyen değişiklik yok',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bugün $count manuel çalıştırma hakkı kaldı',
+      one: 'Bugün 1 manuel çalıştırma hakkı kaldı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes düzeltme',
+      one: '1 düzeltme',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks öneri',
+      one: '1 öneri',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eski değişiklik atlandı',
+      one: '1 eski değişiklik atlandı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bildirim gizlilik nedeniyle tutuldu',
+      one: '1 bildirim gizlilik nedeniyle tutuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Bu bölüm için yanıt kaydedildi.';
 }

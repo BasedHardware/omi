@@ -12689,5 +12689,149 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tasksGroupByDate => 'Grupēt pēc datuma';
 
   @override
+  String get dreamReportTitle => 'Dream ziņojums';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Priekšskatījuma režīms: Dream parāda, ko tas mainītu, taču jūsu kontā pagaidām nekas nemainās.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream šīs izmaiņas piemēro pats. Jebkuru varat atsaukt sadaļā Nesenās izmaiņas.';
+
+  @override
+  String get dreamReportRunNow => 'Palaist tagad';
+
+  @override
+  String get dreamReportRunLimit => 'Šodien manuālo palaidienu vairs nav';
+
+  @override
+  String get dreamReportRunInProgress => 'Piegājiens jau norit. Mēģiniet vēlreiz pēc minūtes.';
+
+  @override
+  String get dreamReportRunFailed => 'Neizdevās palaist Dream. Mēģiniet vēlreiz.';
+
+  @override
+  String get dreamReportIdle => 'Pagaidām nav nekā jauna, ko pārskatīt.';
+
+  @override
+  String get dreamReportLoadFailed => 'Neizdevās ielādēt Dream ziņojumu.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Piegājienu vēl nav';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream aptuveni reizi stundā pārskata, kas jūsu kontā ir mainījies.';
+
+  @override
+  String get dreamReportScheduled => 'Pēc grafika';
+
+  @override
+  String get dreamReportManual => 'Manuāli';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Neizdevās ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Apturēts pie laika ierobežojuma';
+
+  @override
+  String get dreamReportNothingFound => 'Nav ko labot';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Izlasīti $records vienumi · $tokens marķieri';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Labotu';
+
+  @override
+  String get dreamReportFixed => 'Labots';
+
+  @override
+  String get dreamReportWouldAsk => 'Jautātu jums';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Ieteiktu uzdevumus';
+
+  @override
+  String get dreamReportLearnedWords => 'Apgūtie vārdi';
+
+  @override
+  String get dreamReportFeedback => 'Paziņots Omi komandai';
+
+  @override
+  String get dreamReportDeletedItem => 'Izdzēsts vienums';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Šodien $count no $limit piegājieniem';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count izmaiņas gaida',
+      one: '1 izmaiņa gaida',
+      zero: 'Nav gaidošu izmaiņu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Šodien atlikuši $count manuāli palaidieni',
+      one: 'Šodien atlicis 1 manuāls palaidiens',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes labojumi',
+      one: '1 labojums',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks ieteikumi',
+      one: '1 ieteikums',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vecākas izmaiņas izlaistas',
+      one: '1 vecāka izmaiņa izlaista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ziņojumi aizturēti privātuma dēļ',
+      one: '1 ziņojums aizturēts privātuma dēļ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Atbilde saglabāta šim fragmentam.';
 }

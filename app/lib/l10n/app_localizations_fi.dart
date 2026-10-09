@@ -12665,5 +12665,149 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tasksGroupByDate => 'Ryhmittele päivämäärän mukaan';
 
   @override
+  String get dreamReportTitle => 'Dream-raportti';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Esikatselutila: Dream näyttää, mitä se muuttaisi, mutta tilissäsi ei muutu vielä mitään.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream tekee nämä muutokset itse. Peru ne kohdassa Viimeisimmät muutokset.';
+
+  @override
+  String get dreamReportRunNow => 'Suorita nyt';
+
+  @override
+  String get dreamReportRunLimit => 'Ei manuaalisia ajoja jäljellä tänään';
+
+  @override
+  String get dreamReportRunInProgress => 'Ajo on jo käynnissä. Yritä uudelleen minuutin kuluttua.';
+
+  @override
+  String get dreamReportRunFailed => 'Dreamin ajaminen ei onnistunut. Yritä uudelleen.';
+
+  @override
+  String get dreamReportIdle => 'Ei vielä mitään uutta tarkistettavaa.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream-raportin lataaminen ei onnistunut.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Ei vielä ajoja';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream tarkistaa tilisi muutokset noin kerran tunnissa.';
+
+  @override
+  String get dreamReportScheduled => 'Ajastettu';
+
+  @override
+  String get dreamReportManual => 'Manuaalinen';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Epäonnistui ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Pysähtyi aikarajaan';
+
+  @override
+  String get dreamReportNothingFound => 'Ei korjattavaa';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Luettu $records kohdetta · $tokens tokenia';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Korjaisi';
+
+  @override
+  String get dreamReportFixed => 'Korjattu';
+
+  @override
+  String get dreamReportWouldAsk => 'Kysyisi sinulta';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Ehdottaisi tehtäviä';
+
+  @override
+  String get dreamReportLearnedWords => 'Opitut sanat';
+
+  @override
+  String get dreamReportFeedback => 'Ilmoitettu Omi-tiimille';
+
+  @override
+  String get dreamReportDeletedItem => 'Poistettu kohde';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit ajoa tänään';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count muutosta odottaa',
+      one: '1 muutos odottaa',
+      zero: 'Ei odottavia muutoksia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count manuaalista ajoa jäljellä tänään',
+      one: '1 manuaalinen ajo jäljellä tänään',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes korjausta',
+      one: '1 korjaus',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks ehdotusta',
+      one: '1 ehdotus',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vanhempaa muutosta ohitettu',
+      one: '1 vanhempi muutos ohitettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ilmoitusta pidätetty yksityisyyden vuoksi',
+      one: '1 ilmoitus pidätetty yksityisyyden vuoksi',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Vastaus tallennettu tälle katkelmalle.';
 }

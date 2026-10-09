@@ -12656,5 +12656,150 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tasksGroupByDate => 'Zoskupiť podľa dátumu';
 
   @override
+  String get dreamReportTitle => 'Správa Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Režim ukážky: Dream ukazuje, čo by zmenil, ale vo vašom účte sa zatiaľ nič nemení.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream tieto zmeny vykonáva sám. Ktorúkoľvek z nich môžete vrátiť v Nedávnych zmenách.';
+
+  @override
+  String get dreamReportRunNow => 'Spustiť teraz';
+
+  @override
+  String get dreamReportRunLimit => 'Dnes už nezostali žiadne ručné spustenia';
+
+  @override
+  String get dreamReportRunInProgress => 'Beh už prebieha. Skúste to znova o minútu.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream sa nepodarilo spustiť. Skúste to znova.';
+
+  @override
+  String get dreamReportIdle => 'Zatiaľ nie je čo nové skontrolovať.';
+
+  @override
+  String get dreamReportLoadFailed => 'Správu Dream sa nepodarilo načítať.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Zatiaľ žiadne behy';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream približne raz za hodinu skontroluje, čo sa vo vašom účte zmenilo.';
+
+  @override
+  String get dreamReportScheduled => 'Naplánované';
+
+  @override
+  String get dreamReportManual => 'Ručne';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Zlyhalo ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Zastavené na časovom limite';
+
+  @override
+  String get dreamReportNothingFound => 'Nie je čo opraviť';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Prečítaných položiek: $records · tokenov: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Opravil by';
+
+  @override
+  String get dreamReportFixed => 'Opravené';
+
+  @override
+  String get dreamReportWouldAsk => 'Opýtal by sa vás';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Navrhol by úlohy';
+
+  @override
+  String get dreamReportLearnedWords => 'Naučené slová';
+
+  @override
+  String get dreamReportFeedback => 'Nahlásené tímu Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Odstránená položka';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Dnes $count z $limit behov';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zmien čaká',
+      one: '1 zmena čaká',
+      zero: 'Žiadne čakajúce zmeny',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dnes zostáva $count ručných spustení',
+      one: 'Dnes zostáva 1 ručné spustenie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes opráv',
+      one: '1 oprava',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks návrhov',
+      one: '1 návrh',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starších zmien preskočených',
+      one: '1 staršia zmena preskočená',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hlásení zadržaných z dôvodu súkromia',
+      one: '1 hlásenie zadržané z dôvodu súkromia',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Odpoveď uložená pre tento úryvok.';
 }

@@ -12703,5 +12703,150 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tasksGroupByDate => 'Группировать по дате';
 
   @override
+  String get dreamReportTitle => 'Отчёт Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Режим предпросмотра: Dream показывает, что изменил бы, но в вашем аккаунте пока ничего не меняется.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream применяет эти изменения сам. Отменить любое из них можно в разделе «Недавние изменения».';
+
+  @override
+  String get dreamReportRunNow => 'Запустить сейчас';
+
+  @override
+  String get dreamReportRunLimit => 'Ручные запуски на сегодня закончились';
+
+  @override
+  String get dreamReportRunInProgress => 'Запуск уже выполняется. Повторите через минуту.';
+
+  @override
+  String get dreamReportRunFailed => 'Не удалось запустить Dream. Повторите попытку.';
+
+  @override
+  String get dreamReportIdle => 'Пока нет ничего нового.';
+
+  @override
+  String get dreamReportLoadFailed => 'Не удалось загрузить отчёт Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Запусков пока нет';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream проверяет изменения в вашем аккаунте примерно раз в час.';
+
+  @override
+  String get dreamReportScheduled => 'По расписанию';
+
+  @override
+  String get dreamReportManual => 'Вручную';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Ошибка ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Остановлено по лимиту времени';
+
+  @override
+  String get dreamReportNothingFound => 'Исправлять нечего';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прочитано элементов: $records · токенов: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Исправил бы';
+
+  @override
+  String get dreamReportFixed => 'Исправлено';
+
+  @override
+  String get dreamReportWouldAsk => 'Спросил бы вас';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Предложил бы задачи';
+
+  @override
+  String get dreamReportLearnedWords => 'Выученные слова';
+
+  @override
+  String get dreamReportFeedback => 'Отправлено команде Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Удалённый элемент';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count из $limit запусков сегодня';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count изменения ожидают',
+      one: '1 изменение ожидает',
+      zero: 'Нет ожидающих изменений',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Сегодня осталось $count ручных запуска',
+      one: 'Сегодня остался 1 ручной запуск',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes исправления',
+      one: '1 исправление',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks предложения',
+      one: '1 предложение',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count более старых изменения пропущено',
+      one: '1 более старое изменение пропущено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count отчёта задержано из соображений конфиденциальности',
+      one: '1 отчёт задержан из соображений конфиденциальности',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Ответ сохранён для этого отрывка.';
 }

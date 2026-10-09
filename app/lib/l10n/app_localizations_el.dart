@@ -12741,5 +12741,150 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksGroupByDate => 'Ομαδοποίηση ανά ημερομηνία';
 
   @override
+  String get dreamReportTitle => 'Αναφορά Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Λειτουργία προεπισκόπησης: το Dream δείχνει τι θα άλλαζε, αλλά τίποτα στον λογαριασμό σου δεν αλλάζει ακόμα.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Το Dream εφαρμόζει αυτές τις αλλαγές μόνο του. Αναίρεσε όποια θέλεις στις Πρόσφατες αλλαγές.';
+
+  @override
+  String get dreamReportRunNow => 'Εκτέλεση τώρα';
+
+  @override
+  String get dreamReportRunLimit => 'Δεν απομένουν χειροκίνητες εκτελέσεις σήμερα';
+
+  @override
+  String get dreamReportRunInProgress => 'Ένα πέρασμα εκτελείται ήδη. Δοκίμασε ξανά σε ένα λεπτό.';
+
+  @override
+  String get dreamReportRunFailed => 'Δεν ήταν δυνατή η εκτέλεση του Dream. Δοκίμασε ξανά.';
+
+  @override
+  String get dreamReportIdle => 'Δεν υπάρχει ακόμα κάτι νέο για έλεγχο.';
+
+  @override
+  String get dreamReportLoadFailed => 'Δεν ήταν δυνατή η φόρτωση της αναφοράς Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Δεν υπάρχουν περάσματα ακόμα';
+
+  @override
+  String get dreamReportEmptyBody => 'Το Dream ελέγχει τι άλλαξε στον λογαριασμό σου περίπου μία φορά την ώρα.';
+
+  @override
+  String get dreamReportScheduled => 'Προγραμματισμένη';
+
+  @override
+  String get dreamReportManual => 'Χειροκίνητη';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Απέτυχε ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Σταμάτησε στο χρονικό όριο';
+
+  @override
+  String get dreamReportNothingFound => 'Δεν υπάρχει κάτι για διόρθωση';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Διαβάστηκαν $records στοιχεία · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Θα διόρθωνε';
+
+  @override
+  String get dreamReportFixed => 'Διορθώθηκε';
+
+  @override
+  String get dreamReportWouldAsk => 'Θα σε ρωτούσε';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Θα πρότεινε εργασίες';
+
+  @override
+  String get dreamReportLearnedWords => 'Λέξεις που έμαθε';
+
+  @override
+  String get dreamReportFeedback => 'Αναφέρθηκε στην ομάδα του Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Διαγραμμένο στοιχείο';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count από $limit περάσματα σήμερα';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αλλαγές σε αναμονή',
+      one: '1 αλλαγή σε αναμονή',
+      zero: 'Καμία αλλαγή σε αναμονή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Απομένουν $count χειροκίνητες εκτελέσεις σήμερα',
+      one: 'Απομένει 1 χειροκίνητη εκτέλεση σήμερα',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes διορθώσεις',
+      one: '1 διόρθωση',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks προτάσεις',
+      one: '1 πρόταση',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count παλαιότερες αλλαγές παραλείφθηκαν',
+      one: '1 παλαιότερη αλλαγή παραλείφθηκε',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αναφορές κρατήθηκαν για λόγους απορρήτου',
+      one: '1 αναφορά κρατήθηκε για λόγους απορρήτου',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get speakerTagPromptExcerptSaved => 'Η απάντηση αποθηκεύτηκε για αυτό το απόσπασμα.';
 }
