@@ -898,9 +898,9 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  // level
-  //   1 - play 20ms
-  //   2 - play 50ms
+  // CV1 haptic mapping (omi/firmware/omi/src/haptic.c)
+  //   1 - play 100ms
+  //   2 - play 300ms
   //   3 - play 500ms
   @override
   Future<bool> performPlayToSpeakerHaptic(int level) async {
@@ -1243,13 +1243,14 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  Future<bool> readChargingStatus() async {
+  /// Null means the charging state is unknown; it must not create a charge edge.
+  Future<bool?> readChargingStatus() async {
     try {
       final value = await transport.readCharacteristic(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
-      return value.isNotEmpty && value[0] == 1;
+      return value.isEmpty ? null : value[0] == 1;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
-      return false;
+      return null;
     }
   }
 

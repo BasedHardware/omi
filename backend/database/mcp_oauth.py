@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
@@ -12,6 +13,7 @@ import re
 from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
 
 from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
@@ -19,6 +21,7 @@ import database.mcp_cache_integrity as mcp_cache_integrity
 import database.mcp_client_metadata as mcp_client_metadata
 import database.mcp_token_cache as mcp_token_cache
 from database._client import data_plane_db as db
+from database._client import is_expired_transaction_error
 from database.mcp_auth_read import mcp_auth_read
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_app_key_grants import (
@@ -49,6 +52,11 @@ SUPPORTED_SCOPES = MCP_SUPPORTED_SCOPES
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
+MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS", "120"))
+# Grace bounds the WINDOW of benign concurrent replays; this bounds the COUNT.
+# A replayed refresh token may mint at most this many replacement pairs before
+# the grant is treated as hostile and revoked (replay replay-detection).
+MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
 PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
@@ -59,6 +67,10 @@ CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 
 class AccountDeletionAccessBlocked(RuntimeError):
     """Raised when an OAuth write loses the deletion-admission race."""
+
+
+class RefreshRotationUnavailable(RuntimeError):
+    """Refresh rotation exhausted its transient Firestore retry budget."""
 
 
 logger = logging.getLogger(__name__)
@@ -1045,15 +1057,23 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
 
 
 def rotate_refresh_token(
-    refresh_token: str, client_id: str, resource: Optional[str], scope: Optional[str] = None
+    refresh_token: str,
+    client_id: str,
+    resource: Optional[str],
+    scope: Optional[str] = None,
+    *,
+    on_outcome: Optional[Callable[[str], None]] = None,
 ) -> Optional[Dict[str, Any]]:
+    """Rotate atomically; report a committed outcome without coupling to metrics."""
     ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
-    transaction = db.transaction()
     replay_grant_id: Optional[str] = None
+    grace_grant_id: Optional[str] = None
 
     @_typed_transactional
     def _rotate(transaction: Any) -> Optional[Dict[str, Any]]:
-        nonlocal replay_grant_id
+        nonlocal replay_grant_id, grace_grant_id
+        # A failed commit must not leak its outcome into the next attempt.
+        replay_grant_id = grace_grant_id = None
         doc = ref.get(transaction=transaction)
         if not doc.exists:
             return None
@@ -1077,16 +1097,23 @@ def rotate_refresh_token(
         ):
             return None
         grant.setdefault("id", data.get("grant_id"))
+        replay_grace = False
         if data.get("used_at") or data.get("replaced_by"):
-            replay_grant_id = data.get("grant_id")
-            # Record replay intent only. The grant and token revoke writes
-            # happen in ``revoke_grant`` AFTER its mandatory Redis marker, so
-            # a Redis outage propagates as an error and every retry of the
-            # used refresh token re-enters this branch — the token family can
-            # never end up Firestore-revoked while a cached access token
-            # survives without a marker.
-            transaction.set(ref, {"replay_detected_at": now}, merge=True)
-            return None
+            used_at = data.get("used_at")
+            replay_grace = (
+                isinstance(used_at, datetime) and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
+            )
+            if replay_grace and int(data.get("replay_reissue_count") or 0) >= MCP_OAUTH_REPLAY_REISSUE_LIMIT:
+                # The window bounds duration; this bound caps how many durable
+                # pairs one replayed token can mint before the grant is treated
+                # as hostile and revoked.
+                replay_grace = False
+            if not replay_grace:
+                replay_grant_id = data.get("grant_id")
+                # Record intent only. Revoke AFTER the mandatory Redis marker
+                # so an outage cannot leave a cached token on a revoked grant.
+                transaction.set(ref, {"replay_detected_at": now}, merge=True)
+                return None
         try:
             requested_scopes: List[str] = (
                 normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
@@ -1106,13 +1133,64 @@ def rotate_refresh_token(
         ) = _build_token_pair_writes(grant, requested_scopes, data.get("token_family_id"))
         transaction.set(access_ref, access_data)
         transaction.set(refresh_ref, refresh_data)
-        transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
+        if replay_grace:
+            # Keep the original used_at: repeated reissues never extend grace.
+            # Increment the per-source-token reissue count in the same
+            # transaction so concurrent replays cannot each stay under the cap.
+            transaction.set(
+                ref,
+                {"replayed_at": now, "replay_reissue_count": int(data.get("replay_reissue_count") or 0) + 1},
+                merge=True,
+            )
+            grace_grant_id = data.get("grant_id")
+        else:
+            transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
         transaction.set(grant_ref, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, new_refresh_token, requested_scopes)
 
-    token_pair: Optional[Dict[str, Any]] = _rotate(transaction)
+    # Typed-unbound fix: every loop exit either breaks with a result or re-raises,
+    # so None can never actually flow out of the retry loop.
+    token_pair: Optional[Dict[str, Any]] = None
+    for attempt in range(3):
+        try:
+            # Disable the SDK's same-transaction Aborted retries; this boundary
+            # owns the three-attempt budget and always starts a fresh object.
+            token_pair = _rotate(db.transaction(max_attempts=1))
+            break
+        except (InvalidArgument, Aborted, ServiceUnavailable, DeadlineExceeded, ValueError) as error:
+            # Firestore wraps exhausted Aborted commits in ValueError.
+            transient = error.__cause__ if isinstance(error, ValueError) else error
+            if not (
+                (transient is not None and is_expired_transaction_error(transient))
+                or isinstance(transient, (Aborted, ServiceUnavailable, DeadlineExceeded))
+            ):
+                raise
+            if attempt == 2:
+                raise RefreshRotationUnavailable("MCP OAuth refresh rotation unavailable") from error
+            logger.warning(
+                "MCP OAuth refresh rotation retry attempt=%d error=%s", attempt + 1, type(transient).__name__
+            )
+            time.sleep((0.1, 0.3)[attempt])
+    outcome = "rotated" if token_pair else "invalid"
     if replay_grant_id:
+        # Grant document ids embed uid and client ids can embed account data;
+        # log stable hashes for correlation without identifying material.
+        logger.warning(
+            "MCP OAuth refresh replay revoke client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(replay_grant_id)[:16],
+        )
         revoke_grant(replay_grant_id, replay_detected=True)
+        outcome = "replay_revoked"
+    elif grace_grant_id:
+        logger.warning(
+            "MCP OAuth refresh replay grace reissue client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(grace_grant_id)[:16],
+        )
+        outcome = "replay_grace_reissued"
+    if on_outcome is not None:
+        on_outcome(outcome)
     return token_pair
 
 

@@ -9941,11 +9941,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neįrašyta ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name balso profilis';
   }
@@ -12464,14 +12459,227 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalizuojama jūsų patirtis';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kol laukiate, ar Omi buvo malonu naudoti?';
+  String get onboardingRatingPromptTitle => 'Ar jums patinka Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda ❤️';
+  String get onboardingRatingPromptYes => 'Taip';
 
   @override
-  String get onboardingRatingPromptYes => 'Taip, noriu jus palaikyti!';
+  String get onboardingRatingPromptNo => 'Ne';
 
   @override
-  String get onboardingRatingPromptNo => 'Ne visai';
+  String get partialRecording => 'Dalinis įrašas';
+
+  @override
+  String get importTranscriptFiles => 'Transkripcijų failai';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pasirinkite SRT, VTT arba TXT transkripcijas arba jų ZIP archyvą';
+
+  @override
+  String get importTooManyAttempts => 'Šiuo metu per daug importavimų. Bandykite vėliau.';
+
+  @override
+  String get importFileTooLarge => 'Šis failas per didelis, kad būtų importuotas.';
+
+  @override
+  String get importUnsupportedFileType => 'Šio tipo failo importuoti negalima.';
+
+  @override
+  String get reviewTitle => 'Peržiūra';
+
+  @override
+  String get reviewEntryTitle => 'Klausimai jums';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Liko: $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kas tai pasakė?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Tas pats asmuo kaip „$name“?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Kaip tai rašoma?';
+
+  @override
+  String get reviewPlayClip => 'Leisti fragmentą';
+
+  @override
+  String get reviewStopClip => 'Sustabdyti fragmentą';
+
+  @override
+  String get reviewOpenDetailsHint => 'Atidaro išsamią informaciją';
+
+  @override
+  String get reviewAnswerMe => 'Aš';
+
+  @override
+  String get reviewAnswerOther => 'Kita';
+
+  @override
+  String get reviewAddTask => 'Pridėti užduotį';
+
+  @override
+  String get reviewAnswerFailed => 'Nepavyko išsaugoti atsakymo. Bandykite dar kartą.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Šis atsakymas pažymi pokalbius: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Nežinomas kalbėtojas';
+
+  @override
+  String get reviewNewPersonName => 'Jų vardas';
+
+  @override
+  String get reviewSomeoneElse => 'Kažkas kitas…';
+
+  @override
+  String get reviewConfirm => 'Patvirtinti';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Patvirtinti: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Nesu tikras';
+
+  @override
+  String get reviewOpenConversation => 'Pokalbis';
+
+  @override
+  String get reviewTaskField => 'Užduotis';
+
+  @override
+  String get reviewDue => 'Terminas';
+
+  @override
+  String get reviewNoDate => 'Nėra';
+
+  @override
+  String get reviewProject => 'Projektas';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Jau padaryta';
+
+  @override
+  String get reviewReasonNotMine => 'Ne mano';
+
+  @override
+  String get reviewReasonNotUseful => 'Nenaudinga';
+
+  @override
+  String get reviewYesMerge => 'Taip, sujungti';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Pokalbių: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Įvesti';
+
+  @override
+  String get reviewLoadFailed => 'Nepavyko įkelti jūsų klausimų.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nėra į ką atsakyti';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi čia klaus tik tada, kai jūsų reikės.';
+
+  @override
+  String get reviewRecentChanges => 'Naujausi pakeitimai';
+
+  @override
+  String get reviewChangesIntro =>
+      'Ką Omi pats pakeitė per pastarąsias 30 dienų. Atšaukite viską, kas atrodo neteisinga.';
+
+  @override
+  String get reviewChangeUndone => 'Atšaukta. Omi to pats nekartos.';
+
+  @override
+  String get reviewChangeFailed => 'Nepavyko atnaujinti šio pakeitimo. Bandykite dar kartą.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Nepavyko įkelti naujausių pakeitimų.';
+
+  @override
+  String get reviewNoChangesTitle => 'Pakeitimų dar nėra';
+
+  @override
+  String get reviewNoChangesBody => 'Kai Omi sutvarkys jūsų užrašus, pakeitimai atsiras čia.';
+
+  @override
+  String get reviewShowMore => 'Rodyti daugiau';
+
+  @override
+  String get entityKeptCurrent => 'Atnaujintą palaiko Omi';
+
+  @override
+  String get entityNotRight => 'Neteisinga?';
+
+  @override
+  String get entityCorrectionTitle => 'Kas neteisinga?';
+
+  @override
+  String get entityCorrectionHint => 'Pasakykite Omi, ką pataisyti';
+
+  @override
+  String get entityCorrectionSaved => 'Ačiū. Omi tai pataisys.';
+
+  @override
+  String get entityCorrectionFailed => 'Nepavyko išsiųsti pataisos. Bandykite dar kartą.';
+
+  @override
+  String get entityLoadFailed => 'Nepavyko įkelti šio puslapio.';
+
+  @override
+  String get entityProject => 'Projektas';
+
+  @override
+  String get entityProjects => 'Projektai';
+
+  @override
+  String get entityDecisions => 'Sprendimai';
+
+  @override
+  String get entityOpenTasks => 'Atviros užduotys';
+
+  @override
+  String get entityOpenThreads => 'Atviros temos';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Laukiama: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Terminas: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Ką Omi žino';
+
+  @override
+  String get entityRecentConversations => 'Naujausi pokalbiai';
+
+  @override
+  String get tasksNoProject => 'Be projekto';
+
+  @override
+  String get tasksGroupByProject => 'Grupuoti pagal projektą';
+
+  @override
+  String get tasksGroupByDate => 'Grupuoti pagal datą';
 }

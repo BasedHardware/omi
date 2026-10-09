@@ -244,7 +244,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('routers/conversations.py', '_bind_late_client_projection'),
         ('routers/conversations.py', '_drop_display_projection'),
         # Transcript-edit genuine clear of the stored projection.
-        ('database/conversations.py', '_invalidate_client_processing'),
+        ('database/conversations.py', 'clear_client_processing'),
         # Live-capture write: opt-out still clears a projection that is actually present
         # (finalize overlap). A read of the stored field, then the same genuine clear.
         ('database/conversations.py', '_write_segments'),
@@ -521,8 +521,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             '_canonical_conversation_write_payload',
             'model_dump',
         ),
-        DumpSite('utils/conversations/process_conversation.py', 'save_transcript_chunk_vectors', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', 'save_structured_vector', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
@@ -624,9 +622,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family. Pydantic-excluded (`Field(exclude=True)`), never
         # serialized to any client, and written only at explicit persistence
         # seams behind `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Classifying it
-        # projection-family would make `_invalidate_client_processing` and
+        # projection-family would make `invalidate_client_processing` and
         # `strip_client_processing` strip/delete the dark write itself.
         'capture_evidence',
+        # Server-computed capture badge, NOT client-authored projection-family.
+        # Retained by persistence/transcript-edit sinks and app views; explicitly
+        # stripped as private capture metadata by the integration redactor.
+        'capture_coverage',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',
@@ -706,7 +708,7 @@ PROJECTION_SINKS: tuple[ProjectionSink, ...] = (
         'strip',
     ),
     ProjectionSink(
-        'database.conversations._invalidate_client_processing',
+        'database.conversations.clear_client_processing',
         'delete_field',
         'invalidate',
     ),
@@ -822,7 +824,7 @@ def projection_sink_fns() -> dict[str, Any]:
 
     return {
         'strip': strip_client_processing,
-        'invalidate': getattr(conversations_db, '_invalidate_client_processing'),
+        'invalidate': getattr(conversations_db, 'clear_client_processing'),
         'drop': getattr(conversations_router, '_drop_display_projection'),
         'delete_field': google_firestore.DELETE_FIELD,
     }
@@ -2177,6 +2179,26 @@ def test_red_proof_walrus_alias_fails_rebind_scan() -> None:
     assert any(site.startswith('walrus:conversation_ref:') for site in rebinds)
     # The production source has no assignment expression to report.
     assert not [site for site in collect_intent_txn_write_surface(source)[1] if site.startswith('walrus:')]
+
+
+@pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])
+@pytest.mark.parametrize('locked', [False, True])
+def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod, projection_sink_fns, coverage, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.capture_coverage = coverage
+    assert 'capture_coverage' not in render_mod.PROJECTION_FAMILY_FIELDS
+    public = render_mod.conversation_to_dict(conv)
+    assert public['capture_coverage'] == coverage
+    assert render_mod.redact_conversation_for_list(dict(public))['capture_coverage'] == coverage
+    assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(dict(public))
+    for sink in ('strip', 'invalidate'):
+        payload = dict(public)
+        projection_sink_fns[sink](payload)
+        assert payload['capture_coverage'] == coverage
+    projection_sink_fns['drop'](conv)
+    assert conv.capture_coverage == coverage
+    public.pop('capture_coverage')
+    assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(public)
 
 
 @pytest.mark.parametrize('locked', [False, True])

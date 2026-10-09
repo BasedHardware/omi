@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
@@ -49,6 +50,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
     LiveSessionTranscriptOutcome,
@@ -363,6 +365,7 @@ class ListenSessionRuntime:
 
     def _capture_cost_routing_arm(self) -> None:
         self._cost_routing_arm: str | None = None
+        self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
@@ -370,6 +373,12 @@ class ListenSessionRuntime:
                 # Selection owns invalid-config diagnostics and static fallback.
                 # A cohort metric must never prevent that serving path running.
                 self._cost_routing_arm = 'control'
+            arm = (
+                'on'
+                if self._cost_routing_arm == 'on'
+                else 'shadow' if os.getenv('STT_ROUTING_MODE', 'off').lower() == 'shadow' else 'off'
+            )
+            self._routing_cohort = RoutingCohort(arm)
 
     def _record_session_transcript_outcome(self) -> None:
         """Emit omi_live_session_transcript_outcome_total exactly once per session.
@@ -420,6 +429,16 @@ class ListenSessionRuntime:
                     or 'unknown'
                 )
                 LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=provider_family(provider)).inc()
+            cohort = getattr(self, '_routing_cohort', None)
+            if cohort is not None:
+                self._routing_cohort_completion = (
+                    outcome,
+                    bool(
+                        session_recovery_enabled(self)
+                        and self.state.live_transcript_delivered
+                        and self.state.stt_terminal_failure
+                    ),
+                )
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
@@ -436,6 +455,13 @@ class ListenSessionRuntime:
                 reason='reconnect_budget',
                 retry_after=retry_after,
             )
+            return False
+        if self.client_conversation_id and await self.persistence.call(
+            conversation_tombstones.is_deleted, self.request.uid, self.client_conversation_id
+        ):
+            # Check before bootstrap/registration so rejection has no session to tear down.
+            # A create already past this point can still race a deletion commit.
+            await self.request.websocket.close(code=1008, reason='Conversation was deleted')
             return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
@@ -575,11 +601,12 @@ class ListenSessionRuntime:
         include_profile = should_include_speech_profile(
             request.include_speech_profile, self.is_multi_channel, request.onboarding_mode
         )
-        if should_load_speech_profile(
+        profile_eligible = should_load_speech_profile(
             use_custom_stt=self.use_custom_stt,
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
-        ):
+        )
+        if profile_eligible:
             # A Firestore voiceprint is sufficient for matching even if its GCS
             # audio cache has disappeared. Only probe audio for legacy profiles
             # whose embedding still needs to be extracted.
@@ -596,7 +623,7 @@ class ListenSessionRuntime:
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
-            has_speech_profile=self.has_speech_profile,
+            has_speech_profile=self.has_speech_profile or profile_eligible,
         )
         if self.state.speaker_id_enabled:
             self.state.audio_ring_buffer = AudioRingBuffer(self.limits.ring_buffer_duration, request.sample_rate)
@@ -924,9 +951,11 @@ class ListenSessionRuntime:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)
         token = current_recovery_enabled.set(self.recovery_enabled)
+        cohort_token = current_routing_cohort.set(None)
         try:
             await self._run()
         finally:
+            current_routing_cohort.reset(cohort_token)
             current_recovery_enabled.reset(token)
 
     async def _run(self) -> None:
@@ -959,6 +988,7 @@ class ListenSessionRuntime:
             # Intent-to-treat cohort: snapshot before selection, including
             # initialization failures and fail-open sessions in the on arm.
             self._capture_cost_routing_arm()
+            current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
@@ -1077,6 +1107,12 @@ class ListenSessionRuntime:
         try:
             await self._teardown_components()
         finally:
+            # Receiver finish/drain can settle an exhausted leg or admit a
+            # pending paid onset. Count the complete socket after those seams.
+            cohort = getattr(self, '_routing_cohort', None)
+            completion = getattr(self, '_routing_cohort_completion', None)
+            if cohort is not None and completion is not None:
+                cohort.finish(completion[0], terminal_after_text=completion[1])
             if not self.request.owner_persistence_blocked.is_set():
                 try:
                     await run_blocking(storage_executor, self.parity_capture.persist)

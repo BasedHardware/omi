@@ -1302,7 +1302,7 @@ def test_finalized_and_processing_targets_and_off_keep_reprocessing(dependencies
     process = MagicMock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
-    process.assert_called_once()
+    assert len(process.call_args_list) == (0 if status == 'in_progress' else 1)
 
 
 @pytest.mark.parametrize('flag', ['', 'off'])

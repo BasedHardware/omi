@@ -426,6 +426,12 @@ class SendMap:
             self._spans.pop(0)
             self.evicted_spans += 1
 
+    def discard_provider_from(self, first: int) -> None:
+        """Remove a disproven suffix, including the tail of a coalesced span."""
+        self._spans = [
+            [start, capture, min(length, first - start)] for start, capture, length in self._spans if start < first
+        ]
+
     def add_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
         """Record consecutive pieces that the provider receives back-to-back."""
         for capture_first_sample, length_samples in spans:
@@ -620,6 +626,17 @@ class ProviderEpochTranslator:
         self.wire_audio_samples: Optional[int] = None
         self.wire_provider_samples: Optional[int] = None
         self._wire_race_intervals: Optional[deque[Tuple[int, int]]] = None
+        self.wire_pending_from: Optional[int] = None
+
+    def invalidate_wire_from(self, first: int) -> None:
+        """Discard unverified maps; delayed tokens cannot regain this suffix."""
+        self.send_map.discard_provider_from(first)
+        self._send_owners = [(a, min(b, first), owner) for a, b, owner in self._send_owners if a < first]
+        end = self.wire_provider_samples or first
+        if end > first:
+            if self._wire_race_intervals is None:
+                self._wire_race_intervals = deque(maxlen=MAX_SEND_SPANS)
+            self._wire_race_intervals.append((first, end))
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -827,6 +844,15 @@ class ProviderEpochTranslator:
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            if self.wire_pending_from is not None and max(first_sample, last_sample) > self.wire_pending_from:
+                # Prediction is a send-time cursor, not capture evidence until
+                # its own FIFO acknowledgment verifies it. No transport wait.
+                self._reject(segment, 'outside_accepted_sends')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
+                else:
+                    translated.append(segment)
+                continue
             if self._on_validation is not None:
                 is_shadow = self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'shadow'
                 validation_map = (

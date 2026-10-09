@@ -6,6 +6,8 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
+from google.cloud.firestore_v1.transaction import transactional
 
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.mcp_memories import (
@@ -101,7 +103,7 @@ class _DB:
         self._collections.setdefault(name, _Collection())
         return self._collections[name]
 
-    def transaction(self):
+    def transaction(self, **_kwargs):
         return _Transaction()
 
 
@@ -1007,10 +1009,20 @@ def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
     assert second_pair['refresh_token'] != first_pair['refresh_token']
     assert mcp_oauth.validate_access_token(second_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)['uid'] == 'user-2'
 
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(
+        mcp_oauth.hash_secret(first_pair['refresh_token'])
+    ).update({'used_at': mcp_oauth._now() - timedelta(minutes=10)})
+    outcomes = []
     assert (
-        mcp_oauth.rotate_refresh_token(first_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+        mcp_oauth.rotate_refresh_token(
+            first_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, on_outcome=outcomes.append
+        )
         is None
     )
+    assert outcomes == ['replay_revoked']
+    revoked = mcp_oauth.db.collection('mcp_oauth_grants').document(grant['id']).get().to_dict()
+    assert revoked['replay_detected'] is True
+    assert revoked['status'] == 'revoked'
     assert mcp_oauth.validate_access_token(second_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
 
     new_grant = mcp_oauth.create_or_update_grant('user-2', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
@@ -1019,6 +1031,230 @@ def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
         mcp_oauth.rotate_refresh_token(second_pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
         is None
     )
+
+
+def _install_rotation_commit_failures(monkeypatch, errors):
+    """Exercise the real SDK decorator with atomic, read-before-write commits."""
+    transactions = []
+    sleeps = []
+
+    class CommitTransaction:
+        _read_only = False
+
+        def __init__(self, max_attempts):
+            self._max_attempts = max_attempts
+            self._id = None
+            self.writes = []
+
+        def _clean_up(self):
+            self._id = None
+
+        def _begin(self, retry_id=None):
+            assert retry_id is None  # Every attempt starts a new transaction.
+            self._id = str(len(transactions)).encode()
+
+        def set(self, ref, data, merge=False):
+            self.writes.append(lambda: ref.set(data, merge=merge))
+
+        def update(self, ref, data):
+            self.writes.append(lambda: ref.update(data))
+
+        def _commit(self):
+            if errors:
+                raise errors.pop(0)
+            for write in self.writes:
+                write()
+
+        def _rollback(self):
+            self.writes.clear()
+
+    original_get = _DocReference.get
+
+    def strict_get(ref, transaction=None, **kwargs):
+        if transaction is not None:
+            assert not transaction.writes, 'Firestore forbids reads after writes'
+        return original_get(ref, transaction=transaction, **kwargs)
+
+    def fresh_transaction(*, max_attempts=1):
+        assert max_attempts == 1
+        transaction = CommitTransaction(max_attempts)
+        transactions.append(transaction)
+        return transaction
+
+    monkeypatch.setattr(_DocReference, 'get', strict_get)
+    monkeypatch.setattr(mcp_oauth.db, 'transaction', fresh_transaction)
+    monkeypatch.setattr(mcp_oauth, '_typed_transactional', transactional)
+    monkeypatch.setattr(mcp_oauth.time, 'sleep', sleeps.append)
+    return transactions, sleeps
+
+
+_TRANSIENT_ROTATION_ERRORS = [
+    InvalidArgument('The referenced transaction has expired or is no longer valid.'),
+    Aborted('contention'),
+    ServiceUnavailable('unavailable'),
+    DeadlineExceeded('deadline'),
+]
+
+
+@pytest.mark.parametrize('error', _TRANSIENT_ROTATION_ERRORS, ids=lambda error: type(error).__name__)
+def test_refresh_rotation_retries_failed_commit_with_fresh_transaction(monkeypatch, error):
+    grant = mcp_oauth.create_or_update_grant(
+        'retry-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    first = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    transactions, sleeps = _install_rotation_commit_failures(monkeypatch, [error])
+    outcomes = []
+
+    rotated = mcp_oauth.rotate_refresh_token(
+        first['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append
+    )
+
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert sleeps == [0.1]
+    assert outcomes == ['rotated']
+    assert mcp_oauth.validate_access_token(rotated['access_token'])['grant_id'] == grant['id']
+
+
+@pytest.mark.parametrize('error', _TRANSIENT_ROTATION_ERRORS, ids=lambda error: type(error).__name__)
+def test_refresh_rotation_transient_exhaustion_raises_unavailable(monkeypatch, error):
+    grant = mcp_oauth.create_or_update_grant(
+        'exhaust-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    first = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    transactions, sleeps = _install_rotation_commit_failures(monkeypatch, [error] * 3)
+    outcomes = []
+
+    with pytest.raises(mcp_oauth.RefreshRotationUnavailable):
+        mcp_oauth.rotate_refresh_token(first['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+
+    assert len(transactions) == 3
+    assert len({id(transaction) for transaction in transactions}) == 3
+    assert sleeps == [0.1, 0.3]
+    assert outcomes == []
+    old = mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(first['refresh_token']))
+    assert old.get().to_dict()['used_at'] is None
+    assert mcp_oauth.get_active_grant(grant['id']) is not None
+
+
+@pytest.mark.parametrize('error', [InvalidArgument('invalid document'), ValueError('invalid transaction input')])
+def test_refresh_rotation_does_not_retry_permanent_errors(monkeypatch, error):
+    grant = mcp_oauth.create_or_update_grant(
+        'permanent-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    first = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    transactions, sleeps = _install_rotation_commit_failures(monkeypatch, [error])
+    with pytest.raises(type(error)):
+        mcp_oauth.rotate_refresh_token(first['refresh_token'], 'omi-chatgpt-prod', None)
+    assert len(transactions) == 1
+    assert sleeps == []
+
+
+def test_refresh_replay_grace_reissues_valid_pair_without_extending_window(caplog):
+    scopes = ['memories.read', 'conversations.read']
+    grant = mcp_oauth.create_or_update_grant('grace-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    first = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    rotated = mcp_oauth.rotate_refresh_token(first['refresh_token'], 'omi-chatgpt-prod', None)
+    old = mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(first['refresh_token']))
+    original_used_at = old.get().to_dict()['used_at']
+    outcomes = []
+
+    reissued = mcp_oauth.rotate_refresh_token(
+        first['refresh_token'], 'omi-chatgpt-prod', None, 'memories.read', on_outcome=outcomes.append
+    )
+
+    assert outcomes == ['replay_grace_reissued']
+    assert reissued['refresh_token'] not in (first['refresh_token'], rotated['refresh_token'])
+    assert reissued['access_token'] not in (first['access_token'], rotated['access_token'])
+    assert reissued['scope'] == 'memories.read'
+    assert old.get().to_dict()['replayed_at'] >= original_used_at
+    assert old.get().to_dict()['used_at'] == original_used_at
+    assert old.get().to_dict()['replaced_by'] == mcp_oauth.hash_secret(rotated['refresh_token'])
+    assert mcp_oauth.get_active_grant(grant['id']) is not None
+    assert mcp_oauth.validate_access_token(reissued['access_token'])['grant_id'] == grant['id']
+    assert mcp_oauth.validate_access_token(rotated['access_token']) is not None
+    assert 'replay grace reissue' in caplog.text
+    assert first['refresh_token'] not in caplog.text
+    assert 'grace-user' not in caplog.text
+    assert mcp_oauth.rotate_refresh_token(reissued['refresh_token'], 'omi-chatgpt-prod', None) is not None
+
+
+def test_refresh_replay_without_used_at_revokes_grant():
+    grant = mcp_oauth.create_or_update_grant(
+        'missing-used-at', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'replaced_by': 'issued-pair-hash'}
+    )
+    assert mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None) is None
+    assert mcp_oauth.get_active_grant(grant['id']) is None
+
+
+@pytest.mark.parametrize('age_seconds, expected_outcome', [(120, 'replay_grace_reissued'), (121, 'replay_revoked')])
+def test_refresh_replay_grace_boundary(monkeypatch, age_seconds, expected_outcome):
+    grant = mcp_oauth.create_or_update_grant(
+        'boundary-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    now = mcp_oauth._now()
+    monkeypatch.setattr(mcp_oauth, '_now', lambda: now)
+    monkeypatch.setattr(mcp_oauth, 'MCP_OAUTH_REPLAY_GRACE_SECONDS', 120)
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'used_at': now - timedelta(seconds=age_seconds)}
+    )
+    outcomes = []
+    result = mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+    assert outcomes == [expected_outcome]
+    assert (result is not None) == (expected_outcome == 'replay_grace_reissued')
+
+
+def test_refresh_replay_grace_rejects_scope_escalation():
+    grant = mcp_oauth.create_or_update_grant(
+        'scope-grace', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None)
+    outcomes = []
+    assert (
+        mcp_oauth.rotate_refresh_token(
+            pair['refresh_token'], 'omi-chatgpt-prod', None, 'memories.write', on_outcome=outcomes.append
+        )
+        is None
+    )
+    assert outcomes == ['invalid']
+    assert mcp_oauth.get_active_grant(grant['id']) is not None
+
+
+def test_refresh_replay_grace_reissues_are_count_capped_then_revoke_grant():
+    # The window bounds duration; the reissue cap bounds count. One replayed
+    # token must never mint unbounded durable pairs (review finding).
+    grant = mcp_oauth.create_or_update_grant(
+        'grace-cap', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None)
+
+    outcomes: list = []
+    reissues = [
+        mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+        for _ in range(mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT)
+    ]
+    assert outcomes == ['replay_grace_reissued'] * mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT
+    assert all(reissued is not None for reissued in reissues)
+    # The issued pairs are distinct: each reissue is a real usable pair.
+    assert len({reissued['refresh_token'] for reissued in reissues}) == mcp_oauth.MCP_OAUTH_REPLAY_REISSUE_LIMIT
+    for reissued in reissues:
+        assert mcp_oauth.validate_access_token(reissued['access_token']) is not None
+
+    # One replay past the cap: same window, same source token → revoke.
+    outcomes.clear()
+    assert (
+        mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+        is None
+    )
+    assert outcomes == ['replay_revoked']
+    assert mcp_oauth.get_active_grant(grant['id']) is None
 
 
 def test_revoke_user_grant_invalidates_tokens():

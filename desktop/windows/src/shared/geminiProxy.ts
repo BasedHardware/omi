@@ -34,6 +34,8 @@ export type GeminiProxyRequest = {
   lane: GeminiLane
   workload: GeminiWorkload
   platform: GeminiClientPlatform
+  /** Additional request metadata; auth and attribution remain owned by this transport. */
+  extraHeaders?: Record<string, string>
   signal?: AbortSignal
 }
 
@@ -51,6 +53,7 @@ export function geminiProxyFetch(
   return fetchImpl(url, {
     method: 'POST',
     headers: {
+      ...req.extraHeaders,
       'Content-Type': 'application/json',
       Authorization: `Bearer ${req.token}`,
       'X-Omi-Lane': req.lane,

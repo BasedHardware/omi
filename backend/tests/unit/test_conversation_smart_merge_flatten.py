@@ -1215,6 +1215,9 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
 
     calls = {'vector': [], 'index': [], 'survivor': []}
     monkeypatch.setattr(merge_conversations, 'firestore_db', store)
+    # Merge-source tombstone writes go through their own module-level client;
+    # bind it to the same fake store or the write hits real Firestore.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(merge_conversations, 'MemoryService', FakeMemoryService)
     monkeypatch.setattr(merge_conversations, 'retraction_can_be_skipped', lambda *a, **k: False)
     monkeypatch.setattr(merge_conversations, 'delete_vector', lambda uid, cid: calls['vector'].append(cid))

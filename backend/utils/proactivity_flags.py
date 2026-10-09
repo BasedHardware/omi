@@ -11,7 +11,6 @@ from threading import Lock
 from typing import Any
 
 from config.proactivity_v2 import ProactivityDenied
-from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -126,20 +125,18 @@ def enabled(uid: str) -> bool:
     return result.enabled
 
 
-def mentor_pipeline(uid: str) -> str:
-    """Resolve one exclusive mentor lane using the admission flag client/cache."""
-    pipeline = os.getenv('MENTOR_PIPELINE', 'legacy')
-    if pipeline != 'cohort':
-        return pipeline
-    try:
-        return 'v2' if enabled(uid) else 'legacy'
-    except Exception:
-        record_fallback(
-            component='other',
-            from_mode='mentor_cohort',
-            to_mode='legacy',
-            reason='other',
-            outcome='recovered',
-            log=logger,
-        )
-        return 'legacy'
+def mentor_pipeline(uid: str) -> str | None:
+    """Resolve the exclusive mentor lane for this user: 'v2' or no lane.
+
+    The legacy mentor pipeline was deleted after v2 reached 100%: every
+    non-'v2' answer (unflagged user, non-cohort host, mid-flight invalid flip)
+    means no mentor dispatch, never the removed path. Flag errors deny the
+    same way ``enabled`` does — ``ProactivityFlagUnavailable`` with the
+    rate-limited diagnostic — instead of falling back to a deleted lane.
+    """
+    if os.getenv('MENTOR_PIPELINE') != 'cohort':
+        # cohort is the only supported mode; unset, a stale legacy/v2 value, or
+        # a typo is a config error that resolves no lane (and the runtime env
+        # validator rejects it at deploy time).
+        return None
+    return 'v2' if enabled(uid) else None

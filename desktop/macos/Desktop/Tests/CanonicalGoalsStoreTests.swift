@@ -159,7 +159,6 @@ final class CanonicalGoalsStoreTests: XCTestCase {
       ChatFirstCapabilityProjection(
         control: OmiAPI.TaskWorkflowControl(
           accountGeneration: generation,
-          chatFirstUi: true,
           workflowMode: .read
         )))
   }

@@ -52,6 +52,8 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/review',
+    '/v1/entities',
     '/v1/proactivity',
     '/memory/search',
     '/v1/account/cutover',
@@ -147,6 +149,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; public docs expose the Developer API key conversation detail route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; not part of the Developer API key contract.',
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/title',
@@ -255,6 +261,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}/analytics',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; included in the app-client contract, not the Developer API key contract.',
     (
         'GET',
         '/v1/conversations/{conversation_id}/finalization',

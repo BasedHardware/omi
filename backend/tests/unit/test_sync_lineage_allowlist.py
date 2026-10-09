@@ -434,7 +434,7 @@ def test_admitted_owner_defers_enrichment_of_an_open_live_row(dependencies, monk
 @pytest.mark.parametrize('name', sorted(INACTIVE))
 def test_refused_owner_reprocesses_exactly_as_the_kill_switch(dependencies, monkeypatch, name):
     off = _reprocess(dependencies, monkeypatch, OFF)
-    assert len(off) == 1
+    assert off == []
     assert _reprocess(dependencies, monkeypatch, INACTIVE[name]) == off
 
 

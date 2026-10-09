@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
+from utils.conversations import relevance_rescue
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
@@ -183,7 +184,14 @@ def decide_relevance(
         if verdict == 'keep':
             return keep('rule', rule)
         if verdict == 'discard':
-            return discard_unless_calendar('rule', rule)
+            decision = discard_unless_calendar('rule', rule)
+            mode = relevance_rescue.rescue_mode()
+            if decision.discard and mode != 'off' and relevance_rescue.should_rescue(texts, rule):
+                rescue = relevance_rescue.score_segments(texts)
+                relevance_rescue.record_rescue(mode=mode, rule=rule, outcome=rescue.outcome)
+                if mode == 'on' and rescue.rescued:
+                    return RelevanceDecision('keep', 'jev', f'rescue_{rule}', trigger, jev_p_discard=rescue.score)
+            return decision
 
     if model_discards is None:
         return keep('policy', 'model_withheld')

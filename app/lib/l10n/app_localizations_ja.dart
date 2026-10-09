@@ -9757,11 +9757,6 @@ class AppLocalizationsJa extends AppLocalizations {
       'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return '未記録 ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$nameさんの音声プロフィール';
   }
@@ -12251,14 +12246,226 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'あなた向けにカスタマイズ中';
 
   @override
-  String get onboardingRatingPromptTitle => 'お待ちの間に、Omiは使いやすいですか？';
+  String get onboardingRatingPromptTitle => 'Omiを楽しんでいますか？';
 
   @override
-  String get onboardingRatingPromptBody => '星5つの評価は私たちの大きな励みになります ❤️';
+  String get onboardingRatingPromptYes => 'はい';
 
   @override
-  String get onboardingRatingPromptYes => 'はい、応援します！';
+  String get onboardingRatingPromptNo => 'いいえ';
 
   @override
-  String get onboardingRatingPromptNo => 'あまり';
+  String get partialRecording => '一部のみの録音';
+
+  @override
+  String get importTranscriptFiles => '文字起こしファイル';
+
+  @override
+  String get importTranscriptFilesDescription => 'SRT・VTT・TXT形式の文字起こし、またはそれらをまとめたZIPを選択してください';
+
+  @override
+  String get importTooManyAttempts => '現在インポートが多すぎます。しばらくしてからもう一度お試しください。';
+
+  @override
+  String get importFileTooLarge => 'このファイルはインポートするには大きすぎます。';
+
+  @override
+  String get importUnsupportedFileType => 'この種類のファイルはインポートできません。';
+
+  @override
+  String get reviewTitle => '確認';
+
+  @override
+  String get reviewEntryTitle => 'あなたへの質問';
+
+  @override
+  String reviewRemaining(int count) {
+    return '残り$count件';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'これは誰の発言ですか？';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '「$name」と同じ人ですか？';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'この綴りは？';
+
+  @override
+  String get reviewPlayClip => 'クリップを再生';
+
+  @override
+  String get reviewStopClip => 'クリップを停止';
+
+  @override
+  String get reviewOpenDetailsHint => '詳細を開きます';
+
+  @override
+  String get reviewAnswerMe => '自分';
+
+  @override
+  String get reviewAnswerOther => 'その他';
+
+  @override
+  String get reviewAddTask => 'タスクを追加';
+
+  @override
+  String get reviewAnswerFailed => '回答を保存できませんでした。もう一度お試しください。';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'この回答は$count件の会話にラベルを付けます';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => '不明な話者';
+
+  @override
+  String get reviewNewPersonName => '名前';
+
+  @override
+  String get reviewSomeoneElse => 'ほかの人…';
+
+  @override
+  String get reviewConfirm => '確認';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '$nameを確認';
+  }
+
+  @override
+  String get reviewNotSure => 'わからない';
+
+  @override
+  String get reviewOpenConversation => '会話';
+
+  @override
+  String get reviewTaskField => 'タスク';
+
+  @override
+  String get reviewDue => '期限';
+
+  @override
+  String get reviewNoDate => 'なし';
+
+  @override
+  String get reviewProject => 'プロジェクト';
+
+  @override
+  String get reviewReasonAlreadyDone => '対応済み';
+
+  @override
+  String get reviewReasonNotMine => '自分のではない';
+
+  @override
+  String get reviewReasonNotUseful => '役に立たない';
+
+  @override
+  String get reviewYesMerge => 'はい、統合';
+
+  @override
+  String reviewConversationCount(int count) {
+    return '会話：$count';
+  }
+
+  @override
+  String get reviewSpellingCustom => '入力する';
+
+  @override
+  String get reviewLoadFailed => '質問を読み込めませんでした。';
+
+  @override
+  String get reviewCaughtUpTitle => '回答するものはありません';
+
+  @override
+  String get reviewCaughtUpBody => 'Omiは、あなたが必要なときだけここで質問します。';
+
+  @override
+  String get reviewRecentChanges => '最近の変更';
+
+  @override
+  String get reviewChangesIntro => '過去30日間にOmiが自動で変更した内容です。おかしいものは元に戻せます。';
+
+  @override
+  String get reviewChangeUndone => '元に戻しました。Omiが自動でやり直すことはありません。';
+
+  @override
+  String get reviewChangeFailed => 'この変更を更新できませんでした。もう一度お試しください。';
+
+  @override
+  String get reviewChangesLoadFailed => '最近の変更を読み込めませんでした。';
+
+  @override
+  String get reviewNoChangesTitle => '変更はまだありません';
+
+  @override
+  String get reviewNoChangesBody => 'Omiがメモを整理すると、変更がここに表示されます。';
+
+  @override
+  String get reviewShowMore => 'もっと見る';
+
+  @override
+  String get entityKeptCurrent => 'Omiが最新の状態に保っています';
+
+  @override
+  String get entityNotRight => '違いますか？';
+
+  @override
+  String get entityCorrectionTitle => 'どこが違いますか？';
+
+  @override
+  String get entityCorrectionHint => '修正してほしい内容をOmiに伝える';
+
+  @override
+  String get entityCorrectionSaved => 'ありがとうございます。Omiが修正します。';
+
+  @override
+  String get entityCorrectionFailed => '修正を送信できませんでした。もう一度お試しください。';
+
+  @override
+  String get entityLoadFailed => 'このページを読み込めませんでした。';
+
+  @override
+  String get entityProject => 'プロジェクト';
+
+  @override
+  String get entityProjects => 'プロジェクト';
+
+  @override
+  String get entityDecisions => '決定事項';
+
+  @override
+  String get entityOpenTasks => '未完了のタスク';
+
+  @override
+  String get entityOpenThreads => '未解決の件';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '$nameの返答待ち';
+  }
+
+  @override
+  String entityDue(String date) {
+    return '期限：$date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omiが知っていること';
+
+  @override
+  String get entityRecentConversations => '最近の会話';
+
+  @override
+  String get tasksNoProject => 'プロジェクトなし';
+
+  @override
+  String get tasksGroupByProject => 'プロジェクト別にグループ化';
+
+  @override
+  String get tasksGroupByDate => '日付別にグループ化';
 }

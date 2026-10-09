@@ -459,7 +459,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     if retired:
         lines += [
             "Code was deleted but an external row may still exist. Names cover PostHog",
-            "keys and shipped local preference keys; the sync reports live PostHog",
+            "keys, env switches, and shipped local preference keys; the sync reports live PostHog",
             "leftovers as read-only delete candidates. Never re-read these names for",
             "admission.",
             "",

@@ -1,9 +1,9 @@
 # Transcript chunk backfill
 
 Chat and conversation search query transcript-chunk vectors (`ns_tchunks`), but
-chunks are written only for conversations that finished processing while
-`TRANSCRIPT_CHUNK_INDEXING_ENABLED` was on. Stored history has none, so a detail
-spoken only in a transcript is unfindable until that user is backfilled.
+no processing path writes them: the never-enabled indexing step was removed in
+#20959. Stored history has none, so a detail spoken only in a transcript is
+unfindable until that user is backfilled.
 `backend/scripts/backfill_transcript_chunk_vectors.py` indexes one user's
 completed, visible conversations with the same chunking search readers rebuild.
 
@@ -11,8 +11,8 @@ completed, visible conversations with the same chunking search readers rebuild.
 
 A specific account reports that chat or search misses something it said, and the
 reply notes that older or unindexed transcripts may still contain it (#20629).
-This is a per-account repair. It does not turn on indexing for new conversations;
-that is the flag owner's decision.
+This is a per-account repair. It does not index conversations recorded after the
+run.
 
 ## Run
 
@@ -37,5 +37,5 @@ UID privately from the support report. Never paste it into a public issue or PR.
 - `removed_after_delete`: conversations the user deleted mid-run. Their chunks
   were removed again, so no derived vectors outlive a deletion.
 
-New conversations stay unindexed while the flag is off. Rerun for the account if
+Conversations recorded after the run are not indexed. Rerun for the account if
 it needs later history to be searchable too.

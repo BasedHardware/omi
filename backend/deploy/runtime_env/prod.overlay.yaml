@@ -39,6 +39,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -79,14 +81,12 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        MENTOR_GATE_DEBOUNCE_ENABLED:
-          value: 'true'
-          category: rollout
         LISTEN_RECONNECT_BUDGET_PER_MIN:
           value: '6'
           category: reliability
@@ -101,8 +101,6 @@ overlay:
         # 50% on 2026-10-02 after the batch-pressure quorum fix #20208; 100% of
         # eligible sessions later that day, with the per-pod session cap raised
         # 8 -> 16 because listen pods were overflowing at the cap every hour).
-        STT_CONNECT_ORDER_FROM_CONFIG:
-          value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -128,7 +126,15 @@ overlay:
           value: '45'
           category: rollout
         STT_ROUTING_MODE:
-          value: shadow
+          value: 'on'
+        # 2026-10-06: sticky-UID ON ramp, gated per step on the
+        # omi_stt_routing_cohort_* counters (GATES.md): 5%/25%/50% holds were
+        # clean; this commit completes the ramp at 100%.
+        STT_ROUTING_ON_PERCENT:
+          value: '100'
+        STT_NO_TEXT_RESCUE_ENABLED:
+          value: 'true'
+          category: rollout
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
@@ -153,10 +159,6 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'true'
@@ -239,13 +241,16 @@ overlay:
           value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '2'
+          value: '0'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -262,6 +267,9 @@ overlay:
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
           category: rollout
+        REVIEW_SURFACE_MODE:
+          value: 'on'
+          category: rollout
         # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
         # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
         # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
@@ -270,6 +278,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -310,14 +320,12 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        MENTOR_GATE_DEBOUNCE_ENABLED:
-          value: 'true'
-          category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -345,10 +353,6 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'true'
         BUCKET_SCREEN_FRAMES:
@@ -367,13 +371,16 @@ overlay:
           value: '100'
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '2'
+          value: '0'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -507,6 +514,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -532,14 +541,12 @@ overlay:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: 'cohort'
+            value: 'on'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
           # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
           # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -560,10 +567,6 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
@@ -655,13 +658,16 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -677,6 +683,9 @@ overlay:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
             category: rollout
           # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
           # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
@@ -695,6 +704,13 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Shadow dogfood: infra failures on 2026-10-09 consumed the default 2 passes/day.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -723,6 +739,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -751,10 +768,6 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
@@ -816,13 +829,16 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -853,6 +869,11 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -881,6 +902,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -953,13 +975,16 @@ overlay:
             value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '2'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
+            category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
@@ -990,6 +1015,11 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -1016,6 +1046,7 @@ overlay:
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
@@ -1072,6 +1103,29 @@ overlay:
         flags:
           --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          PINECONE_INDEX_NAME:
+            value: memories-backend
+      x-connector-sync-job:
+        # backend-runtime already mounts the X OAuth and RapidAPI secrets on the
+        # Cloud Run API. backend-jobs-runtime does not, so this job cannot use
+        # the notifications identity without a new secret grant.
+        flags:
+          --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        secrets:
+          REDIS_DB_PASSWORD:
+            secret: REDIS_DB_PASSWORD
+            version: latest
+        env:
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+          REDIS_DB_PORT:
+            value: '13151'
+          # The canonical intake fence reads MEMORY_ENABLED; without it the job's
+          # memory writes 503 with 'globally paused'.
+          MEMORY_ENABLED:
+            value: 'on'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:
@@ -1163,6 +1217,7 @@ overlay:
     workflow_files:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
+    - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
     - .github/workflows/gcp_daily_memory_sweep_job.yml

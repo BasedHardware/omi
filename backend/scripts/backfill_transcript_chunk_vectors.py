@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Index one user's existing transcripts into the transcript-chunk namespace.
 
-Chat and conversation search always query transcript-chunk vectors, but chunks
-are written only when ``TRANSCRIPT_CHUNK_INDEXING_ENABLED`` was on while a
-conversation finished processing. It is closed by default, so stored history has
-no chunks and a detail spoken only in a transcript stays unfindable (#20629).
+Chat and conversation search still query transcript-chunk vectors, but no
+processing path writes them: the never-enabled indexing step was removed (#20959).
+Stored history therefore has no chunks, and a detail spoken only in a transcript
+stays unfindable (#20629).
 
-This writes the same chunks the processing path writes, built exactly as the
+This writes chunks with ``upsert_transcript_chunk_vectors``, built exactly as the
 search readers rebuild them (``started_at`` or ``created_at``), so every indexed
 chunk index hydrates back to the same verbatim text. Vector IDs are
 deterministic, so a rerun overwrites instead of duplicating. Chunk text is

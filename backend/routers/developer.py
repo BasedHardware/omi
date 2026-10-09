@@ -16,6 +16,7 @@ import database.goals as goals_db
 import database.users as users_db
 import database.daily_summaries as daily_summaries_db
 from database._client import db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
@@ -82,10 +83,6 @@ from utils.conversations.transcript_hash import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
-from utils.conversations.mcp_transcript_search import (
-    merge_summary_and_transcript_ids,
-    resolve_mcp_conversation_search_ids,
-)
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
@@ -1446,15 +1443,7 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     except ConversationSearchUnavailableError as exc:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
     items = results.get("items", []) if isinstance(results, dict) else []
-    summary_ids = [item["id"] for item in items if item.get("id")]
-    transcript_ids = resolve_mcp_conversation_search_ids(
-        uid,
-        question,
-        limit=request.limit,
-        query_vectors=lambda *args, **kwargs: [],
-        search_transcript_chunks=vector_db.search_transcript_chunks,
-    )
-    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    conversation_ids = [item["id"] for item in items if item.get("id")][: request.limit]
     if not conversation_ids:
         return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
 
@@ -1970,6 +1959,21 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        # One point read suppresses retries even when a prior delete failed during cleanup.
+        # Residual race: a create already past this read can overlap a delete commit;
+        # this guard deliberately does not transact across the two collections.
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            logger.info(
+                "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation_id,
+            )
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
         existing_conversation = conversations_db.get_conversation(
             uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
         )
@@ -2133,6 +2137,31 @@ def _create_conversation_from_segments(
     if client_projection is not None and not request.client_session_id:
         conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
+        # A delete committing while processing ran must win: re-check intent
+        # before the final persist, otherwise the loser of the admission race
+        # re-persists the row the user just deleted. Both identities are
+        # checked (derived uuid5 and the raw session id, matching admission),
+        # and a hit also purges the processing/processing-completed row this
+        # call may have created or completed, so the retired identity is not
+        # published by our own response path.
+        suppress_id = None
+        if conversation_tombstones.is_deleted(uid, conversation.id):
+            suppress_id = conversation.id
+        elif conversation_tombstones.is_deleted(uid, request.client_session_id):
+            suppress_id = request.client_session_id
+        if suppress_id is not None:
+            logger.info(
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s suppress_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation.id,
+                suppress_id,
+            )
+            try:
+                conversations_db.delete_conversation(uid, conversation.id)
+            except Exception:
+                logger.exception('tombstone suppress row cleanup failed uid=%s conversation=%s', uid, conversation.id)
+            return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,
@@ -2288,6 +2317,7 @@ def delete_conversation_endpoint(
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
     from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 
+    conversation_tombstones.record_deletion(uid, conversation_id)
     delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 

@@ -33,6 +33,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -77,6 +78,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -95,6 +97,7 @@ import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/app_session_telemetry.dart';
+import 'package:omi/utils/analytics/phone_battery_sample_telemetry.dart';
 import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -237,11 +240,6 @@ Future _init() async {
 
   FlutterForegroundTask.initCommunicationPort();
 
-  // Service manager
-  if (!_serviceManagerInitialized) {
-    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
-    _serviceManagerInitialized = true;
-  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -295,6 +293,16 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // Persisted override must be live before auth resolution and product traffic.
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+  // ConnectivityService snapshots its health-check URLs when ServiceManager
+  // initializes, so initialize it only after restoring (or clearing) the
+  // persisted override. This also makes release builds pin their flavor URL
+  // before the first connectivity probe.
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   await PhysicalQualification.startupStage(
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
@@ -519,6 +527,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry();
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
     identityEpoch: () => AnalyticsManager.identityEpoch,
@@ -532,6 +541,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (!PhysicalQualification.enabled) {
       _appSessionTelemetry.recordColdStart();
       _performanceTelemetry.attach();
+      unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
@@ -545,6 +555,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (!PhysicalQualification.enabled) _performanceTelemetry.dispose();
+    _phoneBatteryTelemetry.dispose();
     super.dispose();
   }
 
@@ -613,6 +624,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
+        ChangeNotifierProvider(create: (context) => ReviewProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),

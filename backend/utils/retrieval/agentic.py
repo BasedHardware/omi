@@ -1422,6 +1422,7 @@ def chat_mount(tool_schemas: list) -> Mount:
         tools=tuple(tool_schemas),
         skills=(_CHAT_RETRIEVAL_SKILL, _CHAT_TOOL_SKILL),
         budget=Budget(turns=12, tool_calls=25, deadline_seconds=AGENT_STREAM_MAX_DURATION_SECONDS),
+        cache_breakpoint=True,
     )
 
 

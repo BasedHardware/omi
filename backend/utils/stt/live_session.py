@@ -11,7 +11,9 @@ from starlette.websockets import WebSocketState
 
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt import streaming as st
+from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
@@ -90,7 +92,7 @@ class LiveChainSession:
         language = host.stt_language
         uid = host.request.uid
         models = [m.strip() for m in st.stt_service_models]
-        keywords: list[str] = host.vocabulary[:100] if host.vocabulary else []
+        keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
         window_eligible = (
             window_allocation(uid)
@@ -484,6 +486,7 @@ class LiveLegSocket(STTSocket):
         self._transcript_outcome: str | None = None
         target = connecting_target.get()
         self._routing_target_entry = target
+        self._routing_cohort = current_routing_cohort.get()
         self.routing_target = (
             target.id
             if target
@@ -897,6 +900,8 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
+                    self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:
                     self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
             if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
@@ -1026,6 +1031,8 @@ class LiveLegSocket(STTSocket):
         finally:
             if token is not None:
                 capture_spans.reset(token)
+        if accepted and self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
+            self._routing_cohort.paid_audio(self.service.value, len(data) / (self.sample_rate * 2))
         if accepted and self._send_tracker is not None and spans:
             if not self._soniox_wire_ledger:
                 self._send_tracker.note_accepted_spans(spans)
