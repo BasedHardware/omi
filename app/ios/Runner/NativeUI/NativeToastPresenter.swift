@@ -250,7 +250,7 @@ private struct NativeToastCapsule: View {
     var body: some View {
         content
             .padding(.leading, 16)
-            .padding(.trailing, request.closeLabel == nil ? 16 : 4)
+            .padding(.trailing, request.closeLabel != nil ? 4 : request.actionLabel != nil ? 12 : 16)
             .padding(.vertical, 6)
             .frame(maxWidth: 600)
             // A capsule would clip the corners of tall accessibility-size content.
@@ -300,19 +300,32 @@ private struct NativeToastCapsule: View {
         }
     }
 
+    /// Confirm and error symbols are state colours; a filled disc draws its glyph in white on that colour,
+    /// so it stays crisp on any glass. Other symbols are secondary ink.
     @ViewBuilder private var icon: some View {
         if request.symbol == "progress" {
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.small).frame(width: 24)
         } else {
-            Image(systemName: request.symbol)
-                .foregroundStyle(request.kind == "confirm" ? Color.green : request.kind == "error" ? Color.red : Color.secondary)
-                .accessibilityHidden(true)
+            let state: Color? = request.kind == "confirm" ? .green : request.kind == "error" ? .red : nil
+            Group {
+                if let state, request.symbol.hasSuffix(".fill") {
+                    Image(systemName: request.symbol).symbolRenderingMode(.palette).foregroundStyle(.white, state)
+                } else {
+                    Image(systemName: request.symbol).symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(state ?? Color.secondary)
+                }
+            }
+            .font(.title3.weight(.semibold))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .frame(minWidth: 24)
+            .accessibilityHidden(true)
         }
     }
 
     private var message: some View {
         Text(request.message)
-            .font(.subheadline)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.primary)
             .lineLimit(4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("native-toast-message")
@@ -324,32 +337,49 @@ private struct NativeToastCapsule: View {
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.borderless)
                 .tint(.primary)
+                .padding(.horizontal, 4)
                 .frame(minHeight: 44)
+                .contentShape(Rectangle())
                 .accessibilityIdentifier("native-toast-action")
         }
         if let close = request.closeLabel {
             Button { model.finish(request.requestId, "closed") } label: {
                 Image(systemName: "xmark")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(Color.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color(uiColor: .tertiarySystemFill)))
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .tint(Color.secondary)
+            .tint(.primary)
             .accessibilityLabel(close)
             .accessibilityIdentifier("native-toast-close")
         }
     }
 }
 
+/// Glass tinted with the toast's own background, so its text keeps its contrast over any content (plain
+/// glass took on a light page's brightness behind a dark toast), and a soft shadow that lifts it off the
+/// page in both appearances.
 @available(iOS 16.0, *)
 private struct NativeToastBackground: ViewModifier {
     let shape: AnyShape
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
+        // The shadow belongs to the backing shape only, never to the text and symbols.
+        let shadow = Color.black.opacity(colorScheme == .dark ? 0.35 : 0.14)
         if #available(iOS 26.0, *) {
-            content.glassEffect(.regular.interactive(), in: shape)
+            content
+                .glassEffect(.regular.tint(Color(uiColor: .systemBackground).opacity(0.8)).interactive(), in: shape)
+                .background(shape.fill(Color(uiColor: .systemBackground).opacity(0.6))
+                    .shadow(color: shadow, radius: 18, x: 0, y: 8))
         } else {
-            content.background(.regularMaterial, in: shape)
+            content
+                .background(shape.fill(.regularMaterial).shadow(color: shadow, radius: 18, x: 0, y: 8))
+                .overlay(shape.stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
         }
     }
 }

@@ -15,7 +15,12 @@ Shared presentation rules live in Swift only and use snapshot copy alone: `Nativ
 radius matching inset-grouped cells, block radius, 44 pt rows, system-blue accent for selection
 marks and tags), centred `NativeEmptyState` (ContentUnavailableView on iOS 17+), one
 `NativeSectionHeader` style for Home's titled sections, and `NativeBadge` for a subtitle that is
-a short all-caps tag. Transcript speakers get a stable `NativeSpeakerTint` hue from their label.
+a short all-caps tag. Transcript speakers get a stable `NativeSpeakerTint` hue from their label (never
+purple, INV-UI-1). Round controls (composer, player, bottom bars, Home footer) are 44 pt
+`NativeCircleButtonStyle` circles; a screen's one primary action (Send, play/pause, a stage's
+Continue, Copy) is the neutral accent with inverse ink, and plain glass while it cannot act.
+Switches use the system on-state green, because a white track hides the white knob. Toasts and the
+activity HUD tint their glass with their own background so text keeps its contrast over any page.
 
 Home is one SwiftUI screen: device/header actions, authoritative capture status and controls,
 recovery notices, recaps, recordings, dated conversations and the bottom controls share the

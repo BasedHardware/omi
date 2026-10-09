@@ -59,8 +59,9 @@ enum NativeGraphProjection {
     }
 }
 
-/// Draws a graph exactly as the Flutter GraphPainter3D does: edges first, then nodes back to front,
-/// with halo rings, a radial fill, depth fade and 15% dimming outside the current selection.
+/// Draws a graph as the Flutter GraphPainter3D does: edges first, then nodes back to front, with halo
+/// rings, a radial fill, depth fade and 15% dimming outside the current selection. Labels keep a
+/// backing in both schemes and a 10 pt floor, so they stay legible over edges and halos.
 @available(iOS 16.0, *)
 struct NativeGraphCanvas: View {
     let graph: NativeSurfaceRow.Graph
@@ -97,15 +98,15 @@ struct NativeGraphCanvas: View {
     private static let lightSurface = RGB(hex: "#FFFFFF")
     private static let lightText = RGB(hex: "#000000")
 
-    /// In the light scheme a label sits on a rounded surface1 background, as in Flutter.
+    /// A label sits on a rounded backing: surface1 in the light scheme, as in Flutter, and a faded black in
+    /// the dark one, so white labels stay legible over edges and halos. The backing fades with the label.
     private static func drawLabel(_ text: GraphicsContext.ResolvedText, at origin: CGPoint, light: Bool,
-                                  padding: CGSize, in context: inout GraphicsContext) {
+                                  alpha: Double = 1, padding: CGSize, in context: inout GraphicsContext) {
         let size = text.measure(in: CGSize(width: 10_000, height: 10_000))
-        if light {
-            let background = CGRect(x: origin.x - padding.width, y: origin.y - padding.height,
-                                    width: size.width + padding.width * 2, height: size.height + padding.height * 2)
-            context.fill(Path(roundedRect: background, cornerRadius: 4), with: .color(lightSurface.color(0.88)))
-        }
+        let background = CGRect(x: origin.x - padding.width, y: origin.y - padding.height,
+                                width: size.width + padding.width * 2, height: size.height + padding.height * 2)
+        let backing = light ? lightSurface.color(0.88) : RGB(red: 0, green: 0, blue: 0).color(0.55 * min(max(alpha, 0), 1))
+        context.fill(Path(roundedRect: background, cornerRadius: min(6, background.height / 2)), with: .color(backing))
         context.draw(text, in: CGRect(origin: origin, size: size))
     }
 
@@ -150,7 +151,7 @@ struct NativeGraphCanvas: View {
             let measured = text.measure(in: CGSize(width: 10_000, height: 10_000))
             let middle = CGPoint(x: (first.point.x + second.point.x) / 2 - Double(measured.width) / 2,
                                  y: (first.point.y + second.point.y) / 2 - Double(measured.height) / 2 - 8)
-            drawLabel(text, at: middle, light: light, padding: CGSize(width: 4, height: 2), in: &context)
+            drawLabel(text, at: middle, light: light, alpha: alpha * 2, padding: CGSize(width: 4, height: 2), in: &context)
         }
 
         for (node, point, alpha) in order.sorted(by: { $0.point.z < $1.point.z }) {
@@ -174,12 +175,13 @@ struct NativeGraphCanvas: View {
                 gradient, center: CGPoint(x: point.x - radius * 0.25, y: point.y - radius * 0.25),
                 startRadius: 0, endRadius: CGFloat(radius * 1.2)))
             guard point.scale > 0.7, alpha > 0.5, radius > 4, !node.label.isEmpty else { continue }
+            // Never below 10 pt, so a distant node's label is still readable.
             let text = context.resolve(Text(node.label)
-                .font(.system(size: CGFloat(min(max(10 * point.scale, 8), 14)), weight: .semibold))
-                .foregroundColor(ink.color(alpha * 0.9)))
+                .font(.system(size: CGFloat(min(max(11 * point.scale, 10), 15)), weight: .semibold))
+                .foregroundColor(ink.color(alpha * 0.95)))
             let measured = text.measure(in: CGSize(width: 10_000, height: 10_000))
-            drawLabel(text, at: CGPoint(x: point.x - Double(measured.width) / 2, y: point.y + radius + 3), light: light,
-                      padding: CGSize(width: 4, height: 3), in: &context)
+            drawLabel(text, at: CGPoint(x: point.x - Double(measured.width) / 2, y: point.y + radius + 5), light: light,
+                      alpha: alpha, padding: CGSize(width: 6, height: 3), in: &context)
         }
     }
 }

@@ -157,13 +157,13 @@ struct NativeHomeView: View {
         .safeAreaInset(edge: .bottom) {
             if let chrome = state.snapshot.chrome {
                 NativeGlassControls {
-                    HStack(spacing: 12) {
+                    // One 44 pt height for the Ask capsule and the round actions, like the composer's controls.
+                    HStack(spacing: 10) {
                         ForEach(chrome.footer) { action in
                             if action.id == "chat" && !dynamicTypeSize.isAccessibilitySize {
                                 control(action, expanded: true).labelStyle(.titleAndIcon).modifier(NativeGlassButtonStyle()).frame(maxWidth: .infinity)
                             } else {
-                                control(action).labelStyle(.iconOnly).modifier(NativeGlassButtonStyle())
-                                    .frame(minWidth: 44, minHeight: 44)
+                                control(action).labelStyle(.iconOnly).buttonStyle(NativeCircleButtonStyle())
                             }
                         }
                     }.padding(.horizontal, 16).padding(.vertical, 10)
@@ -177,7 +177,7 @@ struct NativeHomeView: View {
                         Button { dispatch(device.id) } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: device.symbol)
-                                Text(device.title)
+                                Text(device.title).monospacedDigit()
                             }
                         }.disabled(!device.enabled || state.pending.contains(device.id))
                             .accessibilityIdentifier("native-\(device.id)")
@@ -295,33 +295,46 @@ struct NativeHomeView: View {
 
     private func control(_ action: NativeHomeSnapshot.Chrome.Action, expanded: Bool = false) -> some View {
         Button { dispatch(action.id) } label: {
-            Label { Text(action.title) } icon: { Image(systemName: action.symbol).font(.system(size: 20)) }
-                .frame(maxWidth: expanded ? .infinity : nil)
+            Label { Text(action.title).fontWeight(.medium) } icon: { Image(systemName: action.symbol).font(.system(size: 19)) }
+                .frame(maxWidth: expanded ? .infinity : nil, minHeight: expanded ? 30 : nil)
         }
             .disabled(!action.enabled || state.pending.contains(action.id))
             .accessibilityIdentifier("native-\(action.id)")
     }
 
+    /// The source in a tinted disc, the status over its elapsed time, round capture controls, and the
+    /// latest transcript line set off by a quote rule.
     private func captureCard(_ capture: NativeHomeSnapshot.Chrome.Capture) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Image(systemName: capture.source == "phone" ? "iphone" : capture.source == "call" ? "phone.fill" : "waveform")
-                    .font(.title2).accessibilityHidden(true)
+                    .font(.title3.weight(.medium))
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color(uiColor: .tertiarySystemFill)))
+                    .accessibilityHidden(true)
                 Button { dispatch("capture") } label: {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(capture.status).font(.headline).foregroundStyle(.primary)
                         Text([capture.elapsed, capture.detail].filter { !$0.isEmpty }.joined(separator: " · "))
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
+                            .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 ForEach(capture.actions) { action in
-                    Button { dispatch(action.id) } label: { Image(systemName: action.symbol).frame(minWidth: 44, minHeight: 44) }
+                    Button { dispatch(action.id) } label: { Image(systemName: action.symbol) }
+                        .buttonStyle(NativeCircleButtonStyle(surface: .fill))
                         .accessibilityLabel(action.title).disabled(!action.enabled || state.pending.contains(action.id))
                 }
             }
             if !capture.explanation.isEmpty { Text(capture.explanation).font(.footnote).foregroundStyle(.secondary) }
-            if !capture.lastLine.isEmpty { Text(capture.lastLine).font(.subheadline).lineLimit(2) }
-        }.padding(.vertical, 4)
+            if !capture.lastLine.isEmpty {
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 1.5).fill(.tertiary).frame(width: 3).accessibilityHidden(true)
+                    Text(capture.lastLine).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                }.fixedSize(horizontal: false, vertical: true)
+            }
+        }.padding(.vertical, 6)
             .accessibilityIdentifier("native-live-capture")
     }
 
@@ -391,6 +404,11 @@ private struct NativeConversationView: View {
         state.valid && state.snapshot.conversation(id: conversation.id)?.locked == false
     }
 
+    private static var moreSymbol: String {
+        if #available(iOS 26.0, *) { return "ellipsis" }
+        return "ellipsis.circle"
+    }
+
     var body: some View {
         Group {
             if !available {
@@ -402,7 +420,7 @@ private struct NativeConversationView: View {
                         Text(state.snapshot.copy.transcript).tag(1)
                     }
                     .pickerStyle(.segmented)
-                    .padding()
+                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 4)
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 20) {
                             if selectedTab == 0 {
@@ -454,7 +472,8 @@ private struct NativeConversationView: View {
                         await load()
                     }
                 } label: {
-                    Label(state.snapshot.copy.more, systemImage: "ellipsis.circle")
+                    // iOS 26 toolbar buttons are already glass circles, so the plain glyph avoids a ring in a ring.
+                    Label(state.snapshot.copy.more, systemImage: Self.moreSymbol)
                 }
                 .accessibilityIdentifier("native-conversation-actions")
                 .disabled(!available)
