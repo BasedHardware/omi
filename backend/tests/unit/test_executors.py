@@ -284,9 +284,7 @@ async def test_start_background_task_tracks_and_removes():
 
 def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog):
     """A live account gate refuses the write. That is not a background crash."""
-
-    class DestructiveOperationInProgress(RuntimeError):
-        pass
+    from database.legal_holds import DestructiveOperationInProgress
 
     def blocked():
         raise DestructiveOperationInProgress('external data write blocked by destructive operation')
