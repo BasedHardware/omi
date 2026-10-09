@@ -160,7 +160,8 @@ def _format_summary(data: dict[str, Any], language: str) -> str:
     content_urls = data.get("content_urls")
     desktop_urls = content_urls.get("desktop") if isinstance(content_urls, dict) else None
     page_url = desktop_urls.get("page") if isinstance(desktop_urls, dict) else None
-    page_url = page_url or _article_url(language, title)
+    if not isinstance(page_url, str) or not page_url:
+        page_url = _article_url(language, title)
 
     lines = [title]
     if description:

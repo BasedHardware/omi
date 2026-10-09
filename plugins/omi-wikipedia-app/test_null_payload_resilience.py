@@ -104,6 +104,15 @@ class WikipediaNullPayloadResilienceTests(unittest.IsolatedAsyncioTestCase):
         summary = app._format_summary(data, "en")
         self.assertIn("https://en.wikipedia.org/wiki/Custom_URL", summary)
 
+    def test_format_summary_with_non_string_desktop_page_url(self):
+        data = {
+            "title": "Quantum Computing",
+            "extract": "Quantum computing is a rapidly-emerging technology.",
+            "content_urls": {"desktop": {"page": {"unexpected": "nested_dict"}}},
+        }
+        summary = app._format_summary(data, "en")
+        self.assertIn("https://en.wikipedia.org/wiki/Quantum_Computing", summary)
+
     async def test_search_articles_handles_null_query_object(self):
         with patch.object(app, "_request_json", return_value={"query": None}):
             resp = await app.search_articles({"query": "Ada Lovelace"})
