@@ -10,7 +10,7 @@ from config.jev_decisions import uid_bucket
 from config.speaker_grouping import VARIANTS, configuration
 from models.conversation import Conversation
 from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import TranscriptSegment, transcript_segment_for_client
 from utils.conversations import speaker_grouping_shadow as shadow
 from utils.conversations import speaker_resolution as stage
 from utils.stt.conversation_speakers import Identity, resolve_conversation_speakers
@@ -199,6 +199,9 @@ def test_original_scoped_partition_survives_rewrite_and_storage():
     restored.assign_resolved_speaker(70, 'conversation:c')
     assert shadow.provider_key(restored) == key
     assert 'provider_speaker' not in restored.model_dump(mode='json')
+    client = transcript_segment_for_client(restored.model_dump())
+    assert 'provider_speaker' not in client
+    assert 'speaker_grouping_shadow' not in client
     legacy = segment(1, 'conversation:c')
     assert shadow.provider_key(legacy) is None
     s._clear_audio_evidence()

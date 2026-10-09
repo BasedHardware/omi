@@ -631,7 +631,15 @@ def transcript_segment_for_client(segment: Mapping[str, Any]) -> Dict[str, Any]:
     return {
         key: value
         for key, value in segment.items()
-        if key not in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores')
+        if key
+        not in (
+            'audio_capture_start',
+            'audio_capture_end',
+            'audio_source',
+            'speaker_match_scores',
+            'provider_speaker',
+            'speaker_grouping_shadow',
+        )
     }
 
 
