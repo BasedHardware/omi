@@ -77,6 +77,10 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+        SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
@@ -316,6 +320,10 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+        SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
@@ -501,6 +509,9 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
+          DREAM_AGENT_FEEDBACK_SALT:
+            secret: DREAM_AGENT_FEEDBACK_SALT
+            version: latest
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
             version: latest
@@ -518,7 +529,10 @@ overlay:
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
           DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
+          # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
+          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -540,6 +554,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -701,6 +719,10 @@ overlay:
         # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
         # service reads needs its own grant to this account. Every backend Cloud Run service is pinned.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        secrets:
+          DREAM_AGENT_FEEDBACK_SALT:
+            secret: DREAM_AGENT_FEEDBACK_SALT
+            version: latest
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -712,8 +734,10 @@ overlay:
             category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-          # Shadow dogfood: infra failures on 2026-10-09 consumed the default 2 passes/day.
-          DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
+          # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
+          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
@@ -738,6 +762,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -901,6 +929,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -1045,6 +1077,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout

@@ -227,6 +227,7 @@ prometheus:
           - source_labels: [__meta_kubernetes_service_name]
             regex: "(.*)-prometheus-stackdriver-exporter"
             action: keep
+      # Exporter namespace allowlist includes notifications-job (GMP cluster=__run__).
       - job_name: cloud-run-application-metrics
         # A prod scrape is ~28MB and takes 6-10s because the exporter queries
         # Cloud Monitoring inline. The default 10s scrape_timeout cut every

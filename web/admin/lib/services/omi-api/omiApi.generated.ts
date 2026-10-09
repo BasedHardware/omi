@@ -2084,6 +2084,69 @@ export interface Display {
   start_at?: string | null;
 }
 
+export interface DreamReportEdit {
+  after: string;
+  before: string;
+  evidence_count: number;
+  kind: string;
+  outcome: "shadow" | "applied" | "suppressed" | "suggest_only" | "edit_cap" | "invalid_evidence";
+  reason: string;
+  target_label: string;
+}
+
+export interface DreamReportFeedback {
+  component: string;
+  count: number;
+  failure_class: string;
+  severity: string;
+}
+
+export interface DreamReportQuestion {
+  kind: string;
+  text: string;
+}
+
+export interface DreamReportTask {
+  description: string;
+}
+
+export interface DreamReportTerm {
+  aliases: Array<string>;
+  kind: string;
+  spelling: string;
+}
+
+export interface DreamRun {
+  cost_usd?: number;
+  created_at: string;
+  dirty_dropped?: number;
+  edits?: Array<DreamReportEdit>;
+  error_type?: string | null;
+  feedback?: Array<DreamReportFeedback>;
+  privacy_rejected?: number;
+  questions?: Array<DreamReportQuestion>;
+  records_queued_after?: number;
+  records_read?: number;
+  run_id: string;
+  slow_tasks?: Array<DreamReportTask>;
+  status: "complete" | "failed" | "deadline" | "idle";
+  tokens?: number;
+  trigger: "schedule" | "manual";
+  vocabulary?: Array<DreamReportTerm>;
+}
+
+export type DreamRunRequest = Record<string, never>;
+
+export interface DreamRunsResponse {
+  manual_runs_limit: number;
+  manual_runs_today: number;
+  mode: "shadow" | "on";
+  passes_limit: number;
+  passes_today: number;
+  queued_changes: number;
+  runs: Array<DreamRun>;
+}
+
 export interface EntitiesResponse {
   entities: Array<EntityRef>;
 }
@@ -5929,6 +5992,14 @@ export interface OmiApiSchemas {
   "DismissAnnouncementRequest": DismissAnnouncementRequest;
   "DismissAnnouncementResponse": DismissAnnouncementResponse;
   "Display": Display;
+  "DreamReportEdit": DreamReportEdit;
+  "DreamReportFeedback": DreamReportFeedback;
+  "DreamReportQuestion": DreamReportQuestion;
+  "DreamReportTask": DreamReportTask;
+  "DreamReportTerm": DreamReportTerm;
+  "DreamRun": DreamRun;
+  "DreamRunRequest": DreamRunRequest;
+  "DreamRunsResponse": DreamRunsResponse;
   "EntitiesResponse": EntitiesResponse;
   "EntityCorrection": EntityCorrection;
   "EntityPage": EntityPage;
@@ -8188,6 +8259,24 @@ export interface OmiApiPaths {
         "200": DeveloperSuccessResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dream/runs": {
+    get: {
+      operationId: "get_runs_v1_dream_runs_get";
+      responses: {
+        "200": DreamRunsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "run_now_v1_dream_runs_post";
+      responses: {
+        "200": DreamRun;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -14849,6 +14938,49 @@ export async function deleteMemory(path: { memory_id: string }, init?: OmiApiCli
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_runs_v1_dream_runs_get(query: { limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DreamRunsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dream/runs`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function run_now_v1_dream_runs_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DreamRunRequest, init?: OmiApiClientInit): Promise<DreamRun> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dream/runs`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_entities_v1_entities_get(query: { type: "project" }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EntitiesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/entities`;
@@ -21223,4 +21355,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 490 client methods generated.
+// Total: 492 client methods generated.

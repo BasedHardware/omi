@@ -212,6 +212,10 @@ speaker, summary, memory, or translation. See
 [`transcription-shadow.md`](transcription-shadow.md) for gates, metrics, storage,
 and the known best-effort background-task limit.
 
+The optional cached-evidence alternatives, encrypted shadow receipts, cohort,
+metrics and promotion criteria are documented in the
+[speaker grouping shadow runbook](speaker_grouping_shadow.mdx).
+
 ## 1. Connection + Streaming + Transcription
 
 ### Segment-upload processing shape
@@ -1217,6 +1221,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A typed chain exhaustion on a mid-session rebuild
+(`LiveChainExhausted` from the managed dial) is classified evidence, not a
+crash: the rebuild arms log one
+`STT failover chain exhausted` ERROR line (FC-typed-failure-collapsed-to-generic)
+while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
+`stt_failed` client status carry the operational signal. Untyped dial faults
+keep the `STT failover connect raised` traceback for diagnosis.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure
@@ -3870,3 +3881,19 @@ awaits cannot be replaced by a stale automatic owner suggestion.
 Snapshot unavailability is kept separate from the receiving receipt. A failed
 final transaction vetoes automatic owner claims and shortened proofs while still
 applying known receiving rejections, including retraction of manual owner maps.
+
+### Live capture inactivity observation
+
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.
