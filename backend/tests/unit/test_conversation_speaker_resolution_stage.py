@@ -1404,6 +1404,7 @@ def test_grouping_shadow_reuses_cache_no_new_model_calls_and_manual_overlay(monk
     assert c.transcript_segments[0].person_id == 'manual-person'
     assert all(token == 'person:manual-person' for token in c.transcript_segments[0].speaker_grouping_shadow.values())
     assert caplog.text.count('event=speaker_grouping_shadow uid=') == 3
+    assert caplog.text.count('surface=sync') == 3
 
 
 def test_shadow_failure_does_not_withdraw_incumbent_resolution(monkeypatch, env):

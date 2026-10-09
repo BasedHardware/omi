@@ -293,7 +293,15 @@ def compare_and_select(
             count(variant, 'owner_fragmented', summary['owner_fragmented'])
             providers = sorted({s.stt_provider or 'unknown' for s in segments})
             source = getattr(conversation.source, 'value', conversation.source)
-            surface = surface_label(conversation)
+            surface = surface_label(
+                {
+                    'source': conversation.source,
+                    'transcript_segments': [
+                        {'speaker_id_scope': (s.provider_speaker or {}).get('scope', s.speaker_id_scope)}
+                        for s in segments
+                    ],
+                }
+            )
             logger.info(
                 'event=speaker_grouping_shadow uid=%s conversation=%s provider=%s source=%s surface=%s summary=%s',
                 uid,
