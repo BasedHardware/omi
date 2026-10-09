@@ -987,7 +987,6 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -1096,6 +1095,7 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -2710,7 +2710,6 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -2816,6 +2815,7 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
               category: rollout}
