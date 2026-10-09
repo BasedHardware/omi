@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omi-integration"
+version = "0.1.0"
+description = "Omi Integration API client (OpenAPI-generated)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27,<1.0",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://www.omi.me/"
+Repository = "https://github.com/BasedHardware/omi"
+
+[tool.setuptools.packages.find]
+where = ["src"]
