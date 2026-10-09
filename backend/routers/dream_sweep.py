@@ -5,11 +5,16 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends
 
-from utils import dream_agent
+from utils import dream_agent, dream_canary
 from utils.cloud_tasks import verify_cloud_tasks_oidc
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.post('/v2/dream-agent/canary', include_in_schema=False)
+async def canary_dream_agent(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    return await dream_canary.check()
 
 
 @router.post('/v2/dream-agent/sweep', include_in_schema=False)
