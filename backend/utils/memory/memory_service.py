@@ -2737,13 +2737,14 @@ class MemoryService:
         if state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
         page = merged[bounded_offset : bounded_offset + bounded_limit]
-        if canonical_unavailable is not None:
-            truncated = True
-            if budget is not None and not budget.truncated:
-                budget.mark_exhausted('documents')
-        if truncated:
-            # An unhydrated stub ships empty content; a truncated page must
-            # stay an honest prefix of fully-known rows instead.
+        if canonical_unavailable is not None and budget is not None and not budget.truncated:
+            # Canonical is missing, so the route must not present this page as
+            # a complete account. The historical rows themselves are known and
+            # still need their content filled in.
+            budget.mark_exhausted('documents')
+        if truncated and canonical_unavailable is None:
+            # The request budget died before content was known. Do not ship
+            # empty stubs as if they were a finished page.
             page = [memory for memory in page if memory.id not in kept_stub_ids]
         elif kept_stub_ids:
             page = self._hydrate_merged_historical_stubs(uid, page, kept_stub_ids, budget=budget)
