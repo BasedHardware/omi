@@ -1099,7 +1099,7 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
 # capture off real-time vendor streams; seconds, never session identifiers.
 OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS = Gauge(
     'omi_listen_live_no_audio_sessions',
-    'Open backend-STT listen sessions awaiting first usable audio or with upstream audio idle for 300 seconds',
+    'Open backend-STT sockets awaiting first decoded frame for 300s, or receiving no raw byte frames for 300s afterward',
 )
 
 OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(

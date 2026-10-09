@@ -24,6 +24,7 @@ from typing import Set
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+DREAM_SPEC_PATH = ROOT_DIR / 'backend' / 'docs' / 'api' / 'dream-openapi.json'
 FLUTTER_HTTP_ROOT = ROOT_DIR / 'app' / 'lib' / 'backend' / 'http'
 
 # Unlike the desktop inventories, every route this extractor finds is in scope:
@@ -78,8 +79,12 @@ def _in_scope(routes: Set[str]) -> Set[str]:
 
 
 def _load_spec_paths() -> Set[str]:
-    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
-    return set(spec.get('paths', {}).keys())
+    # Dream uses a separately generated first-party contract, not an exclusion.
+    paths: Set[str] = set()
+    for spec_path in (SPEC_PATH, DREAM_SPEC_PATH):
+        spec = json.loads(spec_path.read_text(encoding='utf-8'))
+        paths.update(spec.get('paths', {}).keys())
+    return paths
 
 
 def _covered_by_spec(route: str, spec_paths: Set[str]) -> bool:

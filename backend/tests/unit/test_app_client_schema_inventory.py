@@ -448,3 +448,17 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     assert formerly_dirty_result.returncode == 0
     assert 'getApps' not in clean_result.stdout
     assert 'OpenAPI route functions with raw Dart decode sites:' not in formerly_dirty_result.stdout
+
+
+def test_generated_boundary_evidence_is_derived_from_decoder_composition(tmp_path, monkeypatch):
+    schema_dir = tmp_path / 'schema'
+    api_dir = tmp_path / 'api'
+    schema_dir.mkdir()
+    api_dir.mkdir()
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    decoder = api_dir / 'example.dart'
+    decoder.write_text('Display.fromJson(raw);')
+    assert inventory_app_client_schemas._collect_wire_backed_type_names() == []
+    decoder.write_text('Display.fromJson(wire.GeneratedResponse.fromJson(raw).toJson());')
+    assert inventory_app_client_schemas._collect_wire_backed_type_names() == ['Display']

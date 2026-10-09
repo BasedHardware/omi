@@ -381,7 +381,7 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
 
 
 class ListenNoAudioObservation:
-    """Session-owned accounting; control-message keepalives are not audio."""
+    """Observe first decoded audio, then raw byte-frame inactivity; control messages never reset the timer."""
 
     def __init__(self) -> None:
         self.started_at = monotonic()

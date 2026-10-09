@@ -3859,15 +3859,16 @@ immediately. Recovery never regenerates admitted audio from old chunk snapshots.
 
 ### Live capture inactivity observation
 
-`omi_listen_live_no_audio_sessions` counts open backend-STT sockets that have
-received no usable upstream audio frame for 300 seconds, or have stopped sending
-upstream audio for 300 seconds after first audio, sampled by the 10-second
-heartbeat. Control messages do not reset it. Audio resumption or teardown removes the
-socket; custom STT is excluded because it sends client transcripts. The gauge has
-no customer labels and starts at zero. A transition emits
-`omi_listen_capture_idle reason=no_upstream_audio`. This is an observation, not a
-forced disconnect: intentional idle clients can contribute. It cannot detect a
-pendant wedge when the app never opens a backend socket. The raw receive
-timestamp is used after the first validated frame, so later undecodable frames
-still count as upstream activity; decode-failure counters cover that case. Fleet alert thresholds should be calibrated against this
-baseline before paging.
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.

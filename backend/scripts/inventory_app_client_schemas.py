@@ -97,6 +97,11 @@ def _collect_wire_backed_type_names() -> list[str]:
         text = path.read_text(encoding='utf-8')
         names.update(typedef_re.findall(text))
         names.update(adapter_re.findall(text))
+    # Some display adapters receive JSON only after a generated boundary parser.
+    # Derive that evidence from actual decoder composition, never a file allowlist.
+    boundary_re = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\.fromJson\(\s*wire\.Generated')
+    for path in sorted(APP_API_DIR.rglob('*.dart')):
+        names.update(boundary_re.findall(path.read_text(encoding='utf-8')))
     return sorted(names, key=len, reverse=True)  # longest first for alternation
 
 
@@ -266,7 +271,10 @@ def scan_dart_schema_file(path: Path) -> DartSchemaFile:
         to_json_count=len(TO_JSON_RE.findall(text)),
         generated=any(marker in text[:500] for marker in GENERATED_MARKERS) or path.name.endswith('.g.dart'),
         generated_backed=bool(
-            GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text) or _WIRE_BACKED_DECODE_RE.search(text)
+            GENERATED_WIRE_RE.search(text)
+            or WIRE_DECODE_RE.search(text)
+            or _WIRE_BACKED_DECODE_RE.search(text)
+            or set(CLASS_RE.findall(text)).intersection(_WIRE_BACKED_NAMES)
         ),
     )
 
