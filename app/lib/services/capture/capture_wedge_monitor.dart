@@ -180,6 +180,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       if (session.deviceId != deviceId) continue;
       session.ingressBytes += byteCount;
       session.lastIngressByteAt = now;
+      session.lastBleIngressAt = now;
     }
   }
 
@@ -600,15 +601,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     }
   }
 
-  /// Ingress age is the last BLE ingress byte, or the session start when a
-  /// session is in scope but no byte has arrived — the same clock
-  /// `connected_no_bytes` already uses. Transcript age is only the transcript
-  /// observation. Either value is -1 when its clock was never seen.
+  /// Ingress age is only the BLE ingress-byte observation. The watchdog still
+  /// decides `connected_no_bytes` from `lastIngressByteAt ?? connectedAt`; that
+  /// clock is not the telemetry property. Transcript age is only the transcript
+  /// observation. Either value is -1 when its observation was never seen.
   ({int ingress, int transcript}) _silenceAge(String deviceId, {_OpenCaptureSession? session}) {
     final resolved = session ?? _longestOpenSession(deviceId);
     if (resolved == null) return (ingress: -1, transcript: -1);
-    final ingressAt = resolved.lastIngressByteAt ?? resolved.connectedAt;
-    return (ingress: _secondsSince(ingressAt), transcript: _secondsSince(resolved.lastTranscriptAt));
+    return (
+      ingress: _secondsSince(resolved.lastBleIngressAt),
+      transcript: _secondsSince(resolved.lastTranscriptAt),
+    );
   }
 
   _OpenCaptureSession? _longestOpenSession(String deviceId) {
@@ -651,5 +654,6 @@ class _OpenCaptureSession {
   int bytesSinceTranscript = 0;
   int ingressBytes = 0;
   DateTime? lastIngressByteAt;
+  DateTime? lastBleIngressAt;
   bool watchdogDeclared = false;
 }

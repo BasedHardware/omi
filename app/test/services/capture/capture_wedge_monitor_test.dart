@@ -149,7 +149,7 @@ void main() {
       expect(detected.single['app_build'], '987');
       expect(detected.single['build'], '987');
       expect(detected.single['platform'], 'ios');
-      expect(detected.single['seconds_since_last_ingress_byte'], 0);
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
       expect(detected.single['seconds_since_last_transcript'], -1);
     });
 
@@ -614,7 +614,7 @@ void main() {
       expect(detected, hasLength(1));
       expect(detected.single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
       expect(detected.single['build'], '987');
-      expect(detected.single['seconds_since_last_ingress_byte'], 300);
+      expect(detected.single['seconds_since_last_ingress_byte'], -1);
       expect(detected.single['seconds_since_last_transcript'], -1);
       expect(detected.single['ingress_bytes'], 0);
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
@@ -702,7 +702,7 @@ void main() {
       final detected = forEvent('Capture Wedge Detected').single;
       expect(detected['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
       expect(detected['seconds_since_last_transcript'], 120);
-      expect(detected['seconds_since_last_ingress_byte'], 120);
+      expect(detected['seconds_since_last_ingress_byte'], -1);
       expect(detected['build'], '987');
       monitor.dispose();
     });
