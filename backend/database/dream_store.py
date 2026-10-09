@@ -222,11 +222,13 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
         budget = (spend.get(transaction=tx).to_dict() or {}) if refund else {}
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
-        queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database)
+        queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
+        queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database) if success else []
         versions = {item['version'] for item in consumed}
         acknowledged = [s for s in queued if success and s.to_dict()['version'] in versions]
         remaining = [s for s in queued if not success or s.to_dict()['version'] not in versions]
-        settled = {**report, 'records_queued_after': len(remaining)}
+        queued_after = queued_count - len(acknowledged)
+        settled = {**report, 'records_queued_after': queued_after}
         encoded = _review_store().encode_doc(uid, {'source': settled})
         watermark = lease['watermark']
         if success and consumed:
@@ -248,7 +250,7 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
                 'success': success,
                 'trigger': lease.get('trigger', 'schedule'),
                 'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
-                'records_queued_after': len(remaining),
+                'records_queued_after': queued_after,
                 'tokens': int(report.get('tokens', 0)),
                 'cost_usd': float(report.get('cost_usd', 0)),
             },
@@ -259,7 +261,7 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': max(0, data['score'] - lease['score']) if success and not remaining else data['score'],
+            'score': max(0, data['score'] - lease['score']) if success and queued_after == 0 else data['score'],
         }
         if refund:
             # A midnight completion must not decrement the new day's allowance.

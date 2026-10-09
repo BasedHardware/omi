@@ -41,6 +41,8 @@ def read_record(uid, ref):
         ):
             return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
+        if row is None:
+            return None
         if row.is_locked or row.user_review is False or row.visibility != 'private':
             return None
         return row.model_dump(mode='python')
