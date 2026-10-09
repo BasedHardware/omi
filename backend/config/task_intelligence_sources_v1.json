@@ -59,6 +59,7 @@
       "policy_class": "direct_command",
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
