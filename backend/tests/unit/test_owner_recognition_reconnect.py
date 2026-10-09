@@ -247,3 +247,52 @@ async def test_handoff_uses_active_owner_not_historical_epoch_maps(monkeypatch, 
     await speak(new, 0, 2)
     assert visible_owner(new, 0)
     np.testing.assert_array_equal(new.continuity.donor['centroid'], [1, 0])
+
+
+@pytest.mark.anyio
+async def test_accepted_reconnect_owner_survives_same_scope_rollover_after_hint_expiry(monkeypatch, redis):
+    await seed(monkeypatch)
+    matcher, host, _ = await connect(monkeypatch, [OWNER])
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+    await speak(matcher, 0, 2)
+    assert visible_owner(matcher, 0)
+    clock = time.time()
+    monkeypatch.setattr(time, 'time', lambda: clock + 121)
+    assert not matcher.continuity.available()
+
+    async def read(fn, *args, **kwargs):
+        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+
+    host.persistence.call = AsyncMock(side_effect=read)
+    matcher.note_rollover_carry(set())
+    await matcher.refresh_for_conversation(
+        'next', owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+    )
+    assert visible_owner(matcher, 0), 'cache TTL limits new-socket hints, not an accepted same-stream identity'
+    assert not redis.get(cache._keys('owner', DEVICE)[1]), 'two seconds still cannot seed another socket'
+
+
+@pytest.mark.anyio
+async def test_completed_roster_rechecks_short_accept_even_without_rollover_candidate(monkeypatch, redis):
+    await seed(monkeypatch)
+    matcher, host, emitted = await connect(monkeypatch, [OWNER, OWNER])
+    await speak(matcher, 0, 2)
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='next-epoch'))
+
+    async def load():
+        matcher.person_embeddings['user'] = {'embedding': OWNER, 'name': 'Owner'}
+        await speak(matcher, 1, 2, start=3, scope='next-epoch')
+        assert visible_owner(matcher, 1), 'owner-only stage initially accepts'
+        matcher.person_embeddings['peer'] = {'embedding': OWNER, 'name': 'Peer'}
+
+    async def read(fn, *args, **kwargs):
+        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence.call = AsyncMock(side_effect=read)
+    await matcher.refresh_for_conversation(
+        'next', owner_carry_scope='next-epoch', owner_carry_donor={'id': 'conversation'}
+    )
+    assert not visible_owner(matcher, 1)
+    assert not matcher.speaker_to_person, 'neither owner nor peer gets a two-second label after margin rejection'
+    assert any(args[0] == 1 and args[1] == '' for args in emitted)

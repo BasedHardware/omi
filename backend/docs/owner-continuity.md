@@ -55,7 +55,7 @@ Use counts of `target=owner carried=none` grouped by `reason` to test this ranki
 
 The correction retains the entire eligible same-scope evidence roster through
 rollover, including non-owner/unknown competitors, then recalculates distances
-against the completed eligible print roster before joint arbitration. In
+against the completed eligible print roster before joint arbitration, even when no old owner qualifies for carry. In
 particular, a paid-to-free transition cannot discard a previously named peer's
 acoustic competition. Retained peer evidence does not itself carry a person name.
 
@@ -105,6 +105,9 @@ or another account/device follows ordinary matching. Two seconds and 0.35 are
 conservative starting points requiring post-deploy false-accept/miss evaluation;
 no real-audio calibration or production validation was performed in this PR.
 
+Once a reconnect accept is established, same-provider-scope rollover rechecks
+its centroid against current prints and joint competition without requiring the
+old socket hint to remain alive. The TTL applies to new-socket acquisition.
 Shortened accepts cannot seed another handoff. At least five independent seconds
 are required for a new donor, preventing indefinitely chained pseudo-evidence.
 Unplaced audio, <2-second fresh evidence, cache outages, missing device headers,

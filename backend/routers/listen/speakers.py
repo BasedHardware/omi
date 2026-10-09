@@ -244,11 +244,16 @@ class SpeakerMatcher:
                         )
                         or {}
                     )
+                except Exception:
+                    read_failed = True
+            if candidates or self._voice_centroids:
+                try:
                     current_receipt = await self.host.persistence.call(
                         conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
                     )
                 except Exception:
                     read_failed = True
+                    current_receipt = {'segments': {'reserved': {'is_user': True}}}
             receipt = donor.get('manual_speaker_assignments') or {}
             epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
             owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
@@ -265,12 +270,12 @@ class SpeakerMatcher:
                 gate = 'profile_changed'
             elif getattr(epoch, 'current_scope', None) != owner_carry_scope:
                 gate = 'scope_changed'
+            existing = set(self._voice_distances)
+            restored = set()
             if gate:
                 reasons.update({voice: gate for voice in candidates})
             elif candidates:
                 assert owner_carry_scope is not None
-                existing = set(self._voice_distances)
-                restored = set()
                 for voice, (centroid, evidence, covered) in retained.items():
                     if voice not in existing:
                         self._voice_scopes[voice] = owner_carry_scope
@@ -296,6 +301,11 @@ class SpeakerMatcher:
                     self._voice_scopes[voice] = owner_carry_scope
                     self._voice_segments[voice] = ''
                     restored.add(voice)
+            if (
+                self._voice_centroids
+                and carry_generation == self._generation
+                and self._profile_conversation_id == conversation_id
+            ):
                 # Revalidate both carried evidence and matches that ran while
                 # profiles/receipts were loading, against the completed roster.
                 for voice, centroid in self._voice_centroids.items():
@@ -305,7 +315,15 @@ class SpeakerMatcher:
                         if vector is not None and vector.size == centroid.size:
                             distances[person_id] = compare_embeddings(centroid, vector)
                     self._voice_distances[voice] = distances
-                    self._voice_decisions[voice] = self._evidence_decision(voice, centroid, distances)
+                    # A guarded reconnect accept is now a live scoped identity.
+                    # Hint TTL limits another socket, not same-stream rollover.
+                    qualified_owner = (voice in restored and voice in candidates) or (
+                        self.speaker_to_person.get(voice, (None,))[0] == USER_SELF_PERSON_ID
+                        and self._mapping_origin.get(voice) == 'automatic'
+                    )
+                    self._voice_decisions[voice] = self._evidence_decision(
+                        voice, centroid, distances, qualified_owner=qualified_owner
+                    )
                 rejected = manual_rejected_speakers(current_receipt)
                 decisions = arbitrate_owner_matches(
                     {v: d for v, d in self._voice_distances.items() if v not in rejected},
@@ -680,17 +698,22 @@ class SpeakerMatcher:
             self.host.state.speaker_map_dirty = True
         else:
             # Only buffered speech on the same scoped voice renews the gap.
-            ring = self.host.state.audio_ring_buffer
+            ring = getattr(self.host.state, 'audio_ring_buffer', None)
             bounds = ring.get_time_range() if ring is not None else None
-            if bounds and segment['abs_end'] > bounds[0] and segment['abs_start'] < bounds[1]:
+            start, end = segment.get('abs_start'), segment.get('abs_end')
+            if bounds and start is not None and end is not None and end > bounds[0] and start < bounds[1]:
                 self.continuity.observe(speaker_id)
         await self.continuity.update(receipt, generation=generation)
 
-    def _evidence_decision(self, voice: int, centroid: Any, distances: Dict[str, float]) -> SpeakerMatchDecision:
+    def _evidence_decision(
+        self, voice: int, centroid: Any, distances: Dict[str, float], *, qualified_owner: bool = False
+    ) -> SpeakerMatchDecision:
         decision = select_speaker_match(distances)
         seconds = sum(duration for _, duration in self.speaker_evidence.get(voice, ()))
         if seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and not (
-            seconds >= FRESH_SECONDS and self.continuity.matches(centroid, decision)
+            seconds >= FRESH_SECONDS
+            and decision.person_id == USER_SELF_PERSON_ID
+            and (qualified_owner or self.continuity.matches(centroid, decision))
         ):
             return replace(decision, person_id=None)
         return decision
