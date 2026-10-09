@@ -634,6 +634,12 @@ final class PreviewHarness: ObservableObject {
                  "enabled": false, "destructive": false]
             ]]]
         }
+        if ProcessInfo.processInfo.arguments.contains("empty-surface") {
+            surfaceRaw["title"] = "Tasks"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["empty"] = "No tasks yet"
+            surfaceRaw["sections"] = [["id": "today", "title": "Today", "footer": "", "rows": []]]
+        }
         if ProcessInfo.processInfo.arguments.contains("late-toolbar") {
             surfaceRaw["title"] = "Here is what I heard"
             surfaceRaw["toolbar"] = []
@@ -730,6 +736,12 @@ final class PreviewHarness: ObservableObject {
                 "capture": ["status": "Listening", "detail": "", "elapsed": "12:04", "source": "omi", "lastLine": "Keep the pendant flow as it is.", "explanation": "",
                     "actions": [["id": "pauseCapture", "title": "Pause", "symbol": "pause.fill", "enabled": true]]]]
         }
+        if ProcessInfo.processInfo.arguments.contains("recaps"), var chrome = raw["chrome"] as? [String: Any] {
+            chrome["recaps"] = [["id": "recap-1", "title": "A Busy Day of Shopping and Omi", "date": "Tue, Sep 29", "emoji": "🛍️"],
+                                ["id": "recap-2", "title": "Planning the Native Launch", "date": "Mon, Sep 28", "emoji": "🚀"],
+                                ["id": "recap-3", "title": "Quiet Sunday", "date": "Sun, Sep 27", "emoji": "🌿"]]
+            raw["chrome"] = chrome
+        }
         if ProcessInfo.processInfo.arguments.contains("attachments"), var chat = surfaceRaw["chat"] as? [String: Any] {
             var actions = chat["actions"] as! [[String: Any]]
             actions.append(["id": "chat_attach", "title": "Add Attachment", "kind": "menu", "symbol": "paperclip", "subtitle": "",
@@ -808,8 +820,14 @@ final class PreviewHarness: ObservableObject {
                 ]]]
             }
         }
-        if ProcessInfo.processInfo.arguments.contains("light") { raw["appearance"] = "light" }
-        else { raw["appearance"] = "dark" }
+        if ProcessInfo.processInfo.arguments.contains("light") {
+            raw["appearance"] = "light"
+            surfaceRaw["appearance"] = "light"
+        } else { raw["appearance"] = "dark" }
+        if ProcessInfo.processInfo.arguments.contains("rtl") {
+            raw["direction"] = "rtl"
+            surfaceRaw["direction"] = "rtl"
+        }
         if ProcessInfo.processInfo.arguments.contains("error") || ProcessInfo.processInfo.arguments.contains("empty") {
             raw["groups"] = []
             raw["localRecordingCount"] = 0

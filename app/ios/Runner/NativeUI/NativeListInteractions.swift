@@ -84,6 +84,19 @@ struct NativeSelectionDisabled: ViewModifier {
     }
 }
 
+/// A selectable row shows its selection by the accent checkmark alone, as Mail and Photos do: the plain
+/// cell background replaces the system's grey selected fill, and the row's own content stays monochrome.
+@available(iOS 16.0, *)
+struct NativeSelectableRow: ViewModifier {
+    let selectable: Bool
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if selectable {
+            content.listRowBackground(Color(uiColor: .secondarySystemGroupedBackground))
+        } else { content }
+    }
+}
+
 /// A titled section header that expands and collapses its rows locally.
 @available(iOS 16.0, *)
 struct NativeCollapsibleHeader: View {
@@ -98,13 +111,114 @@ struct NativeCollapsibleHeader: View {
             HStack(spacing: 8) {
                 Text(title)
                 Spacer(minLength: 8)
-                Image(systemName: collapsed ? "chevron.down" : "chevron.up")
-                    .font(.caption.weight(.semibold)).accessibilityHidden(true)
-            }.frame(minHeight: 44).contentShape(Rectangle())
+                // One glyph that turns, pointing down to expand and up to collapse; symmetric in RTL.
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .rotationEffect(.degrees(collapsed ? 0 : 180))
+                    .accessibilityHidden(true)
+            }.frame(minHeight: NativeMetrics.rowHeight).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(collapsed ? expandLabel : collapseLabel)
+    }
+}
+
+/// A dashboard section title with a trailing action such as "View All". Home's recaps and conversations
+/// share it; date groups and surface sections keep the system header.
+@available(iOS 16.0, *)
+struct NativeSectionHeader<Trailing: View>: View {
+    let title: String
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        // Large text stacks the action under the title instead of breaking the title mid-word.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 8) {
+                titleText
+                Spacer(minLength: 8)
+                trailing()
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                titleText
+                trailing()
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: NativeMetrics.rowHeight, alignment: .leading)
+        .textCase(nil)
+        .contentShape(Rectangle())
+    }
+
+    /// A Color, not the hierarchical style, which a list header maps to its secondary grey.
+    private var titleText: some View {
+        Text(title).font(.title3.weight(.semibold)).foregroundStyle(Color.primary)
+    }
+}
+
+/// The trailing action of a section header. The chevron is decoration; the label is the title alone.
+@available(iOS 16.0, *)
+struct NativeSectionAction: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(title)
+            Image(systemName: "chevron.forward").imageScale(.small).accessibilityHidden(true)
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(Color.secondary)
+        .textCase(nil)
+    }
+}
+
+/// Snapshot copy for a list with nothing to show, centred with a symbol like the system's empty states.
+/// The title keeps the caller's accessibility identifier.
+@available(iOS 16.0, *)
+struct NativeEmptyState: View {
+    let title: String
+    let symbol: String
+    var identifier: String?
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            ContentUnavailableView {
+                Label { titleText } icon: { Image(systemName: symbol) }
+            }
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: symbol).font(.system(size: 44)).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                titleText.font(.title3.weight(.semibold))
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32).padding(.vertical, 40)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder private var titleText: some View {
+        if let identifier { Text(title).accessibilityIdentifier(identifier) } else { Text(title) }
+    }
+}
+
+/// A short status tag ("NEW", "BETA") drawn as a small tinted capsule. Only a subtitle that is already such
+/// a tag becomes one, so ordinary subtitles and translations without letter case stay plain text.
+@available(iOS 16.0, *)
+struct NativeBadge: View {
+    let text: String
+
+    static func accepts(_ text: String) -> Bool {
+        (1...6).contains(text.count) && !text.contains(where: \.isWhitespace)
+            && text.contains(where: \.isUppercase) && !text.contains(where: \.isLowercase)
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(NativeMetrics.accent)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(NativeMetrics.accent.opacity(0.16), in: Capsule())
+            .fixedSize()
     }
 }
 

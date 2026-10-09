@@ -1,5 +1,21 @@
 import SwiftUI
 
+/// Shared presentation metrics, so cards, blocks and rows agree across Home and every surface.
+enum NativeMetrics {
+    /// Matches the system's inset-grouped cell: 26 pt with Liquid Glass (iOS 26+), 10 pt before.
+    static var cardRadius: CGFloat {
+        if #available(iOS 26.0, *) { return 26 }
+        return 10
+    }
+    /// Code blocks, tables, thumbnails and the reader's current-line highlight.
+    static let blockRadius: CGFloat = 12
+    /// The minimum tappable row and control height.
+    static let rowHeight: CGFloat = 44
+    /// Selection marks and tags. The renderer's own tint is monochrome and the app defines no accent
+    /// colour, so `Color.accentColor` would resolve to that tint; this is the system accent.
+    static let accent = Color(uiColor: .systemBlue)
+}
+
 /// Glass belongs to the controls above content; reading surfaces keep an opaque background.
 struct NativeGlassControls<Content: View>: View {
     @ViewBuilder let content: () -> Content

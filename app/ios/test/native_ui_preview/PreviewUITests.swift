@@ -663,6 +663,17 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(app.buttons["native-retry"].exists)
         capture(app, "native-empty")
     }
+    func testEmptySurfaceCentresItsCopyAndKeepsItsIdentifier() {
+        let app = start(["surface", "empty-surface"])
+        let empty = app.staticTexts["native-surface-empty"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 10))
+        XCTAssertEqual(empty.label, "No tasks yet")
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(empty.frame.midX, window.midX, accuracy: 2, "The empty state is centred, not a leading row")
+        XCTAssertGreaterThan(empty.frame.minY, window.height / 4)
+        XCTAssertTrue(app.buttons["save"].isHittable, "The empty state never covers the toolbar")
+        capture(app, "native-surface-empty")
+    }
     func testSessionInvalidationHidesNativeTranscript() {
         let app = start()
         app.buttons["native-conversation-conversation-1"].tap()
@@ -700,6 +711,22 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["tasks:"].waitForExistence(timeout: 5))
         app.swipeUp()
         XCTAssertTrue(app.buttons["native-conversation-conversation-1"].isHittable)
+    }
+    func testSeveralRecapsPageWithTheNextCardPeeking() {
+        let app = start(["chrome", "recaps"])
+        let first = app.buttons["native-recap-recap-1"], second = app.buttons["native-recap-recap-2"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(first.isHittable)
+        let window = app.windows.firstMatch.frame
+        // The next card shows at the trailing edge, so the row reads as a carousel rather than one card.
+        XCTAssertLessThan(first.frame.width, window.width - 40)
+        XCTAssertTrue(second.exists)
+        XCTAssertLessThan(second.frame.minX, window.maxX)
+        capture(app, "native-home-recap-carousel")
+        first.swipeLeft()
+        wait(until: second.isHittable, "A swipe pages to the next recap")
+        second.tap()
+        XCTAssertTrue(app.staticTexts["recap:recap-2"].waitForExistence(timeout: 5))
     }
     func testHomeChromeLargeTextKeepsControlsReachable() {
         let app = start(["chrome", "large", "light"])

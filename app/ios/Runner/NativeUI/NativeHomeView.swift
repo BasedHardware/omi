@@ -64,73 +64,47 @@ struct NativeHomeView: View {
         .environment(\.layoutDirection, state.snapshot.direction == "rtl" ? .rightToLeft : .leftToRight)
     }
 
+    /// Loaded, not failed and without a conversation.
+    private var isEmpty: Bool {
+        !state.snapshot.loading && !state.snapshot.failed && state.snapshot.groups.isEmpty
+    }
+
+    /// Nothing else is listed, so the empty state centres on the screen rather than sitting in a row.
+    private var showsOnlyEmpty: Bool {
+        isEmpty && state.snapshot.chrome == nil && state.snapshot.localRecordingCount == 0
+            && !state.snapshot.hasMore && !state.actionFailed
+    }
+
+    private var emptyState: some View {
+        NativeEmptyState(title: state.snapshot.copy.empty, symbol: "bubble.left.and.text.bubble.right")
+    }
+
     private var library: some View {
         List {
-            if let chrome = state.snapshot.chrome {
-                if let capture = chrome.capture {
-                    Section { captureCard(capture) }
-                }
-                if !chrome.alerts.isEmpty {
-                    Section {
-                        ForEach(chrome.alerts) { control($0) }
-                    }
-                }
-                if !chrome.recaps.isEmpty {
-                    Section {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(chrome.recaps) { recap in
-                                    Button { dispatch("recap", recap.id) } label: {
-                                        VStack(alignment: .leading, spacing: 12) {
-                                            Text("\(recap.emoji)  \(recap.date)").font(.caption).foregroundStyle(.secondary)
-                                            Text(recap.title).font(.headline).foregroundStyle(.primary)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                        }
-                                        .frame(width: dynamicTypeSize.isAccessibilitySize ? 300 : 240, alignment: .leading)
-                                        .padding(16)
-                                        .frame(minHeight: 130, alignment: .topLeading)
-                                        .background(Color(uiColor: .secondarySystemGroupedBackground),
-                                                    in: RoundedRectangle(cornerRadius: 20))
-                                    }.buttonStyle(.plain)
-                                        .accessibilityIdentifier("native-recap-\(recap.id)")
-                                }
-                            }.padding(.vertical, 4)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                        .listRowBackground(Color.clear)
-                    } header: {
-                        HStack {
-                            Text(chrome.recapsTitle)
-                            Spacer()
-                            Button(state.snapshot.copy.viewAll) { dispatch("recaps") }
-                                .textCase(nil)
-                        }
-                    }
-                }
-            }
+            if let chrome = state.snapshot.chrome { chromeSections(chrome) }
             if state.snapshot.chrome != nil {
+                // The browse row is the section's header, so Recordings sits directly beneath it.
                 Section {
+                    if state.snapshot.localRecordingCount > 0 { recordingsRow }
+                } header: {
                     Button { dispatch("browse") } label: {
-                        HStack { Text(state.snapshot.copy.conversations).font(.headline); Spacer(); Text(state.snapshot.copy.viewAll) }
-                    }.buttonStyle(.plain).listRowBackground(Color.clear)
+                        NativeSectionHeader(title: state.snapshot.copy.conversations) {
+                            NativeSectionAction(title: state.snapshot.copy.viewAll)
+                        }
+                    }.buttonStyle(.plain)
                         .accessibilityIdentifier("native-browse-all")
                 }
-            }
-            if state.snapshot.localRecordingCount > 0 {
-                Button {
-                    dispatch("browse")
-                } label: {
-                    HStack {
-                        Label(state.snapshot.copy.recordings, systemImage: "waveform")
-                        Spacer()
-                        Text(state.snapshot.localRecordingCount, format: .number)
-                    }
-                }
-                .accessibilityIdentifier("native-recordings")
+            } else if state.snapshot.localRecordingCount > 0 {
+                recordingsRow
             }
             if state.snapshot.failed || state.actionFailed {
                 Section {
-                    Text(state.snapshot.copy.error)
+                    Label {
+                        Text(state.snapshot.copy.error)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            .accessibilityHidden(true)
+                    }
                     Button(state.snapshot.copy.retry) {
                         dispatch("refresh")
                     }
@@ -138,9 +112,9 @@ struct NativeHomeView: View {
                 }
             }
             if state.snapshot.loading && state.snapshot.groups.isEmpty {
-                ProgressView().accessibilityLabel(state.snapshot.copy.loading)
-            } else if !state.snapshot.failed && state.snapshot.groups.isEmpty {
-                Text(state.snapshot.copy.empty).foregroundStyle(.secondary).listRowBackground(Color.clear)
+                ProgressView().accessibilityLabel(state.snapshot.copy.loading).frame(maxWidth: .infinity)
+            } else if isEmpty && !showsOnlyEmpty {
+                emptyState.listRowBackground(Color.clear)
             }
             ForEach(state.snapshot.groups) { group in
                 Section(group.title) {
@@ -174,6 +148,9 @@ struct NativeHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .overlay {
+            if showsOnlyEmpty { emptyState.allowsHitTesting(false).transition(.opacity) }
+        }
         .navigationTitle(state.snapshot.chrome?.home ?? state.snapshot.copy.conversations)
         .navigationBarTitleDisplayMode(state.snapshot.chrome == nil ? .inline : .large)
         .refreshable { await state.send("refresh") }
@@ -227,6 +204,95 @@ struct NativeHomeView: View {
         Task { await state.send(method, id) }
     }
 
+    @ViewBuilder private func chromeSections(_ chrome: NativeHomeSnapshot.Chrome) -> some View {
+        if let capture = chrome.capture {
+            Section { captureCard(capture) }
+        }
+        if !chrome.alerts.isEmpty {
+            Section {
+                ForEach(chrome.alerts) { control($0) }
+            }
+        }
+        if !chrome.recaps.isEmpty {
+            Section {
+                recaps(chrome.recaps)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .listRowBackground(Color.clear)
+            } header: {
+                NativeSectionHeader(title: chrome.recapsTitle) {
+                    Button { dispatch("recaps") } label: {
+                        NativeSectionAction(title: state.snapshot.copy.viewAll)
+                            .frame(minHeight: NativeMetrics.rowHeight).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// One recap fills the row; several page horizontally with the next card peeking in.
+    @ViewBuilder private func recaps(_ recaps: [NativeHomeSnapshot.Chrome.Recap]) -> some View {
+        if recaps.count == 1, let recap = recaps.first {
+            recapCard(recap)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(recaps) { recap in
+                        recapCard(recap).modifier(NativeCarouselPage(width: dynamicTypeSize.isAccessibilitySize ? 320 : 280))
+                    }
+                }
+                // Cards share the tallest card's height.
+                .fixedSize(horizontal: false, vertical: true)
+                .modifier(NativeCarouselLayout())
+            }
+            .modifier(NativeCarouselPaging())
+        }
+    }
+
+    private func recapCard(_ recap: NativeHomeSnapshot.Chrome.Recap) -> some View {
+        Button { dispatch("recap", recap.id) } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(recap.emoji)  \(recap.date)").font(.subheadline).foregroundStyle(.secondary)
+                    Text(recap.title).font(.headline).foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 88, maxHeight: .infinity, alignment: .leading)
+            .background(Color(uiColor: .secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: NativeMetrics.cardRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: NativeMetrics.cardRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("native-recap-\(recap.id)")
+    }
+
+    private var recordingsRow: some View {
+        Button {
+            dispatch("browse")
+        } label: {
+            HStack(spacing: 12) {
+                Label(state.snapshot.copy.recordings, systemImage: "waveform")
+                Spacer()
+                Text(state.snapshot.localRecordingCount, format: .number).foregroundStyle(.secondary)
+                // Large text needs the room for the title, as system cells drop their accessory.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "chevron.forward")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(minHeight: NativeMetrics.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .accessibilityIdentifier("native-recordings")
+    }
+
     private func control(_ action: NativeHomeSnapshot.Chrome.Action, expanded: Bool = false) -> some View {
         Button { dispatch(action.id) } label: {
             Label { Text(action.title) } icon: { Image(systemName: action.symbol).font(.system(size: 20)) }
@@ -261,22 +327,55 @@ struct NativeHomeView: View {
 
     private func row(_ conversation: NativeConversation) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(conversation.title).font(.headline)
                 if conversation.locked {
-                    Image(systemName: "lock.fill").accessibilityHidden(true)
+                    Image(systemName: "lock.fill").font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
                 if conversation.starred {
-                    Image(systemName: "star.fill").accessibilityHidden(true)
+                    Image(systemName: "star.fill").font(.footnote).foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
                 }
             }
             Text(conversation.timestamp).font(.subheadline).foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)
-        .frame(minHeight: 44, alignment: .leading)
+        .frame(minHeight: NativeMetrics.rowHeight, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityValue(conversation.starred ? state.snapshot.copy.starred : "")
         .accessibilityHint(conversation.locked ? state.snapshot.copy.lockedHint : "")
+    }
+}
+
+/// A carousel card's width: the row less a peek of the next card (iOS 17+), otherwise a fixed width.
+@available(iOS 16.0, *)
+private struct NativeCarouselPage: ViewModifier {
+    let width: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.containerRelativeFrame(.horizontal) { length, _ in max(min(length, width), length - 56) }
+        } else {
+            content.frame(width: width)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+private struct NativeCarouselLayout: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) { content.scrollTargetLayout() } else { content }
+    }
+}
+
+/// Swipes settle on a card, and the peeking card is not clipped at the row's edge.
+@available(iOS 16.0, *)
+private struct NativeCarouselPaging: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.scrollTargetBehavior(.viewAligned).scrollClipDisabled()
+        } else { content }
     }
 }
 
