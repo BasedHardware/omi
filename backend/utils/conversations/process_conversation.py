@@ -112,6 +112,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
+from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -2942,7 +2943,8 @@ def process_conversation(
 
     _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
-    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    with identity_pass(None if already_observed else 'first'):
+        speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
