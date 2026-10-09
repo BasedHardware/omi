@@ -173,7 +173,13 @@ def test_late_identity_repair_counter_observes_only_committed_cas(env, monkeypat
         return True
 
     monkeypatch.setattr(stage, 'resolve_speakers_for_processing', resolve)
-    monkeypatch.setattr(stage.identity_updates_db, 'persist_speaker_resolution_if_current', lambda *a, **kw: committed)
+
+    def persist(uid, payload, **kw):
+        if committed:
+            kw['on_committed_identity'](raw, payload)
+        return committed
+
+    monkeypatch.setattr(stage.identity_updates_db, 'persist_speaker_resolution_if_current', persist)
     counter = getattr(metrics, 'OWNER_IDENTITY_REPAIR', None)
 
     def repair_count():

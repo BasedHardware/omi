@@ -956,16 +956,8 @@ def refresh_completed_speaker_identity(uid: str, conversation_id: str, *, candid
             return False
         payload = conversation.model_dump()
         committed = identity_updates_db.persist_speaker_resolution_if_current(
-            uid, payload, expected_updated_at=raw['updated_at']
+            uid, payload, expected_updated_at=raw['updated_at'], on_committed_identity=record_owner_identity_repair
         )
-        if committed:
-            try:
-                record_owner_identity_repair(raw, payload)
-            except Exception as error:
-                # Observability cannot turn an authoritative commit into a failure.
-                logger.warning(
-                    'event=owner_identity_repair_metrics outcome=failed exception_type=%s', type(error).__name__
-                )
         return committed
     except Exception as error:
         logger.warning('event=speaker_identity_refresh outcome=failed exception_type=%s', type(error).__name__)

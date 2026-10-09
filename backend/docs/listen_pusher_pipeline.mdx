@@ -3775,8 +3775,12 @@ Participant grouping marked `resolved` does not by itself suppress the late
 identity retry: only a resolved row already containing an owner label is skipped.
 A completed owner miss can therefore use newly available audio/profile evidence.
 
-`omi_owner_identity_repair_total{outcome}` counts only successful late identity
-CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+`omi_owner_identity_repair_total{outcome}` counts identity changes in successful
+late CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It compares
+decoded transaction-current segments to the actual encoded write after manual
+authority has been reapplied. Missing legacy segment ids use the same stable ids
+as conversation reads. Unchanged identities emit nothing, even when resolution
+metadata is updated. The observer runs once after transaction success. It does not
 observe ordinary finalization again. The existing conversation counter/share
 remain first-finalization snapshots. Metric failure cannot change a committed
 repair into a reported storage failure.
