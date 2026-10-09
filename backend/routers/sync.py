@@ -20,6 +20,7 @@ from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
+from database.legal_holds import DestructiveOperationInProgress
 from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
@@ -2385,14 +2386,21 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         except Exception as e:
             # The upload fence raises DestructiveOperationInProgress while a
             # destructive operation owns the account. Leaving it unhandled
-            # reports that frame to Error Reporting and skips the unavailable
-            # marker the build path writes on its final attempt.
+            # reports that frame to Error Reporting. The unavailable marker is
+            # the same fenced GCS write, so the final attempt must catch a
+            # second fence and still return failed_final.
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
-                await run_blocking(
-                    storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
-                )
+                try:
+                    await run_blocking(
+                        storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                    )
+                except DestructiveOperationInProgress:
+                    logger.info(
+                        f'audio_merge: unavailable marker deferred reason=destructive_operation '
+                        f'conv={conversation_id} file={audio_file_id}'
+                    )
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
             logger.warning(
                 f'audio_merge: attempt {task_retry_count + 1} failed conv={conversation_id} '
@@ -2495,18 +2503,25 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         except Exception as e:
             # Same contract as the build: a destructive-operation fence on the
             # upload must retry (or mark unavailable on the final attempt)
-            # instead of escaping as an unhandled legal_holds traceback.
+            # instead of escaping as an unhandled legal_holds traceback. The
+            # marker write is fenced too, so a second fence is logged and the
+            # task still completes as failed_final.
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
-                await run_blocking(
-                    storage_executor,
-                    mark_conversation_playback_unavailable,
-                    uid,
-                    conversation_id,
-                    fingerprint,
-                    'merge_failed',
-                )
+                try:
+                    await run_blocking(
+                        storage_executor,
+                        mark_conversation_playback_unavailable,
+                        uid,
+                        conversation_id,
+                        fingerprint,
+                        'merge_failed',
+                    )
+                except DestructiveOperationInProgress:
+                    logger.info(
+                        f'audio_merge: unavailable marker deferred reason=destructive_operation conv={conversation_id}'
+                    )
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
             logger.warning(
                 f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
