@@ -231,6 +231,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
             source: session.source,
             trigger: triggerBytesSentNoTranscript,
             requireFeatureGate: false,
+            depthSession: session,
           ),
         );
       }
@@ -242,7 +243,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     if (ends.length >= zeroByteThreshold &&
         ends.last.difference(ends[ends.length - zeroByteThreshold]) <= zeroByteWindow) {
       unawaited(
-        _maybeDeclare(state, deviceId: session.deviceId, source: session.source, trigger: triggerZeroByteStreak),
+        _maybeDeclare(
+          state,
+          deviceId: session.deviceId,
+          source: session.source,
+          trigger: triggerZeroByteStreak,
+          depthSession: session,
+        ),
       );
     }
   }
@@ -321,9 +328,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
             requireFeatureGate: false,
             extraProperties: {
               'bytes_since_last_transcript': session.bytesSinceTranscript,
-              'seconds_since_last_transcript': now.difference(progressAt).inSeconds,
               'socket_still_connected': true,
             },
+            depthSession: session,
           ),
         );
         continue;
@@ -343,10 +350,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           source: session.source,
           trigger: triggerConnectedNoBytes,
           requireFeatureGate: false,
-          extraProperties: {
-            'seconds_since_last_ingress_byte': now.difference(ingressAt).inSeconds,
-            'ingress_bytes': session.ingressBytes,
-          },
+          extraProperties: {'ingress_bytes': session.ingressBytes},
+          depthSession: session,
         ),
       );
     }
@@ -461,7 +466,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     required String trigger,
     bool requireFeatureGate = true,
     Map<String, Object> extraProperties = const {},
+    _OpenCaptureSession? depthSession,
   }) async {
+    // Snapshot before the feature-gate await. A later byte must not rewrite the
+    // age that was true at detection.
+    final depth = _silenceAge(deviceId, session: depthSession);
     if (_nativeIngressDevices.contains(deviceId) &&
         (trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects)) {
       return;
@@ -497,6 +506,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       'app_build': _appBuild(),
       'platform': _platform(),
       ...extraProperties,
+      'seconds_since_last_ingress_byte': depth.ingress,
+      'seconds_since_last_transcript': depth.transcript,
     });
     notifyListeners();
     unawaited(_attemptRecovery(episode));
@@ -583,10 +594,41 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   void _safeTrack(String event, Map<String, Object> properties) {
     try {
-      _track(event, properties);
+      _track(event, {...properties, 'build': _appBuild()});
     } catch (e) {
       Logger.debug('CaptureWedgeMonitor: track failed for $event: $e');
     }
+  }
+
+  /// Ingress age is the last BLE ingress byte, or the session start when a
+  /// session is in scope but no byte has arrived — the same clock
+  /// `connected_no_bytes` already uses. Transcript age is only the transcript
+  /// observation. Either value is -1 when its clock was never seen.
+  ({int ingress, int transcript}) _silenceAge(String deviceId, {_OpenCaptureSession? session}) {
+    final resolved = session ?? _longestOpenSession(deviceId);
+    if (resolved == null) return (ingress: -1, transcript: -1);
+    final ingressAt = resolved.lastIngressByteAt ?? resolved.connectedAt;
+    return (ingress: _secondsSince(ingressAt), transcript: _secondsSince(resolved.lastTranscriptAt));
+  }
+
+  _OpenCaptureSession? _longestOpenSession(String deviceId) {
+    _OpenCaptureSession? chosen;
+    DateTime? chosenAt;
+    for (final session in _openSessions.values) {
+      if (session.deviceId != deviceId) continue;
+      final at = session.lastIngressByteAt ?? session.connectedAt;
+      if (chosen == null || chosenAt == null || at.isBefore(chosenAt)) {
+        chosen = session;
+        chosenAt = at;
+      }
+    }
+    return chosen;
+  }
+
+  int _secondsSince(DateTime? at) {
+    if (at == null) return -1;
+    final seconds = _now().difference(at).inSeconds;
+    return seconds < 0 ? 0 : seconds;
   }
 }
 
