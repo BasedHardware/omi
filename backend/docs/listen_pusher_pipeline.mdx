@@ -1446,6 +1446,13 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
+Reminder effects read the saved task lifecycle after persistence rather than
+using extraction state. Cancelled, superseded, completed, deleted and undated
+tasks do not arm reminders. An unavailable post-create reminder read emits
+degraded telemetry and skips that reminder step without failing the committed
+extraction or blocking vector/export continuation. This is not a durable
+reminder retry; transport and offline-device delivery remain best effort.
+
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
 links, completion, edited descriptions/dates, folders, manual assignments and
@@ -1825,6 +1832,16 @@ sequenceDiagram
 
     Note over Backend: Retry exhaustion: after MAX_RETRIES (3),<br/>conversation stays buffered with reset sent_at.<br/>cleanup_processing_conversations picks it up next session.
 ```
+
+Close-code severity: a close the pusher sends for its own rolling update
+(1012 service restart) is expected, self-healing transport churn — buffered
+audio and pending conversations replay on the replacement socket — and logs
+at INFO (`Pusher * Connection closed` lines; FC-lifecycle-close-classified-by-transport-phase).
+Every other close (abnormal 1006, internal 1011, TLS 1015, no close frame)
+keeps the ERROR meaning of those lines. Independently of the close code, a
+close raised by a socket that a reconnect already replaced is informational
+on the flush and receive paths and never tears down the freshly installed
+connection.
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 

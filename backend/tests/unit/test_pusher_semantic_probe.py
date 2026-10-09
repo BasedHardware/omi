@@ -273,6 +273,30 @@ def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, pr
     assert 'transcript token endpoint uid' not in line
 
 
+def test_base_probe_status_line_names_listen_bootstrap_error(monkeypatch, probe, tmp_path, capsys):
+    receipt = probe._receipt(
+        status='FAIL',
+        evidence_id='pusher-dev-123-synthetic',
+        deployment_receipt={},
+        deployment_receipt_sha256='',
+        started_at='2026-09-27T00:00:00Z',
+        ended_at='2026-09-27T00:00:01Z',
+        candidate_pod_count=0,
+        failure_stage='listen_bootstrap_error',
+        live_word_count=None,
+        expected_word_count=None,
+        consumer_readback_passed=False,
+    )
+    monkeypatch.setattr(
+        probe, 'parse_args', lambda *_: SimpleNamespace(output=tmp_path / 'receipt.json', alignment_scenario=False)
+    )
+    monkeypatch.setattr(probe, 'run_probe', lambda *_: asyncio.sleep(0, result=(receipt, False)))
+
+    assert probe.main([]) == 1
+    line = capsys.readouterr().out.strip()
+    assert 'failure_stage=listen_bootstrap_error' in line
+
+
 @pytest.fixture
 def probe(monkeypatch):
     spec = importlib.util.spec_from_file_location('pusher_semantic_probe_test_target', SCRIPT)
@@ -375,14 +399,137 @@ class _FailoverListenSocket:
 
 
 class _FakeConnect:
-    def __init__(self, socket: _FailoverListenSocket) -> None:
+    def __init__(self, socket: object) -> None:
         self._socket = socket
 
-    async def __aenter__(self) -> _FailoverListenSocket:
+    async def __aenter__(self) -> object:
         return self._socket
 
     async def __aexit__(self, *_exc: object) -> bool:
         return False
+
+
+class _HandshakeCloseSocket:
+    """Deliver an optional handshake, then close on the next recv or send.
+
+    An empty prelude closes inside the pre-audio `session_bound and ready`
+    loop. A session-then-ready prelude lets that loop finish so the first
+    audio send is the close, which is post-ready.
+    """
+
+    def __init__(self, prelude: list[dict], *, close_code: int, close_on: str, reason: str) -> None:
+        self._prelude = [json.dumps(item) for item in prelude]
+        self._close_code = close_code
+        self._close_on = close_on
+        self._reason = reason
+        self.sent = 0
+
+    def _closed(self) -> None:
+        from websockets.exceptions import ConnectionClosedError
+        from websockets.frames import Close
+
+        raise ConnectionClosedError(Close(self._close_code, self._reason), None)
+
+    async def recv(self) -> str:
+        if self._prelude:
+            return self._prelude.pop(0)
+        self._closed()
+        raise AssertionError('close did not raise')
+
+    async def send(self, _chunk: bytes) -> None:
+        self.sent += 1
+        if self._close_on == 'send':
+            self._closed()
+
+    async def close(self, code: int = 1000, reason: str = '') -> None:
+        return None
+
+
+_LISTEN_CONVERSATION_ID = '5df117e1-3b4b-41b2-94c6-54f3c690e811'
+
+
+async def _run_closed_listen_probe(monkeypatch, probe, tmp_path, socket):
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+    monkeypatch.setattr(probe.uuid, 'uuid4', lambda: probe.uuid.UUID(_LISTEN_CONVERSATION_ID))
+
+    async def waiting_readback(*_args, **_kwargs):
+        await asyncio.sleep(3600)
+        pytest.fail('readback unexpectedly finished')
+
+    monkeypatch.setattr(probe, '_terminal_readback', waiting_readback)
+    monkeypatch.setattr(probe.websockets, 'connect', lambda *_a, **_k: _FakeConnect(socket))
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=180,
+        project='synthetic',
+        namespace='synthetic',
+    )
+    try:
+        return await asyncio.wait_for(probe.run_probe(args), timeout=2)
+    finally:
+        current = asyncio.current_task()
+        others = [task for task in asyncio.all_tasks() if task is not current]
+        pending = [task for task in others if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        for task in others:
+            if task.done() and not task.cancelled():
+                task.exception()
+
+
+@pytest.mark.asyncio
+async def test_pre_audio_connection_close_is_listen_bootstrap_error(monkeypatch, probe, tmp_path):
+    reason = 'redis credential rejected at accept'
+    socket = _HandshakeCloseSocket([], close_code=1006, close_on='recv', reason=reason)
+
+    receipt, passed = await _run_closed_listen_probe(monkeypatch, probe, tmp_path, socket)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'listen_bootstrap_error'
+    assert socket.sent == 0
+    assert reason not in json.dumps(receipt)
+
+
+@pytest.mark.asyncio
+async def test_post_ready_connection_close_stays_listen_closed_early(monkeypatch, probe, tmp_path):
+    reason = 'socket dropped mid stream'
+    socket = _HandshakeCloseSocket(
+        [
+            {'type': 'conversation_session', 'conversation_id': _LISTEN_CONVERSATION_ID},
+            {'type': 'service_status', 'status': 'ready'},
+        ],
+        close_code=1006,
+        close_on='send',
+        reason=reason,
+    )
+
+    receipt, passed = await _run_closed_listen_probe(monkeypatch, probe, tmp_path, socket)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'listen_closed_early'
+    assert socket.sent == 1
+    assert reason not in json.dumps(receipt)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_window_1011_stays_stt_unavailable(monkeypatch, probe, tmp_path):
+    """A 1011 during accept still cannot masquerade as a bootstrap or finalization failure."""
+    reason = 'provider details'
+    socket = _HandshakeCloseSocket([], close_code=1011, close_on='recv', reason=reason)
+
+    receipt, passed = await _run_closed_listen_probe(monkeypatch, probe, tmp_path, socket)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'stt_unavailable'
+    assert reason not in json.dumps(receipt)
 
 
 def _install_fake_timeline(monkeypatch: pytest.MonkeyPatch, probe, clock: list[float]) -> None:
