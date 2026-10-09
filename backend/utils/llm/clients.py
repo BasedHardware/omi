@@ -28,6 +28,7 @@ from utils.byok import get_byok_key
 from utils.llm.byok_errors import handle_llm_error, handle_llm_error_async
 from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
+    BYOK_GEMINI_MODEL,
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
     _OPENROUTER_TEMPERATURES,
@@ -84,6 +85,7 @@ try:
         invoke_openai_embeddings_gateway,
         is_gateway_route_absent,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
+        should_route_company_paid_features_through_gateway,
         should_route_chat_agent_through_gateway,
         should_route_features_through_gateway,
     )
@@ -99,6 +101,9 @@ except ImportError as exc:
 
     def should_route_features_through_gateway() -> bool:
         return False
+
+    def should_route_company_paid_features_through_gateway() -> bool:
+        return True
 
     def should_route_chat_agent_through_gateway() -> bool:
         return False
@@ -133,16 +138,6 @@ except ImportError:
 
     def get_gateway_anthropic_client(*, byok_api_key=None):
         raise RuntimeError('Omi gateway Anthropic client is unavailable')
-
-
-try:
-    from utils.llm.gateway_shadow import maybe_wrap_dev_gateway_shadow
-except ImportError as exc:
-    if exc.name != 'utils.llm.gateway_shadow':
-        raise
-
-    def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
-        return legacy_model
 
 
 from utils.llm.usage_tracker import get_usage_callback
@@ -634,7 +629,9 @@ def _effective_byok_provider(model: str, provider: str) -> str:
 def _byok_fallback_model(provider: str) -> str:
     if provider == 'openai':
         return 'gpt-4o-mini'
-    if provider in {'gemini', 'openrouter'}:
+    if provider == 'gemini':
+        return BYOK_GEMINI_MODEL
+    if provider == 'openrouter':
         return 'gemini-2.5-flash-lite'
     if provider == 'anthropic':
         return 'claude-sonnet-4-6'
@@ -673,23 +670,6 @@ def get_llm(
     providers. Returns a BaseChatModel. For Anthropic/Perplexity, use
     get_model(feature) to get the model string and the provider-specific client.
     """
-    gateway_feature_mode = should_route_features_through_gateway()
-    # Chat-agent has its own kill switch. FEATURE_MODE=gateway plus
-    # CHAT_AGENT_ROUTE=direct must stay on direct OpenAI/Luna, not the gateway lane
-    # and not a leftover Anthropic Messages client.
-    route_through_gateway = (
-        should_route_chat_agent_through_gateway() if feature == 'chat_agent' else gateway_feature_mode
-    )
-
-    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
-        raise ValueError(
-            f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
-        )
-    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
-        raise ValueError(
-            f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
-        )
-
     if request_timeout is None:
         # The deadline is a property of the feature, not of the call site: a feature that
         # summarizes a whole conversation while a user waits cannot answer inside the
@@ -698,6 +678,14 @@ def get_llm(
         request_timeout = feature_request_timeout(feature)
 
     model, provider = _get_model_config(feature)
+    if is_anthropic_only_feature(feature) or provider == 'anthropic':
+        raise ValueError(
+            f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
+        )
+    if is_perplexity_only_feature(feature) or provider == 'perplexity':
+        raise ValueError(
+            f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
+        )
     # The feature lane (feature_auto_lane_id) is pinned to the feature's
     # resolved provider. When BYOK selection below switches providers, the
     # gateway lane for this feature still routes to the original provider, so a
@@ -705,15 +693,6 @@ def get_llm(
     # direct client — the gateway would otherwise reject the forwarded key
     # with missing_byok_key. Keep the pre-selection provider to detect the switch.
     lane_provider = _effective_byok_provider(model, provider)
-
-    if provider == 'anthropic' and not gateway_feature_mode:
-        raise ValueError(
-            f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
-        )
-    if provider == 'perplexity' and not gateway_feature_mode:
-        raise ValueError(
-            f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
-        )
 
     if is_structured_output_feature(feature) and provider == 'gemini':
         logger.debug(
@@ -777,7 +756,26 @@ def get_llm(
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
 
+    # Managed generation never consults the rollout switches: it is always
+    # dispatched through the gateway. Preserve optional gateway routing for
+    # user-paid BYOK, but evaluate its legacy switches only after resolving the
+    # user's key so a stale/invalid managed rollout setting cannot reject a
+    # BYOK request. Invalid optional settings leave BYOK on its direct provider.
+    byok_route_through_gateway = False
+    if byok_key:
+        try:
+            byok_route_through_gateway = (
+                should_route_chat_agent_through_gateway()
+                if feature == 'chat_agent'
+                else should_route_features_through_gateway()
+            )
+        except RuntimeError:
+            byok_route_through_gateway = False
+
     effective_provider = _effective_byok_provider(model, provider)
+    route_through_gateway = (should_route_company_paid_features_through_gateway() and not byok_key) or (
+        bool(byok_key) and byok_route_through_gateway
+    )
     # VertexGeminiProvider._reject_byok() — Gemini BYOK must use the direct
     # OpenAI-compatible client, not the gateway lane.
     gateway_accepts_byok = effective_provider != "gemini"
@@ -824,13 +822,11 @@ def get_llm(
             route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
 
-    result = maybe_wrap_dev_gateway_shadow(
-        feature=feature,
-        model=model,
-        provider=provider,
-        streaming=streaming,
-        legacy_model=result,
-    )
+    # Preserve the final route identity per invocation without mutating a cached
+    # SDK client. Gateway model_name is only an auto-lane ID; prompt callers need
+    # the post-profile, post-key-fallback model to decide content compatibility.
+    if isinstance(result, BaseChatModel):
+        result = result.model_copy(update={'metadata': {**(result.metadata or {}), 'omi_resolved_model': model}})
 
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
@@ -853,10 +849,9 @@ def get_llm_gateway_chat_structured(
 ) -> BaseChatModel:
     """Return the gateway chat-structured lane as a LangChain chat model.
 
-    Use this for shadow/eval comparisons that must preserve the existing
-    LangChain prompt and parser chain shape. Live feature routing should still
-    go through ``get_llm(feature)`` until an explicit rollout promotes the
-    gateway provider for that feature.
+    Use this for shadow/eval comparisons that need the shared structured lane.
+    Company-paid live feature calls use ``get_llm(feature)`` and their own
+    mandatory feature lane.
     """
 
     result = get_or_create_omi_gateway_llm(

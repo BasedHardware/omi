@@ -12517,17 +12517,227 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Προσαρμογή της εμπειρίας σας';
 
   @override
-  String get onboardingRatingPromptTitle => 'Όσο περιμένετε, σας αρέσει να χρησιμοποιείτε το Omi;';
+  String get onboardingRatingPromptTitle => 'Σας αρέσει το Omi;';
 
   @override
-  String get onboardingRatingPromptBody => 'Μια βαθμολογία 5 αστέρων μας βοηθά πραγματικά ❤️';
+  String get onboardingRatingPromptYes => 'Ναι';
 
   @override
-  String get onboardingRatingPromptYes => 'Ναι, θέλω να σας στηρίξω!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Όχι ακριβώς';
+  String get onboardingRatingPromptNo => 'Όχι';
 
   @override
   String get partialRecording => 'Μερική ηχογράφηση';
+
+  @override
+  String get importTranscriptFiles => 'Αρχεία απομαγνητοφωνήσεων';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'Επιλέξτε απομαγνητοφωνήσεις SRT, VTT ή TXT ή ένα ZIP που τις περιέχει';
+
+  @override
+  String get importTooManyAttempts => 'Πάρα πολλές εισαγωγές αυτή τη στιγμή. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get importFileTooLarge => 'Αυτό το αρχείο είναι πολύ μεγάλο για εισαγωγή.';
+
+  @override
+  String get importUnsupportedFileType => 'Αυτός ο τύπος αρχείου δεν μπορεί να εισαχθεί.';
+
+  @override
+  String get reviewTitle => 'Έλεγχος';
+
+  @override
+  String get reviewEntryTitle => 'Ερωτήσεις για εσάς';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Απομένουν $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Ποιος το είπε αυτό;';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Το ίδιο άτομο με «$name»;';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Πώς γράφεται αυτό;';
+
+  @override
+  String get reviewPlayClip => 'Αναπαραγωγή κλιπ';
+
+  @override
+  String get reviewStopClip => 'Διακοπή κλιπ';
+
+  @override
+  String get reviewOpenDetailsHint => 'Ανοίγει λεπτομέρειες';
+
+  @override
+  String get reviewAnswerMe => 'Εγώ';
+
+  @override
+  String get reviewAnswerOther => 'Άλλο';
+
+  @override
+  String get reviewAddTask => 'Προσθήκη εργασίας';
+
+  @override
+  String get reviewAnswerFailed => 'Δεν ήταν δυνατή η αποθήκευση της απάντησης. Δοκιμάστε ξανά.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Αυτή η απάντηση επισημαίνει $count συνομιλίες';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Άγνωστος ομιλητής';
+
+  @override
+  String get reviewNewPersonName => 'Το όνομά τους';
+
+  @override
+  String get reviewSomeoneElse => 'Κάποιος άλλος…';
+
+  @override
+  String get reviewConfirm => 'Επιβεβαίωση';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Επιβεβαίωση: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Δεν είμαι σίγουρος';
+
+  @override
+  String get reviewOpenConversation => 'Συνομιλία';
+
+  @override
+  String get reviewTaskField => 'Εργασία';
+
+  @override
+  String get reviewDue => 'Προθεσμία';
+
+  @override
+  String get reviewNoDate => 'Καμία';
+
+  @override
+  String get reviewProject => 'Έργο';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Ήδη έγινε';
+
+  @override
+  String get reviewReasonNotMine => 'Δεν είναι δική μου';
+
+  @override
+  String get reviewReasonNotUseful => 'Δεν είναι χρήσιμο';
+
+  @override
+  String get reviewYesMerge => 'Ναι, συγχώνευση';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Συνομιλίες: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Πληκτρολογήστε το';
+
+  @override
+  String get reviewLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των ερωτήσεών σας.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Τίποτα να απαντήσετε';
+
+  @override
+  String get reviewCaughtUpBody => 'Το Omi θα ρωτά εδώ μόνο όταν σας χρειάζεται.';
+
+  @override
+  String get reviewRecentChanges => 'Πρόσφατες αλλαγές';
+
+  @override
+  String get reviewChangesIntro => 'Τι άλλαξε το Omi μόνο του τις τελευταίες 30 ημέρες. Αναιρέστε ό,τι φαίνεται λάθος.';
+
+  @override
+  String get reviewChangeUndone => 'Αναιρέθηκε. Το Omi δεν θα το επαναλάβει μόνο του.';
+
+  @override
+  String get reviewChangeFailed => 'Δεν ήταν δυνατή η ενημέρωση αυτής της αλλαγής. Δοκιμάστε ξανά.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των πρόσφατων αλλαγών.';
+
+  @override
+  String get reviewNoChangesTitle => 'Καμία αλλαγή ακόμη';
+
+  @override
+  String get reviewNoChangesBody => 'Όταν το Omi τακτοποιεί τις σημειώσεις σας, οι αλλαγές εμφανίζονται εδώ.';
+
+  @override
+  String get reviewShowMore => 'Εμφάνιση περισσότερων';
+
+  @override
+  String get entityKeptCurrent => 'Ενημερώνεται από το Omi';
+
+  @override
+  String get entityNotRight => 'Δεν είναι σωστό;';
+
+  @override
+  String get entityCorrectionTitle => 'Τι δεν είναι σωστό;';
+
+  @override
+  String get entityCorrectionHint => 'Πείτε στο Omi τι να διορθώσει';
+
+  @override
+  String get entityCorrectionSaved => 'Ευχαριστούμε. Το Omi θα το διορθώσει.';
+
+  @override
+  String get entityCorrectionFailed => 'Δεν ήταν δυνατή η αποστολή της διόρθωσης. Δοκιμάστε ξανά.';
+
+  @override
+  String get entityLoadFailed => 'Δεν ήταν δυνατή η φόρτωση αυτής της σελίδας.';
+
+  @override
+  String get entityProject => 'Έργο';
+
+  @override
+  String get entityProjects => 'Έργα';
+
+  @override
+  String get entityDecisions => 'Αποφάσεις';
+
+  @override
+  String get entityOpenTasks => 'Ανοιχτές εργασίες';
+
+  @override
+  String get entityOpenThreads => 'Ανοιχτά θέματα';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Αναμονή για $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Προθεσμία $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Τι γνωρίζει το Omi';
+
+  @override
+  String get entityRecentConversations => 'Πρόσφατες συνομιλίες';
+
+  @override
+  String get tasksNoProject => 'Χωρίς έργο';
+
+  @override
+  String get tasksGroupByProject => 'Ομαδοποίηση ανά έργο';
+
+  @override
+  String get tasksGroupByDate => 'Ομαδοποίηση ανά ημερομηνία';
 }

@@ -36,7 +36,8 @@ from tests.support.firestore_conversation_profiles import (
     SCAN_PROFILES,
     WITHOUT_PHOTOS_PROFILES,
 )
-from tests.support import firestore_outside_query_drivers as outside_drivers
+from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
+from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -136,7 +137,7 @@ BODY_DIGEST = {
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
-    'database.smart_merge.absorb_conversation': '56123c7f51757edce7c7f0ed8b61fc718e080b542ce5a153bb5b83e6a1a84ca5',
+    'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -2473,7 +2474,14 @@ _add(
     )
 )
 
-for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+for entry in (
+    *outside_drivers.DRIVERS.values(),
+    *outside_drivers.COVERED_BY.values(),
+    *outside_drivers.SKIPS.values(),
+    *dream_drivers.DRIVERS.values(),
+    *dream_drivers.COVERED_BY.values(),
+    *dream_drivers.SKIPS.values(),
+):
     _add(entry)
 
 

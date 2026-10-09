@@ -12,19 +12,12 @@ from __future__ import annotations
 import logging
 import os
 from importlib import import_module
-from dataclasses import replace
-from typing import Any, Dict, List, Mapping, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from models.calendar_context import CalendarMeetingContext
 
-if TYPE_CHECKING:
-    from utils.conversations.episode_evidence import EvidenceItem
 from utils.conversations.meeting_context_gate import should_gather_meeting_context
-from utils.conversations.meeting_context_render import (
-    MAX_SCREEN_CHARACTERS,
-    render_meeting_context_pack,
-)
-from utils.conversations.screen_text_digest import digest_screen_rows
+from utils.conversations.meeting_context_render import render_meeting_context_pack
 from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
 from utils.conversations.screen_frame_evidence import (
     NotesFrameImage,
@@ -55,17 +48,13 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
 
 
 def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
-
-
-def meeting_notes_episode_evidence_enabled(uid: str | None = None) -> bool:
-    return _flag_enabled('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED') and import_module(
-        'config.episode_notes'
-    ).episode_notes_cohort(uid)
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_frames_context_enabled() -> bool:
@@ -74,10 +63,7 @@ def meeting_notes_screen_frames_context_enabled() -> bool:
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Frame names and summaries are screen text: they ride the screen-text flag.
-    # Images need the same docs, so either flag loads them.
-    if not (meeting_notes_screen_text_context_enabled() or meeting_notes_screen_frames_context_enabled()):
-        return ()
+    # Screen text is always available; images still have their own gate.
     return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
 
 
@@ -85,8 +71,6 @@ def _rich_meeting_roster(
     uid: str,
     conversation: Any,
     calendar_context: Optional[CalendarMeetingContext],
-    *,
-    include_frame_text: bool = True,
 ) -> Tuple[Optional[MeetingRoster], List[Dict[str, Any]], bool, Tuple[ScreenFrameEvidence, ...]]:
     """Best-effort normalized roster plus the people-catalog read used for it.
 
@@ -113,8 +97,6 @@ def _rich_meeting_roster(
         if calendar_context is None and not desktop_capture and not gather:
             return None, [], desktop_capture, ()
         evidence = _screen_frame_evidence(uid, conversation)
-        if not include_frame_text:
-            evidence = tuple(replace(frame, names=(), summary='') for frame in evidence)
         # Names the judge read off approved frames are identity evidence for either
         # flag: with images attached, the roster must carry them too, or the notes
         # validator strips the names the model read from those images.
@@ -151,7 +133,6 @@ def _rich_meeting_context_block(
     *,
     include_screen_text: bool,
     screen_moments: Tuple[str, ...] = (),
-    evidence_items: Optional[List[EvidenceItem]] = None,
 ) -> Optional[str]:
     """Render the BACKGROUND CONTEXT block for the notes prompt; None when the
     pack comes back empty. Called only at the notes call site — memory and app
@@ -165,14 +146,7 @@ def _rich_meeting_context_block(
             include_screen_text=include_screen_text,
             timezone_name=tz_str,
             screen_moments=screen_moments,
-            **({'preserve_screen_rows': True} if evidence_items is not None else {}),
         )
-        if evidence_items is not None:
-            evidence_items.extend(import_module('utils.conversations.episode_evidence').context_pack_evidence(pack))
-            if pack is not None and pack.screen_rows:
-                # Long-input fallback needs the same rich background as baseline,
-                # reusing already-read rows rather than issuing another query.
-                pack = replace(pack, screen_text=digest_screen_rows(pack.screen_rows, MAX_SCREEN_CHARACTERS))
         return render_meeting_context_pack(pack) if pack else None
     except Exception as exc:  # noqa: BLE001 - background is best effort
         logger.warning('rich meeting context build failed uid=%s: %s', uid, type(exc).__name__)
@@ -202,19 +176,13 @@ def rich_notes_inputs(
     *,
     include_background: bool,
     include_screen_text: bool,
-    evidence_items: Optional[List[EvidenceItem]] = None,
 ) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
     """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
     roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
         uid,
         conversation,
         calendar_context,
-        **({'include_frame_text': include_screen_text} if evidence_items is not None else {}),
     )
-    if evidence_items is not None:
-        evidence_items.extend(
-            import_module('utils.conversations.episode_evidence').meeting_evidence(roster, calendar_context, evidence)
-        )
     if roster is None or not include_background:
         return roster, None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)
@@ -226,7 +194,6 @@ def rich_notes_inputs(
         tz_str,
         include_screen_text=include_screen_text,
         screen_moments=screen_moment_lines(evidence, started_at) if include_screen_text else (),
-        **({'evidence_items': evidence_items} if evidence_items is not None else {}),
     )
     images: Tuple[NotesFrameImage, ...] = ()
     if meeting_notes_screen_frames_context_enabled():

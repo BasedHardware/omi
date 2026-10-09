@@ -17,10 +17,12 @@ const h = vi.hoisted(() => ({
     screenAnalysisEnabled: true
   } as Record<string, unknown>,
   getSessionEpoch: vi.fn(() => h.epoch),
-  getBackendSession: vi.fn(() => ({ apiBase: 'https://api', desktopApiBase: 'https://d', token: 't' })),
+  getBackendSession: vi.fn<() => unknown>(() => ({ apiBase: 'https://api', desktopApiBase: 'https://d', token: 't' })),
   readFrameImageBase64: vi.fn(async () => 'imgdata'),
   mayAnalyzeFrame: vi.fn(() => true),
-  runExtractionLoop: vi.fn(async (..._a: unknown[]) => [] as ExtractedTask[]),
+  runScreenTaskPipeline: vi.fn(async (..._a: unknown[]) => ({
+    results: [] as ExtractedTask[], gateOutcome: 'passed' as const, auditSample: false
+  })),
   createStagedTaskFromExtraction: vi.fn(async (..._a: unknown[]) => {})
 }))
 
@@ -31,7 +33,7 @@ vi.mock('../core/session', () => ({
 }))
 vi.mock('../core/frameImage', () => ({ readFrameImageBase64: h.readFrameImageBase64 }))
 vi.mock('../core/privacy', () => ({ mayAnalyzeFrame: h.mayAnalyzeFrame }))
-vi.mock('./loop', () => ({ runExtractionLoop: h.runExtractionLoop }))
+vi.mock('./screenTaskPipeline', () => ({ runScreenTaskPipeline: h.runScreenTaskPipeline }))
 vi.mock('./create', () => ({ createStagedTaskFromExtraction: h.createStagedTaskFromExtraction }))
 
 import { TaskAssistant, shouldExtractForApp } from './taskAssistant'
@@ -96,7 +98,7 @@ beforeEach(() => {
   h.getBackendSession.mockReturnValue({ apiBase: 'https://api', desktopApiBase: 'https://d', token: 't' })
   h.readFrameImageBase64.mockResolvedValue('imgdata')
   h.mayAnalyzeFrame.mockReturnValue(true)
-  h.runExtractionLoop.mockResolvedValue([])
+  h.runScreenTaskPipeline.mockResolvedValue({ results: [], gateOutcome: 'passed', auditSample: false })
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -160,8 +162,23 @@ describe('shouldAnalyze', () => {
 // --- analyze: confidence gate + save ----------------------------------------
 
 describe('analyze — confidence gate', () => {
+  it('drops a session resolved across an account switch before reading the frame', async () => {
+    let resolveSession!: (session: { apiBase: string; desktopApiBase: string; token: string }) => void
+    h.getBackendSession.mockImplementation(() => new Promise((resolve) => {
+      resolveSession = resolve
+    }))
+
+    const pending = new TaskAssistant().analyze(makeFrame())
+    h.epoch = 6
+    resolveSession({ apiBase: 'https://old-api', desktopApiBase: 'https://old-desktop', token: 'old-token' })
+    await pending
+
+    expect(h.readFrameImageBase64).not.toHaveBeenCalled()
+    expect(h.runScreenTaskPipeline).not.toHaveBeenCalled()
+  })
+
   it('stages a task at/above the threshold', async () => {
-    h.runExtractionLoop.mockResolvedValue([makeTask({ confidence: 0.9 })])
+    h.runScreenTaskPipeline.mockResolvedValue({ results: [makeTask({ confidence: 0.9 })], gateOutcome: 'passed', auditSample: false })
     await new TaskAssistant().analyze(makeFrame())
     expect(h.createStagedTaskFromExtraction).toHaveBeenCalledTimes(1)
     const [t, frame, epoch, , minConf] = h.createStagedTaskFromExtraction.mock.calls[0]
@@ -172,20 +189,20 @@ describe('analyze — confidence gate', () => {
   })
 
   it('drops a sub-threshold task with no save', async () => {
-    h.runExtractionLoop.mockResolvedValue([makeTask({ confidence: 0.74 })])
+    h.runScreenTaskPipeline.mockResolvedValue({ results: [makeTask({ confidence: 0.74 })], gateOutcome: 'passed', auditSample: false })
     await new TaskAssistant().analyze(makeFrame())
     expect(h.createStagedTaskFromExtraction).not.toHaveBeenCalled()
   })
 
   it('does not run the pipeline for a non-whitelisted app', async () => {
     await new TaskAssistant().analyze(makeFrame({ app: 'Steam', windowTitle: 'Store' }))
-    expect(h.runExtractionLoop).not.toHaveBeenCalled()
+    expect(h.runScreenTaskPipeline).not.toHaveBeenCalled()
   })
 
   it('skips the batch when the session epoch advances during the loop', async () => {
-    h.runExtractionLoop.mockImplementation(async () => {
+    h.runScreenTaskPipeline.mockImplementation(async () => {
       h.epoch = 6 // sign-out / user switch landed mid-extraction
-      return [makeTask({ confidence: 0.9 })]
+      return { results: [makeTask({ confidence: 0.9 })], gateOutcome: 'passed', auditSample: false }
     })
     await new TaskAssistant().analyze(makeFrame())
     expect(h.createStagedTaskFromExtraction).not.toHaveBeenCalled()
@@ -196,23 +213,23 @@ describe('analyze — confidence gate', () => {
 
 describe('onContextSwitch', () => {
   it('extracts from the DEPARTING frame, not the new context', async () => {
-    h.runExtractionLoop.mockResolvedValue([makeTask()])
+    h.runScreenTaskPipeline.mockResolvedValue({ results: [makeTask()], gateOutcome: 'passed', auditSample: false })
     const departing = makeFrame({ app: 'Slack', windowTitle: 'Acme — general' })
     await new TaskAssistant().onContextSwitch(departing, 'Chrome', null)
-    expect(h.runExtractionLoop).toHaveBeenCalledTimes(1)
-    expect(h.runExtractionLoop.mock.calls[0][0]).toMatchObject({ app: 'Slack' })
+    expect(h.runScreenTaskPipeline).toHaveBeenCalledTimes(1)
+    expect(h.runScreenTaskPipeline.mock.calls[0][0]).toMatchObject({ app: 'Slack' })
     expect(h.createStagedTaskFromExtraction).toHaveBeenCalledTimes(1)
   })
 
   it('does nothing when disabled (the coordinator does not gate this seam)', async () => {
     h.settings.taskEnabled = false
     await new TaskAssistant().onContextSwitch(makeFrame(), 'Chrome', null)
-    expect(h.runExtractionLoop).not.toHaveBeenCalled()
+    expect(h.runScreenTaskPipeline).not.toHaveBeenCalled()
   })
 
   it('no-ops with no departing frame and no prior frame', async () => {
     await new TaskAssistant().onContextSwitch(null, 'Slack', null)
-    expect(h.runExtractionLoop).not.toHaveBeenCalled()
+    expect(h.runScreenTaskPipeline).not.toHaveBeenCalled()
   })
 })
 
@@ -221,15 +238,15 @@ describe('onContextSwitch', () => {
 describe('re-entrancy', () => {
   it('does not let a context-switch run overlap an in-flight analyze run', async () => {
     let release!: () => void
-    h.runExtractionLoop.mockImplementation(
-      () => new Promise((r) => (release = () => r([makeTask()])))
-    )
+    h.runScreenTaskPipeline.mockImplementation(() => new Promise((r) => {
+      release = () => r({ results: [makeTask()], gateOutcome: 'passed', auditSample: false })
+    }))
     const a = new TaskAssistant()
     const p = a.analyze(makeFrame()) // starts the pipeline, holds the lock
-    await new Promise((r) => setTimeout(r, 0)) // flush to the parked runExtractionLoop
+    await new Promise((r) => setTimeout(r, 0)) // flush to the parked extraction
     // A context switch arrives mid-analyze — must be dropped, not run in parallel.
     await a.onContextSwitch(makeFrame({ app: 'Telegram', windowTitle: 'Chat' }), 'Chrome', null)
-    expect(h.runExtractionLoop).toHaveBeenCalledTimes(1)
+    expect(h.runScreenTaskPipeline).toHaveBeenCalledTimes(1)
     release()
     await p
     expect(h.createStagedTaskFromExtraction).toHaveBeenCalledTimes(1)
@@ -240,12 +257,12 @@ describe('re-entrancy', () => {
 
 describe('per-window dedupe', () => {
   it('skips re-analyzing the same window within the TTL', async () => {
-    h.runExtractionLoop.mockResolvedValue([])
+    h.runScreenTaskPipeline.mockResolvedValue({ results: [], gateOutcome: 'passed', auditSample: false })
     const a = new TaskAssistant()
     // Notes is whitelisted + non-messaging (60s dedupe TTL) + not a browser.
     const frame = makeFrame({ app: 'Notes', windowTitle: 'Roadmap' })
     await a.analyze(frame)
     await a.analyze(frame) // same window, immediately — deduped
-    expect(h.runExtractionLoop).toHaveBeenCalledTimes(1)
+    expect(h.runScreenTaskPipeline).toHaveBeenCalledTimes(1)
   })
 })

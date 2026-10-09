@@ -942,6 +942,41 @@
       "correlation": null
     },
     {
+      "id": "firstSummaryRatingPromptShown",
+      "wire_name": "First Summary Rating Prompt Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "firstSummaryRatingPromptAnswered",
+      "wire_name": "First Summary Rating Prompt Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "yes",
+            "no"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "useWithoutDeviceOnboardingWelcome",
       "wire_name": "Use Without Device Onboarding Welcome",
       "status": "active",

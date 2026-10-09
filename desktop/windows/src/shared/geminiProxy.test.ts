@@ -74,6 +74,32 @@ describe('geminiProxyFetch — transport contract', () => {
     expect((init.headers as Record<string, string>)['X-Omi-Lane']).toBe('embedding')
   })
 
+  it('adds screen-task metadata without allowing it to replace auth or lane headers', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }))
+    await geminiProxyFetch(fetchImpl, {
+      baseURL: 'b',
+      model: 'gpt-6-luna',
+      action: 'generateContent',
+      token: 'real-token',
+      body: '{}',
+      lane: GeminiLane.taskExtraction,
+      workload: 'extraction',
+      platform: 'windows',
+      extraHeaders: {
+        'X-Omi-Screen-Task-Gate': 'fail_open',
+        'X-Omi-Screen-Task-Audit': 'false',
+        Authorization: 'attacker-controlled'
+      }
+    })
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer real-token',
+      'X-Omi-Lane': 'task_extraction',
+      'X-Omi-Screen-Task-Gate': 'fail_open',
+      'X-Omi-Screen-Task-Audit': 'false'
+    })
+  })
+
   it('selects the streaming proxy route for streamGenerateContent', async () => {
     const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }))
     await geminiProxyFetch(fetchImpl, {
@@ -161,7 +187,7 @@ describe('transport ownership ratchet', () => {
       ['main/assistants/focus/gemini.ts', 'GeminiLane.focus'],
       ['main/assistants/memory/gemini.ts', 'GeminiLane.memory'],
       ['main/assistants/goals/generate.ts', 'GeminiLane.goals'],
-      ['main/assistants/tasks/geminiWire.ts', 'GeminiLane.taskExtraction'],
+      ['main/assistants/tasks/screenTaskPipeline.ts', 'GeminiLane.taskExtraction'],
       ['main/rewind/embeddingClient.ts', 'GeminiLane.embedding'],
       ['renderer/src/lib/screenSynthesis.ts', 'GeminiLane.screenSynthesis'],
       ['renderer/src/lib/liveNotes/liveNotesMonitor.ts', 'GeminiLane.liveNotes']

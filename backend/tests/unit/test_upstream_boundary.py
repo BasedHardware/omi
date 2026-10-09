@@ -253,7 +253,6 @@ class TestExtractionSeamFanOut:
             patch.object(pc, "_save_action_items", save_action_items),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
-            patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
             pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
 

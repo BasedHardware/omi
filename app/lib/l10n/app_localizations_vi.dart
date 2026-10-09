@@ -12432,17 +12432,226 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Đang cá nhân hóa trải nghiệm của bạn';
 
   @override
-  String get onboardingRatingPromptTitle => 'Trong lúc chờ, bạn thấy dùng Omi có thích không?';
+  String get onboardingRatingPromptTitle => 'Bạn có thích Omi không?';
 
   @override
-  String get onboardingRatingPromptBody => 'Đánh giá 5 sao thực sự giúp ích cho chúng tôi rất nhiều ❤️';
+  String get onboardingRatingPromptYes => 'Có';
 
   @override
-  String get onboardingRatingPromptYes => 'Có, tôi muốn ủng hộ các bạn!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Không hẳn';
+  String get onboardingRatingPromptNo => 'Không';
 
   @override
   String get partialRecording => 'Bản ghi một phần';
+
+  @override
+  String get importTranscriptFiles => 'Tệp bản chép lời';
+
+  @override
+  String get importTranscriptFilesDescription => 'Chọn bản chép lời SRT, VTT hoặc TXT, hoặc tệp ZIP chứa chúng';
+
+  @override
+  String get importTooManyAttempts => 'Hiện có quá nhiều lượt nhập dữ liệu. Vui lòng thử lại sau.';
+
+  @override
+  String get importFileTooLarge => 'Tệp này quá lớn để nhập dữ liệu.';
+
+  @override
+  String get importUnsupportedFileType => 'Không thể nhập loại tệp này.';
+
+  @override
+  String get reviewTitle => 'Xem lại';
+
+  @override
+  String get reviewEntryTitle => 'Câu hỏi dành cho bạn';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Còn $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Ai đã nói điều này?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Có phải cùng người với “$name” không?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Từ này viết thế nào?';
+
+  @override
+  String get reviewPlayClip => 'Phát đoạn ghi';
+
+  @override
+  String get reviewStopClip => 'Dừng đoạn ghi';
+
+  @override
+  String get reviewOpenDetailsHint => 'Mở chi tiết';
+
+  @override
+  String get reviewAnswerMe => 'Tôi';
+
+  @override
+  String get reviewAnswerOther => 'Khác';
+
+  @override
+  String get reviewAddTask => 'Thêm tác vụ';
+
+  @override
+  String get reviewAnswerFailed => 'Không thể lưu câu trả lời của bạn. Hãy thử lại.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Câu trả lời này gắn nhãn cho $count cuộc trò chuyện';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Người nói không xác định';
+
+  @override
+  String get reviewNewPersonName => 'Tên của họ';
+
+  @override
+  String get reviewSomeoneElse => 'Người khác…';
+
+  @override
+  String get reviewConfirm => 'Xác nhận';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Xác nhận $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Không chắc';
+
+  @override
+  String get reviewOpenConversation => 'Cuộc trò chuyện';
+
+  @override
+  String get reviewTaskField => 'Tác vụ';
+
+  @override
+  String get reviewDue => 'Hạn';
+
+  @override
+  String get reviewNoDate => 'Không có';
+
+  @override
+  String get reviewProject => 'Dự án';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Đã xong';
+
+  @override
+  String get reviewReasonNotMine => 'Không phải của tôi';
+
+  @override
+  String get reviewReasonNotUseful => 'Không hữu ích';
+
+  @override
+  String get reviewYesMerge => 'Có, gộp lại';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Cuộc trò chuyện: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Nhập tên';
+
+  @override
+  String get reviewLoadFailed => 'Không thể tải câu hỏi của bạn.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Không có gì để trả lời';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi chỉ hỏi ở đây khi cần bạn.';
+
+  @override
+  String get reviewRecentChanges => 'Thay đổi gần đây';
+
+  @override
+  String get reviewChangesIntro => 'Những gì Omi tự thay đổi trong 30 ngày qua. Hoàn tác bất cứ điều gì có vẻ sai.';
+
+  @override
+  String get reviewChangeUndone => 'Đã hoàn tác. Omi sẽ không tự làm lại điều này.';
+
+  @override
+  String get reviewChangeFailed => 'Không thể cập nhật thay đổi này. Hãy thử lại.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Không thể tải các thay đổi gần đây.';
+
+  @override
+  String get reviewNoChangesTitle => 'Chưa có thay đổi nào';
+
+  @override
+  String get reviewNoChangesBody => 'Khi Omi sắp xếp ghi chú của bạn, các thay đổi sẽ hiện ở đây.';
+
+  @override
+  String get reviewShowMore => 'Xem thêm';
+
+  @override
+  String get entityKeptCurrent => 'Omi luôn cập nhật';
+
+  @override
+  String get entityNotRight => 'Chưa đúng?';
+
+  @override
+  String get entityCorrectionTitle => 'Điều gì chưa đúng?';
+
+  @override
+  String get entityCorrectionHint => 'Cho Omi biết cần sửa gì';
+
+  @override
+  String get entityCorrectionSaved => 'Cảm ơn. Omi sẽ sửa lại.';
+
+  @override
+  String get entityCorrectionFailed => 'Không thể gửi chỉnh sửa của bạn. Hãy thử lại.';
+
+  @override
+  String get entityLoadFailed => 'Không thể tải trang này.';
+
+  @override
+  String get entityProject => 'Dự án';
+
+  @override
+  String get entityProjects => 'Dự án';
+
+  @override
+  String get entityDecisions => 'Quyết định';
+
+  @override
+  String get entityOpenTasks => 'Tác vụ đang mở';
+
+  @override
+  String get entityOpenThreads => 'Vấn đề đang mở';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Đang chờ $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Hạn $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Những gì Omi biết';
+
+  @override
+  String get entityRecentConversations => 'Cuộc trò chuyện gần đây';
+
+  @override
+  String get tasksNoProject => 'Không có dự án';
+
+  @override
+  String get tasksGroupByProject => 'Nhóm theo dự án';
+
+  @override
+  String get tasksGroupByDate => 'Nhóm theo ngày';
 }

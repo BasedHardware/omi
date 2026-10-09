@@ -1,0 +1,3 @@
+{
+  "change": "Copy link now reuses an existing share link instead of failing when the conversation is already shared."
+}
