@@ -69,7 +69,7 @@ extension SettingsContentView {
       developerKeyField(
         provider: .deepgram,
         title: "Deepgram API Key",
-        subtitle: "Required for BYOK transcription; otherwise Omi's transcription allowance applies.",
+        subtitle: "Needed to use your own Deepgram key. Without it, transcription counts toward your Omi plan.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
       )

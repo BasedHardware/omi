@@ -314,9 +314,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createYourOwnApp => '나만의 앱 만들기';
 
   @override
-  String get buildAndShareApp => '맞춤형 앱을 만들고 공유하세요';
-
-  @override
   String get searchApps => '앱 검색';
 
   @override
@@ -342,9 +339,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get joinCommunity => '커뮤니티에 참여하세요!';
-
-  @override
-  String get membersAndCounting => '8000+명의 회원이 있으며 계속 증가하고 있습니다.';
 
   @override
   String get deleteAccountTitle => '계정 삭제';
@@ -467,16 +461,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yourPrivacyYourControl => '당신의 개인정보, 당신의 제어';
 
   @override
-  String get privacyIntro => 'Omi는 귀하의 개인정보 보호에 최선을 다하고 있습니다. 이 페이지에서 데이터 저장 및 사용 방법을 제어할 수 있습니다.';
-
-  @override
   String get learnMore => '자세히 알아보기…';
 
   @override
   String get dataProtectionLevel => '데이터 보호 수준';
-
-  @override
-  String get dataProtectionDesc => '귀하의 데이터는 기본적으로 강력한 암호화로 보호됩니다. 아래에서 설정 및 향후 개인정보 옵션을 검토하세요.';
 
   @override
   String get appAccess => '앱 접근';
@@ -647,19 +635,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcription => '음성 변환';
 
   @override
-  String get transcriptionConfig => 'STT 제공업체 구성';
-
-  @override
   String get conversationTimeout => '대화 시간 제한';
 
   @override
-  String get conversationTimeoutConfig => '대화 자동 종료 시간 설정';
+  String get conversationTimeoutConfig => 'Omi가 대화를 끝내기 전 무음으로 얼마나 기다릴지';
 
   @override
   String get importData => '데이터 가져오기';
-
-  @override
-  String get importDataConfig => '다른 소스에서 데이터 가져오기';
 
   @override
   String get debugDiagnostics => '디버그 및 진단';
@@ -710,9 +692,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get understanding => '이해';
 
   @override
-  String get understandingSubtitle => '대화에서 이해한 단어 수입니다.';
-
-  @override
   String get providing => '제공';
 
   @override
@@ -720,9 +699,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get remembering => '기억';
-
-  @override
-  String get rememberingSubtitle => '당신을 위해 기억된 사실과 세부 정보입니다.';
 
   @override
   String get unlimitedPlan => '무제한 플랜';
@@ -796,9 +772,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get debugLogsAutoDelete => '3일 후 자동 삭제됩니다.';
 
   @override
-  String get debugLogsDesc => '문제 진단에 도움이 됩니다';
-
-  @override
   String get noLogFilesFound => '로그 파일을 찾을 수 없습니다.';
 
   @override
@@ -835,10 +808,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => '지식 그래프를 삭제하시겠습니까?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      '파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.';
-
-  @override
   String get knowledgeGraphDeleted => '지식 그래프가 삭제되었습니다';
 
   @override
@@ -848,9 +817,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteKnowledgeGraph => '지식 그래프 삭제';
-
-  @override
-  String get deleteKnowledgeGraphDesc => '모든 노드 및 연결 지우기';
 
   @override
   String get mcp => 'MCP';
@@ -1092,9 +1058,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enhanceTranscriptAccuracy => '녹취록 정확도 향상';
 
   @override
-  String get enhanceTranscriptAccuracyDesc => '모델이 개선됨에 따라 녹음에 대한 더 나은 변환 결과를 제공할 수 있습니다.';
-
-  @override
   String get legalNotice =>
       '법적 고지: 음성 데이터 녹음 및 저장의 합법성은 위치 및 이 기능 사용 방법에 따라 다를 수 있습니다. 현지 법률 및 규정을 준수하는지 확인하는 것은 귀하의 책임입니다.';
 
@@ -1259,7 +1222,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tellUsPrimaryLanguage => '기본 언어를 알려주세요';
 
   @override
-  String get languageForTranscription => '더 정확한 변환과 맞춤형 경험을 위해 언어를 설정하세요.';
+  String get languageForTranscription => 'Omi는 이 언어를 받아쓰기, 요약, 추억에 사용해요.';
 
   @override
   String get singleLanguageModeInfo => '단일 언어 모드가 활성화되었습니다. 정확도 향상을 위해 번역이 비활성화됩니다.';
@@ -1416,7 +1379,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String integrationComingSoon(String appName) {
-    return '$appName과의 통합이 곧 출시됩니다! 더 많은 작업 관리 옵션을 제공하기 위해 열심히 노력하고 있습니다.';
+    return '$appName은(는) 아직 지원되지 않아요.';
   }
 
   @override
@@ -1438,7 +1401,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get bringYourOwn => '직접 가져오기';
 
   @override
-  String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
+  String get payYourSttProvider => 'Omi는 무료예요. 받아쓰기 제공업체에 직접 비용을 내시면 돼요.';
 
   @override
   String get freeMinutesMonth => '월 300분 무료 포함. ';
@@ -1525,7 +1488,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enterApiKey => 'API 키를 입력하세요';
 
   @override
-  String get storedLocallyNeverShared => '로컬에 저장되며 절대 공유되지 않습니다';
+  String get storedLocallyNeverShared => '이 휴대폰에 저장돼요. 받아쓰기 제공업체로만 전송돼요.';
 
   @override
   String get host => '호스트';
@@ -1558,18 +1521,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get logsCopied => '로그가 복사되었습니다';
 
   @override
-  String get noLogsYet => '아직 로그가 없습니다. 녹음을 시작하여 사용자 지정 STT 활동을 확인하세요.';
+  String get noLogsYet => '아직 로그가 없어요. 무언가 녹음하면 받아쓰기 제공업체로 보낸 요청을 볼 수 있어요.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device이(가) $reason을(를) 사용합니다. Omi가 사용됩니다.';
+    return '$device은(는) 이 제공업체가 읽을 수 없는 형식($reason)으로 녹음하므로, 대신 Omi의 받아쓰기가 사용돼요.';
   }
 
   @override
   String get omiTranscription => 'Omi 음성 변환';
-
-  @override
-  String get bestInClassTranscription => '설정이 필요 없는 최고 수준의 음성 변환';
 
   @override
   String get instantSpeakerLabels => '즉시 화자 레이블 지정';
@@ -1578,16 +1538,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get languageTranslation => '100개 이상의 언어 번역';
 
   @override
-  String get optimizedForConversation => '대화에 최적화';
-
-  @override
   String get autoLanguageDetection => '자동 언어 감지';
-
-  @override
-  String get highAccuracy => '높은 정확도';
-
-  @override
-  String get privacyFirst => '개인정보 보호 우선';
 
   @override
   String get saveChanges => '변경사항 저장';
@@ -1768,9 +1719,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get allDone => '모두 완료!';
 
   @override
-  String get keepGoing => '계속하세요, 잘하고 있습니다';
-
-  @override
   String get skipThisQuestion => '이 질문 건너뛰기';
 
   @override
@@ -1846,7 +1794,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – 당신의 AI 동반자';
 
   @override
-  String get captureEveryMoment => '모든 순간을 기록하세요. AI 기반\n요약을 받으세요. 더 이상 메모할 필요가 없습니다.';
+  String get captureEveryMoment => 'Omi가 대화를 기록하고 요약과 할 일을\n대신 작성해 드려요.';
 
   @override
   String get appleWatchSetup => 'Apple Watch 설정';
@@ -1894,16 +1842,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectPrimaryLanguage => '기본 언어 선택';
 
   @override
-  String get languageBenefits => '더 정확한 변환과 맞춤형 경험을 위해 언어를 설정하세요';
+  String get languageBenefits => 'Omi는 이 언어를 받아쓰기, 요약, 추억에 사용해요.';
 
   @override
   String get whatsYourPrimaryLanguage => '기본 언어가 무엇인가요?';
 
   @override
   String get selectYourLanguage => '언어를 선택하세요';
-
-  @override
-  String get personalGrowthJourney => '모든 말을 듣는 AI와 함께하는 개인 성장 여정.';
 
   @override
   String get actionItemsTitle => '작업';
@@ -2100,9 +2045,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get baselineMemory => '기준 메모리';
-
-  @override
-  String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
   String get memoryContentHint => '오전 회의를 선호해요.';
@@ -2398,10 +2340,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createKeyToGetStarted => '시작하려면 키를 만드세요';
 
   @override
-  String get configureSttProvider => 'STT 제공업체 구성';
-
-  @override
-  String get setWhenConversationsAutoEnd => '대화가 자동 종료되는 시점 설정';
+  String get setWhenConversationsAutoEnd => 'Omi가 대화를 끝내기 전 무음으로 얼마나 기다릴지';
 
   @override
   String get importDataFromOtherSources => '다른 소스에서 데이터 가져오기';
@@ -2428,9 +2367,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String failedToDeleteGraph(String error) {
     return '그래프 삭제 실패: $error';
   }
-
-  @override
-  String get clearAllNodesAndConnections => '모든 노드와 연결 지우기';
 
   @override
   String get connectAiAssistantsToData => 'AI 어시스턴트를 데이터에 연결';
@@ -2526,9 +2462,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get youreAllSet => '준비 완료!';
 
   @override
-  String get welcomeToOmiDescription => 'Omi에 오신 것을 환영합니다! AI 동반자가 대화, 작업 등을 도와드릴 준비가 되었습니다.';
-
-  @override
   String get startUsingOmi => 'Omi 사용 시작';
 
   @override
@@ -2608,12 +2541,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get useMobileAppToCapture => '모바일 앱을 사용하여 오디오를 캡처하세요';
 
   @override
-  String get conversationsProcessedAutomatically => '대화는 자동으로 처리됩니다';
-
-  @override
-  String get getInsightsInstantly => '즉시 인사이트와 요약을 얻으세요';
-
-  @override
   String get showAll => '모두 표시 →';
 
   @override
@@ -2621,9 +2548,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyScore => '일일 점수';
-
-  @override
-  String get dailyScoreDescription => '실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.';
 
   @override
   String get searchResults => '검색 결과';
@@ -3005,9 +2929,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectionNeeded => '🌐 연결 필요';
 
   @override
-  String get startConversation => '대화를 시작하고 마법을 시작하세요';
-
-  @override
   String get checkInternetConnection => '인터넷 연결을 확인하세요';
 
   @override
@@ -3194,9 +3115,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get getOmiDevice => 'Omi 장치 받기';
 
   @override
-  String get wearableAiCompanion => '웨어러블 AI 컴패니언';
-
-  @override
   String get loadingMemories => '추억 로드 중…';
 
   @override
@@ -3239,22 +3157,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get makePrivate => '비공개로 변경';
 
   @override
-  String get organizeAndControlMemories => '메모리를 정리하고 관리하세요';
-
-  @override
   String get total => '전체';
 
   @override
   String get makeAllMemoriesPrivate => '모든 메모리를 비공개로 설정';
 
   @override
-  String get setAllMemoriesToPrivate => '모든 메모리를 비공개로 설정';
-
-  @override
   String get makeAllMemoriesPublic => '모든 메모리를 공개로 설정';
-
-  @override
-  String get setAllMemoriesToPublic => '모든 메모리를 공개로 설정';
 
   @override
   String get permanentlyRemoveAllMemories => 'Omi에서 모든 메모리를 영구적으로 제거';
@@ -3322,9 +3231,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chooseYourLanguage => '언어를 선택하세요';
 
   @override
-  String get selectPreferredLanguageForBestExperience => '최고의 Omi 경험을 위해 선호하는 언어를 선택하세요';
-
-  @override
   String get searchLanguages => '언어 검색';
 
   @override
@@ -3346,9 +3252,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String charactersCount(int count) {
     return '$count자';
   }
-
-  @override
-  String get enableFeaturesForBestExperience => '기기에서 최고의 Omi 경험을 위해 기능을 활성화하세요.';
 
   @override
   String get microphoneAccess => '마이크 액세스';
@@ -3758,9 +3661,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deliveryTime => '전송 시간';
 
   @override
-  String get deliveryTimeDescription => '일일 요약을 받을 시간';
-
-  @override
   String get subscription => '구독';
 
   @override
@@ -3800,12 +3700,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get shortcutChangeInstruction => '단축키를 클릭하여 변경합니다. Escape를 눌러 취소합니다.';
 
   @override
-  String get configureSTTProvider => 'STT 제공업체 구성';
-
-  @override
-  String get setConversationEndDescription => '대화가 자동으로 종료되는 시기 설정';
-
-  @override
   String get importDataDescription => '다른 소스에서 데이터 가져오기';
 
   @override
@@ -3815,13 +3709,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get exportingConversations => '대화 내보내는 중…';
 
   @override
-  String get clearNodesDescription => '모든 노드와 연결 지우기';
-
-  @override
   String get deleteKnowledgeGraphQuestion => '지식 그래프를 삭제하시겠습니까?';
-
-  @override
-  String get deleteKnowledgeGraphWarning => '파생된 모든 지식 그래프 데이터가 삭제됩니다. 원래 메모리는 안전하게 유지됩니다.';
 
   @override
   String get connectOmiWithAI => 'Omi를 AI 어시스턴트와 연결';
@@ -4135,9 +4023,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createAnApp => '앱 만들기';
 
   @override
-  String get createAndShareYourApp => '앱을 만들고 공유하세요';
-
-  @override
   String get itemApp => '앱';
 
   @override
@@ -4230,10 +4115,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get maximumSecurityE2ee => '최대 보안 (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
-
-  @override
   String get importantTradeoffs => '중요한 절충 사항:';
 
   @override
@@ -4265,14 +4146,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get secureEncryption => '안전한 암호화';
 
   @override
-  String get secureEncryptionDescription =>
-      '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
-
-  @override
   String get endToEndEncryption => '엔드투엔드 암호화';
-
-  @override
-  String get e2eeCardDescription => '최대 보안을 위해 활성화하면 본인만 데이터에 접근할 수 있습니다. 자세히 알아보려면 탭하세요.';
 
   @override
   String get dataAlwaysEncrypted => '레벨에 관계없이 데이터는 항상 저장 시 및 전송 중에 암호화됩니다.';
@@ -4343,7 +4217,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Unlimited를 무료로 받으세요.';
 
   @override
-  String get trainingDataBullets => '• 귀하의 데이터가 AI 모델 개선에 도움이 됩니다\n• 민감하지 않은 데이터만 공유됩니다\n• 완전히 투명한 프로세스';
+  String get trainingDataBullets => '• 여러분의 데이터는 AI 모델 개선에 도움이 돼요\n• 민감하지 않은 데이터만 공유돼요';
 
   @override
   String get learnMoreAtOmiTraining => 'omi.me/training에서 자세히 알아보기';
@@ -4423,9 +4297,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get youAreOnUnlimitedPlan => '현재 Unlimited 플랜을 사용 중입니다.';
 
   @override
-  String get yourOmiUnleashed => '당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.';
-
-  @override
   String planEndedOn(String date) {
     return '플랜이 $date에 종료되었습니다.\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
   }
@@ -4503,10 +4374,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yourPrivacyMattersToUs => '당신의 개인정보는 우리에게 중요합니다';
 
   @override
-  String get privacyIntroText =>
-      'Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:';
-
-  @override
   String get whatWeTrack => '추적 항목';
 
   @override
@@ -4517,12 +4384,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get ourCommitment => '우리의 약속';
-
-  @override
-  String get commitmentText => '우리는 수집한 데이터를 Omi를 더 나은 제품으로 만드는 데만 사용할 것을 약속합니다. 귀하의 개인정보와 신뢰는 우리에게 가장 중요합니다.';
-
-  @override
-  String get thankYouText => 'Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.';
 
   @override
   String get password => '비밀번호';
@@ -4567,10 +4428,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get exportStartedMayTakeFewSeconds => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다…';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
 
   @override
   String get configureDailySummaryDigest => '일일 작업 요약 구성';
@@ -4696,9 +4553,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get howItWorksTitle => '어떻게 작동하나요?';
 
   @override
-  String get howPeopleWorks => '사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!';
-
-  @override
   String get tapToDelete => '탭하여 삭제';
 
   @override
@@ -4755,7 +4609,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudStorageDialogMessage => '실시간 녹음이 말하는 동안 개인 클라우드 저장소에 저장됩니다.';
 
   @override
-  String get storeAudioCloudDescription => '말하는 동안 실시간 녹음을 개인 클라우드 저장소에 저장하세요. 오디오는 실시간으로 안전하게 캡처 및 저장됩니다.';
+  String get storeAudioCloudDescription => '말하는 동안 녹음을 업로드해서 나중에 다시 재생할 수 있어요.';
 
   @override
   String get downloadingFirmware => '펌웨어 다운로드 중';
@@ -5564,9 +5418,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get removeFromAllFolders => '모든 폴더에서 제거';
 
   @override
-  String get buildAndShareYourCustomApp => '맞춤 앱을 만들고 공유하세요';
-
-  @override
   String get searchAppsPlaceholder => '1500개 이상의 앱 검색';
 
   @override
@@ -5594,19 +5445,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get frequencyDescOff => '사전 알림 없음';
 
   @override
-  String get frequencyDescMinimal => '중요한 알림만';
+  String get frequencyDescMinimal => '긴급한 것만, 하루 약 1–3개';
 
   @override
-  String get frequencyDescLow => '중요한 업데이트만';
+  String get frequencyDescLow => '중요한 것만, 하루 약 3–5개';
 
   @override
-  String get frequencyDescBalanced => '정기적인 유용한 알림';
+  String get frequencyDescBalanced => '유용한 제안, 하루 약 5–8개';
 
   @override
-  String get frequencyDescHigh => '잦은 확인';
+  String get frequencyDescHigh => '더 많은 제안, 하루 약 6–9개';
 
   @override
-  String get frequencyDescMaximum => '항상 연결 상태 유지';
+  String get frequencyDescMaximum => '유용한 연결 모두, 하루 최대 9개';
 
   @override
   String get clearChatQuestion => '채팅을 삭제하시겠습니까?';
@@ -6518,7 +6369,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transferToPhone => '휴대폰으로 전송';
 
   @override
-  String get privateAndSecureOnDevice => '장치에서 비공개 및 보안 유지';
+  String get privateAndSecureOnDevice => '이 휴대폰에 저장됨';
 
   @override
   String get recordingInfo => '녹음 정보';
@@ -6979,12 +6830,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingTellUsAboutYourself => '자기소개를 해주세요';
-
-  @override
-  String get onboardingChooseYourPreference => '선호 설정을 선택하세요';
-
-  @override
-  String get onboardingGrantRequiredAccess => '필요한 권한을 허용하세요';
 
   @override
   String get onboardingYoureAllSet => '모든 준비가 완료되었습니다';
@@ -7856,9 +7701,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get apiEnvironment => 'API 환경';
 
   @override
-  String get apiEnvironmentDescription => '연결할 서버를 선택하세요';
-
-  @override
   String get production => '프로덕션';
 
   @override
@@ -8120,9 +7962,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
 
   @override
-  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
-
-  @override
   String get phoneCallsUpgradeButton => 'Unlimited로 업그레이드';
 
   @override
@@ -8225,7 +8064,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get fairUseAboutBody =>
-      'Omi는 개인 대화, 회의 및 실시간 상호작용을 위해 설계되었습니다. 사용량은 연결 시간이 아닌 감지된 실제 발화 시간으로 측정됩니다. 비개인적 콘텐츠에 대해 정상 패턴을 크게 초과하는 사용이 있을 경우 조정이 적용될 수 있습니다.';
+      'Omi는 개인 대화, 회의, 실시간 상호작용을 위해 설계되었어요. 사용량은 연결된 시간이 아니라 말한 시간으로 측정돼요. 사용량이 일반적인 개인 사용을 훨씬 넘으면 먼저 경고를 드려요. 계속 과도하게 사용하면 받아쓰기 속도가 느려지거나 제한될 수 있어요.';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8319,9 +8158,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cancelSyncQuestion => '동기화를 취소하시겠습니까?';
 
   @override
-  String get omisStorageDesc => 'Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.';
-
-  @override
   String get phoneStorageDesc => 'Omi가 다시 연결되면 녹음이 업로드 전에 자동으로 휴대폰으로 전송됩니다.';
 
   @override
@@ -8349,16 +8185,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String get permissionEnable => '활성화';
 
   @override
-  String get permissionsPageDescription => '이 권한들은 Omi 작동의 핵심입니다. 알림, 위치 기반 경험, 오디오 캡처와 같은 주요 기능을 활성화합니다.';
+  String get permissionsPageDescription =>
+      'Omi는 기기에 연결하고, 오디오를 녹음하고, 백그라운드에서 계속 작동하고, 알림을 보내고, 대화가 어디서 이루어졌는지 기록하기 위해 이 권한을 사용해요.';
 
   @override
   String get permissionsRequiredDescription => 'Omi가 제대로 작동하려면 몇 가지 권한이 필요합니다. 계속하려면 권한을 허용해 주세요.';
 
   @override
   String get permissionsSetupTitle => '최고의 경험을 누리세요';
-
-  @override
-  String get permissionsSetupDescription => 'Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.';
 
   @override
   String get permissionsChangeAnytime => '설정 > 권한에서 언제든지 변경할 수 있습니다';
@@ -8872,9 +8706,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get architectSubtitle => '파워유저 AI — 수천 건의 채팅 + 에이전트 자동화';
-
-  @override
   String chatUsageCost(String used, String limit) {
     return '채팅: \$$used / \$$limit 이번 달 사용량';
   }
@@ -8946,7 +8777,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get recordWithPhoneMic => '휴대폰 마이크로 녹음';
 
   @override
-  String get recordWithPhoneMicSubtitle => '주변 오디오를 캡처하세요';
+  String get recordWithPhoneMicSubtitle => '이 휴대폰의 마이크로 녹음하고 텍스트로 변환';
 
   @override
   String get phoneCall => '전화 통화';
@@ -9174,9 +9005,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get backgroundModeDescription => '앱을 완전히 닫아도 Omi 녹음을 계속 유지합니다.';
 
   @override
-  String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
-
-  @override
   String get backgroundModeUnavailable =>
       '호환되는 기기가 연결되어 있지 않아 백그라운드 모드를 사용할 수 없습니다. 이 기능을 사용하려면 Omi, OpenGlass 또는 Friend Pendant 기기를 연결하세요.';
 
@@ -9343,7 +9171,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingIntroTitle => 'Omi 알아보기';
 
   @override
-  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+  String get deviceOnboardingIntroSubtitle => '실시간 받아쓰기, 질문하기, 두 번 탭 단축키를 체험해 보세요.';
 
   @override
   String get deviceOnboardingIntroDuration => '약 1분';
@@ -9837,7 +9665,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get home => '홈';
 
   @override
-  String get failedToUpdateBaselineStatus => '베이스라인 상태 업데이트에 실패했습니다.';
+  String get failedToUpdateBaselineStatus => '이 추억을 업데이트하지 못했어요. 다시 시도해 주세요.';
 
   @override
   String get unstarConversation => '대화 별표 해제';
@@ -10094,10 +9922,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryReviewFix => '수정';
 
   @override
-  String get memoryReviewConfirmed => '확인했어요. 이를 반영할게요.';
+  String get memoryReviewConfirmed => '확인했어요.';
 
   @override
-  String get memoryReviewDropped => '삭제했어요. 이런 정보는 피할게요.';
+  String get memoryReviewDropped => '추억에서 삭제했어요.';
 
   @override
   String get memoryReviewUpdated => '업데이트했어요.';
@@ -10398,7 +10226,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vadGate => 'VAD 게이트';
 
   @override
-  String get vadGateDescription => '음성 인식 비용을 줄이기 위한 서버 측 음성 게이트';
+  String get vadGateDescription => '비용을 줄이기 위해 받아쓰기 전에 무음 오디오를 건너뛰어요.';
 
   @override
   String get flashCustomFirmware => '사용자 지정 펌웨어 설치';
@@ -10462,7 +10290,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get onboardingCompleteMessage => 'Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다.';
+  String get onboardingCompleteMessage => 'Omi를 며칠 동안 실행해 두세요. 대화, 추억, 할 일이 채워지기 시작할 거예요.';
 
   @override
   String get cantFindDeviceHint => '기기를 찾을 수 없나요? 전원이 켜져 있고 휴대폰 가까이에 있는지 확인한 후 다시 검색하세요.';
@@ -10894,9 +10722,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speakerTagPromptTitle => 'Omi가 목소리를 알아보도록 도와주세요';
-
-  @override
-  String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
 
   @override
   String get speakerTagPromptIsThisYou => '본인인가요?';
@@ -11520,14 +11345,14 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '일치 $count건을 확인했어요',
-      one: '일치 1건을 확인했어요',
+      other: '자동 라벨 $count개를 확인했어요',
+      one: '자동 라벨 1개를 확인했어요',
     );
     return '$_temp0';
   }
 
   @override
-  String get confidenceReasonAutoOnly => '자동 일치만 있고 확인한 적 없음';
+  String get confidenceReasonAutoOnly => '자동으로 표시됨, 아직 확인 안 함';
 
   @override
   String get confidenceReasonNeverConfirmed => '확인한 적 없음';
@@ -11536,10 +11361,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get confidenceReasonCorrected => '일치 결과를 직접 고쳤어요';
 
   @override
-  String get confidenceReasonVoiceReady => '음성 준비됨';
+  String get confidenceReasonVoiceReady => '음성 저장됨';
 
   @override
-  String get confidenceReasonNeedsVoice => '음성 필요';
+  String get confidenceReasonNeedsVoice => '음성 샘플 없음';
 
   @override
   String get confidenceReasonNotHeard => '아직 들리지 않음';
@@ -11559,7 +11384,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String confidenceSummaryUnverified(String name) {
-    return '아직 $name을(를) 뒷받침할 활동이 없어요.';
+    return '아직 $name을(를) 표시하거나 확인하지 않아서, Omi가 이 사람의 목소리를 아는지 확실하지 않아요.';
   }
 
   @override
@@ -11603,8 +11428,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '자동 일치 $count건 확인함',
-      one: '자동 일치 1건 확인함',
+      other: '자동 라벨 $count개를 확인했어요',
+      one: '자동 라벨 1개를 확인했어요',
     );
     return '$_temp0';
   }
@@ -11614,8 +11439,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '일치 $count건을 다른 사람으로 변경함',
-      one: '일치 1건을 다른 사람으로 변경함',
+      other: '자동 라벨 $count개를 다른 사람으로 변경했어요',
+      one: '자동 라벨 1개를 다른 사람으로 변경했어요',
     );
     return '$_temp0';
   }
@@ -11625,8 +11450,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '아무도 확인하지 않은 자동 일치 $count건',
-      one: '아무도 확인하지 않은 자동 일치 1건',
+      other: '아직 확인하지 않은 자동 라벨 $count개',
+      one: '아직 확인하지 않은 자동 라벨 1개',
     );
     return '$_temp0';
   }
@@ -11671,11 +11496,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String confidenceIsConfirmed(String name) {
-    return '$name은(는) 확인됨 상태예요. Omi는 라벨을 지정할 때마다 계속 배워요.';
+    return '$name은(는) 확인됨 상태예요. 더 이상 하실 일은 없어요.';
   }
 
   @override
-  String get confidenceFootnote => '신뢰도를 크게 바꾸는 건 내 답변뿐이에요. 자동 일치만으로는 거의 도움이 되지 않아요.';
+  String get confidenceFootnote => '내가 붙인 라벨과 확인이 가장 큰 영향을 줘요. 자동 라벨은 확인하기 전까지는 영향이 적어요.';
 
   @override
   String get personWhyConfidence => '왜죠?';
@@ -11684,14 +11509,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String pinPersonTitle(String name) {
     return '$name 고정';
   }
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return '$name을(를) 목록 위에 두고, 대화에 등장할 사람으로 기억해요';
-  }
-
-  @override
-  String get pinPersonHonestLine => '비슷한 목소리를 매칭하기 전에 Omi가 확인합니다.';
 
   @override
   String get pinAction => '고정';
@@ -11851,15 +11668,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintIdentify => '답할 때마다 Omi가 목소리를 배우고 그 사람의 신뢰도가 올라가요.';
+  String get speakerTagPromptHintIdentify => '답변해 주시면 Omi가 다음에 이 목소리를 알아볼 수 있어요.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return '“예”를 누르면 $name의 신뢰도가 올라가요.';
-  }
-
-  @override
-  String get speakerTagPromptHintOwner => '내 음성 프로필을 정확하게 유지해서 Omi가 나를 다른 사람으로 부르는 일이 없게 해요.';
+  String get speakerTagPromptHintOwner => 'Omi가 내 목소리와 다른 사람의 목소리를 구별하도록 도와줘요.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12187,7 +11999,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unnamedSpeakerLabel => '화자';
 
   @override
-  String get unresolvedSpeakersNotice => '녹음 전반에 걸쳐 화자가 구분되지 않았습니다.';
+  String get unresolvedSpeakersNotice => '이 대화의 녹음들 사이에서 화자 라벨이 일치하지 않을 수 있어요.';
 
   @override
   String get unresolvedSpeakersTitle => '화자 레이블 정보';
@@ -12615,4 +12427,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get pinPersonDescription => '고정된 사람은 \'사람들\' 목록 맨 위에 남고 \'정리\'로 삭제되지 않아요.';
 }

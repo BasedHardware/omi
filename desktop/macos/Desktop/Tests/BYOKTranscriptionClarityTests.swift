@@ -21,7 +21,7 @@ final class BYOKTranscriptionClarityTests: XCTestCase {
     XCTAssertNil(response.transcriptionAllowance?.remainingSeconds)
     XCTAssertEqual(
       TranscriptionAllowancePresentation.statusText(response.transcriptionAllowance),
-      "Transcription: Deepgram BYOK active")
+      "Transcription: using your Deepgram key")
   }
 
   func testExhaustedAllowanceAndMissingServerAnswerDoNotClaimBYOK() throws {

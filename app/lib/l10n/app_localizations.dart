@@ -783,12 +783,6 @@ abstract class AppLocalizations {
   /// **'Create Your Own App'**
   String get createYourOwnApp;
 
-  /// Create app button subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Build and share your custom app'**
-  String get buildAndShareApp;
-
   /// Placeholder text for search input
   ///
   /// In en, this message translates to:
@@ -842,12 +836,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Join the community!'**
   String get joinCommunity;
-
-  /// Discord member count
-  ///
-  /// In en, this message translates to:
-  /// **'8000+ members and counting.'**
-  String get membersAndCounting;
 
   /// Delete account page title
   ///
@@ -1089,12 +1077,6 @@ abstract class AppLocalizations {
   /// **'Your Privacy, Your Control'**
   String get yourPrivacyYourControl;
 
-  /// Data privacy page introduction
-  ///
-  /// In en, this message translates to:
-  /// **'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.'**
-  String get privacyIntro;
-
   /// Learn more link
   ///
   /// In en, this message translates to:
@@ -1106,12 +1088,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Data Protection Level'**
   String get dataProtectionLevel;
-
-  /// Data protection section description
-  ///
-  /// In en, this message translates to:
-  /// **'Your data is secured by default with strong encryption. Review your settings and future privacy options below.'**
-  String get dataProtectionDesc;
 
   /// App access section title
   ///
@@ -1449,12 +1425,6 @@ abstract class AppLocalizations {
   /// **'Transcription'**
   String get transcription;
 
-  /// Transcription configuration subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Configure STT provider'**
-  String get transcriptionConfig;
-
   /// Conversation timeout feature name
   ///
   /// In en, this message translates to:
@@ -1464,7 +1434,7 @@ abstract class AppLocalizations {
   /// Conversation timeout configuration subtitle
   ///
   /// In en, this message translates to:
-  /// **'Set when conversations auto-end'**
+  /// **'How long Omi waits in silence before ending a conversation'**
   String get conversationTimeoutConfig;
 
   /// Import data feature name
@@ -1472,12 +1442,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import Data'**
   String get importData;
-
-  /// Import data details subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Import data from other sources'**
-  String get importDataConfig;
 
   /// Debug & Diagnostics section header
   ///
@@ -1575,12 +1539,6 @@ abstract class AppLocalizations {
   /// **'Understanding'**
   String get understanding;
 
-  /// Understanding stat subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Words understood from your conversations.'**
-  String get understandingSubtitle;
-
   /// Providing stat title
   ///
   /// In en, this message translates to:
@@ -1598,12 +1556,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remembering'**
   String get remembering;
-
-  /// Remembering stat subtitle
-  ///
-  /// In en, this message translates to:
-  /// **'Facts and details remembered for you.'**
-  String get rememberingSubtitle;
 
   /// Unlimited plan name
   ///
@@ -1719,12 +1671,6 @@ abstract class AppLocalizations {
   /// **'Auto-deletes after 3 days.'**
   String get debugLogsAutoDelete;
 
-  /// No description provided for @debugLogsDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Helps diagnose issues'**
-  String get debugLogsDesc;
-
   /// Message when no debug log files exist
   ///
   /// In en, this message translates to:
@@ -1797,12 +1743,6 @@ abstract class AppLocalizations {
   /// **'Delete Knowledge Graph?'**
   String get deleteKnowledgeGraphTitle;
 
-  /// Dialog message explaining delete knowledge graph action
-  ///
-  /// In en, this message translates to:
-  /// **'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.'**
-  String get deleteKnowledgeGraphMessage;
-
   /// Success message when knowledge graph deleted
   ///
   /// In en, this message translates to:
@@ -1820,12 +1760,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete Knowledge Graph'**
   String get deleteKnowledgeGraph;
-
-  /// No description provided for @deleteKnowledgeGraphDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear all nodes and connections'**
-  String get deleteKnowledgeGraphDesc;
 
   /// MCP (Model Context Protocol) section header
   ///
@@ -2265,12 +2199,6 @@ abstract class AppLocalizations {
   /// **'Enhance Transcript Accuracy'**
   String get enhanceTranscriptAccuracy;
 
-  /// No description provided for @enhanceTranscriptAccuracyDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'As our model improves, we can provide better transcription results for your recordings.'**
-  String get enhanceTranscriptAccuracyDesc;
-
   /// No description provided for @legalNotice.
   ///
   /// In en, this message translates to:
@@ -2592,7 +2520,7 @@ abstract class AppLocalizations {
   /// No description provided for @languageForTranscription.
   ///
   /// In en, this message translates to:
-  /// **'Set your language for sharper transcriptions and a personalized experience.'**
+  /// **'Omi uses this language for transcription, summaries, and memories.'**
   String get languageForTranscription;
 
   /// No description provided for @singleLanguageModeInfo.
@@ -2844,7 +2772,7 @@ abstract class AppLocalizations {
   /// No description provided for @integrationComingSoon.
   ///
   /// In en, this message translates to:
-  /// **'Integration with {appName} is coming soon! We\'re working hard to bring you more task management options.'**
+  /// **'{appName} isn\'t supported yet.'**
   String integrationComingSoon(String appName);
 
   /// Button to dismiss explanation
@@ -2886,7 +2814,7 @@ abstract class AppLocalizations {
   /// No description provided for @payYourSttProvider.
   ///
   /// In en, this message translates to:
-  /// **'Freely use omi. You only pay your STT provider directly.'**
+  /// **'Free in Omi. You pay your transcription provider directly.'**
   String get payYourSttProvider;
 
   /// No description provided for @freeMinutesMonth.
@@ -3048,7 +2976,7 @@ abstract class AppLocalizations {
   /// No description provided for @storedLocallyNeverShared.
   ///
   /// In en, this message translates to:
-  /// **'Stored locally, never shared'**
+  /// **'Saved on this phone. Only sent to your transcription provider.'**
   String get storedLocallyNeverShared;
 
   /// No description provided for @host.
@@ -3114,13 +3042,13 @@ abstract class AppLocalizations {
   /// No description provided for @noLogsYet.
   ///
   /// In en, this message translates to:
-  /// **'No logs yet. Start recording to see custom STT activity.'**
+  /// **'No logs yet. Record something to see requests to your transcription provider.'**
   String get noLogsYet;
 
   /// Warning about device codec compatibility
   ///
   /// In en, this message translates to:
-  /// **'{device} uses {reason}. Omi will be used.'**
+  /// **'{device} records in a format this provider can\'t read ({reason}), so Omi\'s transcription will be used instead.'**
   String deviceUsesCodec(String device, String reason);
 
   /// No description provided for @omiTranscription.
@@ -3128,12 +3056,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi Transcription'**
   String get omiTranscription;
-
-  /// No description provided for @bestInClassTranscription.
-  ///
-  /// In en, this message translates to:
-  /// **'Best in class transcription with zero setup'**
-  String get bestInClassTranscription;
 
   /// No description provided for @instantSpeakerLabels.
   ///
@@ -3147,29 +3069,11 @@ abstract class AppLocalizations {
   /// **'100+ language translation'**
   String get languageTranslation;
 
-  /// No description provided for @optimizedForConversation.
-  ///
-  /// In en, this message translates to:
-  /// **'Optimized for conversation'**
-  String get optimizedForConversation;
-
   /// No description provided for @autoLanguageDetection.
   ///
   /// In en, this message translates to:
   /// **'Auto language detection'**
   String get autoLanguageDetection;
-
-  /// No description provided for @highAccuracy.
-  ///
-  /// In en, this message translates to:
-  /// **'High accuracy'**
-  String get highAccuracy;
-
-  /// No description provided for @privacyFirst.
-  ///
-  /// In en, this message translates to:
-  /// **'Privacy first'**
-  String get privacyFirst;
 
   /// Button text to save edited memory
   ///
@@ -3519,12 +3423,6 @@ abstract class AppLocalizations {
   /// **'All done!'**
   String get allDone;
 
-  /// Encouragement text during a multi-step process
-  ///
-  /// In en, this message translates to:
-  /// **'Keep going, you are doing great'**
-  String get keepGoing;
-
   /// Button text to skip current question
   ///
   /// In en, this message translates to:
@@ -3678,7 +3576,7 @@ abstract class AppLocalizations {
   /// App value proposition or description
   ///
   /// In en, this message translates to:
-  /// **'Capture every moment. Get AI-powered\nsummaries. Never take notes again.'**
+  /// **'Omi records your conversations and writes\nthe summary and to-dos for you.'**
   String get captureEveryMoment;
 
   /// Title for Apple Watch setup page
@@ -3762,7 +3660,7 @@ abstract class AppLocalizations {
   /// Explanation of why language selection matters
   ///
   /// In en, this message translates to:
-  /// **'Set your language for sharper transcriptions and a personalized experience'**
+  /// **'Omi uses this language for transcription, summaries, and memories.'**
   String get languageBenefits;
 
   /// Question asking for primary language
@@ -3776,12 +3674,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select your language'**
   String get selectYourLanguage;
-
-  /// Subtitle describing Omi on auth screen
-  ///
-  /// In en, this message translates to:
-  /// **'Your personal growth journey with AI that listens to your every word.'**
-  String get personalGrowthJourney;
 
   /// Title for the Action Items page
   ///
@@ -4154,12 +4046,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Baseline Memory'**
   String get baselineMemory;
-
-  /// Description for baseline memory being always in context
-  ///
-  /// In en, this message translates to:
-  /// **'Always in context'**
-  String get alwaysInContext;
 
   /// Example of a useful personal preference to remember.
   ///
@@ -4725,16 +4611,10 @@ abstract class AppLocalizations {
   /// **'Create a key to get started'**
   String get createKeyToGetStarted;
 
-  /// Description for transcription settings
-  ///
-  /// In en, this message translates to:
-  /// **'Configure STT provider'**
-  String get configureSttProvider;
-
   /// Description for conversation timeout setting
   ///
   /// In en, this message translates to:
-  /// **'Set when conversations auto-end'**
+  /// **'How long Omi waits in silence before ending a conversation'**
   String get setWhenConversationsAutoEnd;
 
   /// Description for import data feature
@@ -4784,12 +4664,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to delete graph: {error}'**
   String failedToDeleteGraph(String error);
-
-  /// Description for delete knowledge graph
-  ///
-  /// In en, this message translates to:
-  /// **'Clear all nodes and connections'**
-  String get clearAllNodesAndConnections;
 
   /// Description for MCP Server feature
   ///
@@ -4977,12 +4851,6 @@ abstract class AppLocalizations {
   /// **'You\'re all set!'**
   String get youreAllSet;
 
-  /// Welcome message on completion screen
-  ///
-  /// In en, this message translates to:
-  /// **'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.'**
-  String get welcomeToOmiDescription;
-
   /// Button to complete onboarding and start using the app
   ///
   /// In en, this message translates to:
@@ -5133,18 +5001,6 @@ abstract class AppLocalizations {
   /// **'Use your mobile app to capture audio'**
   String get useMobileAppToCapture;
 
-  /// Tip about automatic conversation processing
-  ///
-  /// In en, this message translates to:
-  /// **'Conversations are processed automatically'**
-  String get conversationsProcessedAutomatically;
-
-  /// Tip about instant insights feature
-  ///
-  /// In en, this message translates to:
-  /// **'Get insights and summaries instantly'**
-  String get getInsightsInstantly;
-
   /// Button text to show all items
   ///
   /// In en, this message translates to:
@@ -5162,12 +5018,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'DAILY SCORE'**
   String get dailyScore;
-
-  /// Description text for daily score widget
-  ///
-  /// In en, this message translates to:
-  /// **'A score to help you better\nfocus on execution.'**
-  String get dailyScoreDescription;
 
   /// Badge label for search results section
   ///
@@ -5919,12 +5769,6 @@ abstract class AppLocalizations {
   /// **'🌐 Connection needed'**
   String get connectionNeeded;
 
-  /// Empty state subtitle when connected
-  ///
-  /// In en, this message translates to:
-  /// **'Start a conversation and let the magic begin'**
-  String get startConversation;
-
   /// Empty state subtitle when not connected
   ///
   /// In en, this message translates to:
@@ -6285,12 +6129,6 @@ abstract class AppLocalizations {
   /// **'Get Omi Device'**
   String get getOmiDevice;
 
-  /// Widget subtitle for device promotion
-  ///
-  /// In en, this message translates to:
-  /// **'Wearable AI companion'**
-  String get wearableAiCompanion;
-
   /// Loading overlay message when reloading memories
   ///
   /// In en, this message translates to:
@@ -6375,12 +6213,6 @@ abstract class AppLocalizations {
   /// **'Make Private'**
   String get makePrivate;
 
-  /// Subtitle for memory management dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Organize and control your memories'**
-  String get organizeAndControlMemories;
-
   /// Label for total memory count statistic
   ///
   /// In en, this message translates to:
@@ -6393,23 +6225,11 @@ abstract class AppLocalizations {
   /// **'Make All Memories Private'**
   String get makeAllMemoriesPrivate;
 
-  /// Description for making all memories private
-  ///
-  /// In en, this message translates to:
-  /// **'Set all memories to private visibility'**
-  String get setAllMemoriesToPrivate;
-
   /// Action to make all memories public
   ///
   /// In en, this message translates to:
   /// **'Make All Memories Public'**
   String get makeAllMemoriesPublic;
-
-  /// Description for making all memories public
-  ///
-  /// In en, this message translates to:
-  /// **'Set all memories to public visibility'**
-  String get setAllMemoriesToPublic;
 
   /// Description for deleting all memories
   ///
@@ -6537,12 +6357,6 @@ abstract class AppLocalizations {
   /// **'Choose your language'**
   String get chooseYourLanguage;
 
-  /// No description provided for @selectPreferredLanguageForBestExperience.
-  ///
-  /// In en, this message translates to:
-  /// **'Select your preferred language for the best Omi experience'**
-  String get selectPreferredLanguageForBestExperience;
-
   /// No description provided for @searchLanguages.
   ///
   /// In en, this message translates to:
@@ -6584,12 +6398,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} characters'**
   String charactersCount(int count);
-
-  /// No description provided for @enableFeaturesForBestExperience.
-  ///
-  /// In en, this message translates to:
-  /// **'Enable features for the best Omi experience on your device.'**
-  String get enableFeaturesForBestExperience;
 
   /// No description provided for @microphoneAccess.
   ///
@@ -7365,12 +7173,6 @@ abstract class AppLocalizations {
   /// **'Delivery Time'**
   String get deliveryTime;
 
-  /// Delivery time description
-  ///
-  /// In en, this message translates to:
-  /// **'When to receive your daily summary'**
-  String get deliveryTimeDescription;
-
   /// Subscription section title
   ///
   /// In en, this message translates to:
@@ -7449,18 +7251,6 @@ abstract class AppLocalizations {
   /// **'Click on a shortcut to change it. Press Escape to cancel.'**
   String get shortcutChangeInstruction;
 
-  /// No description provided for @configureSTTProvider.
-  ///
-  /// In en, this message translates to:
-  /// **'Configure STT provider'**
-  String get configureSTTProvider;
-
-  /// No description provided for @setConversationEndDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Set when conversations auto-end'**
-  String get setConversationEndDescription;
-
   /// No description provided for @importDataDescription.
   ///
   /// In en, this message translates to:
@@ -7479,23 +7269,11 @@ abstract class AppLocalizations {
   /// **'Exporting conversations…'**
   String get exportingConversations;
 
-  /// No description provided for @clearNodesDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear all nodes and connections'**
-  String get clearNodesDescription;
-
   /// No description provided for @deleteKnowledgeGraphQuestion.
   ///
   /// In en, this message translates to:
   /// **'Delete Knowledge Graph?'**
   String get deleteKnowledgeGraphQuestion;
-
-  /// No description provided for @deleteKnowledgeGraphWarning.
-  ///
-  /// In en, this message translates to:
-  /// **'This will delete all derived knowledge graph data. Your original memories remain safe.'**
-  String get deleteKnowledgeGraphWarning;
 
   /// No description provided for @connectOmiWithAI.
   ///
@@ -8073,12 +7851,6 @@ abstract class AppLocalizations {
   /// **'Create an App'**
   String get createAnApp;
 
-  /// Subtitle for create app option
-  ///
-  /// In en, this message translates to:
-  /// **'Create and share your app'**
-  String get createAndShareYourApp;
-
   /// The word 'App' used as parameter in other strings
   ///
   /// In en, this message translates to:
@@ -8223,12 +7995,6 @@ abstract class AppLocalizations {
   /// **'Maximum Security (E2EE)'**
   String get maximumSecurityE2ee;
 
-  /// Description of E2EE encryption explaining its benefits
-  ///
-  /// In en, this message translates to:
-  /// **'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.'**
-  String get e2eeDescription;
-
   /// Header for trade-offs section in E2EE dialog
   ///
   /// In en, this message translates to:
@@ -8283,23 +8049,11 @@ abstract class AppLocalizations {
   /// **'Secure Encryption'**
   String get secureEncryption;
 
-  /// Description of secure encryption explaining how data is protected
-  ///
-  /// In en, this message translates to:
-  /// **'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.'**
-  String get secureEncryptionDescription;
-
   /// Title for E2EE card
   ///
   /// In en, this message translates to:
   /// **'End-to-End Encryption'**
   String get endToEndEncryption;
-
-  /// Description for E2EE card explaining its benefit
-  ///
-  /// In en, this message translates to:
-  /// **'Enable for maximum security where only you can access your data. Tap to learn more.'**
-  String get e2eeCardDescription;
 
   /// Info message explaining data is always encrypted
   ///
@@ -8436,7 +8190,7 @@ abstract class AppLocalizations {
   /// Bullet points explaining training data program benefits
   ///
   /// In en, this message translates to:
-  /// **'• Your data helps improve AI models\n• Only non-sensitive data is shared\n• Fully transparent process'**
+  /// **'• Your data helps improve AI models\n• Only non-sensitive data is shared'**
   String get trainingDataBullets;
 
   /// Link text to learn more about training
@@ -8589,12 +8343,6 @@ abstract class AppLocalizations {
   /// **'You are on the Unlimited Plan.'**
   String get youAreOnUnlimitedPlan;
 
-  /// Marketing text for unlimited plan
-  ///
-  /// In en, this message translates to:
-  /// **'Your Omi, unleashed. Go unlimited for endless possibilities.'**
-  String get yourOmiUnleashed;
-
   /// Message when plan has ended
   ///
   /// In en, this message translates to:
@@ -8733,12 +8481,6 @@ abstract class AppLocalizations {
   /// **'Your Privacy Matters to Us'**
   String get yourPrivacyMattersToUs;
 
-  /// Privacy page - privacyIntroText
-  ///
-  /// In en, this message translates to:
-  /// **'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:'**
-  String get privacyIntroText;
-
   /// Privacy page - whatWeTrack
   ///
   /// In en, this message translates to:
@@ -8762,18 +8504,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Our Commitment'**
   String get ourCommitment;
-
-  /// Privacy page - commitmentText
-  ///
-  /// In en, this message translates to:
-  /// **'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.'**
-  String get commitmentText;
-
-  /// Privacy page - thankYouText
-  ///
-  /// In en, this message translates to:
-  /// **'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.'**
-  String get thankYouText;
 
   /// WiFi sync settings - password
   ///
@@ -8858,12 +8588,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export started. This may take a few seconds…'**
   String get exportStartedMayTakeFewSeconds;
-
-  /// Developer settings - knowledgeGraphDeleteDescription
-  ///
-  /// In en, this message translates to:
-  /// **'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.'**
-  String get knowledgeGraphDeleteDescription;
 
   /// Subtitle for Daily Summary menu item in profile settings
   ///
@@ -9075,12 +8799,6 @@ abstract class AppLocalizations {
   /// **'How it works?'**
   String get howItWorksTitle;
 
-  /// Explanation of how people/speech recognition works
-  ///
-  /// In en, this message translates to:
-  /// **'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!'**
-  String get howPeopleWorks;
-
   /// Hint text for tap to delete action
   ///
   /// In en, this message translates to:
@@ -9192,7 +8910,7 @@ abstract class AppLocalizations {
   /// storeAudioCloudDescription label
   ///
   /// In en, this message translates to:
-  /// **'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.'**
+  /// **'Uploads your recordings as you speak so you can play them back later.'**
   String get storeAudioCloudDescription;
 
   /// Status text shown while downloading firmware
@@ -10749,12 +10467,6 @@ abstract class AppLocalizations {
   /// **'Remove from all folders'**
   String get removeFromAllFolders;
 
-  /// Subtitle for create app button
-  ///
-  /// In en, this message translates to:
-  /// **'Build and share your custom app'**
-  String get buildAndShareYourCustomApp;
-
   /// Search bar placeholder text
   ///
   /// In en, this message translates to:
@@ -10812,31 +10524,31 @@ abstract class AppLocalizations {
   /// Description for minimal notification frequency
   ///
   /// In en, this message translates to:
-  /// **'Only critical reminders'**
+  /// **'Only urgent things, about 1–3 a day'**
   String get frequencyDescMinimal;
 
   /// Description for low notification frequency
   ///
   /// In en, this message translates to:
-  /// **'Important updates only'**
+  /// **'Important things only, about 3–5 a day'**
   String get frequencyDescLow;
 
   /// Description for balanced notification frequency
   ///
   /// In en, this message translates to:
-  /// **'Regular helpful nudges'**
+  /// **'Useful suggestions, about 5–8 a day'**
   String get frequencyDescBalanced;
 
   /// Description for high notification frequency
   ///
   /// In en, this message translates to:
-  /// **'Frequent check-ins'**
+  /// **'More suggestions, about 6–9 a day'**
   String get frequencyDescHigh;
 
   /// Description for maximum notification frequency
   ///
   /// In en, this message translates to:
-  /// **'Stay constantly engaged'**
+  /// **'Every useful connection, up to 9 a day'**
   String get frequencyDescMaximum;
 
   /// Dialog title asking to clear chat
@@ -12501,10 +12213,10 @@ abstract class AppLocalizations {
   /// **'Transfer to Phone'**
   String get transferToPhone;
 
-  /// Privacy notice for local recordings
+  /// Status of a recording that is stored on the phone (list row and recording detail).
   ///
   /// In en, this message translates to:
-  /// **'Private & secure on your device'**
+  /// **'Saved on this phone'**
   String get privateAndSecureOnDevice;
 
   /// Menu item to view recording information
@@ -13358,18 +13070,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tell us about yourself'**
   String get onboardingTellUsAboutYourself;
-
-  /// Onboarding step description for language selection
-  ///
-  /// In en, this message translates to:
-  /// **'Choose your preference'**
-  String get onboardingChooseYourPreference;
-
-  /// Onboarding step description for permissions
-  ///
-  /// In en, this message translates to:
-  /// **'Grant required access'**
-  String get onboardingGrantRequiredAccess;
 
   /// Onboarding step description for completion
   ///
@@ -14937,12 +14637,6 @@ abstract class AppLocalizations {
   /// **'API Environment'**
   String get apiEnvironment;
 
-  /// Subtitle for the API environment switcher
-  ///
-  /// In en, this message translates to:
-  /// **'Choose which backend to connect to'**
-  String get apiEnvironmentDescription;
-
   /// Label for production API environment
   ///
   /// In en, this message translates to:
@@ -15441,12 +15135,6 @@ abstract class AppLocalizations {
   /// **'Recipients see your real number, not a random one'**
   String get phoneCallsUpsellFeature3;
 
-  /// Phone calls upsell feature 4
-  ///
-  /// In en, this message translates to:
-  /// **'Your calls stay private and secure'**
-  String get phoneCallsUpsellFeature4;
-
   /// Button text to upgrade to unlimited plan from phone calls upsell
   ///
   /// In en, this message translates to:
@@ -15648,7 +15336,7 @@ abstract class AppLocalizations {
   /// No description provided for @fairUseAboutBody.
   ///
   /// In en, this message translates to:
-  /// **'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.'**
+  /// **'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by time spent speaking, not time connected. If your usage is far above normal personal use, you\'ll get a warning first. Continued heavy use can slow down or limit transcription.'**
   String get fairUseAboutBody;
 
   /// Snackbar message when case reference is copied to clipboard
@@ -15795,12 +15483,6 @@ abstract class AppLocalizations {
   /// **'Cancel sync?'**
   String get cancelSyncQuestion;
 
-  /// Description of device storage in sync info sheet
-  ///
-  /// In en, this message translates to:
-  /// **'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.'**
-  String get omisStorageDesc;
-
   /// Description of phone storage in sync info sheet
   ///
   /// In en, this message translates to:
@@ -15858,7 +15540,7 @@ abstract class AppLocalizations {
   /// Description text shown at the bottom of the permissions page
   ///
   /// In en, this message translates to:
-  /// **'These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.'**
+  /// **'Omi uses these to connect to your device, record audio, keep working in the background, send reminders, and note where conversations happened.'**
   String get permissionsPageDescription;
 
   /// Description for the permissions interstitial screen
@@ -15872,12 +15554,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Get the best experience'**
   String get permissionsSetupTitle;
-
-  /// Subtitle for the permissions interstitial screen
-  ///
-  /// In en, this message translates to:
-  /// **'Enable a few permissions so Omi can work its magic.'**
-  String get permissionsSetupDescription;
 
   /// Reassurance note on the permissions interstitial
   ///
@@ -16821,12 +16497,6 @@ abstract class AppLocalizations {
   /// **'{count} questions per month'**
   String operatorSubtitle(int count);
 
-  /// No description provided for @architectSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Power-user AI — thousands of chats + agentic automations'**
-  String get architectSubtitle;
-
   /// No description provided for @chatUsageCost.
   ///
   /// In en, this message translates to:
@@ -16956,7 +16626,7 @@ abstract class AppLocalizations {
   /// Subtitle for the phone-mic option in the record-options sheet
   ///
   /// In en, this message translates to:
-  /// **'Capture audio around you'**
+  /// **'Record and transcribe with this phone\'s microphone'**
   String get recordWithPhoneMicSubtitle;
 
   /// Title of the phone-call option in the record-options sheet
@@ -17355,12 +17025,6 @@ abstract class AppLocalizations {
   /// **'Keep your Omi recording even when the app is fully closed.'**
   String get backgroundModeDescription;
 
-  /// Caveat note shown in the Background Mode sheet
-  ///
-  /// In en, this message translates to:
-  /// **'Works with Omi devices only for now, and is being improved continuously.'**
-  String get backgroundModeNote;
-
   /// Warning shown in Background Mode sheet when no device with a native BLE audio route is connected
   ///
   /// In en, this message translates to:
@@ -17694,7 +17358,7 @@ abstract class AppLocalizations {
   /// Onboarding intro screen subtitle explaining the tutorial
   ///
   /// In en, this message translates to:
-  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  /// **'Try live transcription, asking a question, and the double-tap shortcut.'**
   String get deviceOnboardingIntroSubtitle;
 
   /// Onboarding intro screen estimated duration hint
@@ -18612,7 +18276,7 @@ abstract class AppLocalizations {
   /// Snackbar when toggling a memory's baseline flag fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to update baseline status'**
+  /// **'Couldn\'t update this memory. Try again.'**
   String get failedToUpdateBaselineStatus;
 
   /// Accessible name for the conversation-detail star button when the conversation is already starred
@@ -18882,13 +18546,13 @@ abstract class AppLocalizations {
   /// Status after the user confirms a learned memory
   ///
   /// In en, this message translates to:
-  /// **'Confirmed. I\'ll act on this.'**
+  /// **'Confirmed.'**
   String get memoryReviewConfirmed;
 
-  /// Status after the user marks a learned memory wrong
+  /// Status after the user marks a learned memory wrong; the memory is hidden.
   ///
   /// In en, this message translates to:
-  /// **'Dropped. I\'ll avoid facts like this.'**
+  /// **'Removed from your memories.'**
   String get memoryReviewDropped;
 
   /// Status after the user corrects a learned memory
@@ -19338,7 +19002,7 @@ abstract class AppLocalizations {
   /// No description provided for @vadGateDescription.
   ///
   /// In en, this message translates to:
-  /// **'Server-side voice gating to reduce speech-to-text costs'**
+  /// **'Skips silent audio before transcription to cut cost.'**
   String get vadGateDescription;
 
   /// No description provided for @flashCustomFirmware.
@@ -19452,7 +19116,7 @@ abstract class AppLocalizations {
   /// Completion screen at the end of first-run onboarding
   ///
   /// In en, this message translates to:
-  /// **'Keep Omi running in the background for 2 days and it will start giving you useful feedback.'**
+  /// **'Keep Omi running for a couple of days. Your conversations, memories, and to-dos will start filling in.'**
   String get onboardingCompleteMessage;
 
   /// Shown when no device was found after scanning for a while
@@ -20174,12 +19838,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help Omi recognize voices'**
   String get speakerTagPromptTitle;
-
-  /// Card subtitle for the speaker tagging prompt
-  ///
-  /// In en, this message translates to:
-  /// **'A quick check on voices from the last two days'**
-  String get speakerTagPromptSubtitle;
 
   /// Question shown under a short audio clip of a speaker
   ///
@@ -21240,13 +20898,13 @@ abstract class AppLocalizations {
   /// Reason line under a person's name: automatic voice matches the user confirmed by hand.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{You confirmed 1 match} other{You confirmed {count} matches}}'**
+  /// **'{count, plural, =1{You confirmed 1 automatic label} other{You confirmed {count} automatic labels}}'**
   String confidenceReasonAutoConfirmed(int count);
 
   /// Reason line under a person's name: Omi matched this voice automatically but the user never confirmed it.
   ///
   /// In en, this message translates to:
-  /// **'Only auto-matched, never confirmed'**
+  /// **'Labeled automatically, not confirmed yet'**
   String get confidenceReasonAutoOnly;
 
   /// Reason line under a person's name: the user never labeled or confirmed this person.
@@ -21264,13 +20922,13 @@ abstract class AppLocalizations {
   /// Second half of a reason line, after a middle dot: Omi has a voice sample for this person. Lowercase because it follows a separator.
   ///
   /// In en, this message translates to:
-  /// **'voice ready'**
+  /// **'voice saved'**
   String get confidenceReasonVoiceReady;
 
   /// Second half of a reason line, after a middle dot: Omi has no voice sample for this person yet. Lowercase.
   ///
   /// In en, this message translates to:
-  /// **'needs voice'**
+  /// **'no voice sample yet'**
   String get confidenceReasonNeedsVoice;
 
   /// Second half of a reason line, after a middle dot: this person has not appeared in a conversation yet. Lowercase.
@@ -21300,7 +20958,7 @@ abstract class AppLocalizations {
   /// Sheet summary for an Unverified person: the user never labeled or confirmed them.
   ///
   /// In en, this message translates to:
-  /// **'Nothing you\'ve done backs {name} up yet.'**
+  /// **'You haven\'t labeled or confirmed {name} yet, so Omi isn\'t sure it knows their voice.'**
   String confidenceSummaryUnverified(String name);
 
   /// Section header in the confidence sheet listing what Omi's confidence is based on (Title Case).
@@ -21330,19 +20988,19 @@ abstract class AppLocalizations {
   /// Evidence row: automatic matches the user confirmed by hand.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{Confirmed 1 automatic match} other{Confirmed {count} automatic matches}}'**
+  /// **'{count, plural, =1{You confirmed 1 automatic label} other{You confirmed {count} automatic labels}}'**
   String evidenceAutoConfirmed(int count);
 
   /// Evidence row: automatic matches to this person that the user corrected to someone else.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 match moved to someone else} other{{count} matches moved to someone else}}'**
+  /// **'{count, plural, =1{You changed 1 automatic label to someone else} other{You changed {count} automatic labels to someone else}}'**
   String evidenceAutoCorrected(int count);
 
   /// Evidence row: conversations where Omi matched this person automatically and nobody confirmed it.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 automatic match nobody confirmed} other{{count} automatic matches nobody confirmed}}'**
+  /// **'{count, plural, =1{1 automatic label not confirmed yet} other{{count} automatic labels not confirmed yet}}'**
   String evidenceAutoUnconfirmed(int count);
 
   /// Evidence row: Omi has a usable voice sample for this person.
@@ -21420,13 +21078,13 @@ abstract class AppLocalizations {
   /// Shown in the confidence sheet for a Confirmed person instead of next steps.
   ///
   /// In en, this message translates to:
-  /// **'{name} is Confirmed. Omi keeps learning from each label.'**
+  /// **'{name} is Confirmed. There\'s nothing else you need to do.'**
   String confidenceIsConfirmed(String name);
 
   /// Footnote at the bottom of the confidence sheet.
   ///
   /// In en, this message translates to:
-  /// **'Only your answers move confidence much. Automatic matches on their own barely help.'**
+  /// **'Labels and confirmations from you count most. Automatic labels count for little until you confirm them.'**
   String get confidenceFootnote;
 
   /// Link beside a person's confidence level that opens an explanation.
@@ -21440,18 +21098,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pin {name}'**
   String pinPersonTitle(String name);
-
-  /// What pinning a person means, under the Pin switch.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep {name}, and expect them in your conversations'**
-  String pinPersonSubtitle(String name);
-
-  /// Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi asks before matching close voices.'**
-  String get pinPersonHonestLine;
 
   /// Swipe action and menu item: pin this person (Title Case verb).
   ///
@@ -21678,19 +21324,13 @@ abstract class AppLocalizations {
   /// Hint at the bottom of the 'Who is this?' card.
   ///
   /// In en, this message translates to:
-  /// **'Each answer teaches Omi a voice and raises that person\'s confidence.'**
+  /// **'Your answer helps Omi recognize this voice next time.'**
   String get speakerTagPromptHintIdentify;
-
-  /// Hint at the bottom of the 'Is this <name>?' card.
-  ///
-  /// In en, this message translates to:
-  /// **'Yes raises {name}\'s confidence.'**
-  String speakerTagPromptHintConfirm(String name);
 
   /// Hint at the bottom of the 'Is this you?' card.
   ///
   /// In en, this message translates to:
-  /// **'Keeps your own voice profile sharp, so Omi never names you as someone else.'**
+  /// **'Helps Omi tell your voice apart from other people\'s.'**
   String get speakerTagPromptHintOwner;
 
   /// Answered state of the voice card after the user named the voice.
@@ -22143,10 +21783,10 @@ abstract class AppLocalizations {
   /// **'Speaker'**
   String get unnamedSpeakerLabel;
 
-  /// Quiet line under the transcript heading explaining that voices could not be separated across recordings
+  /// Quiet line under the transcript heading: speaker labels may be inconsistent across the merged recordings of this conversation.
   ///
   /// In en, this message translates to:
-  /// **'Speakers aren\'t separated across recordings.'**
+  /// **'Speaker labels may not match across the recordings in this conversation.'**
   String get unresolvedSpeakersNotice;
 
   /// Title of the sheet explaining unresolved speaker labels
@@ -22868,6 +22508,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
   String dreamReportPrivacyHeld(int count);
+
+  /// Subtitle under the Pin switch on a person's page: what pinning does.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned people stay at the top of your People list and aren\'t removed by Clean Up.'**
+  String get pinPersonDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

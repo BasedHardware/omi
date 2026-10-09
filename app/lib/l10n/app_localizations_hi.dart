@@ -314,9 +314,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createYourOwnApp => 'अपना खुद का ऐप बनाएं';
 
   @override
-  String get buildAndShareApp => 'अपना खुद का ऐप बनाएं और साझा करें';
-
-  @override
   String get searchApps => 'ऐप्स खोजें';
 
   @override
@@ -342,9 +339,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get joinCommunity => 'समुदाय में शामिल हों!';
-
-  @override
-  String get membersAndCounting => '8000+ सदस्य और गिनती जारी है।';
 
   @override
   String get deleteAccountTitle => 'खाता हटाएं';
@@ -471,17 +465,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get yourPrivacyYourControl => 'आपकी गोपनीयता, आपका नियंत्रण';
 
   @override
-  String get privacyIntro =>
-      'Omi में, हम आपकी गोपनीयता की रक्षा के लिए प्रतिबद्ध हैं। यह पृष्ठ आपको यह नियंत्रित करने की अनुमति देता है कि आपका डेटा कैसे सहेजा और उपयोग किया जाता है।';
-
-  @override
   String get learnMore => 'और जानें…';
 
   @override
   String get dataProtectionLevel => 'डेटा सुरक्षा स्तर';
-
-  @override
-  String get dataProtectionDesc => 'डिफ़ॉल्ट रूप से, आपका डेटा मजबूत एन्क्रिप्शन द्वारा सुरक्षित है।';
 
   @override
   String get appAccess => 'ऐप एक्सेस';
@@ -656,19 +643,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get transcription => 'प्रतिलेखन';
 
   @override
-  String get transcriptionConfig => 'STT प्रदाता कॉन्फ़िगर करें';
-
-  @override
   String get conversationTimeout => 'बातचीत समय समाप्त';
 
   @override
-  String get conversationTimeoutConfig => 'स्वचालित रूप से बातचीत समाप्त होने का समय सेट करें';
+  String get conversationTimeoutConfig => 'Omi बातचीत समाप्त करने से पहले कितनी देर तक खामोशी का इंतज़ार करता है';
 
   @override
   String get importData => 'डेटा आयात करें';
-
-  @override
-  String get importDataConfig => 'अन्य स्रोतों से डेटा आयात करें';
 
   @override
   String get debugDiagnostics => 'डीबग और डायग्नोस्टिक्स';
@@ -719,9 +700,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get understanding => 'समझ रहा है';
 
   @override
-  String get understandingSubtitle => 'आपकी बातचीत से समझे गए शब्द।';
-
-  @override
   String get providing => 'प्रदान कर रहा है';
 
   @override
@@ -729,9 +707,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get remembering => 'याद रख रहा है';
-
-  @override
-  String get rememberingSubtitle => 'तथ्य और विवरण आपके लिए याद रखे गए।';
 
   @override
   String get unlimitedPlan => 'असीमित योजना';
@@ -805,9 +780,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get debugLogsAutoDelete => '3 दिनों के बाद स्वचालित रूप से हटा दिया जाता है।';
 
   @override
-  String get debugLogsDesc => 'समस्याओं का निदान करने में मदद करता है';
-
-  @override
   String get noLogFilesFound => 'कोई लॉग फ़ाइल नहीं मिली।';
 
   @override
@@ -844,10 +816,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'नॉलेज ग्राफ़ हटाएं?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      'यह सभी व्युत्पन्न ग्राफ़ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहती हैं।';
-
-  @override
   String get knowledgeGraphDeleted => 'ज्ञान ग्राफ़ हटाया गया';
 
   @override
@@ -857,9 +825,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deleteKnowledgeGraph => 'नॉलेज ग्राफ़ हटाएं';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'सभी नोड्स और कनेक्शन हटा दें';
 
   @override
   String get mcp => 'MCP';
@@ -1104,10 +1069,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get enhanceTranscriptAccuracy => 'ट्रांसक्रिप्ट सटीकता बढ़ाएं';
 
   @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'जैसे-जैसे हमारा मॉडल सुधरता है, हम आपकी रिकॉर्डिंग के लिए बेहतर ट्रांसक्रिप्ट प्रदान कर सकते हैं।';
-
-  @override
   String get legalNotice => 'कानूनी नोटिस: रिकॉर्डिंग की वैधता आपके स्थान के आधार पर भिन्न हो सकती है।';
 
   @override
@@ -1272,7 +1233,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tellUsPrimaryLanguage => 'हमें अपनी प्राथमिक भाषा बताएं';
 
   @override
-  String get languageForTranscription => 'स्पष्ट प्रतिलेखन के लिए अपनी भाषा सेट करें।';
+  String get languageForTranscription => 'Omi इस भाषा का उपयोग ट्रांसक्रिप्शन, सारांश और यादों के लिए करता है।';
 
   @override
   String get singleLanguageModeInfo => 'एकल भाषा मोड चालू है।';
@@ -1429,7 +1390,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String integrationComingSoon(String appName) {
-    return '$appName एकीकरण जल्द आ रहा है!';
+    return '$appName अभी समर्थित नहीं है।';
   }
 
   @override
@@ -1451,7 +1412,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get bringYourOwn => 'अपना खुद का लाएं';
 
   @override
-  String get payYourSttProvider => 'Omi का मुफ्त उपयोग करें। आप केवल सीधे STT प्रदाता को भुगतान करते हैं।';
+  String get payYourSttProvider => 'Omi में मुफ़्त। आप अपने ट्रांसक्रिप्शन प्रदाता को सीधे भुगतान करते हैं।';
 
   @override
   String get freeMinutesMonth => '300 मुफ़्त मिनट/माह शामिल हैं।';
@@ -1538,7 +1499,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get enterApiKey => 'अपनी API कुंजी दर्ज करें';
 
   @override
-  String get storedLocallyNeverShared => 'स्थानीय रूप से संग्रहीत, कभी साझा नहीं किया गया';
+  String get storedLocallyNeverShared => 'इस फ़ोन पर सेव है। केवल आपके ट्रांसक्रिप्शन प्रदाता को भेजा जाता है।';
 
   @override
   String get host => 'होस्ट';
@@ -1571,18 +1532,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get logsCopied => 'लॉग कॉपी किए गए';
 
   @override
-  String get noLogsYet => 'अभी तक कोई लॉग नहीं। गतिविधि देखने के लिए रिकॉर्ड करें।';
+  String get noLogsYet => 'अभी कोई लॉग नहीं। ट्रांसक्रिप्शन प्रदाता के अनुरोध देखने के लिए कुछ रिकॉर्ड करें।';
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device $reason का उपयोग करता है। Omi का उपयोग किया जाएगा।';
+    return '$device ऐसे फ़ॉर्मैट में रिकॉर्ड करता है जिसे यह प्रदाता नहीं पढ़ सकता ($reason), इसलिए इसके बजाय Omi की ट्रांसक्रिप्शन इस्तेमाल होगी।';
   }
 
   @override
   String get omiTranscription => 'Omi प्रतिलेखन';
-
-  @override
-  String get bestInClassTranscription => 'सर्वोत्तम श्रेणी का प्रतिलेखन';
 
   @override
   String get instantSpeakerLabels => 'तत्काल स्पीकर लेबल';
@@ -1591,16 +1549,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get languageTranslation => '100+ भाषा अनुवाद';
 
   @override
-  String get optimizedForConversation => 'बातचीत के लिए अनुकूलित';
-
-  @override
   String get autoLanguageDetection => 'स्वचालित भाषा पहचान';
-
-  @override
-  String get highAccuracy => 'उच्च सटीकता';
-
-  @override
-  String get privacyFirst => 'गोपनीयता पहले';
 
   @override
   String get saveChanges => 'परिवर्तन सहेजें';
@@ -1781,9 +1730,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get allDone => 'सब हो गया!';
 
   @override
-  String get keepGoing => 'जारी रखें';
-
-  @override
   String get skipThisQuestion => 'इस प्रश्न को छोड़ें';
 
   @override
@@ -1859,7 +1805,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – आपका AI साथी';
 
   @override
-  String get captureEveryMoment => 'हर पल को कैप्चर करें। AI सारांश प्राप्त करें।';
+  String get captureEveryMoment => 'Omi आपकी बातचीत रिकॉर्ड करता है और आपके लिए\nसारांश और काम की सूची लिखता है।';
 
   @override
   String get appleWatchSetup => 'Apple Watch सेटअप';
@@ -1905,16 +1851,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get selectPrimaryLanguage => 'अपनी प्राथमिक भाषा चुनें';
 
   @override
-  String get languageBenefits => 'स्पष्ट प्रतिलेखन के लिए अपनी भाषा निर्धारित करें';
+  String get languageBenefits => 'Omi इस भाषा का उपयोग ट्रांसक्रिप्शन, सारांश और यादों के लिए करता है।';
 
   @override
   String get whatsYourPrimaryLanguage => 'आपकी प्राथमिक भाषा क्या है?';
 
   @override
   String get selectYourLanguage => 'अपनी भाषा चुनें';
-
-  @override
-  String get personalGrowthJourney => 'आपकी व्यक्तिगत विकास यात्रा AI के साथ जो आपके हर शब्द को सुनता है।';
 
   @override
   String get actionItemsTitle => 'कार्य';
@@ -2114,9 +2057,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get baselineMemory => 'आधार मेमोरी';
-
-  @override
-  String get alwaysInContext => 'हमेशा संदर्भ में';
 
   @override
   String get memoryContentHint => 'मुझे सुबह की बैठकें पसंद हैं।';
@@ -2414,10 +2354,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createKeyToGetStarted => 'शुरू करने के लिए एक कुंजी बनाएं';
 
   @override
-  String get configureSttProvider => 'STT प्रदाता कॉन्फ़िगर करें';
-
-  @override
-  String get setWhenConversationsAutoEnd => 'सेट करें कि बातचीत कब स्वचालित रूप से समाप्त हो';
+  String get setWhenConversationsAutoEnd => 'Omi बातचीत समाप्त करने से पहले कितनी देर तक खामोशी का इंतज़ार करता है';
 
   @override
   String get importDataFromOtherSources => 'अन्य स्रोतों से डेटा आयात करें';
@@ -2444,9 +2381,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String failedToDeleteGraph(String error) {
     return 'ग्राफ हटाने में विफल: $error';
   }
-
-  @override
-  String get clearAllNodesAndConnections => 'सभी नोड्स और कनेक्शन साफ़ करें';
 
   @override
   String get connectAiAssistantsToData => 'AI सहायकों को अपने डेटा से कनेक्ट करें';
@@ -2542,10 +2476,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get youreAllSet => 'आप तैयार हैं!';
 
   @override
-  String get welcomeToOmiDescription =>
-      'Omi में आपका स्वागत है! आपका AI साथी बातचीत, कार्यों और अधिक में आपकी सहायता के लिए तैयार है।';
-
-  @override
   String get startUsingOmi => 'Omi उपयोग शुरू करें';
 
   @override
@@ -2625,12 +2555,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get useMobileAppToCapture => 'ऑडियो कैप्चर करने के लिए अपने मोबाइल ऐप का उपयोग करें';
 
   @override
-  String get conversationsProcessedAutomatically => 'बातचीत स्वचालित रूप से प्रोसेस की जाती है';
-
-  @override
-  String get getInsightsInstantly => 'तुरंत जानकारी और सारांश प्राप्त करें';
-
-  @override
   String get showAll => 'सभी दिखाएं →';
 
   @override
@@ -2638,10 +2562,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dailyScore => 'दैनिक स्कोर';
-
-  @override
-  String get dailyScoreDescription =>
-      'एक स्कोर जो आपको बेहतर तरीके से\nनिष्पादन पर ध्यान केंद्रित करने में मदद करता है।';
 
   @override
   String get searchResults => 'खोज परिणाम';
@@ -3032,9 +2952,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get connectionNeeded => '🌐 कनेक्शन की आवश्यकता है';
 
   @override
-  String get startConversation => 'बातचीत शुरू करें और जादू शुरू होने दें';
-
-  @override
   String get checkInternetConnection => 'कृपया अपना इंटरनेट कनेक्शन जांचें';
 
   @override
@@ -3222,9 +3139,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get getOmiDevice => 'Omi डिवाइस प्राप्त करें';
 
   @override
-  String get wearableAiCompanion => 'पहनने योग्य AI साथी';
-
-  @override
   String get loadingMemories => 'यादें लोड हो रही हैं…';
 
   @override
@@ -3267,22 +3181,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get makePrivate => 'निजी बनाएं';
 
   @override
-  String get organizeAndControlMemories => 'अपनी यादों को व्यवस्थित और नियंत्रित करें';
-
-  @override
   String get total => 'कुल';
 
   @override
   String get makeAllMemoriesPrivate => 'सभी यादों को निजी बनाएं';
 
   @override
-  String get setAllMemoriesToPrivate => 'सभी यादों को निजी दृश्यता पर सेट करें';
-
-  @override
   String get makeAllMemoriesPublic => 'सभी यादों को सार्वजनिक बनाएं';
-
-  @override
-  String get setAllMemoriesToPublic => 'सभी यादों को सार्वजनिक दृश्यता पर सेट करें';
 
   @override
   String get permanentlyRemoveAllMemories => 'Omi से सभी यादों को स्थायी रूप से हटाएं';
@@ -3351,9 +3256,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get chooseYourLanguage => 'अपनी भाषा चुनें';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'सर्वोत्तम Omi अनुभव के लिए अपनी पसंदीदा भाषा चुनें';
-
-  @override
   String get searchLanguages => 'भाषाएं खोजें';
 
   @override
@@ -3376,9 +3278,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String charactersCount(int count) {
     return '$count वर्ण';
   }
-
-  @override
-  String get enableFeaturesForBestExperience => 'अपने डिवाइस पर सर्वोत्तम Omi अनुभव के लिए सुविधाएं सक्षम करें।';
 
   @override
   String get microphoneAccess => 'माइक्रोफ़ोन एक्सेस';
@@ -3795,9 +3694,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deliveryTime => 'डिलीवरी समय';
 
   @override
-  String get deliveryTimeDescription => 'अपना दैनिक सारांश कब प्राप्त करें';
-
-  @override
   String get subscription => 'सदस्यता';
 
   @override
@@ -3837,12 +3733,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get shortcutChangeInstruction => 'इसे बदलने के लिए शॉर्टकट पर क्लिक करें। रद्द करने के लिए Escape दबाएं।';
 
   @override
-  String get configureSTTProvider => 'STT प्रदाता कॉन्फ़िगर करें';
-
-  @override
-  String get setConversationEndDescription => 'सेट करें कि बातचीत कब स्वतः समाप्त होती है';
-
-  @override
   String get importDataDescription => 'अन्य स्रोतों से डेटा आयात करें';
 
   @override
@@ -3852,14 +3742,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get exportingConversations => 'बातचीत निर्यात हो रही है…';
 
   @override
-  String get clearNodesDescription => 'सभी नोड्स और कनेक्शन साफ़ करें';
-
-  @override
   String get deleteKnowledgeGraphQuestion => 'ज्ञान ग्राफ हटाएं?';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'यह सभी व्युत्पन्न ज्ञान ग्राफ डेटा हटा देगा। आपकी मूल यादें सुरक्षित रहती हैं।';
 
   @override
   String get connectOmiWithAI => 'Omi को AI सहायकों से कनेक्ट करें';
@@ -4179,9 +4062,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get createAnApp => 'एक ऐप बनाएं';
 
   @override
-  String get createAndShareYourApp => 'अपना ऐप बनाएं और साझा करें';
-
-  @override
   String get itemApp => 'ऐप';
 
   @override
@@ -4275,10 +4155,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get maximumSecurityE2ee => 'अधिकतम सुरक्षा (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      'एंड-टू-एंड एन्क्रिप्शन गोपनीयता का स्वर्ण मानक है। सक्षम होने पर, आपका डेटा हमारे सर्वर पर भेजे जाने से पहले आपके डिवाइस पर एन्क्रिप्ट किया जाता है। इसका मतलब है कि कोई भी, यहां तक कि Omi भी, आपकी सामग्री तक नहीं पहुंच सकता।';
-
-  @override
   String get importantTradeoffs => 'महत्वपूर्ण समझौते:';
 
   @override
@@ -4310,15 +4186,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get secureEncryption => 'सुरक्षित एन्क्रिप्शन';
 
   @override
-  String get secureEncryptionDescription =>
-      'आपका डेटा हमारे सर्वर पर आपके लिए एक अद्वितीय कुंजी के साथ एन्क्रिप्ट किया गया है, जो Google Cloud पर होस्ट किया गया है। इसका मतलब है कि आपकी कच्ची सामग्री किसी के लिए भी अप्राप्य है, जिसमें Omi स्टाफ या Google शामिल हैं, सीधे डेटाबेस से।';
-
-  @override
   String get endToEndEncryption => 'एंड-टू-एंड एन्क्रिप्शन';
-
-  @override
-  String get e2eeCardDescription =>
-      'अधिकतम सुरक्षा के लिए सक्षम करें जहां केवल आप अपना डेटा एक्सेस कर सकते हैं। अधिक जानने के लिए टैप करें।';
 
   @override
   String get dataAlwaysEncrypted => 'स्तर के बावजूद, आपका डेटा हमेशा आराम और पारगमन में एन्क्रिप्टेड रहता है।';
@@ -4391,7 +4259,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get trainingDataBullets =>
-      '• आपका डेटा AI मॉडल को बेहतर बनाने में मदद करता है\n• केवल गैर-संवेदनशील डेटा साझा किया जाता है\n• पूरी तरह से पारदर्शी प्रक्रिया';
+      '• आपका डेटा AI मॉडल को बेहतर बनाने में मदद करता है\n• केवल गैर-संवेदनशील डेटा साझा किया जाता है';
 
   @override
   String get learnMoreAtOmiTraining => 'omi.me/training पर और जानें';
@@ -4472,9 +4340,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'आप अनलिमिटेड प्लान पर हैं।';
 
   @override
-  String get yourOmiUnleashed => 'आपका Omi, मुक्त। असीमित संभावनाओं के लिए अनलिमिटेड हो जाएं।';
-
-  @override
   String planEndedOn(String date) {
     return 'आपकी योजना $date को समाप्त हो गई।\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।';
   }
@@ -4553,10 +4418,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'आपकी गोपनीयता हमारे लिए महत्वपूर्ण है';
 
   @override
-  String get privacyIntroText =>
-      'Omi में, हम आपकी गोपनीयता को बहुत गंभीरता से लेते हैं। हम उन डेटा के बारे में पारदर्शी रहना चाहते हैं जो हम एकत्र करते हैं और उनका उपयोग कैसे करते हैं। यहाँ आपको क्या जानना चाहिए:';
-
-  @override
   String get whatWeTrack => 'हम क्या ट्रैक करते हैं';
 
   @override
@@ -4567,14 +4428,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get ourCommitment => 'हमारी प्रतिबद्धता';
-
-  @override
-  String get commitmentText =>
-      'हम केवल Omi को आपके लिए बेहतर उत्पाद बनाने के लिए एकत्र किए गए डेटा का उपयोग करने के लिए प्रतिबद्ध हैं। आपकी गोपनीयता और विश्वास हमारे लिए सर्वोपरि हैं।';
-
-  @override
-  String get thankYouText =>
-      'Omi के एक मूल्यवान उपयोगकर्ता होने के लिए धन्यवाद। यदि आपके कोई प्रश्न या चिंताएं हैं, तो team@basedhardware.com पर हमसे संपर्क करें।';
 
   @override
   String get password => 'पासवर्ड';
@@ -4620,10 +4473,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get exportStartedMayTakeFewSeconds => 'निर्यात शुरू हुआ। इसमें कुछ सेकंड लग सकते हैं…';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'यह सभी व्युत्पन्न नॉलेज ग्राफ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहेंगी। ग्राफ समय के साथ या अगले अनुरोध पर पुनर्निर्मित होगा।';
 
   @override
   String get configureDailySummaryDigest => 'अपना दैनिक कार्य सारांश कॉन्फ़िगर करें';
@@ -4749,10 +4598,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get howItWorksTitle => 'यह कैसे काम करता है?';
 
   @override
-  String get howPeopleWorks =>
-      'एक बार व्यक्ति बन जाने के बाद, आप बातचीत के ट्रांसक्रिप्ट में जा सकते हैं और उन्हें उनके संबंधित सेगमेंट असाइन कर सकते हैं, इस तरह Omi उनकी आवाज़ को भी पहचान पाएगा!';
-
-  @override
   String get tapToDelete => 'हटाने के लिए टैप करें';
 
   @override
@@ -4813,7 +4658,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get storeAudioCloudDescription =>
-      'बोलते समय अपनी रीयल-टाइम रिकॉर्डिंग को निजी क्लाउड स्टोरेज में संग्रहीत करें। ऑडियो रीयल-टाइम में सुरक्षित रूप से कैप्चर और सहेजा जाता है।';
+      'आप बोलते समय अपनी रिकॉर्डिंग अपलोड करता है, ताकि आप उन्हें बाद में सुन सकें।';
 
   @override
   String get downloadingFirmware => 'फर्मवेयर डाउनलोड हो रहा है';
@@ -5635,9 +5480,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get removeFromAllFolders => 'सभी फ़ोल्डरों से हटाएं';
 
   @override
-  String get buildAndShareYourCustomApp => 'अपना कस्टम ऐप बनाएं और साझा करें';
-
-  @override
   String get searchAppsPlaceholder => '1500+ ऐप्स में खोजें';
 
   @override
@@ -5665,19 +5507,19 @@ class AppLocalizationsHi extends AppLocalizations {
   String get frequencyDescOff => 'कोई सक्रिय सूचनाएं नहीं';
 
   @override
-  String get frequencyDescMinimal => 'केवल महत्वपूर्ण रिमाइंडर';
+  String get frequencyDescMinimal => 'केवल ज़रूरी बातें, लगभग 1–3 प्रतिदिन';
 
   @override
-  String get frequencyDescLow => 'केवल महत्वपूर्ण अपडेट';
+  String get frequencyDescLow => 'केवल ज़रूरी बातें, लगभग 3–5 प्रतिदिन';
 
   @override
-  String get frequencyDescBalanced => 'नियमित सहायक रिमाइंडर';
+  String get frequencyDescBalanced => 'उपयोगी सुझाव, लगभग 5–8 प्रतिदिन';
 
   @override
-  String get frequencyDescHigh => 'बार-बार जांच';
+  String get frequencyDescHigh => 'और सुझाव, लगभग 6–9 प्रतिदिन';
 
   @override
-  String get frequencyDescMaximum => 'लगातार जुड़े रहें';
+  String get frequencyDescMaximum => 'हर उपयोगी संबंध, प्रतिदिन अधिकतम 9';
 
   @override
   String get clearChatQuestion => 'चैट साफ करें?';
@@ -6601,7 +6443,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get transferToPhone => 'फोन में ट्रांसफर करें';
 
   @override
-  String get privateAndSecureOnDevice => 'निजी और सुरक्षित, डिवाइस पर';
+  String get privateAndSecureOnDevice => 'इस फ़ोन पर सेव है';
 
   @override
   String get recordingInfo => 'रिकॉर्डिंग जानकारी';
@@ -7067,12 +6909,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingTellUsAboutYourself => 'हमें अपने बारे में बताएं';
-
-  @override
-  String get onboardingChooseYourPreference => 'अपनी पसंद चुनें';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'आवश्यक पहुँच प्रदान करें';
 
   @override
   String get onboardingYoureAllSet => 'आप तैयार हैं';
@@ -7958,9 +7794,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get apiEnvironment => 'API वातावरण';
 
   @override
-  String get apiEnvironmentDescription => 'कनेक्ट करने के लिए सर्वर चुनें';
-
-  @override
   String get production => 'प्रोडक्शन';
 
   @override
@@ -8224,9 +8057,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get phoneCallsUpsellFeature3 => 'प्राप्तकर्ता आपका असली नंबर देखते हैं, कोई रैंडम नंबर नहीं';
 
   @override
-  String get phoneCallsUpsellFeature4 => 'आपकी कॉल निजी और सुरक्षित रहती हैं';
-
-  @override
   String get phoneCallsUpgradeButton => 'अनलिमिटेड में अपग्रेड करें';
 
   @override
@@ -8332,7 +8162,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get fairUseAboutBody =>
-      'Omi व्यक्तिगत वार्तालाप, बैठकों और लाइव इंटरैक्शन के लिए डिज़ाइन किया गया है। उपयोग को वास्तविक पहचानी गई वाक् समय से मापा जाता है, कनेक्शन समय से नहीं। यदि उपयोग गैर-व्यक्तिगत सामग्री के लिए सामान्य पैटर्न से काफी अधिक हो जाता है, तो समायोजन लागू हो सकते हैं।';
+      'Omi व्यक्तिगत बातचीत, मीटिंग और लाइव इंटरैक्शन के लिए बनाया गया है। उपयोग को बोलने में बिताए समय से मापा जाता है, कनेक्ट रहने के समय से नहीं। अगर आपका उपयोग सामान्य व्यक्तिगत उपयोग से बहुत अधिक है, तो पहले आपको चेतावनी मिलेगी। लगातार भारी उपयोग से ट्रांसक्रिप्शन धीमा हो सकता है या सीमित किया जा सकता है।';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8426,10 +8256,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cancelSyncQuestion => 'सिंक रद्द करें?';
 
   @override
-  String get omisStorageDesc =>
-      'जब आपका Omi फ़ोन से कनेक्ट नहीं होता, तो यह ऑडियो को अपनी बिल्ट-इन मेमोरी में स्टोर करता है। आप कभी कोई रिकॉर्डिंग नहीं खोएंगे।';
-
-  @override
   String get phoneStorageDesc =>
       'जब Omi फिर से कनेक्ट होता है, रिकॉर्डिंग अपलोड से पहले आपके फ़ोन में ऑटो-ट्रांसफर होती हैं।';
 
@@ -8460,7 +8286,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get permissionsPageDescription =>
-      'ये अनुमतियाँ Omi के काम करने के लिए आवश्यक हैं। ये सूचनाएँ, स्थान-आधारित अनुभव और ऑडियो कैप्चर जैसी प्रमुख सुविधाएँ सक्षम करती हैं।';
+      'Omi इन अनुमतियों का उपयोग आपके डिवाइस से कनेक्ट होने, ऑडियो रिकॉर्ड करने, बैकग्राउंड में चलते रहने, रिमाइंडर भेजने और यह दर्ज करने के लिए करता है कि बातचीत कहाँ हुई।';
 
   @override
   String get permissionsRequiredDescription =>
@@ -8468,9 +8294,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get permissionsSetupTitle => 'सर्वोत्तम अनुभव प्राप्त करें';
-
-  @override
-  String get permissionsSetupDescription => 'कुछ अनुमतियाँ सक्षम करें ताकि Omi अपना जादू दिखा सके।';
 
   @override
   String get permissionsChangeAnytime => 'आप इन्हें कभी भी सेटिंग्स > अनुमतियाँ में बदल सकते हैं';
@@ -8989,9 +8812,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get architectSubtitle => 'पावर-यूजर AI — हज़ारों चैट + एजेंटिक ऑटोमेशन';
-
-  @override
   String chatUsageCost(String used, String limit) {
     return 'चैट: \$$used / \$$limit इस महीने उपयोग किया';
   }
@@ -9064,7 +8884,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get recordWithPhoneMic => 'फ़ोन माइक से रिकॉर्ड करें';
 
   @override
-  String get recordWithPhoneMicSubtitle => 'अपने आस-पास की आवाज़ रिकॉर्ड करें';
+  String get recordWithPhoneMicSubtitle => 'इस फ़ोन के माइक्रोफ़ोन से रिकॉर्ड और ट्रांसक्राइब करें';
 
   @override
   String get phoneCall => 'फ़ोन कॉल';
@@ -9297,9 +9117,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get backgroundModeDescription => 'ऐप पूरी तरह बंद होने पर भी अपने Omi की रिकॉर्डिंग जारी रखें।';
 
   @override
-  String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
-
-  @override
   String get backgroundModeUnavailable =>
       'बैकग्राउंड मोड उपलब्ध नहीं है क्योंकि कोई संगत डिवाइस कनेक्ट नहीं है। इस सुविधा का उपयोग करने के लिए Omi, OpenGlass या Friend Pendant डिवाइस कनेक्ट करें।';
 
@@ -9470,7 +9287,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceOnboardingIntroTitle => 'अपने Omi को जानें';
 
   @override
-  String get deviceOnboardingIntroSubtitle => 'आपका Omi जो कुछ भी कर सकता है, उसका एक त्वरित और व्यावहारिक दौरा।';
+  String get deviceOnboardingIntroSubtitle => 'लाइव ट्रांसक्रिप्शन, सवाल पूछने और डबल-टैप शॉर्टकट को आज़माएँ।';
 
   @override
   String get deviceOnboardingIntroDuration => 'लगभग 1 मिनट';
@@ -9980,7 +9797,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get home => 'होम';
 
   @override
-  String get failedToUpdateBaselineStatus => 'बेसलाइन स्थिति अपडेट करने में विफल।';
+  String get failedToUpdateBaselineStatus => 'यह याद अपडेट नहीं हो सकी। दोबारा कोशिश करें।';
 
   @override
   String get unstarConversation => 'बातचीत से स्टार हटाएँ';
@@ -10238,10 +10055,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryReviewFix => 'सुधारें';
 
   @override
-  String get memoryReviewConfirmed => 'पुष्टि हो गई। मैं इसके अनुसार काम करूँगा।';
+  String get memoryReviewConfirmed => 'पुष्ट किया गया।';
 
   @override
-  String get memoryReviewDropped => 'हटा दिया गया। मैं ऐसे तथ्यों से बचूँगा।';
+  String get memoryReviewDropped => 'आपकी यादों से हटा दिया गया।';
 
   @override
   String get memoryReviewUpdated => 'अपडेट किया गया।';
@@ -10543,7 +10360,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get vadGate => 'VAD Gate';
 
   @override
-  String get vadGateDescription => 'स्पीच-टू-टेक्स्ट की लागत कम करने के लिए सर्वर पर आवाज़ फ़िल्टर';
+  String get vadGateDescription => 'लागत कम करने के लिए ट्रांसक्रिप्शन से पहले शांत ऑडियो छोड़ देता है।';
 
   @override
   String get flashCustomFirmware => 'कस्टम फ़र्मवेयर फ़्लैश करें';
@@ -10608,7 +10425,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage =>
-      'Omi को 2 दिन बैकग्राउंड में चलने दें, फिर यह आपको उपयोगी सुझाव देना शुरू करेगा।';
+      'Omi को कुछ दिनों तक चलने दें। आपकी बातचीत, यादें और काम की सूची भरने लगेंगी।';
 
   @override
   String get cantFindDeviceHint =>
@@ -11045,9 +10862,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speakerTagPromptTitle => 'Omi को आवाज़ें पहचानने में मदद करें';
-
-  @override
-  String get speakerTagPromptSubtitle => 'पिछले दो दिनों की आवाज़ों की एक झटपट जाँच';
 
   @override
   String get speakerTagPromptIsThisYou => 'क्या यह आप हैं?';
@@ -11681,14 +11495,14 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'आपने $count मैच की पुष्टि की',
-      one: 'आपने 1 मैच की पुष्टि की',
+      other: 'आपने $count स्वचालित लेबल की पुष्टि की',
+      one: 'आपने 1 स्वचालित लेबल की पुष्टि की',
     );
     return '$_temp0';
   }
 
   @override
-  String get confidenceReasonAutoOnly => 'सिर्फ़ अपने-आप मैच हुआ, कभी पुष्टि नहीं हुई';
+  String get confidenceReasonAutoOnly => 'अपने-आप लेबल हुआ, अभी पुष्ट नहीं';
 
   @override
   String get confidenceReasonNeverConfirmed => 'कभी पुष्टि नहीं हुई';
@@ -11697,10 +11511,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get confidenceReasonCorrected => 'आपने इसका मैच ठीक किया';
 
   @override
-  String get confidenceReasonVoiceReady => 'आवाज़ तैयार';
+  String get confidenceReasonVoiceReady => 'आवाज़ सेव है';
 
   @override
-  String get confidenceReasonNeedsVoice => 'आवाज़ चाहिए';
+  String get confidenceReasonNeedsVoice => 'अभी आवाज़ का नमूना नहीं';
 
   @override
   String get confidenceReasonNotHeard => 'अभी सुना नहीं गया';
@@ -11720,7 +11534,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String confidenceSummaryUnverified(String name) {
-    return 'आपने अब तक ऐसा कुछ नहीं किया जिससे $name की पुष्टि हो।';
+    return 'आपने $name को अभी तक लेबल या पुष्ट नहीं किया है, इसलिए Omi पक्का नहीं है कि वह उनकी आवाज़ पहचानता है।';
   }
 
   @override
@@ -11764,8 +11578,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'अपने-आप हुए $count मैच पुष्ट किए',
-      one: 'अपने-आप हुआ 1 मैच पुष्ट किया',
+      other: 'आपने $count स्वचालित लेबल की पुष्टि की',
+      one: 'आपने 1 स्वचालित लेबल की पुष्टि की',
     );
     return '$_temp0';
   }
@@ -11775,8 +11589,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count मैच किसी और को दे दिए गए',
-      one: '1 मैच किसी और को दे दिया गया',
+      other: 'आपने $count स्वचालित लेबल किसी और को सौंप दिए',
+      one: 'आपने 1 स्वचालित लेबल किसी और को सौंप दिया',
     );
     return '$_temp0';
   }
@@ -11786,8 +11600,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'अपने-आप हुए $count मैच, जिनकी किसी ने पुष्टि नहीं की',
-      one: 'अपने-आप हुआ 1 मैच, जिसकी किसी ने पुष्टि नहीं की',
+      other: 'अपने-आप हुए $count लेबल, जिनकी अभी पुष्टि नहीं हुई',
+      one: 'अपने-आप हुआ 1 लेबल, जिसकी अभी पुष्टि नहीं हुई',
     );
     return '$_temp0';
   }
@@ -11832,12 +11646,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String confidenceIsConfirmed(String name) {
-    return '$name पुष्ट है। Omi हर लेबल से सीखता रहता है।';
+    return '$name पुष्ट है। आपको और कुछ करने की ज़रूरत नहीं है।';
   }
 
   @override
   String get confidenceFootnote =>
-      'भरोसा मुख्य रूप से आपके जवाबों से बदलता है। अपने-आप हुए मैच अकेले लगभग मदद नहीं करते।';
+      'आपके लेबल और पुष्टियाँ सबसे ज़्यादा मायने रखती हैं। स्वचालित लेबल तब तक कम मायने रखते हैं, जब तक आप उनकी पुष्टि न करें।';
 
   @override
   String get personWhyConfidence => 'क्यों?';
@@ -11846,14 +11660,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String pinPersonTitle(String name) {
     return '$name को पिन करें';
   }
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return '$name को रखें, और अपनी बातचीत में उनके होने की उम्मीद रखें';
-  }
-
-  @override
-  String get pinPersonHonestLine => 'मिलती-जुलती आवाज़ों का मिलान करने से पहले Omi पूछता है।';
 
   @override
   String get pinAction => 'पिन करें';
@@ -12016,16 +11822,10 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintIdentify => 'हर जवाब Omi को एक आवाज़ सिखाता है और उस व्यक्ति पर भरोसा बढ़ाता है।';
+  String get speakerTagPromptHintIdentify => 'आपका जवाब Omi को अगली बार यह आवाज़ पहचानने में मदद करता है।';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return '\"हाँ\" से $name पर भरोसा बढ़ता है।';
-  }
-
-  @override
-  String get speakerTagPromptHintOwner =>
-      'इससे आपकी अपनी आवाज़ की प्रोफ़ाइल सटीक रहती है, ताकि Omi आपको कभी किसी और के नाम से न पुकारे।';
+  String get speakerTagPromptHintOwner => 'Omi को आपकी आवाज़ को दूसरों की आवाज़ों से अलग पहचानने में मदद करता है।';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12355,7 +12155,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get unnamedSpeakerLabel => 'स्पीकर';
 
   @override
-  String get unresolvedSpeakersNotice => 'रिकॉर्डिंग में वक्ताओं को अलग नहीं किया गया है।';
+  String get unresolvedSpeakersNotice => 'इस बातचीत की रिकॉर्डिंग्स में वक्ता के लेबल एक-दूसरे से मेल नहीं खा सकते।';
 
   @override
   String get unresolvedSpeakersTitle => 'स्पीकर लेबल के बारे में';
@@ -12787,4 +12587,7 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get pinPersonDescription => 'पिन किए गए लोग आपकी «लोग» सूची में सबसे ऊपर रहते हैं और «सफ़ाई» से नहीं हटते।';
 }
