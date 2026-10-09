@@ -10,6 +10,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -436,7 +437,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
     }
-    updateUserOnboardingState(completed: true);
+    unawaited(OnboardingSyncRuntime.enqueue(completed: true));
 
     // A link the shell was opened with: select its tab now (parent), open its page after start-up.
     final initialLink = HomeDeepLink.parse(widget.navigateToRoute);

@@ -1,3 +1,4 @@
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
@@ -307,6 +308,7 @@ Future _init() async {
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
   );
+  OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -334,6 +336,7 @@ Future _init() async {
     () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
   );
   if (isAuth) {
+    OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
       authMethod:
@@ -565,6 +568,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _deinit() {
+    unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
@@ -590,6 +594,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      OnboardingSyncRuntime.setActive(true);
       unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
@@ -598,6 +603,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      OnboardingSyncRuntime.setActive(false);
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.setForeground(false);
