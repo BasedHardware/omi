@@ -231,9 +231,12 @@ charge; the reservation ceiling still drives admission. Older reports default
 to scheduled trigger and use their encrypted counters where available.
 
 The bounded API schema is `backend/docs/api/dream-openapi.json`; generated mobile
-DTOs are `app/lib/backend/schema/gen/dream_wire.g.dart`. It is a separate export
-surface to avoid growing the existing 79,000-line app-client schema and large
-client artifacts. Regenerate/check using:
+DTOs are `app/lib/backend/schema/gen/dream_wire.g.dart`, using the same generator
+as review wire types. `GeneratedDreamRunsResponse`
+decodes GET and `GeneratedDreamRun` decodes POST, with generated nested edit,
+question, task, vocabulary and feedback types. `GeneratedDreamRunRequest` emits `{}`.
+The separate export surface avoids growing the existing 79,000-line app-client
+schema and large client artifacts. Regenerate/check using:
 
 ```bash
 cd backend
