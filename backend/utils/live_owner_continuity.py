@@ -161,6 +161,7 @@ class OwnerContinuity:
                 + ([rollover_donor] if rollover_donor else [])
             )
         )
+        snapshots: dict[str, Optional[dict]]
         try:
             snapshots = await self.matcher.host.persistence.call(cache.authority_snapshot, self.uid, conversations)
         except Exception:
