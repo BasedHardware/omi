@@ -1,1 +1,1 @@
-{"change": "Prevent repeated Android sync keep-alive restarts after its daily foreground-service time limit is reached."}
+{"change": "Prevent repeated Android sync keep-alive restarts for a 24-hour rolling window after its foreground-service time limit is reached, including after the app restarts."}
