@@ -61,6 +61,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
 )
+REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
@@ -165,6 +166,11 @@ def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
     if set(by_uid) != set(LIVE_STT_IMPORT_UIDS) | set(LIVE_STT_PENDING_UIDS):
         raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
+    committed = load_all_committed_rules()
+    for uid in REDIS_CACHE_IMPORT_UIDS:
+        if uid not in committed:
+            raise AlertRouteError(f"committed Redis cache alert {uid} is missing")
+        rules[uid] = committed[uid]
     for uid, rule in rules.items():
         labels = rule.get("labels")
         if not isinstance(labels, dict) or labels.get("alert_identity") != uid:
@@ -487,7 +493,7 @@ def _run_fleet_coverage(
     committed = load_all_committed_rules()
     gated_uids = load_gated_uids(committed)
     if alert_set == "live-stt":
-        committed = {uid: committed[uid] for uid in LIVE_STT_IMPORT_UIDS}
+        committed = {uid: committed[uid] for uid in (*LIVE_STT_IMPORT_UIDS, *REDIS_CACHE_IMPORT_UIDS)}
         gated_uids = tuple(uid for uid in gated_uids if uid in committed)
     coverage: FleetCoverage | None = None
     last_error: str | None = None
