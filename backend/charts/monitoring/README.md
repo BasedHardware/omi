@@ -638,11 +638,16 @@ live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
-import` to upsert only committed rules in `live-stt.json` by stable UID (POST
+import` to upsert the committed live-STT allowlist and the two Redis cache connection rules
+(`omi-redis-cache-conn-warn`/`page` from `resilience.json`) by stable UID (POST
 when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
 --fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
-it never deletes or pauses other rules. Soniox runway UIDs remain pending until
+it never deletes or pauses other rules. The `live-stt` verification scope includes those Redis rules and fails closed
+when either is absent, paused, or divergent. They are Grafana-managed alerts,
+not PrometheusRule CRDs. Their `component="other"` selector matches the shared
+fallback bucket for `redis_cache`; cache-write children are initialized at zero.
+Soniox runway UIDs remain pending until
 their metrics have a data source. The token is read from a mode-0600 file and
 neither token material nor contact-point settings are logged. Split-vs-combined
 equality in unit tests is not evidence a rule is live; only the workflow's

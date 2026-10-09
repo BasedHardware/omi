@@ -53,6 +53,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
+    ListenNoAudioObservation,
     LiveSessionTranscriptOutcome,
     record_live_session_transcript_outcome,
     record_live_stt_audio_seconds,
@@ -687,6 +688,9 @@ class ListenSessionRuntime:
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
+            observation = getattr(self, '_no_audio_observation', None)
+            if observation is not None:
+                observation.observe(has_audio=self.state.first_audio_byte_timestamp is not None)
             if not await self._send_ping():
                 break
             if self.state.last_activity_time and time.time() - self.state.last_activity_time > 90:
@@ -992,6 +996,8 @@ class ListenSessionRuntime:
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            if not self.use_custom_stt:
+                self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(
@@ -1104,6 +1110,9 @@ class ListenSessionRuntime:
                 raise error
 
     async def _teardown(self) -> None:
+        observation = getattr(self, '_no_audio_observation', None)
+        if observation is not None:
+            observation.close()
         try:
             await self._teardown_components()
         finally:
