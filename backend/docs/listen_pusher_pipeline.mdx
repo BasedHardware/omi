@@ -3649,6 +3649,22 @@ once; successful extraction reserves its intervals. Account for the clip that
 the three-entry evidence deque will evict before gating the next extraction.
 A rejected voice can then reach another five-second decision on later clean audio.
 
+Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
+runner-up gap of at least `0.10` stay `unknown` / `pending` while additional
+fresh audio or the finished-conversation pass can resolve them. This is an
+evidence-state distinction: rejected voices already retry, and the band adds
+no model calls, acceptance, or identity authority. Owner contention remains
+`ambiguous`; insufficient runner-up margin and distances at or above `0.70`
+remain `no_match`. A pending revalidation withdraws earlier automatic labels
+on every segment, preserving manual, carried and channel authority. Optional
+capture score snapshots also record `unknown` / `pending`; live decision logs
+include the explicit `decision` kind. Acceptance stays
+strictly below `0.65`, conversation matching stays at `0.50`, and owner
+recognition remains free on every plan. Held-out calibration found no safe
+acceptance lift from wider thresholds; the pending band must not be interpreted
+as a measured recall improvement.
+
+
 Each socket admits at most 128 voice ids, with at most 128 pending intervals per
 voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
 Failures consume attempts; quotas survive conversation/profile refresh. All
