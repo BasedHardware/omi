@@ -228,6 +228,8 @@ env:
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
+  - name: NOTES_TIER_ESCALATION_ENABLED
+    value: 'true'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
