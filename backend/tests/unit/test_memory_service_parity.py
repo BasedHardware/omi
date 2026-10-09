@@ -285,7 +285,8 @@ def test_direct_user_ledger_admission_requires_fresh_ingress_and_ledger_mode(mon
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
     backend = service_mod.CanonicalMemoryBackend()
     with (
-        patch.object(service_mod, "read_canonical_memories", return_value=[]),
+        patch.object(service_mod, "read_canonical_memories", side_effect=AssertionError("full fetch")),
+        patch.object(service_mod, "read_canonical_scan_page", return_value=([], True)),
         patch.object(service_mod, "search_canonical_memories", return_value=[]),
         patch.object(service_mod, "write_canonical_external_memory", return_value="mem-1"),
         patch.object(service_mod, "delete_canonical_memory"),

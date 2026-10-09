@@ -403,9 +403,9 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
     first page walk the whole historical collection — 50 rows per Firestore
     round trip, unbounded — before it can emit anything, so even ``limit=8``
     ran past the edge timeout. The walk must stop at a bounded row count and
-    surface the detail the route falls back on, instead of hanging.
+    return that prefix as truncated, instead of hanging or raising into an
+    unbounded offset read.
     """
-    from fastapi import HTTPException
     from models.product_memory import MemoryItemStatus
 
     # The shipped bound is what keeps the walk inside the edge timeout; the test
@@ -419,27 +419,27 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
     statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
     _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
 
-    with pytest.raises(HTTPException) as exc_info:
-        service.read_page("uid-test", limit=8, cursor=None)
+    page = service.read_page("uid-test", limit=8, cursor=None)
 
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
-    assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
+    assert page.memories == []
+    assert page.truncated is True
+    assert page.next_cursor is None
     # The walk stopped at the budget instead of scanning every historical row.
     scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
     assert scanned <= 150
     assert scanned < total
+    service_mod.read_canonical_memories.assert_not_called()
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
 
 
 def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(service_mod, monkeypatch):
     """Prod 2026-08-18T08:09Z+: first pages still 504'd after the row budget shipped.
 
     4000 skipped rows is ~80 sequential Firestore round trips, so a slow account
-    burned the whole 30s edge budget inside the bound and left the offset-read
-    fallback no time to answer. The walk must stop on elapsed seconds too, well
-    before the row budget is spent.
+    burned the whole 30s edge budget inside the bound. The walk must stop on
+    elapsed seconds too and return the prefix already walked, well before the
+    row budget is spent, without starting a full-collection read.
     """
-    from fastapi import HTTPException
     from models.product_memory import MemoryItemStatus
 
     monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_DEADLINE_SECONDS", 0.0)
@@ -449,15 +449,64 @@ def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(serv
     statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
     _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
 
-    with pytest.raises(HTTPException) as exc_info:
-        service.read_page("uid-test", limit=8, cursor=None)
+    page = service.read_page("uid-test", limit=8, cursor=None)
 
-    assert exc_info.value.status_code == 503
-    # Same detail the route's first-page fallback already keys on.
-    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    assert page.truncated is True
+    assert page.next_cursor is None
     # Time stopped the walk, not rows: far fewer rows were scanned than the row budget allows.
     scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
     assert scanned < service_mod.MEMORY_LIST_SCAN_ROW_BUDGET
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
+
+
+def test_keyset_budget_returns_walked_prefix_without_full_fetch(service_mod, monkeypatch):
+    """First-page budget exhaustion keeps rows already accepted and does not stream the collection."""
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = [_dated_memory(service_mod, f"c-{index}", day=10 - index) for index in range(3)]
+    _install_streams(service, service_mod, canonical=canonical, historical=[])
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_CHUNK_SIZE", 1)
+    checks = {"n": 0}
+    original = service_mod._ScanRowBudget.check
+
+    def check(self, stream="historical"):
+        checks["n"] += 1
+        if checks["n"] > 3:
+            raise service_mod.MemoryBackingStoreUnavailable(service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL, stream=stream)
+        return original(self, stream)
+
+    monkeypatch.setattr(service_mod._ScanRowBudget, "check", check)
+
+    page = service.read_page("uid-test", limit=8, cursor=None)
+
+    assert page.truncated is True
+    assert page.next_cursor is None
+    assert [memory.id for memory in page.memories] == ["c-0"]
+    service_mod.read_canonical_memories.assert_not_called()
+    service_mod.fetch_authoritative_product_memory_items.assert_not_called()
+
+
+def test_offset_read_uses_keyset_not_the_full_collection_fetcher(service_mod, monkeypatch):
+    memory = _dated_memory(service_mod, "visible", day=3)
+
+    def fake_scan(*_args, **_kwargs):
+        return [(memory, (memory.updated_at, memory.id))], True
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("offset read must not stream the canonical collection")
+
+    monkeypatch.setattr(service_mod, "read_canonical_scan_page", fake_scan)
+    monkeypatch.setattr(service_mod, "read_canonical_memories", explode)
+    from utils.memory import canonical_memory_adapter as adapter
+    from utils.memory import product_memory_read_service as read_service
+
+    monkeypatch.setattr(adapter, "fetch_authoritative_product_memory_items", explode)
+    monkeypatch.setattr(read_service, "fetch_authoritative_product_memory_items", explode)
+    service = service_mod.MemoryService(db_client=_Db())
+    service.history.read = lambda *_args, **_kwargs: []
+
+    page = service.read("uid-test", limit=10, offset=0)
+
+    assert [item.id for item in page] == ["visible"]
 
 
 def test_scan_budget_charges_within_the_deadline_do_not_raise(service_mod):
