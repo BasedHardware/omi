@@ -12654,4 +12654,149 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Nhóm theo ngày';
+
+  @override
+  String get dreamReportTitle => 'Báo cáo Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Chế độ xem trước: Dream cho thấy những gì sẽ thay đổi, nhưng chưa có gì trong tài khoản của bạn bị thay đổi.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream tự áp dụng các thay đổi này. Bạn có thể hoàn tác bất kỳ thay đổi nào trong Thay đổi gần đây.';
+
+  @override
+  String get dreamReportRunNow => 'Chạy ngay';
+
+  @override
+  String get dreamReportRunLimit => 'Hôm nay đã hết lượt chạy thủ công';
+
+  @override
+  String get dreamReportRunInProgress => 'Một lượt đang chạy. Hãy thử lại sau một phút.';
+
+  @override
+  String get dreamReportRunFailed => 'Không thể chạy Dream. Hãy thử lại.';
+
+  @override
+  String get dreamReportIdle => 'Chưa có gì mới để xem.';
+
+  @override
+  String get dreamReportLoadFailed => 'Không thể tải báo cáo Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Chưa có lượt nào';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream xem những gì đã thay đổi trong tài khoản của bạn khoảng mỗi giờ một lần.';
+
+  @override
+  String get dreamReportScheduled => 'Theo lịch';
+
+  @override
+  String get dreamReportManual => 'Thủ công';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Thất bại ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Dừng do hết giới hạn thời gian';
+
+  @override
+  String get dreamReportNothingFound => 'Không có gì cần sửa';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Đã đọc $records mục · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Sẽ sửa';
+
+  @override
+  String get dreamReportFixed => 'Đã sửa';
+
+  @override
+  String get dreamReportWouldAsk => 'Sẽ hỏi bạn';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Sẽ gợi ý công việc';
+
+  @override
+  String get dreamReportLearnedWords => 'Từ đã học';
+
+  @override
+  String get dreamReportFeedback => 'Đã báo cáo cho nhóm Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Mục đã xóa';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit lượt hôm nay';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count thay đổi đang chờ',
+      one: '1 thay đổi đang chờ',
+      zero: 'Không có thay đổi nào đang chờ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hôm nay còn $count lượt chạy thủ công',
+      one: 'Hôm nay còn 1 lượt chạy thủ công',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes bản sửa',
+      one: '1 bản sửa',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks gợi ý',
+      one: '1 gợi ý',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count thay đổi cũ hơn đã bị bỏ qua',
+      one: '1 thay đổi cũ hơn đã bị bỏ qua',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count báo cáo bị giữ lại vì quyền riêng tư',
+      one: '1 báo cáo bị giữ lại vì quyền riêng tư',
+    );
+    return '$_temp0';
+  }
 }
