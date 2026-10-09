@@ -213,6 +213,39 @@ def test_newest_first_bounded_and_legacy_trigger(store, client):
     assert all(row['trigger'] == 'schedule' for row in runs)
 
 
+def test_enriched_entity_targets_resolve_owner_labels(store, client, monkeypatch):
+    seen = []
+
+    def resolve(uid, key):
+        seen.append((uid, key))
+        return {'name': 'Synthetic robot'}
+
+    monkeypatch.setattr(dream_reads, 'resolve_entity', resolve)
+    source = {
+        'status': 'complete',
+        'proposed': {
+            'edits': [
+                Edit(
+                    kind='entity_summary',
+                    target='entity/person:opaque-key',
+                    after='Summary',
+                    reason='Supported',
+                    evidence=['entity/person:opaque-key'],
+                ).model_dump(),
+            ]
+        },
+        'outcomes': [{'key': 'edit-key', 'status': 'shadow'}],
+    }
+    store.rows[('users', UID, 'dream_runs', 'entity-run')] = {
+        **review_store.encode_doc(UID, {'source': source}),
+        'created_at': datetime.now(timezone.utc),
+    }
+    response = client.get('/v1/dream/runs')
+    assert response.json()['runs'][0]['edits'][0]['target_label'] == 'Entity · Synthetic robot'
+    assert seen == [(UID, 'person:opaque-key')]
+    assert 'opaque-key' not in response.text
+
+
 def test_deadline_includes_admission_and_retains_ambiguous_state(client, store, monkeypatch):
     monkeypatch.setattr(routes, 'MANUAL_DEADLINE_SECONDS', 0.01)
 

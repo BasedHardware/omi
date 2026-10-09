@@ -49,7 +49,12 @@ def project_run(uid, run_id, doc):
         if ref in records:
             continue
         try:
-            records[ref] = dream_reads.read_record(uid, ref)
+            # Identity enrichment uses entity/<typed-id>, rather than dirty collection refs.
+            records[ref] = (
+                dream_reads.resolve_entity(uid, ref.removeprefix('entity/'))
+                if ref.startswith('entity/')
+                else dream_reads.read_record(uid, ref)
+            )
         except (review_store.ReviewNotFound, ValueError):
             records[ref] = None
         except HTTPException as exc:
