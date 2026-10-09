@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-data-sync-restart-after-timeout",
+  "violated_contract": "After Android exhausts the dataSync foreground-service time budget and delivers onTimeout, later transfer passes must not immediately re-enter dataSync promotion while that timeout refusal window remains active.",
+  "canonical_prevention": "Record a process-wide UTC timeout day before stopping the service. Refuse same-day native start requests and queued dataSync promotions, clear the marker lazily on day rollover, and cover marker transitions and queued restart behavior with production service tests.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/test/kotlin/com/friend/ios/sync/SyncTransferForegroundServiceTest.kt"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/app/src/main/kotlin/com/friend/ios/sync/"
+  ],
+  "status": "open"
+}

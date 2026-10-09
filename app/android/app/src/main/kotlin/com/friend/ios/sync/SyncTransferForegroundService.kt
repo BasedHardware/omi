@@ -17,6 +17,8 @@ import androidx.annotation.MainThread
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.friend.ios.fgs.ForegroundStartContract
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * Thin lifecycle shell that keeps Dart WAL file transfers alive when the
@@ -35,6 +37,7 @@ class SyncTransferForegroundService : Service() {
         private const val EXTRA_TEXT = "notification_text"
         private const val ACTION_STOP = "com.friend.ios.sync.STOP"
         @Volatile private var cancellationRequested = false
+        internal var timeoutPolicy = DataSyncTimeoutPolicy()
 
         /**
          * Promote the service to the foreground and hold a partial wake lock.
@@ -43,6 +46,10 @@ class SyncTransferForegroundService : Service() {
          */
         @MainThread
         fun start(context: Context, text: String? = null): Boolean {
+            if (!timeoutPolicy.canStart()) {
+                Log.w(TAG, "dataSync timed out today; refusing sync keep-alive restart")
+                return false
+            }
             return try {
                 val intent = Intent(context, SyncTransferForegroundService::class.java)
                 if (!text.isNullOrBlank()) {
@@ -119,6 +126,11 @@ class SyncTransferForegroundService : Service() {
             stopSelfResult(startId)
             return START_NOT_STICKY
         }
+        if (!timeoutPolicy.canStart()) {
+            Log.w(TAG, "dataSync timed out today; stopping queued sync keep-alive start")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // Replace the immediate shortService notification with dataSync for
         // the transfer lifetime. A rejected type retries shortService before
         // stopping, including when the early promotion could not complete.
@@ -133,6 +145,7 @@ class SyncTransferForegroundService : Service() {
 
     @SuppressLint("InlinedApi")
     private fun promoteToForeground(notification: Notification): Boolean {
+        if (!timeoutPolicy.canStart()) return false
         try {
             startForeground(
                 SyncTransferKeepAlivePolicy.NOTIFICATION_ID,
@@ -174,6 +187,9 @@ class SyncTransferForegroundService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
+        if (fgsType and ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC != 0) {
+            timeoutPolicy.onTimeout()
+        }
         stopForTimeout()
     }
 
@@ -236,5 +252,22 @@ class SyncTransferForegroundService : Service() {
             .setOngoing(true)
             .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
             .build()
+    }
+}
+
+/** Process-wide refusal window. UTC rollover permits another attempt; it does not
+ * claim that Android's rolling 24-hour budget has replenished.
+ */
+internal class DataSyncTimeoutPolicy {
+    private var dataSyncTimedOutAt: LocalDate? = null
+
+    fun onTimeout(today: LocalDate = LocalDate.now(ZoneOffset.UTC)) {
+        dataSyncTimedOutAt = today
+    }
+
+    fun canStart(today: LocalDate = LocalDate.now(ZoneOffset.UTC)): Boolean {
+        if (dataSyncTimedOutAt == today) return false
+        dataSyncTimedOutAt = null
+        return true
     }
 }

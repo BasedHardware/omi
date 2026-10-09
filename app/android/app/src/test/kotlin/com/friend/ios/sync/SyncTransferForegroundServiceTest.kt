@@ -7,6 +7,9 @@ import android.content.ComponentName
 import android.content.pm.ServiceInfo
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
+import java.time.LocalDate
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -18,6 +21,54 @@ import org.robolectric.shadows.ShadowPowerManager
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE, application = Application::class)
 class SyncTransferForegroundServiceTest {
+    @Before
+    @After
+    fun resetTimeoutPolicy() {
+        SyncTransferForegroundService.timeoutPolicy = DataSyncTimeoutPolicy()
+    }
+
+    @Test
+    fun `absent timeout marker permits normal starts`() {
+        assertTrue(DataSyncTimeoutPolicy().canStart(LocalDate.of(2026, 10, 9)))
+    }
+
+    @Test
+    fun `timeout refuses repeated starts on the same UTC day`() {
+        val policy = DataSyncTimeoutPolicy()
+        val today = LocalDate.of(2026, 10, 9)
+        policy.onTimeout(today)
+        assertFalse(policy.canStart(today))
+        assertFalse(policy.canStart(today))
+    }
+
+    @Test
+    fun `UTC day rollover clears timeout marker`() {
+        val policy = DataSyncTimeoutPolicy()
+        val today = LocalDate.of(2026, 12, 31)
+        policy.onTimeout(today)
+        assertTrue(policy.canStart(today.plusDays(1)))
+        assertTrue(policy.canStart(today.plusDays(1)))
+    }
+
+    @Test
+    fun `dataSync timeout refuses native restart and already queued start without reacquiring wake lock`() {
+        val context = RuntimeEnvironment.getApplication()
+        assertTrue(SyncTransferForegroundService.start(context))
+        val start = shadowOf(context).getNextStartedService()
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+        service.onStartCommand(start, 0, 1)
+        val wakeLock = ShadowPowerManager.getLatestWakeLock()
+        service.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        assertFalse(SyncTransferForegroundService.start(context))
+        assertNull(shadowOf(context).getNextStartedService())
+        assertEquals(android.app.Service.START_NOT_STICKY, service.onStartCommand(start, 0, 2))
+        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertSame(wakeLock, ShadowPowerManager.getLatestWakeLock())
+        assertFalse(wakeLock.isHeld)
+        controller.destroy()
+    }
+
     @Test
     fun `immediate cancellation is queued instead of cancelling an undelivered foreground start`() {
         val context = RuntimeEnvironment.getApplication()
@@ -94,6 +145,7 @@ class SyncTransferForegroundServiceTest {
         val service = controller.get()
 
         service.onTimeout(1)
+        assertTrue(SyncTransferForegroundService.timeoutPolicy.canStart())
 
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(shadowOf(service).isForegroundStopped)
