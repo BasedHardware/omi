@@ -53,7 +53,6 @@ from utils.llm.meeting_notes_validation import (
     validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
-from utils.llm.episode_writer import bind_episode_effort
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.shaped_notes_transport import isolated_notes_model
@@ -373,8 +372,15 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
             # After isolation so the cloner still sees the notes model. Unsupported
-            # models stay unbound and keep their own options.
-            call_model = bind_episode_effort(isolated_model, 'xhigh') if escalated else isolated_model
+            # models stay unbound and keep their own options. Lazy import: the
+            # episode writer module is heavy and some file-loading test harnesses
+            # exec this module with stubbed dependencies.
+            if escalated:
+                from utils.llm.episode_writer import bind_episode_effort
+
+                call_model = bind_episode_effort(isolated_model, 'xhigh')
+            else:
+                call_model = isolated_model
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
                 response = await call_model.ainvoke(messages)
