@@ -529,6 +529,25 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
         pass
 
 
+CONVERSATION_RELEVANCE_RESCUE_TOTAL = Counter(
+    'omi_conversation_relevance_rescue_total',
+    'R03/R08 second opinions; shadow never changes verdicts. No transcript or user labels.',
+    ['mode', 'rule', 'outcome'],
+)
+
+
+def record_conversation_relevance_rescue(*, mode: str, rule: str, outcome: str) -> None:
+    """Bounded content-free labels; telemetry never changes relevance."""
+    try:
+        CONVERSATION_RELEVANCE_RESCUE_TOTAL.labels(
+            mode=mode if mode in {'shadow', 'on'} else 'other',
+            rule=rule if rule in {'filler_only', 'no_content_words'} else 'other',
+            outcome=outcome if outcome in {'rescue', 'discard_stands', 'error_keep'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
 # Jev decision model (utils/llm/jev_client.py, #14835). One increment per
 # caller-visible Jev question, after its retry. `lane` names the product
 # decision, never a user; every non-success outcome means the caller kept its
