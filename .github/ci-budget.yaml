@@ -2421,6 +2421,29 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "python-cli-ci.yml/install-smoke": {
+      "budget_p50_minutes": 5,
+      "display_name": "Clean install smoke (Python ${{ matrix.python-version }})",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {
+        "python-version": [
+          "3.10",
+          "3.12"
+        ]
+      },
+      "matrix_size": 2,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Path-filtered clean-install smoke (Python 3.10 and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 1 run/day (10 linux-minutes/day). A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "python-cli-ci.yml/tests": {
       "budget_p50_minutes": 3,
       "display_name": "${{ matrix.label }}",
