@@ -182,9 +182,11 @@ async def test_actual_app_and_developer_webhook_payloads_are_public(monkeypatch,
     monkeypatch.setattr(apps, 'run_blocking', blocking)
     app = SimpleNamespace(
         id='app',
+        name='Synthetic app',
         uid='owner',
         enabled=True,
         triggers_on_conversation_creation=lambda: True,
+        triggers_realtime=lambda: True,
         external_integration=SimpleNamespace(webhook_url='https://synthetic.example/hook'),
     )
     monkeypatch.setattr(apps, 'get_available_apps', lambda _: [app])
@@ -204,8 +206,16 @@ async def test_actual_app_and_developer_webhook_payloads_are_public(monkeypatch,
     monkeypatch.setattr(webhooks, 'get_webhook_circuit_breaker', lambda _: cb)
     monkeypatch.setattr(webhooks, '_post_dev_webhook', post)
     await webhooks.conversation_created_webhook('owner', c)
-    assert len(payloads) == 2
+    monkeypatch.setattr(apps, 'is_trial_paywalled', lambda *a: False)
+    monkeypatch.setenv('MENTOR_PIPELINE', 'off')
+    raw_segments = [s.model_dump() for s in c.transcript_segments]
+    raw_segments[0][storage.FIELD] = 'encrypted-internal-sidecar'
+    await apps.trigger_realtime_integrations('owner', raw_segments, c.id)
+    await webhooks.realtime_transcript_webhook('owner', raw_segments)
+    assert len(payloads) == 4
     for payload in payloads:
-        assert not set(GROUPING_INTERNAL_FIELDS) & set(payload['transcript_segments'][0])
+        rows = payload.get('transcript_segments', payload.get('segments'))
+        assert not set(GROUPING_INTERNAL_FIELDS) & set(rows[0])
         assert 'private-person' not in json.dumps(payload)
-        assert payload['transcript_segments'][0]['text'] == 'private words'
+        assert rows[0]['text'] == 'private words'
+    assert raw_segments[0]['speaker_grouping_shadow']
