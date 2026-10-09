@@ -841,6 +841,9 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
