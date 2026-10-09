@@ -5,10 +5,9 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from config.dream_agent import canary_uid
+from database import conversations
 from database._client import get_firestore_client
-from database.conversations import _prepare_conversation_for_write
-from database.dream_dirty import after_write, canary_writing
-from database.helpers import prepare_for_write
+from database.dream_dirty import canary_writing
 
 RECORD_ID = 'dream-canary-conversation'
 
@@ -30,13 +29,8 @@ def ensure_synthetic_owner(uid, *, firestore_client=None):
     ensure(database.transaction())
 
 
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-@after_write('conversations')
 def write_record(uid, conversation_data):
-    # Same serialization and dirty hook as processed product conversations.
-    get_firestore_client().collection('users').document(uid).collection('conversations').document(RECORD_ID).set(
-        conversation_data
-    )
+    conversations.upsert_conversation_with_lifecycle(uid, conversation_data)
 
 
 def seed(uid):

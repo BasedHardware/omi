@@ -678,7 +678,6 @@ check_openapi_contract_if_needed() {
   )
 
   "$BACKEND_PYTHON" backend/scripts/generate_dart_models.py --all --check
-  (cd backend && scripts/openapi_runner.sh scripts/export_openapi.py --surface dream --check)
   "$BACKEND_PYTHON" backend/scripts/generate_ts_openapi_types.py --check
   "$BACKEND_PYTHON" backend/scripts/generate_swift_openapi_types.py --check
 }

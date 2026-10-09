@@ -1,7 +1,9 @@
 """Owner-only API and independent transactional manual allowances."""
 
 import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -14,8 +16,19 @@ from routers import dream_report as routes
 from tests.support.dream_firestore import DreamFirestore
 from utils import dream_agent, dream_reads, dream_report, dream_transport
 from utils.llm.shaped_agent import Turn
+from scripts.export_openapi import build_openapi
+from scripts.generate_dart_models import build_output
 
 UID = 'synthetic-report-owner'
+
+
+def test_checked_in_dream_schema_and_mobile_dtos_match_real_routes():
+    root = Path(__file__).resolve().parents[3]
+    app = FastAPI()
+    app.include_router(routes.router)
+    spec = json.loads((root / 'backend/docs/api/dream-openapi.json').read_text())
+    assert spec == build_openapi(app, 'dream')
+    assert (root / 'app/lib/backend/schema/gen/dream_wire.g.dart').read_text() == build_output(spec, 'dream')
 
 
 @pytest.fixture

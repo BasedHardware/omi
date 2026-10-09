@@ -8,7 +8,7 @@ from config.dream_agent import Caps, canary_uid, mode
 from database import dream_canary, dream_store, review_store
 from utils import dream_agent, dream_transport
 from utils.executors import db_executor, run_blocking
-from utils.observability.dream import CANARY
+from utils.dream_metrics import CANARY
 
 logger = logging.getLogger(__name__)
 DEADLINE_SECONDS = 85

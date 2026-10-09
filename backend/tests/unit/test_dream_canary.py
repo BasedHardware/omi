@@ -30,6 +30,8 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(storage, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())

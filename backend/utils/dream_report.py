@@ -80,28 +80,31 @@ def project_run(uid, run_id, doc):
         status = 'deadline'
     elif status not in {'complete', 'failed', 'deadline'}:
         status = 'failed'
-    return DreamRun(
-        run_id=run_id,
-        created_at=doc['created_at'],
-        trigger=doc.get('trigger', 'schedule'),
-        status=status,
-        error_type=source.get('error_type'),
-        records_read=doc.get('records_read', source.get('records_read', source.get('dirty_read', 0))),
-        records_queued_after=doc.get('records_queued_after', source.get('records_queued_after', 0)),
-        dirty_dropped=source.get('dirty_dropped', 0),
-        tokens=source.get('tokens', 0),
-        cost_usd=doc.get('cost_usd', source.get('cost_usd_upper_bound', 0)),
-        edits=edits,
-        questions=[{'kind': row['kind'], 'text': row['title']} for row in proposed.get('questions', [])],
-        slow_tasks=[{'description': row['description']} for row in proposed.get('slow_tasks', [])],
-        vocabulary=[
-            {key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')} for row in proposed.get('vocabulary', [])
-        ],
-        feedback=[
-            {key: row[key] for key in ('component', 'failure_class', 'severity', 'count')}
-            for row in proposed.get('feedback', [])
-        ],
-        privacy_rejected=sum(row.get('status') == 'privacy_rejected' for row in outcomes),
+    return DreamRun.model_validate(
+        dict(
+            run_id=run_id,
+            created_at=doc['created_at'],
+            trigger=doc.get('trigger', 'schedule'),
+            status=status,
+            error_type=source.get('error_type'),
+            records_read=doc.get('records_read', source.get('records_read', source.get('dirty_read', 0))),
+            records_queued_after=doc.get('records_queued_after', source.get('records_queued_after', 0)),
+            dirty_dropped=source.get('dirty_dropped', 0),
+            tokens=source.get('tokens', 0),
+            cost_usd=doc.get('cost_usd', source.get('cost_usd_upper_bound', 0)),
+            edits=edits,
+            questions=[{'kind': row['kind'], 'text': row['title']} for row in proposed.get('questions', [])],
+            slow_tasks=[{'description': row['description']} for row in proposed.get('slow_tasks', [])],
+            vocabulary=[
+                {key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')}
+                for row in proposed.get('vocabulary', [])
+            ],
+            feedback=[
+                {key: row[key] for key in ('component', 'failure_class', 'severity', 'count')}
+                for row in proposed.get('feedback', [])
+            ],
+            privacy_rejected=sum(row.get('status') == 'privacy_rejected' for row in outcomes),
+        )
     )
 
 
@@ -109,14 +112,16 @@ def list_runs(uid, limit):
     caps = Caps.from_env()
     state = dream_store.own_state(uid)
     today = state.get('day') == datetime.now(timezone.utc).date().isoformat()
-    return DreamRunsResponse(
-        mode=mode(),
-        passes_today=int(state.get('passes', 0)) if today else 0,
-        passes_limit=caps.passes,
-        manual_runs_today=int(state.get('manual_runs', 0)) if today else 0,
-        manual_runs_limit=caps.manual_runs,
-        queued_changes=dream_store.dirty_count(uid),
-        runs=[project_run(uid, run_id, doc) for run_id, doc in dream_store.own_runs(uid, limit=limit)],
+    return DreamRunsResponse.model_validate(
+        dict(
+            mode=mode(),
+            passes_today=int(state.get('passes', 0)) if today else 0,
+            passes_limit=caps.passes,
+            manual_runs_today=int(state.get('manual_runs', 0)) if today else 0,
+            manual_runs_limit=caps.manual_runs,
+            queued_changes=dream_store.dirty_count(uid),
+            runs=[project_run(uid, run_id, doc) for run_id, doc in dream_store.own_runs(uid, limit=limit)],
+        )
     )
 
 

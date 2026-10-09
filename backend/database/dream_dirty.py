@@ -5,15 +5,16 @@ import inspect
 import logging
 from typing import Any
 from contextvars import ContextVar
+from prometheus_client import Counter
 
 from config.dream_agent import mode
 from database.dream_store import mark_dirty
 from utils.observability.fallback import record_fallback
-from utils.observability.dream import DIRTY
 
 logger = logging.getLogger(__name__)
 dream_writing = ContextVar('dream_writing', default=False)
 canary_writing = ContextVar('dream_canary_writing', default=False)
+DIRTY = Counter('omi_dream_dirty_enqueue_total', 'Dream dirty enqueue outcomes', ['outcome'])
 
 
 def after_write(collection: str):

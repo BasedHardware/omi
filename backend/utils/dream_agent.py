@@ -11,7 +11,7 @@ from models.dream_agent import Triage, Plan
 from utils import dream_reads, dream_tools, dream_transport
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
-from utils.observability.dream import record_pass
+from utils.dream_metrics import record_pass
 
 from utils.dream_prompt import mount, evidence_message
 
