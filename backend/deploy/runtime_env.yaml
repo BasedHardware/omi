@@ -7,8 +7,7 @@ environments:
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
       env:
-        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-          category: rollout}
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
       static_address_name: dev-llm-gateway-ilb-ip-address
     gcp_project: based-hardware-dev
@@ -236,8 +235,7 @@ environments:
             category: service_discovery
             value: https://api.omiapi.com
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-            category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
@@ -263,8 +261,7 @@ environments:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
@@ -318,8 +315,7 @@ environments:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-            category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
@@ -355,8 +351,7 @@ environments:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           GITHUB_TOKEN:
             secret:
@@ -542,8 +537,7 @@ environments:
           value: '1'
         FIRESTORE_READ_LEDGER_SERVICE:
           value: desktop-backend
-        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-          category: rollout}
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
@@ -720,8 +714,7 @@ environments:
               value: dev-v1
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
@@ -764,8 +757,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
           capabilities:
@@ -914,8 +906,7 @@ environments:
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware-dev
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_SCREEN_FRAMES:
@@ -956,8 +947,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           forbidden_env:
           - HOSTED_PUSHER_API_URL
@@ -1102,8 +1092,7 @@ environments:
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware-dev
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -1132,8 +1121,7 @@ environments:
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
           forbidden_env:
@@ -1249,8 +1237,7 @@ environments:
             GCP_LOCATION:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -1661,8 +1648,7 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
-        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-          category: rollout}
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         PROACTIVITY_REDIS_HOST:
           config_map:
@@ -1905,10 +1891,8 @@ environments:
             category: service_discovery
             value: https://omi.me
           DREAM_AGENT_MODE: {value: shadow, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-            category: rollout}
-          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-            category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           PROACTIVITY_REDIS_HOST:
             config_map:
@@ -2001,12 +1985,10 @@ environments:
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -2054,10 +2036,8 @@ environments:
             category: service_discovery
             value: http://diarizer.omi.me:80
           DREAM_AGENT_MODE: {value: shadow, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-            category: rollout}
-          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-            category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           POSTHOG_PROJECT_API_KEY:
             secret:
@@ -2083,8 +2063,7 @@ environments:
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
           TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
@@ -2101,8 +2080,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
       config_map:
         name: prod-omi-backend-config
@@ -2193,8 +2171,7 @@ environments:
           value: '1'
         FIRESTORE_READ_LEDGER_SERVICE:
           value: desktop-backend
-        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-          category: rollout}
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
@@ -2254,6 +2231,9 @@ environments:
               version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
+              version: latest
+            DREAM_AGENT_FEEDBACK_SALT:
+              secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -2383,12 +2363,12 @@ environments:
               value: prod-v1
               category: memory_rollout
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-              category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
             DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
@@ -2471,12 +2451,10 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -2497,6 +2475,9 @@ environments:
               version: latest
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
+              version: latest
+            DREAM_AGENT_FEEDBACK_SALT:
+              secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
             FIRESTORE_READ_LEDGER:
@@ -2614,9 +2595,10 @@ environments:
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-              category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -2624,15 +2606,13 @@ environments:
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
-            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true',
-              category: rollout}
+            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BUCKET_SCREEN_FRAMES:
@@ -2689,11 +2669,9 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -2826,16 +2804,14 @@ environments:
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-              category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
@@ -2893,11 +2869,9 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           provisional: true
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
@@ -3007,10 +2981,8 @@ environments:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
-              category: rollout}
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
-              category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
@@ -3041,8 +3013,7 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
