@@ -224,7 +224,8 @@ class OwnerContinuity:
             # publish a capsule, but still need durable correction revalidation.
             self._last_authority_check = time.monotonic()
             self._authority_observed_at = observed_at
-            await matcher._reevaluate_loaded_owner()
+            if not await matcher._reevaluate_loaded_owner():
+                return
         if not self.refresh_due():
             return
         generation, conversation = matcher._generation, matcher._profile_conversation_id

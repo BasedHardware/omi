@@ -17,6 +17,7 @@ from tests.unit.test_speaker_match import _live_matcher, _segment as audio_segme
 from utils.observability.owner_recognition import LIVE_SPEAKER_ROLLOVER
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.stt.speaker_match import select_speaker_match
+from utils.live_owner_continuity import OwnerContinuity
 
 
 @pytest.mark.anyio
@@ -216,6 +217,7 @@ async def test_completed_roster_margin_rejection_withdraws_delivered_and_persist
         matcher, host, emitted = _live_matcher(monkeypatch, [query])
         stack.state.audio_ring_buffer = host.state.audio_ring_buffer
         matcher.host = stack.host
+        matcher.continuity = OwnerContinuity(matcher)
         stack.host.speakers = matcher
         stack.host.emit_speaker_suggestion = lambda *args, **kw: emitted.append(args)
         stack.host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))

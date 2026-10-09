@@ -3879,8 +3879,9 @@ the snapshot and generation check, so a receiving correction during earlier
 awaits cannot be replaced by a stale automatic owner suggestion.
 
 Snapshot unavailability is kept separate from the receiving receipt. A failed
-final transaction vetoes automatic owner claims and shortened proofs while still
-applying known receiving rejections, including retraction of manual owner maps.
+final transaction passes only already-known receiving rejections/retractions.
+One publication gate stops manual, automatic, carried and shortened owner naming
+and continuity renewal whenever final authority is unavailable.
 
 ### Live capture inactivity observation
 

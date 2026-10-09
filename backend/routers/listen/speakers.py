@@ -110,9 +110,7 @@ class FinalSpeakerAuthority:
 
     @property
     def owner_reserved(self) -> bool:
-        # An unavailable snapshot vetoes automatic claims without erasing
-        # explicit corrections in the independently read receiving receipt.
-        return self.unavailable or manual_owner_reserved(self.receipt)
+        return manual_owner_reserved(self.receipt)
 
 
 def _read_file(path: str) -> bytes:
@@ -302,7 +300,13 @@ class SpeakerMatcher:
             )
             authority, current_receipt = final_authority.roster, final_authority.receipt
             final_donor_receipt = final_authority.rollover_donor_receipt
-            read_failed = read_failed or final_authority.unavailable
+            if carry_generation == self._generation and self._profile_conversation_id == conversation_id:
+                if not self._allow_authority_publication(final_authority):
+                    self._release_rollover_attempts(retained_attempts, carried or set())
+                    reasons.update({voice: 'donor_unavailable' for voice in candidates})
+                    if count_rollover:
+                        record_live_speaker_rollover(old_mappings, old_origins, carried, reasons)
+                    return
             if candidates:
                 if final_donor_receipt is None:
                     read_failed = True
@@ -379,8 +383,7 @@ class SpeakerMatcher:
                         v: (replace(d, person_id=None) if v in restored and d.person_id != USER_SELF_PERSON_ID else d)
                         for v, d in decisions.items()
                         if v in existing or v in candidates
-                    },
-                    rejected,
+                    }
                 )
                 for voice in candidates & restored:
                     decision = decisions.get(voice)
@@ -398,14 +401,17 @@ class SpeakerMatcher:
                             else 'owner_contended' if decision and decision.owner_contended else 'voiceprint_rejected'
                         )
             if carry_generation == self._generation:
-                for voice, attempts in retained_attempts.items():
-                    if voice not in (carried or set()) and voice not in automatic_carry:
-                        self._embedding_attempts[voice] -= attempts
-                        if not self._embedding_attempts[voice] and voice not in self._speaker_locks:
-                            del self._embedding_attempts[voice]
+                self._release_rollover_attempts(retained_attempts, (carried or set()) | automatic_carry)
             if count_rollover:
                 record_live_speaker_rollover(old_mappings, old_origins, carried, reasons)
             await self.continuity.update(current_receipt, force=True, generation=carry_generation)
+
+    def _release_rollover_attempts(self, retained: Mapping[int, int], carried: set[int]) -> None:
+        for voice, attempts in retained.items():
+            if voice not in carried:
+                self._embedding_attempts[voice] -= attempts
+                if not self._embedding_attempts[voice] and voice not in self._speaker_locks:
+                    del self._embedding_attempts[voice]
 
     async def resolve_owner_name(self) -> Optional[str]:
         """The account owner's first name, resolved at most once per session.
@@ -533,11 +539,11 @@ class SpeakerMatcher:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
             return
 
-    async def _reevaluate_loaded_owner(self) -> None:
+    async def _reevaluate_loaded_owner(self) -> bool:
         """A taught/recovered owner can use retained evidence after model quota exhaustion."""
         generation, conversation_id = self._generation, self._profile_conversation_id
         if not self._voice_centroids:
-            return
+            return False
         receipt: Mapping[str, Any] = {}
         if conversation_id:
             try:
@@ -545,13 +551,15 @@ class SpeakerMatcher:
                     conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
                 )
             except Exception:
-                return
+                return False
         if generation != self._generation or conversation_id != self._profile_conversation_id:
-            return
+            return False
         final_authority = await self._final_authority(receipt)
         authority, receipt = final_authority.roster, final_authority.receipt
         if generation != self._generation or conversation_id != self._profile_conversation_id:
-            return
+            return False
+        if not self._allow_authority_publication(final_authority):
+            return False
         rejected = manual_rejected_speakers(receipt)
         self._rebuild_voice_decisions(authority)
         automatic = {
@@ -565,8 +573,9 @@ class SpeakerMatcher:
             owner_reserved=final_authority.owner_reserved,
             voice_groups=self._provider_epoch_voice_groups(),
         )
-        self._publish_decisions(decisions, rejected)
+        self._publish_decisions(decisions)
         await self.continuity.update(receipt, force=True, generation=generation)
+        return True
 
     async def load_and_run(self) -> None:
         state = self.host.state
@@ -754,6 +763,10 @@ class SpeakerMatcher:
             return
         final_authority = await self._final_authority(receipt)
         authority, receipt = final_authority.roster, final_authority.receipt
+        if generation != self._generation or self._profile_conversation_id != conversation_id:
+            return
+        if not self._allow_authority_publication(final_authority, speaker_id=speaker_id, segment_id=segment.get('id')):
+            return
         revoked = (
             self._mapping_origin.get(speaker_id) == 'automatic'
             and self.speaker_to_person.get(speaker_id, (None,))[0] == USER_SELF_PERSON_ID
@@ -761,8 +774,6 @@ class SpeakerMatcher:
             < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
             and (self._voice_scopes.get(speaker_id, ''), speaker_id) not in authority[1]
         )
-        if generation != self._generation or self._profile_conversation_id != conversation_id:
-            return
         if revoked or speaker_id in manual_rejected_speakers(receipt):
             self._retract_rejected_voice(speaker_id, segment.get('id'))
             if revoked and speaker_id in self._voice_decisions:
@@ -823,6 +834,27 @@ class SpeakerMatcher:
                 )
             return FinalSpeakerAuthority(authority, receipt, unavailable=receipt_unavailable)
         return FinalSpeakerAuthority((False, set()), receipt, unavailable=receipt_unavailable)
+
+    def _allow_authority_publication(
+        self,
+        authority: FinalSpeakerAuthority,
+        *,
+        speaker_id: Optional[int] = None,
+        segment_id: Optional[str] = None,
+    ) -> bool:
+        """One gate for manual, automatic, carried and shortened publications.
+
+        An unavailable final read grants only the independently known negative
+        authority. Apply those retractions, then stop before identity or cache
+        publication; an earlier positive receipt cannot authorize either.
+        Callers must fence the matcher generation before entering this gate.
+        """
+        rejected = manual_rejected_speakers(authority.receipt)
+        for voice in rejected:
+            self._retract_rejected_voice(voice, segment_id if voice == speaker_id else self._voice_segments.get(voice))
+        if rejected:
+            self.host.state.speaker_map_dirty = True
+        return not authority.unavailable
 
     def _rebuild_voice_decisions(self, authority: tuple[bool, set[tuple[str, int]]]) -> set[int]:
         """Recompute the current roster after the final authority await, without yielding."""
@@ -1073,14 +1105,8 @@ class SpeakerMatcher:
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
-            # Apply known corrections before either a manual-query return or
-            # the conservative automatic-arbitration fallback can preserve a map.
-            for voice in rejected:
-                self._retract_rejected_voice(
-                    voice, segment['id'] if voice == speaker_id else self._voice_segments.get(voice)
-                )
-            if rejected:
-                self.host.state.speaker_map_dirty = True
+            if not self._allow_authority_publication(final_authority, speaker_id=speaker_id, segment_id=segment['id']):
+                return
             if speaker_id in rejected:
                 self._record_match_score(
                     speaker_id,
@@ -1193,7 +1219,7 @@ class SpeakerMatcher:
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
-            self._publish_decisions(decisions, rejected)
+            self._publish_decisions(decisions)
             if short_reconnect:
                 accepted = decision is not None and decision.person_id == USER_SELF_PERSON_ID
                 if accepted:
@@ -1236,7 +1262,7 @@ class SpeakerMatcher:
             if short_reconnect and not reconnect_recorded:
                 record_owner_reconnect('rejected', 'arbitration')
 
-    def _publish_decisions(self, decisions: Mapping[int, SpeakerMatchDecision], rejected: Mapping[int, Any]) -> None:
+    def _publish_decisions(self, decisions: Mapping[int, SpeakerMatchDecision]) -> None:
         decisions = {
             voice: replace(decision, person_id=None) if voice in self._competition_only else decision
             for voice, decision in decisions.items()
@@ -1244,8 +1270,6 @@ class SpeakerMatcher:
         prior = pinned_speaker_prior_enabled()
         pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
         assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
-        for voice in rejected:
-            self._retract_rejected_voice(voice, self._voice_segments.get(voice))
         for voice, result in decisions.items():
             if self._mapping_origin.get(voice) == 'manual':
                 continue

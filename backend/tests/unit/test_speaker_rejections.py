@@ -1045,3 +1045,176 @@ def test_failed_authority_snapshot_vetoes_new_owner_claim(world, monkeypatch, se
         assert new._voice_distances.keys() <= new._voice_decisions.keys()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('earlier', ['positive', 'negative', 'none'])
+@pytest.mark.parametrize('origin', ['manual', 'automatic', 'carried'])
+@pytest.mark.parametrize('seconds', [2, 5])
+@pytest.mark.parametrize('snapshot_fails', [False, True], ids=['snapshot_ok', 'snapshot_fail'])
+@pytest.mark.parametrize('correct_during_read', [False, True], ids=['unchanged', 'correction_during_read'])
+def test_final_authority_publication_matrix(
+    world, monkeypatch, earlier, origin, seconds, snapshot_fails, correct_during_read
+):
+    """Exercise fresh/manual naming, retained automatic evidence, and rollover carry.
+
+    A positive manual receipt reserves the voice in the automatic/carry paths;
+    only fresh matching installs that explicit manual decision. Failed final
+    authority permits no publication or cache renewal in any of these paths.
+    """
+
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, emitted = await connect(monkeypatch, [noisy, OWNER], uid=UID)
+
+        async def read(fn, *args, **kwargs):
+            if fn is db.get_conversation:
+                return {'id': 'conversation'}
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        # Retained short competition forces a final snapshot for the 5s cases too.
+        await speak(new, 1, 2)
+        if origin != 'manual':
+            await speak(new, 0, seconds, start=3)
+            assert visible_owner(new, 0)
+            if origin == 'automatic':
+                # Retained evidence must pass the same gate when republished.
+                new.speaker_to_person.pop(0)
+                new._mapping_origin.pop(0)
+        receiving = 'next' if origin == 'carried' else 'conversation'
+        world.store.rows[('users', UID, 'conversations', receiving)]['transcript_segments'] = [
+            _segment('current', 0, seconds, speaker_id=0, scope='new-socket')
+        ]
+        if earlier == 'positive':
+            db.assign_conversation_speaker(UID, receiving, speaker_id=0, is_user=True, use_for_speech_training=False)
+        elif earlier == 'negative':
+            response = world.client.post(f'/v1/conversations/{receiving}/speakers/0/reject', json={'kind': 'not_me'})
+            assert response.status_code == 200
+        known = db.get_manual_speaker_receipt(UID, receiving)
+        reference_type = type(world.store.collection('users').document(UID))
+        original_read = reference_type.get
+        transactional_reads = []
+        correcting = False
+
+        def final_read(ref, *args, **kwargs):
+            nonlocal correcting
+            if kwargs.get('transaction') is not None and not correcting:
+                first_read = not transactional_reads
+                transactional_reads.append(ref)
+                if first_read and correct_during_read:
+                    # The real correction's own transaction must remain usable.
+                    correcting = True
+                    try:
+                        response = world.client.post(
+                            f'/v1/conversations/{receiving}/speakers/0/reject', json={'kind': 'not_me'}
+                        )
+                        assert response.status_code == 200
+                    finally:
+                        correcting = False
+                if snapshot_fails:
+                    raise ConnectionError('injected final authority read failure')
+            return original_read(ref, *args, **kwargs)
+
+        monkeypatch.setattr(reference_type, 'get', final_read)
+        earlier_reads = []
+
+        async def capture_read(fn, *args, **kwargs):
+            value = await read(fn, *args, **kwargs)
+            if fn is db.get_manual_speaker_receipt:
+                earlier_reads.append(deepcopy(value))
+            return value
+
+        host.persistence.call = capture_read
+        renewals = []
+        update = new.continuity.update
+
+        async def capture_update(*args, **kwargs):
+            renewals.append(args)
+            await update(*args, **kwargs)
+
+        monkeypatch.setattr(new.continuity, 'update', capture_update)
+        emitted.clear()
+        if origin == 'manual':
+            await speak(new, 0, seconds, start=3)
+        elif origin == 'automatic':
+            await new._reevaluate_loaded_owner()
+        else:
+            host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+            new.note_rollover_carry(set())
+            await new.refresh_for_conversation(
+                receiving, owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+            )
+        assert earlier_reads == [known]
+        assert transactional_reads, 'every table row must exercise the final authority transaction'
+        expected_owner = (
+            not snapshot_fails
+            and not correct_during_read
+            and (earlier == 'none' or (earlier == 'positive' and origin == 'manual'))
+        )
+        assert visible_owner(new, 0) == expected_owner
+        if expected_owner:
+            assert new._mapping_origin[0] == ('manual' if earlier == 'positive' else 'automatic')
+        else:
+            assert new._suggested_person.get(0) != 'user'
+            assert not any(args[1] == 'user' for args in emitted)
+        if snapshot_fails:
+            assert not renewals, 'unavailable authority must not renew any owner continuity publication'
+            if origin == 'carried':
+                assert new._embedding_attempts.get(0, 0) == 0, 'failed carry keeps the fresh conversation allowance'
+        assert new._voice_distances.keys() <= new._voice_decisions.keys()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('mode,seconds', [('mapped', 2), ('mapped', 5), ('idle', 2)])
+def test_unavailable_authority_cannot_renew_an_existing_owner(world, monkeypatch, mode, seconds):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, emitted = await connect(monkeypatch, [noisy, OWNER], uid=UID)
+
+        async def read(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        await speak(new, 1, 2)
+        await speak(new, 0, seconds, start=3)
+        assert visible_owner(new, 0)
+        reference_type = type(world.store.collection('users').document(UID))
+        original_read = reference_type.get
+        failures = []
+
+        def fail_final_read(ref, *args, **kwargs):
+            if kwargs.get('transaction') is not None:
+                failures.append(ref)
+                raise ConnectionError('injected final authority read failure')
+            return original_read(ref, *args, **kwargs)
+
+        monkeypatch.setattr(reference_type, 'get', fail_final_read)
+        mapping = dict(new.speaker_to_person)
+        observed = dict(new.continuity.observed)
+        revision = new.continuity._revision
+        emitted.clear()
+        if mode == 'mapped':
+            await new.match(0, {'id': 'current', 'abs_start': 3, 'abs_end': 3 + seconds})
+        else:
+            new.continuity._last_authority_check -= 31
+            # Exercise the continuation with a pending cache write due, too.
+            monkeypatch.setattr(new.continuity, 'refresh_due', lambda: True)
+            reads = []
+
+            async def capture_read(fn, *args, **kwargs):
+                reads.append(fn.__name__)
+                return await read(fn, *args, **kwargs)
+
+            host.persistence.call = capture_read
+            await new.continuity.refresh()
+            assert reads == ['get_manual_speaker_receipt', 'authority_snapshot']
+        assert failures
+        assert new.speaker_to_person == mapping, 'unknown authority permits neither republishing nor new retraction'
+        assert new.continuity.observed == observed, 'failed authority must not renew the owner speech gap'
+        assert new.continuity._revision == revision, 'failed authority must not write a refreshed capsule'
+        assert not emitted
+
+    asyncio.run(run())

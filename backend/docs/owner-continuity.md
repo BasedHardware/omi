@@ -135,10 +135,12 @@ and (at rollover) immediate donor in one Firestore transaction snapshot, bounded
 to three receipt/privacy projections. Corrections committed before that snapshot
 are honored across all three authorities; separate receipt objects from earlier
 awaits cannot authorize publication. A missing/ineligible document or failed
-snapshot vetoes automatic owner publication. Unavailability is a separate flag,
-so an independently read receiving receipt retains its known rejections. Those
-rejections retract manual and automatic maps before conservative arbitration;
-unavailable authority never supplies a shortened owner proof. The matcher rechecks
+snapshot vetoes all identity publication and owner continuity renewal, including
+earlier positive manual receipts and ordinary five-second automatic evidence.
+Unavailability is a separate flag, so an independently read receiving receipt
+retains its known rejections. One shared publication gate applies those known
+rejections/retractions, then stops acquisition, reevaluation, mapped-voice renewal
+and rollover when authority is unavailable. The matcher rechecks
 its generation and rebuilds current evidence after the transaction, then
 arbitrates and publishes without yielding. Ordinary matching with no short proof or rollover keeps its
 existing receipt read and five-second policy.
