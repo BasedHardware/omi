@@ -26,6 +26,7 @@ from utils.translation_core.providers import (
     TranslationProviderError,
 )
 from llm_gateway.gateway.vertex_schema import vertex_response_json_schema
+from llm_gateway.gateway.vertex_wire import _vertex_request
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -540,13 +541,24 @@ def test_luna_adapter_wraps_provider_failures_as_typed_errors():
     assert raised.value.reason == 'other'
 
 
-def test_luna_translation_batch_schema_preserves_references_for_vertex():
+def test_luna_translation_batch_schema_uses_vertex_json_schema():
     schema = LunaTranslationBatch.model_json_schema()
     converted = vertex_response_json_schema(schema)
-    item_ref = converted['properties']['translations']['items']['$ref']
-    assert item_ref.startswith('#/$defs/')
-    item_schema = converted['$defs'][item_ref.removeprefix('#/$defs/')]
-    assert item_schema['type'] == 'object'
-    assert item_schema['required'] == schema['$defs'][item_ref.removeprefix('#/$defs/')]['required']
-    assert set(item_schema['properties']) == {'text', 'detected_language'}
-    assert all(prop['type'] == 'string' for prop in item_schema['properties'].values())
+    payload = _vertex_request(
+        {
+            'messages': [{'role': 'user', 'content': 'synthetic translation'}],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': schema}},
+        }
+    )
+    config = payload['generationConfig']
+    assert config['responseMimeType'] == 'application/json'
+    assert 'responseSchema' not in config
+    assert config['responseJsonSchema'] == converted
+    items = converted['properties']['translations']['items']
+    assert items == {'$ref': '#/$defs/LunaTranslationItem'}
+    assert converted['$defs']['LunaTranslationItem']['type'] == 'object'
+    assert converted['$defs']['LunaTranslationItem']['required'] == ['text', 'detected_language']
+    properties = converted['$defs']['LunaTranslationItem']['properties']
+    assert set(properties) == {'text', 'detected_language'}
+    assert all(prop['type'] == 'string' for prop in properties.values())
+    assert schema == LunaTranslationBatch.model_json_schema()

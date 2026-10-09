@@ -452,3 +452,41 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     assert formerly_dirty_result.returncode == 0
     assert 'getApps' not in clean_result.stdout
     assert 'OpenAPI route functions with raw Dart decode sites:' not in formerly_dirty_result.stdout
+
+
+def test_display_adapter_requires_generated_values_at_every_rest_consumer(tmp_path, monkeypatch):
+    schema_dir, api_dir = tmp_path / 'schema', tmp_path / 'api'
+    schema_dir.mkdir()
+    api_dir.mkdir()
+    model = schema_dir / 'report.dart'
+    model.write_text('class Report { static Report fromJson(Map json) => Report(); }', encoding='utf-8')
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    consumer = api_dir / 'reports.dart'
+    prefix = "import 'package:omi/backend/schema/report.dart';\n"
+    consumer.write_text(
+        prefix + 'Report read(body) => Report.fromJson(wire.GeneratedReport.fromJson(body).toJson());', encoding='utf-8'
+    )
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'return Report.fromJson(decoded); }',
+        encoding='utf-8',
+    )
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw = api_dir / 'raw.dart'
+    raw.write_text(prefix + 'Report read(body) => Report.fromJson(jsonDecode(body));', encoding='utf-8')
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw.unlink()
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'decoded = jsonDecode(body); return Report.fromJson(decoded); }',
+        encoding='utf-8',
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'void earlier(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); } '
+        'Report read(decoded) => Report.fromJson(decoded);',
+        encoding='utf-8',
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed

@@ -150,7 +150,8 @@ def test_scheduler_prod_and_paused_dev_auth_match_sweep():
 
 
 @pytest.mark.parametrize('reject_vertex', [False, True])
-def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch, capsys, reject_vertex):
+@pytest.mark.parametrize('oversized', [False, True])
+def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch, capsys, reject_vertex, oversized):
     """Seed/read/shape/transport/resolve/translate both lanes with no provider IO.
 
     Reasoning's selected records depend on triage output; force a valid spelling
@@ -173,6 +174,20 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
     requests, vertex_bodies = [], []
     config = load_gateway_config()
     triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
+    plan = {}
+    if oversized:
+        triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}] * 13}
+        plan = {
+            'vocabulary': [
+                {
+                    'kind': 'jargon',
+                    'spelling': 'synthetic',
+                    'aliases': ['synthetic'] * 6,
+                    'evidence': ['conversations/' + storage.RECORD_ID] * 11,
+                }
+            ]
+            * 101
+        }
 
     def upstream(request):
         body = json.loads(request.content)
@@ -186,7 +201,8 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
                     json={
                         'error': {
                             'status': 'INVALID_ARGUMENT',
-                            'message': 'Response schema too complex private-user-content',
+                            'message': 'The specified schema produces a constraint that has too many states for serving. '
+                            'Typical causes include long array length limits (especially when nested). private-user-content',
                             'details': [
                                 {
                                     '@type': 'type.googleapis.com/google.rpc.BadRequest',
@@ -204,14 +220,14 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
             return httpx.Response(
                 200,
                 json={
-                    'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}],
+                    'candidates': [{'content': {'parts': [{'text': json.dumps(plan)}]}, 'finishReason': 'STOP'}],
                     'usageMetadata': {'promptTokenCount': 30, 'candidatesTokenCount': 20, 'totalTokenCount': 50},
                 },
             )
         # Both the actual Luna triage and a recovered reasoning call run through
         # the real OpenAI adapter. The main schema stays unchanged on fallback.
         assert body['model'] == 'gpt-6-luna'
-        value = triage if body['response_format']['json_schema']['name'] == 'Triage' else {}
+        value = triage if body['response_format']['json_schema']['name'] == 'Triage' else plan
         return httpx.Response(
             200,
             json={
@@ -254,7 +270,8 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
             finally:
                 gateway_app.dependency_overrides.clear()
 
-    assert asyncio.run(run())['status'] == 'pass'
+    result = asyncio.run(run())
+    assert result['status'] == 'pass', result
     assert [row['model'] for row in requests] == [dream_transport.TRIAGE_LANE, dream_transport.MAIN_LANE]
     assert len(vertex_bodies) == 1  # Triage is Luna, reasoning is reserved Gemini.
     for request in requests:
@@ -275,6 +292,8 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
         assert generation['responseJsonSchema']['type'] == 'object'
         assert_vertex_subset(generation['responseJsonSchema'])
         assert_local_references(generation['responseJsonSchema'])
+        assert 'maxItems' not in json.dumps(generation['responseJsonSchema'])
+        assert 'minItems' not in json.dumps(generation['responseJsonSchema'])
         if request['model'] == dream_transport.MAIN_LANE:
             assert payload == vertex_bodies[0]
     logs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
@@ -287,6 +306,6 @@ def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch
         assert rejections[0]['failure_class'] == 'provider_invalid_request'
         assert rejections[0]['vertex_status'] == 'INVALID_ARGUMENT'
         assert rejections[0]['vertex_field'] == 'generationConfig.responseJsonSchema'
-        assert rejections[0]['reason'] == 'schema_complexity'
+        assert rejections[0]['reason'] == 'schema_too_many_states'
     assert 'private-user-content' not in json.dumps(logs)
     assert 'private-name' not in json.dumps(logs)

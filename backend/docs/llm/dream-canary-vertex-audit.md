@@ -1,8 +1,13 @@
-# Offline dream canary Vertex audit
+# Dream canary Vertex schema audit
 
-Audited against base `f4f50c515768` (includes #21071), without production access.
-The rejected production construct cannot be identified from the supplied fallback
-line. A valid local translation is not evidence that Vertex accepted the request.
+Current finding: the owner reproduced a Vertex grammar-state rejection with the
+real Plan and isolated it to array bounds. The follow-up evidence and fix below
+remove generation bounds while retaining caller validation and bounded dream
+output. Both llm-gateway and backend require redeployment.
+
+The initial offline audit below used base `f4f50c515768` (includes #21071), without
+production access. At that stage, the fallback line could not identify the rejected
+construct; valid local translation alone did not prove provider acceptance.
 
 ## Replay
 
@@ -82,6 +87,69 @@ Concurrent attempt scopes reset on exit. The next rejection can distinguish
 schema complexity/reference/keyword, thinking config, signature, or unknown reasons;
 it cannot recover a raw construct omitted by Vertex or its bounded preview.
 
-Only **llm-gateway** requires redeployment for these diagnostics. Backend callers,
-canary configuration and routing policy are unchanged. This change does not merge
-or deploy itself.
+The initial diagnostics change required only **llm-gateway** redeployment. The
+follow-up fix below also changes backend dream transport. Canary configuration
+and routing policy remain unchanged.
+
+## Follow-up: live array-bound bisection (2026-10-10)
+
+This evidence supersedes the earlier offline-only complexity hypothesis above.
+The owner reported a 19:00:03Z deployed canary rejection on
+`omi:auto:dream-reasoning`, `gemini-2.5-flash`, HTTP 400 / `INVALID_ARGUMENT`.
+They reproduced it live in **based-hardware-dev**, using synthetic text,
+`thinkingBudget: 0`, and
+`responseJsonSchema: vertex_response_json_schema(Plan.model_json_schema())`.
+Vertex replied:
+
+> The specified schema produces a constraint that has too many states for serving.
+
+The message lists long array length limits, especially when nested, among typical
+causes. The owner's bisection establishes the failing construct for this Plan:
+removing only `minItems`/`maxItems` gave HTTP 200; removing string lengths, numeric
+bounds and formats while retaining array bounds still gave HTTP 400. Removing
+only `maxItems` above 50, 20, 10 or 5 still failed. This is owner-supplied live
+evidence, not a new provider call from this worktree. It does not establish a
+universal numeric acceptance threshold. The
+[Vertex structured-output guide](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/control-generated-output)
+also identifies nested array bounds as a schema-complexity factor.
+
+`vertex_response_json_schema` now omits **only the two array-bound keywords in
+addition to its existing projection**. Numeric bounds, formats, enums, refs and
+all other previously retained keywords remain unchanged. Property names and enum
+values are still data. The original schemas remain on the caller and on Luna
+fallback requests; only the Vertex generation projection is relaxed.
+
+Dream transport trims each array to the original Pydantic schema's `maxItems`
+before validating the response, retaining its ordered prefix. This covers Plan's
+six bounded arrays, Triage clusters/refs, nested evidence and aliases, and optional
+referenced ReviewItem payloads. Minimum lengths, extra fields, scalar bounds, types
+and model validators still fail validation normally. Token usage is accounted
+before normalization/validation, as before. No extra model turn is purchased.
+The real seed/read/transport/gateway canary test covers oversized outputs through
+both Vertex success and Luna recovery; transport tests assert the retained bounds.
+
+The reason classifier emits fixed `schema_too_many_states` for the supplied
+message, before generic schema/thinking classification. Existing attempt metadata
+and privacy protections remain; no raw provider message is logged. A malformed or
+truncated JSON preview can still produce `unknown`.
+
+### Other company-paid bounded structured callers
+
+Audited current generated feature overrides, desktop reserved text lanes and
+in-tree schema producers (including literal `maxItems` and Pydantic list bounds):
+
+| Caller | Bounds / strict enforcement |
+|---|---|
+| macOS screen-task extraction (`ScreenTaskPrompt`, through the Gemini proxy and reserved gateway text lane) | `tasks <= 8`, `tags <= 3`. `ScreenTaskResponse.results` rejects an entire response with more than eight valid tasks; it discards individual items with more than three tags. It enforces these bounds strictly, without dream-style truncation. |
+| Backend `Memories`, `Learnings`, `JudgmentOutput`, memory-ingestion and other bounded Pydantic outputs | Current company-paid feature overrides route these to Luna, not reserved Gemini. Their Pydantic parsers / structured-output adapters validate strictly; they are not affected by this Vertex projection. |
+| Translation (`LunaTranslationBatch` / viewed batch) | Currently Luna and no schema `maxItems`; the adapter also checks batch length against inputs. |
+| Local conversation-summary schemas (`LocalSummaryDraft`) | Contain array bounds but run only on local inference; never a cloud Gemini caller. |
+
+Other desktop Gemini response schemas use unbounded arrays or scalar constraints;
+the desktop BFF transports arbitrary caller schemas and does not itself validate
+all response-schema bounds. The concrete bounded company-paid screen-task caller
+above validates at the client. No caller contract outside dream is changed.
+
+Both **llm-gateway** (schema projection and reason label) and **backend** (dream
+transport normalization) need redeployment to apply this fix. This PR does not
+merge or deploy them.
