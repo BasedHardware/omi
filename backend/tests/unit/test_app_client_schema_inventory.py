@@ -458,7 +458,7 @@ def test_generated_boundary_evidence_is_derived_from_decoder_composition(tmp_pat
     monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
     monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
     decoder = api_dir / 'example.dart'
-    decoder.write_text('Display.fromJson(raw);')
+    decoder.write_text('Display.fromJson(raw);', encoding='utf-8')
     assert inventory_app_client_schemas._collect_wire_backed_type_names() == []
-    decoder.write_text('Display.fromJson(wire.GeneratedResponse.fromJson(raw).toJson());')
+    decoder.write_text('Display.fromJson(wire.GeneratedResponse.fromJson(raw).toJson());', encoding='utf-8')
     assert inventory_app_client_schemas._collect_wire_backed_type_names() == ['Display']
