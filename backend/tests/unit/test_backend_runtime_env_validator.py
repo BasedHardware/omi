@@ -3172,7 +3172,7 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
         'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
         'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'vi7SA9ckQCe4ccobWNxlbdcNdC23',
         'TRANSCRIPTION_SHADOW_PERCENT': '0',
-        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '4',
     }
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)

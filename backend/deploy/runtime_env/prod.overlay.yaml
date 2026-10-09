@@ -336,7 +336,7 @@ overlay:
           value: '0'
           category: rollout
         TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '1'
+          value: '4'
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
