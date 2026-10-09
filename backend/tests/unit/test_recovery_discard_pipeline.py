@@ -143,6 +143,7 @@ async def _run_and_verify(pipeline):
         firestore_client=pipeline.store,
         conversation_reader=conversations_db.get_conversation_raw_snapshot,
         counters=counters,
+        now=NOW,
     )
     assert remaining == []
     return json.loads(response.body), counters
