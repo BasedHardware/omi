@@ -20,6 +20,14 @@
 set -euo pipefail
 
 dist_dir="${1:-dist}"
+venv_dir=""
+
+cleanup() {
+  if [ -n "$venv_dir" ]; then
+    rm -rf "$venv_dir"
+  fi
+}
+trap cleanup EXIT
 
 shopt -s nullglob
 artifacts=("$dist_dir"/*.whl "$dist_dir"/*.tar.gz)
@@ -85,7 +93,6 @@ for artifact in "${artifacts[@]}"; do
   fi
   if [ ! -x "$venv_python" ]; then
     echo "no interpreter found in $venv_bin (venv creation failed?)" >&2
-    rm -rf "$venv_dir"
     exit 1
   fi
 
@@ -96,17 +103,26 @@ for artifact in "${artifacts[@]}"; do
   "$venv_python" -m pip list --format=freeze
 
   echo "--- console script ---"
-  printed_version="$("$venv_bin/omi" --version)"
+  omi_command="$venv_bin/omi"
+  if [ ! -x "$omi_command" ] && [ -x "$venv_bin/omi.exe" ]; then
+    omi_command="$venv_bin/omi.exe"
+  fi
+  if [ ! -x "$omi_command" ]; then
+    echo "no omi console script found in $venv_bin" >&2
+    exit 1
+  fi
+
+  printed_version="$("$omi_command" --version)"
   echo "$printed_version"
-  "$venv_bin/omi" --help > /dev/null
+  "$omi_command" --help > /dev/null
 
   expected_version="omi-cli $declared_version"
   if [ "$printed_version" != "$expected_version" ]; then
     echo "version drift: $artifact declares '$declared_version' but the CLI prints '$printed_version' (expected '$expected_version')" >&2
-    rm -rf "$venv_dir"
     exit 1
   fi
 
   rm -rf "$venv_dir"
+  venv_dir=""
   echo "clean install smoke: ok ($artifact, version $declared_version)"
 done

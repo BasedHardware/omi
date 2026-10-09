@@ -2407,13 +2407,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 66,
+      "expected_runs_per_day": 67,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "rationale": "One label read; 2026-09-28 PR run took 23s. Expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2425,22 +2425,23 @@
       "budget_p50_minutes": 5,
       "display_name": "Clean install smoke (Python ${{ matrix.python-version }})",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {
         "python-version": [
           "3.10",
+          "3.11",
           "3.12"
         ]
       },
-      "matrix_size": 2,
+      "matrix_size": 3,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Path-filtered clean-install smoke (Python 3.10 and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 1 run/day (10 linux-minutes/day). A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review.",
+      "rationale": "Path-filtered clean-install smoke (Python 3.10, 3.11, and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 2 runs/day (30 linux-minutes/day), including one daily run for the PyPI publish gate path. A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 2
+        "linux": 3
       },
       "runs_on": "ubuntu-latest"
     },
@@ -2448,7 +2449,7 @@
       "budget_p50_minutes": 3,
       "display_name": "${{ matrix.label }}",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 50,
+      "expected_runs_per_day": 51,
       "if": null,
       "matrix": {
         "include": [
@@ -2467,7 +2468,7 @@
       "matrix_size": 2,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "dynamic",
       "runner_counts": {
@@ -2479,13 +2480,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Windows ACL / Python 3.12",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. Expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -5127,7 +5128,7 @@
     "python-cli-ci.yml": {
       "name": "Python CLI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Path-filter widened so changes to the PyPI publish gate also run Python CLI verification.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5136,7 +5137,8 @@
           "paths": [
             "sdks/python-cli/**",
             ".github/actions/ci-tier/**",
-            ".github/workflows/python-cli-ci.yml"
+            ".github/workflows/python-cli-ci.yml",
+            ".github/workflows/publish_omi_cli.yml"
           ]
         },
         "push": {
@@ -5146,7 +5148,8 @@
           "paths": [
             "sdks/python-cli/**",
             ".github/actions/ci-tier/**",
-            ".github/workflows/python-cli-ci.yml"
+            ".github/workflows/python-cli-ci.yml",
+            ".github/workflows/publish_omi_cli.yml"
           ]
         }
       }
