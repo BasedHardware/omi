@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from config.dream_agent import Caps, eligible, may_be_eligible, mode
+from config.dream_agent import Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
 from config.plan_catalog import PAID_PLAN_IDS
 from database._client import get_firestore_client
 
@@ -44,14 +44,14 @@ def dirty_id(collection, key):
     return sha256((collection + '/' + key).encode()).hexdigest()
 
 
-def mark_dirty(uid, refs, *, firestore_client=None):
+def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
     # Every product write calls this; outside the cohort it must cost no Firestore read.
-    if mode() == 'off' or not refs or not may_be_eligible(uid):
-        return
+    if mode() == 'off' or not refs or not (uid == canary_uid() if canary else may_be_eligible(uid)):
+        return False
     database = client(firestore_client)
     user = database.collection('users').document(uid).get().to_dict() or {}
-    if not eligible(uid, user):
-        return
+    if not (canary_eligible(uid, user) if canary else eligible(uid, user)):
+        return False
     state = state_ref(database, uid)
     plan = (user.get('subscription') or {}).get('plan', user.get('plan', ''))
     weight = 2 if plan in PAID_PLAN_IDS else 1
@@ -76,6 +76,7 @@ def mark_dirty(uid, refs, *, firestore_client=None):
             batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
         batch.commit()
         trim_dirty(uid, firestore_client=database)
+    return True
 
 
 def dirty_count(uid, *, transaction=None, firestore_client=None):
@@ -128,7 +129,13 @@ def candidates(*, limit=100, firestore_client=None):
     ]
 
 
-def acquire(uid, caps: Caps, *, now=None, firestore_client=None):
+class AdmissionDenied(Exception):
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def acquire(uid, caps: Caps, *, trigger='schedule', canary=False, now=None, firestore_client=None):
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     day = now.date().isoformat()
@@ -143,18 +150,28 @@ def acquire(uid, caps: Caps, *, now=None, firestore_client=None):
         budget = spend.get(transaction=tx).to_dict() or {}
         user = owner.get(transaction=tx).to_dict() or {}
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
+        manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
+        if trigger == 'manual':
+            if data.get('lease'):
+                raise AdmissionDenied('dream_run_in_progress')
+            if data.get('score', 0) <= 0 or dirty_count(uid, transaction=tx, firestore_client=database) == 0:
+                return None
+            if manual_runs >= caps.manual_runs:
+                raise AdmissionDenied('dream_manual_limit')
         if (
             mode() == 'off'
-            or (mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
-            or not eligible(uid, user)
+            or (not canary and mode() == 'on' and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
+            or not (canary_eligible(uid, user) if canary else eligible(uid, user))
             or data.get('lease')
             or data.get('score', 0) <= 0
-            or passes >= caps.passes
+            or (trigger != 'manual' and passes >= caps.passes)
             or caps.tokens < 1024
             or caps.edits < 1
             or caps.max_usd_per_token <= 0
             or float(budget.get('reserved_usd', 0)) + caps.reservation_usd > caps.daily_usd
         ):
+            if trigger == 'manual':
+                raise AdmissionDenied('dream_budget_unavailable')
             return None
         lease = {
             'run_id': run_id,
@@ -164,10 +181,20 @@ def acquire(uid, caps: Caps, *, now=None, firestore_client=None):
             'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
             'reservation_usd': caps.reservation_usd,
             'score': data['score'],
-            'mode': mode(),
+            'mode': 'shadow' if canary else mode(),
+            'trigger': trigger,
             'started_at': now,
         }
-        tx.set(state, {**data, 'lease': lease, 'day': day, 'passes': passes + 1})
+        tx.set(
+            state,
+            {
+                **data,
+                'lease': lease,
+                'day': day,
+                'passes': passes + int(trigger != 'manual'),
+                'manual_runs': manual_runs + int(trigger == 'manual'),
+            },
+        )
         tx.set(spend, {'reserved_usd': float(budget.get('reserved_usd', 0)) + caps.reservation_usd})
         return lease
 
@@ -186,7 +213,6 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
     spend = database.collection('dream_spend').document(lease['day'])
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
-    encoded = _review_store().encode_doc(uid, {'source': report})
 
     @firestore.transactional
     def complete(tx):
@@ -196,10 +222,14 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
         budget = (spend.get(transaction=tx).to_dict() or {}) if refund else {}
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
+        queued_count = dirty_count(uid, transaction=tx, firestore_client=database)
         queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database) if success else []
         versions = {item['version'] for item in consumed}
-        acknowledged = [s for s in queued if s.to_dict()['version'] in versions]
-        remaining = [s for s in queued if s.to_dict()['version'] not in versions]
+        acknowledged = [s for s in queued if success and s.to_dict()['version'] in versions]
+        remaining = [s for s in queued if not success or s.to_dict()['version'] not in versions]
+        queued_after = queued_count - len(acknowledged)
+        settled = {**report, 'records_queued_after': queued_after}
+        encoded = _review_store().encode_doc(uid, {'source': settled})
         watermark = lease['watermark']
         if success and consumed:
             frontier = max(item['last_changed_at'] for item in consumed)
@@ -218,6 +248,11 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
                 'expires_at': lease['started_at'] + timedelta(days=30),
                 'mode': lease['mode'],
                 'success': success,
+                'trigger': lease.get('trigger', 'schedule'),
+                'records_read': int(report.get('records_read', report.get('dirty_read', 0))),
+                'records_queued_after': queued_after,
+                'tokens': int(report.get('tokens', 0)),
+                'cost_usd': float(report.get('cost_usd', 0)),
             },
         )
         patch = {
@@ -226,16 +261,41 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
             # frontier, which must remain behind older unread references.
             'watermark': watermark,
             'dirty_dropped_reported': lease['dirty_dropped'],
-            'score': max(0, data['score'] - lease['score']) if success and not remaining else data['score'],
+            'score': max(0, data['score'] - lease['score']) if success and queued_after == 0 else data['score'],
         }
         if refund:
             # A midnight completion must not decrement the new day's allowance.
             if data.get('day') == lease['day']:
-                patch['passes'] = max(0, int(data.get('passes', 0)) - 1)
+                counter = 'manual_runs' if lease.get('trigger') == 'manual' else 'passes'
+                patch[counter] = max(0, int(data.get(counter, 0)) - 1)
             tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
         tx.update(state, patch)
 
     complete(database.transaction())
+
+
+def own_runs(uid, *, limit=10, firestore_client=None):
+    query = client(firestore_client).collection('users').document(uid).collection('dream_runs')
+    return [
+        (s.id, s.to_dict())
+        for s in query.order_by('created_at', direction='DESCENDING').limit(max(1, min(limit, 20))).stream()
+    ]
+
+
+def own_run(uid, run_id, *, firestore_client=None):
+    return (
+        client(firestore_client)
+        .collection('users')
+        .document(uid)
+        .collection('dream_runs')
+        .document(run_id)
+        .get()
+        .to_dict()
+    )
+
+
+def own_state(uid, *, firestore_client=None):
+    return state_ref(client(firestore_client), uid).get().to_dict() or {}
 
 
 def vocabulary(uid, *, firestore_client=None):
