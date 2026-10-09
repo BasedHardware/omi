@@ -268,18 +268,39 @@ def test_cache_set_fail_open_on_redis_connection_class(
         ('OutOfMemoryError', 'capacity_full'),
     ],
 )
-def test_cache_set_fail_open_matches_exception_name_without_redis_py_type(
+def test_cache_set_fail_open_name_fallback_when_redis_class_is_absent(
     monkeypatch: pytest.MonkeyPatch,
     class_name: str,
     reason: str,
 ) -> None:
-    """redis-py stubs omit ``exceptions``; the live matcher also accepts the class name."""
+    """Name match is only the typing-drift path, used when redis-py does not expose the class."""
+    monkeypatch.setattr(redis_db.redis, 'exceptions', None, raising=False)
     exc_type = type(class_name, (Exception,), {})
     monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('typed as any')))
     recorded = _record(monkeypatch)
     redis_db.cache_user_geolocation('uid-1', {'latitude': 1.0, 'longitude': 2.0})
     assert recorded[0]['reason'] == reason
     assert recorded[0]['from_mode'] == 'cache_write'
+
+
+@pytest.mark.parametrize(
+    'exc_type',
+    [
+        type('AuthenticationError', (Exception,), {}),
+        type('ConnectionError', (Exception,), {}),
+        type('TimeoutError', (Exception,), {}),
+        type('OutOfMemoryError', (Exception,), {}),
+        TimeoutError,
+    ],
+)
+def test_cache_set_fail_open_same_name_from_another_module_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    exc_type: type[BaseException],
+) -> None:
+    """redis-py's own classes are present, so a lookalike or builtin TimeoutError stays loud."""
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('not redis-py')))
+    with pytest.raises(exc_type):
+        redis_db.cache_user_name('uid-1', 'Ada')
 
 
 @pytest.mark.parametrize('exc_type', [TypeError, KeyError])

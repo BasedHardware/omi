@@ -444,17 +444,19 @@ _CACHE_WRITE_FAIL_OPEN: tuple[tuple[str, str], ...] = (
 def _cache_write_fail_open_reason(exc: BaseException) -> Optional[str]:
     """Bounded fail-open reason, or None when the caller must raise.
 
-    Match the redis-py class when ``redis.exceptions`` is present, and the class
-    name when stubs omit that module (the same drift the maxmemory path already
-    handled). Programming errors are not listed and still raise. ConnectionError
-    subclasses other than the more specific rows above, such as BusyLoadingError,
-    map to connection_error.
+    Match the redis-py class when it can be resolved. Fall back to the class
+    name only when that class is absent (redis-py typing drift). A same-named
+    exception from another module, including the builtin ``TimeoutError``, still
+    raises. ConnectionError subclasses other than the more specific rows above,
+    such as BusyLoadingError, map to connection_error.
     """
     exceptions = getattr(redis, 'exceptions', None)
     name = type(exc).__name__
     for class_name, reason in _CACHE_WRITE_FAIL_OPEN:
         cls = getattr(exceptions, class_name, None) if exceptions is not None else None
-        if (cls is not None and isinstance(exc, cls)) or name == class_name:
+        if cls is not None and isinstance(exc, cls):
+            return reason
+        if cls is None and name == class_name:
             return reason
     return None
 
