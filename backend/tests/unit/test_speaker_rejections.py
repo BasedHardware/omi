@@ -646,3 +646,152 @@ def test_donor_correction_route_revokes_closed_socket_hint(world, monkeypatch, a
         assert visible_owner(new, 0), 'independent five-second recognition still works'
 
     asyncio.run(run())
+
+
+async def _seed_closed_owner_donor(world, monkeypatch):
+    client = fakeredis.FakeRedis()
+    monkeypatch.setattr(continuity_cache, '_client', lambda: client)
+    monkeypatch.setattr(continuity_cache, 'get_firestore_client', lambda: world.store)
+    old, host, _ = await connect(monkeypatch, [OWNER], uid=UID)
+    old._profile_conversation_id = CONV
+
+    async def read(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    host.persistence.call = read
+    await speak(old, 4, 5, scope='old-socket')
+    assert visible_owner(old, 4)
+    assert continuity_cache.donor_authority(UID, CONV) == {}
+    old.clear()
+
+
+@pytest.mark.parametrize(
+    'phase', ['acquire', 'rollover_profile', 'rollover_receipt', 'ordinary_peer', 'profile_recovery']
+)
+def test_final_short_authority_observes_correction_during_prior_await(world, monkeypatch, phase):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, _ = await connect(monkeypatch, [OWNER, noisy], uid=UID)
+        reads = []
+        corrected = False
+
+        def correct():
+            nonlocal corrected
+            response = world.client.post(f'/v1/conversations/{CONV}/speakers/4/reject', json={'kind': 'not_me'})
+            assert response.status_code == 200
+            assert continuity_cache.donor_authority(UID, CONV)['generation'] == 1
+            corrected = True
+
+        async def read(fn, *args, **kwargs):
+            reads.append(fn.__name__)
+            if fn is db.get_conversation:
+                return {'id': 'conversation'}
+            if fn is db.get_manual_speaker_receipt and armed and not corrected:
+                correct()
+            return fn(*args, **kwargs)
+
+        armed = phase == 'acquire'
+        host.persistence.call = read
+        if phase == 'acquire':
+            await speak(new, 0, 2)
+        else:
+            await speak(new, 0, 2)
+            assert visible_owner(new, 0), 'uncorrected donor must genuinely authorize the shortened owner'
+            armed = phase != 'rollover_profile'
+            if phase.startswith('rollover'):
+                host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+
+                async def load():
+                    if phase == 'rollover_profile':
+                        correct()
+                    new.person_embeddings = {'user': {'embedding': OWNER.copy(), 'name': 'Owner'}}
+
+                new._load_profiles = load
+                new.note_rollover_carry(set())
+                await new.refresh_for_conversation(
+                    'next', owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+                )
+            elif phase == 'ordinary_peer':
+                await speak(new, 1, 5, start=3)
+            else:
+                await new._reevaluate_loaded_owner()
+        assert corrected
+        assert reads[-1] == 'donor_authority', 'donor validation must follow the profile/current-receipt reads'
+        assert not visible_owner(new, 0), 'a correction committed during awaited work must precede publication'
+        assert new.continuity.donor is None
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_pending_short_authority_keeps_shared_rows_coherent(world, monkeypatch, caplog, cancel):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, _ = await connect(monkeypatch, [noisy, OWNER], uid=UID)
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def read(fn, *args, **kwargs):
+            if fn is continuity_cache.donor_authority:
+                entered.set()
+                await release.wait()
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        pending = asyncio.create_task(speak(new, 0, 2))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert 0 not in new._voice_distances and 0 not in new._voice_decisions
+            assert 0 not in new._voice_centroids
+            if cancel:
+                pending.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await pending
+            await asyncio.wait_for(speak(new, 1, 5, start=3), 5)
+            assert visible_owner(new, 1), 'ordinary recognition must work while a different probe waits or is cancelled'
+            assert new._voice_distances.keys() <= new._voice_decisions.keys()
+        finally:
+            release.set()
+            await asyncio.gather(pending, return_exceptions=True)
+        assert visible_owner(new, 1)
+        assert 'type=KeyError' not in caplog.text
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('change', ['clear', 'profile', 'competing_voice'])
+def test_final_authority_rebuilds_current_state_after_wait(world, monkeypatch, change):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        new, host, _ = await connect(monkeypatch, [OWNER, OWNER], uid=UID)
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def read(fn, *args, **kwargs):
+            if fn is continuity_cache.donor_authority:
+                entered.set()
+                await release.wait()
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        pending = asyncio.create_task(speak(new, 0, 2))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            if change == 'clear':
+                new.clear()
+            elif change == 'profile':
+                # Still similar enough for the enrolled threshold, but a new
+                # enrollment cannot authorize the old session's shortcut.
+                new.person_embeddings['user']['embedding'] = np.array([[0.99, 0.1]], dtype=np.float32)
+            else:
+                await asyncio.wait_for(speak(new, 1, 5, start=3), 5)
+                assert visible_owner(new, 1)
+        finally:
+            release.set()
+            await pending
+        assert not visible_owner(new, 0)
+        if change == 'competing_voice':
+            assert not visible_owner(new, 1), 'the final arbitration must include the other voice that finished'
+        assert new._voice_distances.keys() <= new._voice_decisions.keys()
+
+    asyncio.run(run())

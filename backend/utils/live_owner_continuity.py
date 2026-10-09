@@ -118,15 +118,7 @@ class OwnerContinuity:
             return False
         try:
             receipt = await self.matcher.host.persistence.call(cache.donor_authority, self.uid, donor['conversation'])
-            owner = self.matcher.person_embeddings.get('user')
-            valid = (
-                receipt is not None
-                and owner is not None
-                and donor['profile'] == profile_digest(owner['embedding'])
-                and receipt.get('generation', 0) == donor['receipt_generation']
-                and not manual_owner_reserved(receipt)
-                and donor['voice'] not in manual_rejected_speakers(receipt)
-            )
+            valid = self._authorized(donor, receipt)
         except Exception:
             valid = False
         if not valid:
@@ -135,6 +127,56 @@ class OwnerContinuity:
                 self.accepted.pop(key, None)
             record_owner_reconnect('rejected', 'donor_authority')
         return valid
+
+    def _authorized(self, donor: Any, receipt: Any) -> bool:
+        owner = self.matcher.person_embeddings.get('user')
+        return bool(
+            donor is not None
+            and receipt is not None
+            and owner is not None
+            and donor['profile'] == profile_digest(owner['embedding'])
+            and receipt.get('generation', 0) == donor['receipt_generation']
+            and not manual_owner_reserved(receipt)
+            and donor['voice'] not in manual_rejected_speakers(receipt)
+        )
+
+    async def authorize_roster(self) -> tuple[bool, set[tuple[str, int]]]:
+        """One final donor read for the socket's hint and all accepted proofs.
+
+        A socket consumes only one capsule; its proofs share that provenance.
+        Fail closed for any mismatched proof instead of sequential reads whose
+        earlier authorization could become stale during a later await. Callers
+        must recheck generation and rebuild/arbitrate/publish without more awaits.
+        """
+        hint = self.donor if self.available() else None
+        source = hint or next(iter(self.accepted.values()), None)
+        if source is None:
+            return False, set()
+        try:
+            receipt = await self.matcher.host.persistence.call(cache.donor_authority, self.uid, source['conversation'])
+        except Exception:
+            receipt = None
+        fields = ('conversation', 'voice', 'receipt_generation', 'profile')
+
+        def valid(proof: Any) -> bool:
+            try:
+                return bool(
+                    proof is not None
+                    and all(proof.get(field) == source.get(field) for field in fields)
+                    and self._authorized(proof, receipt)
+                )
+            except (KeyError, TypeError, ValueError):
+                return False
+
+        # Include proofs accepted by another voice during the read, but only
+        # when the same returned authority snapshot actually covers them.
+        authorized = {key for key, proof in self.accepted.items() if valid(proof)}
+        hint_valid = self.available() and valid(self.donor)
+        if (hint is not None and not hint_valid) or len(authorized) != len(self.accepted):
+            self.donor = None if not hint_valid else self.donor
+            self.accepted = {key: proof for key, proof in self.accepted.items() if key in authorized}
+            record_owner_reconnect('rejected', 'donor_authority')
+        return bool(hint_valid), authorized
 
     def observe(self, voice: int) -> None:
         scope = self.matcher._voice_scopes.get(voice)

@@ -223,10 +223,6 @@ class SpeakerMatcher:
                     or self._voice_decisions[voice].person_id != USER_SELF_PERSON_ID
                 ):
                     reasons[voice] = 'no_evidence'
-                elif sum(
-                    seconds for _, seconds in self.speaker_evidence[voice]
-                ) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and not await self.continuity.authorize(voice=voice):
-                    reasons[voice] = 'donor_authority'
                 else:
                     candidates.add(voice)
                     reasons[voice] = 'not_restored'
@@ -280,6 +276,15 @@ class SpeakerMatcher:
                     read_failed = True
                     current_receipt = {'segments': {'reserved': {'is_user': True}}}
             receipt = donor.get('manual_speaker_assignments') or {}
+            authority = await self._short_authority(
+                include_short=any(
+                    sum(seconds for _, seconds in evidence) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
+                    for _, evidence, _ in retained.values()
+                )
+            )
+            # The original acoustic donor (which may precede the rollover
+            # donor) is checked after every profile/receipt await. Everything
+            # through arbitration and publication below is synchronous.
             epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
             owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
             gate = None
@@ -334,22 +339,7 @@ class SpeakerMatcher:
             ):
                 # Revalidate both carried evidence and matches that ran while
                 # profiles/receipts were loading, against the completed roster.
-                for voice, centroid in self._voice_centroids.items():
-                    distances = {}
-                    for person_id, value in self.person_embeddings.items():
-                        vector = validated_embedding(value.get('embedding'))
-                        if vector is not None and vector.size == centroid.size:
-                            distances[person_id] = compare_embeddings(centroid, vector)
-                    self._voice_distances[voice] = distances
-                    # A guarded reconnect accept is now a live scoped identity.
-                    # Hint TTL limits another socket, not same-stream rollover.
-                    qualified_owner = (voice in restored and voice in candidates) or (
-                        self.speaker_to_person.get(voice, (None,))[0] == USER_SELF_PERSON_ID
-                        and self._mapping_origin.get(voice) == 'automatic'
-                    )
-                    self._voice_decisions[voice] = self._evidence_decision(
-                        voice, centroid, distances, qualified_owner=qualified_owner
-                    )
+                qualified = self._rebuild_voice_decisions(authority)
                 rejected = manual_rejected_speakers(current_receipt)
                 decisions = arbitrate_owner_matches(
                     {v: d for v, d in self._voice_distances.items() if v not in rejected},
@@ -376,7 +366,11 @@ class SpeakerMatcher:
                             carried.add(voice)
                     else:
                         reasons[voice] = (
-                            'owner_contended' if decision and decision.owner_contended else 'voiceprint_rejected'
+                            'donor_authority'
+                            if sum(seconds for _, seconds in self.speaker_evidence[voice])
+                            < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
+                            and voice not in qualified
+                            else 'owner_contended' if decision and decision.owner_contended else 'voiceprint_rejected'
                         )
             if carry_generation == self._generation:
                 for voice, attempts in retained_attempts.items():
@@ -529,37 +523,11 @@ class SpeakerMatcher:
                 return
         if generation != self._generation or conversation_id != self._profile_conversation_id:
             return
+        authority = await self._short_authority()
+        if generation != self._generation or conversation_id != self._profile_conversation_id:
+            return
         rejected = manual_rejected_speakers(receipt)
-        for voice in list(self._voice_centroids):
-            if voice in rejected or self._manual_voice_decision(receipt, voice) is not None:
-                continue
-            evidence = self.speaker_evidence.get(voice, ())
-            qualified_owner = False
-            if sum(seconds for _, seconds in evidence) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
-                qualified_owner = (
-                    self.speaker_to_person.get(voice, (None,))[0] == USER_SELF_PERSON_ID
-                    and self._mapping_origin.get(voice) == 'automatic'
-                    and await self.continuity.authorize(voice=voice)
-                )
-                if not qualified_owner:
-                    await self.continuity.authorize()
-                if generation != self._generation or conversation_id != self._profile_conversation_id:
-                    return
-            # Authority reads await; compute from current evidence afterwards.
-            evidence = self.speaker_evidence.get(voice, ())
-            centroid = self._voice_centroids[voice]
-            if voice not in self._competition_only:
-                centroid = mean_embedding([vector for vector, _ in evidence])
-            self._voice_centroids[voice] = centroid
-            distances = {}
-            for person_id, value in self.person_embeddings.items():
-                vector = validated_embedding(value.get('embedding'))
-                if vector is not None and vector.size == centroid.size:
-                    distances[person_id] = compare_embeddings(centroid, vector)
-            self._voice_distances[voice] = distances
-            self._voice_decisions[voice] = self._evidence_decision(
-                voice, centroid, distances, qualified_owner=qualified_owner
-            )
+        self._rebuild_voice_decisions(authority)
         automatic = {
             v: d
             for v, d in self._voice_decisions.items()
@@ -789,12 +757,43 @@ class SpeakerMatcher:
             return replace(decision, person_id=None)
         seconds = sum(duration for _, duration in self.speaker_evidence.get(voice, ()))
         if seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and not (
-            seconds >= FRESH_SECONDS
-            and decision.person_id == USER_SELF_PERSON_ID
-            and (qualified_owner or self.continuity.matches(centroid, decision))
+            seconds >= FRESH_SECONDS and decision.person_id == USER_SELF_PERSON_ID and qualified_owner
         ):
             return replace(decision, person_id=None)
         return decision
+
+    async def _short_authority(self, *, include_short: bool = False) -> tuple[bool, set[tuple[str, int]]]:
+        if include_short or any(
+            sum(seconds for _, seconds in self.speaker_evidence.get(voice, ())) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
+            for voice in self._voice_centroids
+        ):
+            return await self.continuity.authorize_roster()
+        return False, set()
+
+    def _rebuild_voice_decisions(self, authority: tuple[bool, set[tuple[str, int]]]) -> set[int]:
+        """Recompute the current roster after the final authority await, without yielding."""
+        hint_authorized, proofs = authority
+        qualified = set()
+        for voice, centroid in self._voice_centroids.items():
+            evidence = self.speaker_evidence.get(voice, ())
+            if evidence and voice not in self._competition_only:
+                centroid = mean_embedding([vector for vector, _ in evidence])
+            distances = {}
+            for person_id, value in self.person_embeddings.items():
+                vector = validated_embedding(value.get('embedding'))
+                if vector is not None and vector.size == centroid.size:
+                    distances[person_id] = compare_embeddings(centroid, vector)
+            qualified_owner = (self._voice_scopes.get(voice, ''), voice) in proofs or (
+                hint_authorized and self.continuity.matches(centroid, select_speaker_match(distances))
+            )
+            if qualified_owner:
+                qualified.add(voice)
+            self._voice_centroids[voice] = centroid
+            self._voice_distances[voice] = distances
+            self._voice_decisions[voice] = self._evidence_decision(
+                voice, centroid, distances, qualified_owner=qualified_owner
+            )
+        return qualified
 
     def _retract_rejected_voice(self, voice: int, segment_id: Optional[str]) -> None:
         stale = voice in self.speaker_to_person or voice in self._suggested_person
@@ -808,7 +807,9 @@ class SpeakerMatcher:
             if stale:
                 self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
 
-    def _manual_voice_decision(self, receipt: Mapping, speaker_id: int) -> Optional[Mapping]:
+    def _manual_voice_decision(
+        self, receipt: Mapping, speaker_id: int, *, scope: Optional[str] = None
+    ) -> Optional[Mapping]:
         """The newest positive receipt decision naming this voice, if scope-bound ones match."""
         covering = (receipt.get('speakers') or {}).get(str(speaker_id))
         candidates = [covering] if isinstance(covering, Mapping) else []
@@ -821,8 +822,9 @@ class SpeakerMatcher:
         if not positive:
             return None
         decision = max(positive, key=lambda entry: entry.get('generation', 0))
-        scope = decision.get('speaker_id_scope')
-        if decision.get('source') == 'carried' and scope is not None and scope != self._voice_scopes.get(speaker_id):
+        decision_scope = decision.get('speaker_id_scope')
+        voice_scope = self._voice_scopes.get(speaker_id) if scope is None else scope
+        if decision.get('source') == 'carried' and decision_scope is not None and decision_scope != voice_scope:
             return None
         return decision
 
@@ -986,28 +988,14 @@ class SpeakerMatcher:
                 vector = validated_embedding(value.get('embedding'))
                 if vector is not None and vector.size == centroid.size:
                     distances[person_id] = compare_embeddings(centroid, vector)
-            self._voice_distances[speaker_id] = distances
+            query_decision = self._evidence_decision(speaker_id, centroid, distances)
             short_reconnect = evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
             if short_reconnect:
                 self.continuity.attempted.add(speaker_id)
                 record_owner_reconnect('attempted', 'acoustic')
-                await self.continuity.authorize()
-                if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
-                    self._record_exit(drop_reason, speaker_id)
-                    return
-            else:
-                self._competition_only.discard(speaker_id)
-                self._competition_fresh.discard(speaker_id)
-            self._voice_decisions[speaker_id] = self._evidence_decision(speaker_id, centroid, distances)
-            previous_segment = self._voice_segments.get(speaker_id)
-            if previous_segment and previous_segment not in self.segment_assignments:
-                self.segment_identity_status.pop(previous_segment, None)
-            self._voice_segments[speaker_id] = segment['id']
-            self._voice_centroids[speaker_id] = centroid
-            self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
-            self.continuity.observe(speaker_id)
-            # Receipt reads may await. Re-arbitrate the latest shared evidence
-            # after the read, then publish synchronously.
+            # Keep the query row local through all receipt/authority awaits.
+            # Other voices may arbitrate while we wait; every shared distance
+            # row must already have its paired decision, even on cancellation.
             owner_reserved = False
             rejected: Dict[int, dict] = {}
             receipt: Mapping[str, Any] = {}
@@ -1026,12 +1014,20 @@ class SpeakerMatcher:
                 return
             if speaker_id in rejected:
                 for voice in rejected:
-                    self._retract_rejected_voice(voice, self._voice_segments.get(voice))
+                    self._retract_rejected_voice(
+                        voice, segment['id'] if voice == speaker_id else self._voice_segments.get(voice)
+                    )
                 self.host.state.speaker_map_dirty = True
-                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_rejected')
+                self._record_match_score(
+                    speaker_id,
+                    query_decision,
+                    'manual_rejected',
+                    distances=distances,
+                    scope=segment.get('speaker_id_scope') or '',
+                )
                 self._record_exit('rejected', speaker_id)
                 return
-            manual = self._manual_voice_decision(receipt, speaker_id)
+            manual = self._manual_voice_decision(receipt, speaker_id, scope=segment.get('speaker_id_scope') or '')
             if manual is not None:
                 person_id = USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
                 known = self.person_embeddings.get(person_id) if person_id else None
@@ -1060,9 +1056,33 @@ class SpeakerMatcher:
                     self.voice_identity_status[speaker_id] = status
                     self.segment_identity_status[segment['id']] = status
                     self.host.state.speaker_map_dirty = True
-                self._record_match_score(speaker_id, self._voice_decisions[speaker_id], 'manual_decision', manual)
+                self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
+                self._voice_segments[speaker_id] = segment['id']
+                self._record_match_score(
+                    speaker_id,
+                    query_decision,
+                    'manual_decision',
+                    manual,
+                    distances=distances,
+                    scope=segment.get('speaker_id_scope') or '',
+                )
                 self._record_exit('manual_decision', speaker_id)
                 return
+            authority = await self._short_authority(include_short=short_reconnect)
+            if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                self._record_exit(drop_reason, speaker_id)
+                return
+            if not short_reconnect:
+                self._competition_only.discard(speaker_id)
+                self._competition_fresh.discard(speaker_id)
+            previous_segment = self._voice_segments.get(speaker_id)
+            if previous_segment and previous_segment not in self.segment_assignments:
+                self.segment_identity_status.pop(previous_segment, None)
+            self._voice_segments[speaker_id] = segment['id']
+            self._voice_centroids[speaker_id] = centroid
+            self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
+            self._rebuild_voice_decisions(authority)
+            self.continuity.observe(speaker_id)
             voice_groups = self._provider_epoch_voice_groups()
             decisions = arbitrate_owner_matches(
                 {v: d for v, d in self._voice_distances.items() if v not in rejected},
@@ -1209,18 +1229,21 @@ class SpeakerMatcher:
         decision: SpeakerMatchDecision,
         outcome: Optional[str] = None,
         manual: Optional[Mapping] = None,
+        *,
+        distances: Optional[Mapping[str, float]] = None,
+        scope: Optional[str] = None,
     ) -> None:
         try:
             if match_scores.enabled():
                 row = match_scores.summarize(
                     voice,
-                    self._voice_distances[voice],
+                    self._voice_distances[voice] if distances is None else distances,
                     decision,
                     sum(seconds for _, seconds in self.speaker_evidence[voice]),
                     'capture',
                     threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
                     margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
-                    scope=self._voice_scopes.get(voice, ''),
+                    scope=self._voice_scopes.get(voice, '') if scope is None else scope,
                     outcome=outcome,
                 )
                 if outcome is None and owner_near_miss(decision):
