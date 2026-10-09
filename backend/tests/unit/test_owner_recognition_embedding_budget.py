@@ -126,14 +126,24 @@ async def test_churn_cannot_exceed_first_hour_or_steady_state_cost_bound(monkeyp
 
     await churn(24)
     assert len(calls) == 16
-    for step in range(1, 241):
+    spent = len(calls)
+    # Once the real match path has exhausted the burst, drive the same
+    # reservation primitive through two hours of rollover/profile churn.
+    # WAV encoding is covered above and need not run 480 more times to
+    # prove the admission math.
+    for step in range(1, 481):
         clock.now = step * 15.0
-        await churn(2)
-    assert len(calls) == 256
-    for step in range(241, 481):
-        clock.now = step * 15.0
-        await churn(2)
-    assert len(calls) == 496  # 16 + 2 * 240
+        for attempt in range(2):
+            await matcher.refresh_for_conversation(f'refill-{step}-{attempt}')
+            voice = step % 8
+            matcher._admit_voice(voice)
+            reserved = matcher._reserve_embedding(voice)
+            assert reserved is (attempt == 0)
+            spent += reserved
+            await matcher.refresh_for_conversation(matcher._profile_conversation_id)
+        if step == 240:
+            assert spent == 256
+    assert spent == 496  # 16 + 2 * 240
 
 
 @pytest.mark.anyio
@@ -159,7 +169,7 @@ async def test_exhausted_socket_can_match_owner_in_later_conversation(monkeypatc
 
 @pytest.mark.anyio
 @pytest.mark.parametrize('kind', ['accepted', 'confident_reject', 'near_reject', 'margin_reject', 'contended'])
-async def test_decided_voice_stops_but_uncertain_voice_keeps_spending(monkeypatch, kind):
+async def test_accepted_voice_stops_but_rejected_voice_can_keep_spending(monkeypatch, kind):
     _clock(monkeypatch)
     vectors = {
         'accepted': [1.0, 0.0],
@@ -179,11 +189,11 @@ async def test_decided_voice_stops_but_uncertain_voice_keeps_spending(monkeypatc
     exits = []
     monkeypatch.setattr(matcher, '_record_exit', lambda reason, voice: exits.append(reason))
     await matcher.match(1, _segment('next', 12, 5))
-    stopped = kind in ('accepted', 'confident_reject')
+    stopped = kind == 'accepted'
     assert matcher._embedding_attempts[1] == attempts + (not stopped)
     assert matcher._socket_embedding_tokens == tokens - (not stopped)
     if stopped:
-        assert exits == ['already_mapped' if kind == 'accepted' else 'decided_voice']
+        assert exits == ['already_mapped']
 
 
 @pytest.mark.anyio
@@ -204,7 +214,7 @@ async def test_failed_embeddings_and_concurrent_voices_share_the_bucket(monkeypa
 
 
 @pytest.mark.parametrize('other_print', [False, True])
-def test_taught_owner_reuses_evidence_after_voice_stop(monkeypatch, other_print):
+def test_taught_owner_reuses_evidence_after_voice_budget_is_spent(monkeypatch, other_print):
     _clock(monkeypatch)
     matcher, host, _ = _live_matcher(monkeypatch, [])
     matcher.person_embeddings.pop('user')
@@ -223,7 +233,7 @@ def test_taught_owner_reuses_evidence_after_voice_stop(monkeypatch, other_print)
     async def speech():
         for i in range(120):
             await matcher.match(1, _segment(f's{i}', i * 0.5, 0.5))
-        assert len(calls) == (3 if other_print else 12)
+        assert len(calls) == 12
         assert not matcher.speaker_to_person
         await matcher._load_profiles(owner_only=True)
 
@@ -233,4 +243,4 @@ def test_taught_owner_reuses_evidence_after_voice_stop(monkeypatch, other_print)
     ]
     process_speaker_assigned_segments(segments, {}, matcher.speaker_to_person)
     assert segments[0].model_dump()['is_user'] is True
-    assert len(calls) == (3 if other_print else 12)
+    assert len(calls) == 12

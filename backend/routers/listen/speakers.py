@@ -81,8 +81,6 @@ MAX_OWNER_AUDIO_REPAIRS = 3
 # - already_mapped: a decision exists for this diarized speaker (a race drop,
 #   not a loss).
 # - rejected: the manual receipt named this voice as nobody, so it emits nothing.
-# - decided_voice: sufficient evidence confidently rejected all loaded prints
-#   by the existing distance margin; retain evidence without more model calls.
 SPEAKER_ID_EXIT_REASONS = frozenset(
     {
         'window_outside_buffer',
@@ -96,7 +94,6 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'manual_decision',
         'voice_capacity',
         'embedding_budget',
-        'decided_voice',
     }
 )
 
@@ -653,18 +650,6 @@ class SpeakerMatcher:
                     if drop_reason == 'already_mapped':
                         await self._drop_rejected_mapping(speaker_id, segment, generation, conversation_id)
                     self._record_exit(drop_reason, speaker_id)
-                    return
-                decision = self._voice_decisions.get(speaker_id)
-                if (
-                    decision is not None
-                    and not decision.accepted
-                    and not decision.owner_contended
-                    and decision.best_id is not None
-                    and np.isfinite(decision.best_distance)
-                    and decision.best_distance
-                    >= match_policy.SPEAKER_MATCH_THRESHOLD + match_policy.SPEAKER_MATCH_MARGIN
-                ):
-                    self._record_exit('decided_voice', speaker_id)
                     return
                 await self._match_unmapped(speaker_id, segment, generation, conversation_id)
         finally:

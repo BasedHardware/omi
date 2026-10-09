@@ -3647,8 +3647,8 @@ Live identity consumes positioned provider fragments, accumulating distinct
 intervals in the existing ring before embedding. Overlaps and repeats count
 once; successful extraction reserves its intervals. Account for the clip that
 the three-entry evidence deque will evict before gating the next extraction.
-A near-threshold or ambiguous rejected voice can then reach another five-second
-decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
+A rejected voice, including a far/noisy rejection, can then reach another
+five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
 the usable remainder only if its actual PCM duration still meets the extraction
 floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
 remainder reports `window_shorter_than_minimum`.
@@ -3672,10 +3672,12 @@ Each conversation admits at most 128 voice ids, with at most 128 pending interva
 per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
 uncarried voices' attempts; validated automatic owner carry and copied manual
 mappings retain their attempts. Same-conversation profile refresh does not reset
-them. Accepted voices stop spending, as do confident rejections whose nearest
-loaded print is at least the existing 0.10 margin beyond the unchanged 0.65
-threshold. The latter report the new `decided_voice` exit reason. Near-threshold
-misses, print-margin ambiguity, owner contention and missing prints stay retryable.
+them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
+opportunities within both budgets, regardless of their initial distance: noisy
+early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+all evidenced voices and withdraws competing automatic owner mappings.
+Near-threshold misses, print-margin ambiguity, owner contention and missing prints
+stay retryable. No new exit reason is added.
 Retained evidence can still be re-arbitrated or rechecked against a recovered owner
 without another embedding request.
 
