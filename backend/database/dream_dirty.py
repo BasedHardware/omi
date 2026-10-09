@@ -3,7 +3,7 @@
 import functools
 import inspect
 import logging
-from typing import Any
+from typing import Any, cast
 from contextvars import ContextVar
 from prometheus_client import Counter
 
@@ -14,7 +14,19 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 dream_writing = ContextVar('dream_writing', default=False)
 canary_writing = ContextVar('dream_canary_writing', default=False)
-DIRTY = Counter('omi_dream_dirty_enqueue_total', 'Dream dirty enqueue outcomes', ['outcome'])
+
+
+def _dirty_counter() -> Counter:
+    try:
+        return Counter('omi_dream_dirty_enqueue_total', 'Dream dirty enqueue outcomes', ['outcome'])
+    except ValueError:
+        # Prometheus has no public collector lookup; match the existing reload convention.
+        from prometheus_client import REGISTRY
+
+        return cast(Counter, getattr(REGISTRY, '_names_to_collectors')['omi_dream_dirty_enqueue_total'])
+
+
+DIRTY = _dirty_counter()
 
 
 def after_write(collection: str):
