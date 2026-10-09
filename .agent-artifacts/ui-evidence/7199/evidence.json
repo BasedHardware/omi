@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-control-bar-listening.png",
+      "platform": "desktop-macos",
+      "description": "Production FloatingControlBarView rendered offscreen through NSHostingView in a local XCTest harness (AppState with audioRecordingMode=Always On, isTranscriptionPaused=false); compact bar, green dot = listening",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-control-bar-paused.png",
+      "platform": "desktop-macos",
+      "description": "Production FloatingControlBarView rendered offscreen through NSHostingView in a local XCTest harness (AppState with audioRecordingMode=Always On, isTranscriptionPaused=true); compact bar, amber dot = paused, mic/BLE still up",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-control-bar-mode-off.png",
+      "platform": "desktop-macos",
+      "description": "Production FloatingControlBarView rendered offscreen through NSHostingView in a local XCTest harness (AppState with audioRecordingMode=Off, isTranscriptionPaused=false); compact bar, grey dot = recording mode Off, toggle disabled",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

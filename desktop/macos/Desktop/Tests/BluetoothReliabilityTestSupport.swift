@@ -294,6 +294,10 @@ final class SessionConnectionDouble: DeviceConnection {
   var audioCodecEnteredGate: TestAsyncGate?
   var audioCodecReleaseGate: TestAsyncGate?
   var audioCodec: BleAudioCodec = .pcm8
+  /// When true, `getAudioStream()` stays open so `startProcessing` can finish
+  /// without `handleAudioStreamEnded` tearing the session down.
+  var hangAudioStream = false
+  private var audioStreamContinuation: AsyncThrowingStream<Data, Error>.Continuation?
   var batteryStreamCallCount = 0
   private var connectContinuation: CheckedContinuation<Void, Error>?
   private var disconnectContinuation: CheckedContinuation<Void, Never>?
@@ -379,7 +383,17 @@ final class SessionConnectionDouble: DeviceConnection {
     return audioCodec
   }
   func getAudioStream() -> AsyncThrowingStream<Data, Error> {
-    AsyncThrowingStream { $0.finish() }
+    AsyncThrowingStream { continuation in
+      if hangAudioStream {
+        audioStreamContinuation = continuation
+      } else {
+        continuation.finish()
+      }
+    }
+  }
+  func finishAudioStream() {
+    audioStreamContinuation?.finish()
+    audioStreamContinuation = nil
   }
   func getButtonState() async -> [UInt8] { [] }
   func getButtonStream() -> AsyncThrowingStream<[UInt8], Error> {

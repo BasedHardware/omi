@@ -20,6 +20,10 @@ final class BleAudioService: ObservableObject {
   @Published private(set) var audioLevel: Float = 0.0
   @Published private(set) var isDecodeDegraded = false
 
+  /// The connection currently feeding this session. Weak so a teardown that
+  /// drops the stream task also drops the last service-side retain.
+  private(set) weak var processingConnection: DeviceConnection?
+
   // MARK: - Properties
 
   private let logger = Logger(subsystem: "me.omi.desktop", category: "BleAudioService")
@@ -32,11 +36,14 @@ final class BleAudioService: ObservableObject {
   /// bumps it. A Stop/disconnect that lands during the codec await therefore
   /// aborts the resumed start instead of re-arming `isProcessing` with the
   /// handlers already torn down (or clobbering a newer session).
-  private var processingGeneration = 0
+  /// Bumped on every `startProcessing`. Readable so a test can pin that a
+  /// session was never torn down and restarted underneath it.
+  private(set) var processingGeneration = 0
 
   // Audio delivery
   private var transcriptionService: TranscriptionService?
   private var audioDataHandler: ((Data) -> Void)?
+  private var conversationAudioHandler: ((Data) -> Void)?
   private var rawFrameHandler: ((Data) -> Void)?
 
   // Statistics
@@ -54,11 +61,13 @@ final class BleAudioService: ObservableObject {
   ///   - connection: The device connection to get audio from
   ///   - transcriptionService: Optional transcription service to send audio to
   ///   - audioDataHandler: Optional handler for decoded PCM data (alternative to transcription)
+  ///   - conversationAudioHandler: Optional handler for conversation transcription audio
   ///   - rawFrameHandler: Optional handler for raw encoded frames (for WAL recording)
   func startProcessing(
     from connection: DeviceConnection,
     transcriptionService: TranscriptionService? = nil,
     audioDataHandler: ((Data) -> Void)? = nil,
+    conversationAudioHandler: ((Data) -> Void)? = nil,
     rawFrameHandler: ((Data) -> Void)? = nil
   ) async {
     guard !isProcessing else {
@@ -71,9 +80,11 @@ final class BleAudioService: ObservableObject {
     isProcessing = true
     processingGeneration &+= 1
     let generation = processingGeneration
+    processingConnection = connection
 
     self.transcriptionService = transcriptionService
     self.audioDataHandler = audioDataHandler
+    self.conversationAudioHandler = conversationAudioHandler
     self.rawFrameHandler = rawFrameHandler
 
     // Get codec from device. For Omi/OpenGlass this awaits a BLE characteristic
@@ -163,8 +174,10 @@ final class BleAudioService: ObservableObject {
     cancellables.removeAll()
 
     isProcessing = false
+    processingConnection = nil
     transcriptionService = nil
     audioDataHandler = nil
+    conversationAudioHandler = nil
     rawFrameHandler = nil
 
     // Log statistics
@@ -237,6 +250,8 @@ final class BleAudioService: ObservableObject {
     if let transcription = transcriptionService {
       transcription.sendAudio(pcmData)
     }
+
+    conversationAudioHandler?(pcmData)
 
     // Send to custom handler
     audioDataHandler?(pcmData)

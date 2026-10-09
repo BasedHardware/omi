@@ -15,6 +15,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     private var askOmiRegistrationTrace: [HotKeyRegistrationOutcome] = []
   #endif
   typealias HotKeyRegistrar = (Int, Int) -> HotKeyRegistrationAttempt
+  private typealias IdentifiedHotKeyRegistrar = (Int, Int, UInt32) -> HotKeyRegistrationAttempt
   typealias HotKeyFailureRecorder = (Int, Int, Int, HotKeyRegistrationOutcome) -> Void
   typealias HotKeyLogger = (String) -> Void
 
@@ -66,7 +67,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
   }
 
-  private let registrar: HotKeyRegistrar
+  private let registrar: IdentifiedHotKeyRegistrar
   #if DEBUG
     private let testUnregisterer: TestHotKeyUnregisterer?
   #endif
@@ -76,9 +77,11 @@ class GlobalShortcutManager: @unchecked Sendable {
   private enum HotKeyID: UInt32 {
     case askOmi = 2
     case summonOmi = 3
+    case toggleListening = 4
   }
 
   private var shortcutObserver: NSObjectProtocol?
+  private var toggleListeningShortcutObserver: NSObjectProtocol?
 
   private init() {
     registrar = Self.registerWithCarbon
@@ -111,7 +114,7 @@ class GlobalShortcutManager: @unchecked Sendable {
       logger: @escaping HotKeyLogger,
       observesSettings: Bool
     ) {
-      self.registrar = registrar
+      self.registrar = { keyCode, modifiers, _ in registrar(keyCode, modifiers) }
       self.testUnregisterer = testUnregisterer
       self.failureRecorder = failureRecorder ?? Self.recordRegistrationFailure
       self.logger = logger
@@ -130,6 +133,13 @@ class GlobalShortcutManager: @unchecked Sendable {
     ) { [weak self] _ in
       self?.registerAskOmi()
     }
+    toggleListeningShortcutObserver = NotificationCenter.default.addObserver(
+      forName: ShortcutSettings.toggleListeningShortcutChanged,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.registerToggleListening()
+    }
   }
 
   #if DEBUG
@@ -137,6 +147,10 @@ class GlobalShortcutManager: @unchecked Sendable {
       if let shortcutObserver {
         NotificationCenter.default.removeObserver(shortcutObserver)
         self.shortcutObserver = nil
+      }
+      if let toggleListeningShortcutObserver {
+        NotificationCenter.default.removeObserver(toggleListeningShortcutObserver)
+        self.toggleListeningShortcutObserver = nil
       }
     }
   #endif
@@ -147,6 +161,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     // Register Ask Omi shortcut from user settings
     registerAskOmi()
     registerSummonHotkey()
+    registerToggleListening()
   }
 
   /// Registers ⌃⌘O as a dedicated global Carbon hotkey that summons Omi (fronts the
@@ -253,6 +268,29 @@ class GlobalShortcutManager: @unchecked Sendable {
     return outcome
   }
 
+  private func registerToggleListening() {
+    guard !isRegistrationSuspended else { return }
+    if let ref = hotKeyRefs.removeValue(forKey: .toggleListening) {
+      _ = unregisterHotKey(ref)
+    }
+    let (enabled, shortcut) = MainActor.assumeIsolated {
+      (ShortcutSettings.shared.toggleListeningEnabled, ShortcutSettings.shared.toggleListeningShortcut)
+    }
+    guard enabled else {
+      logger("GlobalShortcutManager: Toggle Listening shortcut is disabled")
+      return
+    }
+    guard shortcut.supportsGlobalHotKey, let keyCode = shortcut.keyCode else {
+      logger("GlobalShortcutManager: Toggle Listening shortcut is not a registerable hotkey")
+      return
+    }
+    let outcome = registerHotKey(
+      keyCode: Int(keyCode), modifiers: shortcut.carbonModifiers, id: .toggleListening)
+    if outcome == .registered {
+      logger("GlobalShortcutManager: Registered Toggle Listening shortcut: \(shortcut.displayLabel)")
+    }
+  }
+
   /// Outcome of a Carbon `RegisterEventHotKey` attempt, classified for telemetry.
   enum HotKeyRegistrationOutcome: Equatable {
     case registered
@@ -261,7 +299,7 @@ class GlobalShortcutManager: @unchecked Sendable {
   }
 
   private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) -> HotKeyRegistrationOutcome {
-    let attempt = registrar(keyCode, modifiers)
+    let attempt = registrar(keyCode, modifiers, id.rawValue)
     let outcome = registrationOutcome(for: attempt)
     #if DEBUG
       if id == .askOmi {
@@ -283,9 +321,11 @@ class GlobalShortcutManager: @unchecked Sendable {
     return outcome
   }
 
-  private static func registerWithCarbon(keyCode: Int, modifiers: Int) -> HotKeyRegistrationAttempt {
+  private static func registerWithCarbon(
+    keyCode: Int, modifiers: Int, hotKeyIDRawValue: UInt32
+  ) -> HotKeyRegistrationAttempt {
     var hotKeyRef: EventHotKeyRef?
-    let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: HotKeyID.askOmi.rawValue)  // "OMI!"
+    let hotKeyID = EventHotKeyID(signature: FourCharCode(0x4F4D_4921), id: hotKeyIDRawValue)  // "OMI!"
     let status = RegisterEventHotKey(
       UInt32(keyCode), UInt32(modifiers), hotKeyID,
       GetApplicationEventTarget(), 0, &hotKeyRef
@@ -359,6 +399,11 @@ class GlobalShortcutManager: @unchecked Sendable {
     switch id {
     case .askOmi, .summonOmi:
       openOmiFromShortcut()
+    case .toggleListening:
+      NSLog("GlobalShortcutManager: Toggle Listening shortcut detected")
+      DispatchQueue.main.async {
+        NotificationCenter.default.post(name: .toggleListeningShortcutPressed, object: nil)
+      }
     }
 
     return noErr

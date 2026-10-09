@@ -78,7 +78,7 @@ extension AppState {
         // the stream's byte count is the transcript clock, so dropping quiet chunks would
         // shift every later timestamp and clip soft speech onsets.
         probeAudioGate.forward(monoMixed) { [weak self] audio in
-          self?.transcriptionService?.sendAudio(audio)
+          self?.forwardConversationAudio(audio) { self?.transcriptionService?.sendAudio($0) }
         }
       }
     }
