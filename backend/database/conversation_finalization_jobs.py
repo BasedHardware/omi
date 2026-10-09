@@ -1806,12 +1806,9 @@ def scan_in_progress_conversations(
 
 
 def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
-    """Return the self-heal sweep cursor, its CAS generation, and pending verifications.
+    """Read the CAS sweep cursor and bounded pending job identities/deadlines.
 
-    Returns ``{'resume_after_path', 'generation', 'pending_verifications'}``.
-    ``pending_verifications`` is a bounded list of
-    ``{'uid', 'conversation_id', 'job_id', 'admitted_at'}`` entries the follow-up tick
-    re-checks before the job's own dead-letter workflow would own a failure.
+    Legacy entries without ``admitted_at`` remain readable for TTL migration.
     """
     client = _client(firestore_client)
     snapshot = (
