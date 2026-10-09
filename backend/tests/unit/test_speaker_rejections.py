@@ -795,3 +795,34 @@ def test_final_authority_rebuilds_current_state_after_wait(world, monkeypatch, c
         assert new._voice_distances.keys() <= new._voice_decisions.keys()
 
     asyncio.run(run())
+
+
+def test_manual_query_row_is_installed_coherently_after_name_lookup(world, monkeypatch):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        new, host, _ = await connect(monkeypatch, [OWNER], uid=UID)
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def read(fn, *args, **kwargs):
+            if fn is db.get_manual_speaker_receipt:
+                return {'speakers': {'0': {'person_id': 'peer', 'is_user': False, 'generation': 1}}}
+            if fn is listen_speakers.user_db.get_person:
+                entered.set()
+                await release.wait()
+                return {'name': 'Peer'}
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        pending = asyncio.create_task(speak(new, 0, 2))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert 0 not in new._voice_distances and 0 not in new._voice_decisions
+        finally:
+            release.set()
+            await pending
+        assert new.speaker_to_person[0] == ('peer', 'Peer')
+        assert new._mapping_origin[0] == 'manual'
+        assert 0 in new._voice_distances and 0 in new._voice_decisions
+        assert new._voice_distances[0]['user'] == pytest.approx(0.0), 'manual voices still retain acoustic competition'
+
+    asyncio.run(run())

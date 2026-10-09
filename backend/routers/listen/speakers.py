@@ -1058,6 +1058,11 @@ class SpeakerMatcher:
                     self.host.state.speaker_map_dirty = True
                 self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
                 self._voice_segments[speaker_id] = segment['id']
+                # Retain manual voices' acoustic competition too, but only
+                # install the coherent row after any person-name lookup await.
+                self._voice_centroids[speaker_id] = centroid
+                self._voice_distances[speaker_id] = distances
+                self._voice_decisions[speaker_id] = query_decision
                 self._record_match_score(
                     speaker_id,
                     query_decision,
