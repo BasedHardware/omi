@@ -38,7 +38,9 @@ def _load_main():
         for name in ("requests", "dotenv", "fastapi", "fastapi.responses", "db", "models", "main")
     }
 
-    sys.modules["requests"] = types.ModuleType("requests")
+    requests_mod = types.ModuleType("requests")
+    requests_mod.post = lambda *a, **k: None
+    sys.modules["requests"] = requests_mod
 
     dotenv = types.ModuleType("dotenv")
     dotenv.load_dotenv = lambda *a, **k: None
@@ -141,6 +143,47 @@ class UidReflectionTest(unittest.TestCase):
     def test_ordinary_uid_still_renders(self) -> None:
         body = _body(MAIN.root(uid="abc123"))
         self.assertIn("/auth/google?uid=abc123", body)
+
+
+class ConnectedCalendarEscapingTest(unittest.TestCase):
+    """GET /?uid=... — the connected branch renders calendar options."""
+
+    def setUp(self) -> None:
+        MAIN.get_google_tokens = lambda uid: {"access_token": "token", "refresh_token": "refresh"}
+        MAIN.get_default_calendar = lambda uid: "primary"
+
+    def tearDown(self) -> None:
+        MAIN.get_google_tokens = lambda uid: None
+
+    def test_calendar_name_xss_is_escaped(self) -> None:
+        malicious_calendars = [
+            {"id": "cal1", "name": "<script>alert('stored_xss')</script>", "primary": True},
+            {"id": 'cal2" onfocus="alert(1)', "name": "Work Calendar", "primary": False},
+        ]
+        MAIN.get_user_calendars = lambda uid: malicious_calendars
+        body = _body(MAIN.root(uid="valid_uid"))
+        self.assertNotIn("<script>alert('stored_xss')</script>", body)
+        self.assertIn(html.escape("<script>alert('stored_xss')</script>"), body)
+        self.assertNotIn('cal2" onfocus="alert(1)', body)
+        self.assertIn(html.escape('cal2" onfocus="alert(1)', quote=True), body)
+
+
+class CallbackExceptionEscapingTest(unittest.TestCase):
+    """GET /auth/google/callback — exception message reflection escaping."""
+
+    def test_exception_message_is_escaped(self) -> None:
+        def bad_post(*args, **kwargs):
+            raise RuntimeError("<script>alert('error_xss')</script>")
+
+        old_post = MAIN.requests.post
+        MAIN.requests.post = bad_post
+        try:
+            MAIN.get_oauth_state = lambda uid: "valid_uid:secret"
+            body = _body(MAIN.google_callback(code="auth_code", state="valid_uid:secret", error=None))
+            self.assertNotIn("<script>alert('error_xss')</script>", body)
+            self.assertIn(html.escape("<script>alert('error_xss')</script>"), body)
+        finally:
+            MAIN.requests.post = old_post
 
 
 if __name__ == "__main__":
