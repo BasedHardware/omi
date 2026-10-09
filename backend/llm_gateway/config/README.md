@@ -37,7 +37,9 @@ client received the terminal chunk.
 allowlisted set of upstream error codes and parameter roots; unknown values collapse to `other_4xx`, and provider
 messages, request values, and raw bodies never become labels or terminal-log fields. Provider 4xx responses that
 describe unsupported parameters remain `capability_mismatch`; invalid requests such as
-`context_length_exceeded` use the separate, non-fallback `provider_invalid_request` failure class.
+`context_length_exceeded` use the separate `provider_invalid_request` failure class. These remain ineligible for LKG failover.
+The only within-route exception is an Omi-paid reserved Gemini primary with an explicit Luna fallback: a
+pre-output invalid request may try Luna once under both route and credential policies.
 `llm_gateway_stream_ttfb_seconds` measures time to the first non-empty chunk. Request IDs are opaque UUIDs emitted
 only in response headers and structured logs, never as Prometheus labels. Pre-route contract failures use
 `llm_gateway_request_rejections_total{api_surface,error_class}`; service authentication failures use
@@ -72,3 +74,42 @@ project (normally `roles/datastore.user`). Ledger writes are detached from the r
 and `LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES` (default `1000`) bounds in-memory work. Delivery failures and drops
 increment the bounded `llm_gateway_accounting_events_total` metric but do not fail or extend a model request. Local
 development leaves accounting disabled unless explicitly enabled.
+
+## Vertex structured-output contract
+
+OpenAI `response_format: json_schema` is translated to Vertex v1 `responseJsonSchema`
+with `responseMimeType: application/json`; `responseSchema` is omitted. The shared
+normalizer preserves `$defs`/`$ref`, nullable `anyOf` branches, properties, required
+fields, additional-properties rules, numeric/array bounds, and property ordering.
+String/numeric `const` becomes a singleton `enum`. Unsupported generation constraints
+(such as `default`, `minLength`, `maxLength`, and `pattern`) are omitted. Consumers
+must validate against the original schema; dream's Pydantic validation, including
+`ReviewItem`'s matching-payload validator, remains authoritative. Luna receives the
+original OpenAI schema, not Vertex's normalized copy.
+
+Contract checked on 2026-10-09 against Google's
+[Vertex v1 GenerationConfig reference](https://cloud.google.com/java/docs/reference/google-cloud-vertexai/latest/com.google.cloud.vertexai.api.GenerationConfig)
+and [structured-output guide](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/control-generated-output).
+The former lists the JSON Schema keyword subset and prohibits non-`$` siblings on
+`$ref`; the normalizer inlines those particular referenced nodes. Optional recursive
+references remain compact; Vertex only unrolls cycles to a limited degree and does
+not support required cycles. The latter includes Gemini 2.5 Flash and warns that
+large/deep schemas, optional fields, enums, and constraints can cause HTTP 400.
+There is no universal numerical depth/size limit published there; schema tokens
+count toward the model's input budget. Do not invent a fixed safe threshold.
+
+The 2026-10-09 dream incident supplied only a sanitized 400, so its precise Vertex
+rejection is not established by local tests. The old translator demonstrably emitted
+`Plan`'s unsupported generation fields and expanded its nested review definitions.
+The regression executes translation on real `Plan`, `Triage`, and
+`LunaTranslationBatch` schemas and checks the documented keyword/reference contract.
+This establishes a wire-contract correction, not a production acceptance receipt.
+
+Reserved Gemini invalid-request recovery goes directly to Luna, never shared/paygo
+Gemini, and is available only before output. It keeps the gateway's bounded
+`fallback_reason=provider_invalid_request` terminal metric and emits the shared
+`omi_fallback_total` event (`reason=other`, outcome `recovered` or `exhausted`).
+Existing Vertex 4xx JSON logs use fixed reason classes (`schema_keyword`,
+`schema_reference`, `schema_complexity`, `schema`, or `unknown`) alongside existing
+thought-signature/thinking classes; provider bodies and echoed user values are never
+logged. Only the `llm-gateway` service needs redeployment for these changes.

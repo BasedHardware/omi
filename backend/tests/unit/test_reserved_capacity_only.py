@@ -88,16 +88,15 @@ async def test_paid_dispatch_never_reaches_shared_gemini(monkeypatch, anchor, st
         assert len(seen) == (2 if state == State.ACTIVE else 1)
 
 
-@pytest.mark.parametrize('status,message', [(429, 'Ordinary project rate limit'), (400, 'Invalid tool')])
 @pytest.mark.asyncio
-async def test_generic_rejection_does_not_trigger_capacity_fallback(monkeypatch, status, message):
+async def test_generic_rate_limit_does_not_trigger_capacity_fallback(monkeypatch):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', '{"gemini-2.5-flash":"active","gemini-3.8-flash":"inactive"}')
     seen = []
 
     def handler(request):
         seen.append(request)
-        return httpx.Response(status, json={'error': {'message': message}})
+        return httpx.Response(429, json={'error': {'message': 'Ordinary project rate limit'}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
@@ -114,7 +113,7 @@ async def test_generic_rejection_does_not_trigger_capacity_fallback(monkeypatch,
                 build_omi_managed_credential_context(ServiceCaller(name='backend')),
                 ProviderRegistry({'gemini': vertex}),
             )
-        assert error.value.failure_class.value in {'provider_429_omi_paid', 'provider_invalid_request'}
+        assert error.value.failure_class.value == 'provider_429_omi_paid'
         assert len(seen) == 1
 
 
@@ -282,3 +281,260 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
     assert len(seen) == 1
     assert LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param='top_p')._value.get() == before_top_p + 1
     assert LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param='stop')._value.get() == before_stop + 1
+
+
+@pytest.mark.parametrize(
+    'lane,streaming',
+    [
+        ('omi:auto:dream-reasoning', False),
+        (ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT), False),
+        (ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT), True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, lane, streaming):
+    from llm_gateway.gateway.schemas import FailureClass
+    from llm_gateway.routers.openai_compatible import _stream_with_terminal_metrics
+    from models.dream_agent import Plan
+    import llm_gateway.gateway.reserved_fallback as telemetry
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen, events = [], []
+    monkeypatch.setattr(telemetry, 'record_fallback', lambda **event: events.append(event))
+    original_schema = Plan.model_json_schema()
+
+    def handler(request):
+        seen.append(request)
+        body = json.loads(request.content)
+        if request.url.host == 'us-central1-aiplatform.googleapis.com':
+            assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
+            assert 'responseJsonSchema' in body['generationConfig']
+            return httpx.Response(400, json={'error': {'message': 'Response schema too complex synthetic'}})
+        assert body['model'] == 'gpt-6-luna'
+        assert body['response_format']['json_schema']['schema'] == original_schema
+        assert 'reserved_capacity_only' not in body
+        if streaming:
+            return httpx.Response(200, content=b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')
+        return httpx.Response(200, json=success())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
+        monkeypatch.setattr(
+            vertex._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.ACTIVE})
+        )
+        registry = ProviderRegistry(
+            {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}
+        )
+        request = {
+            'model': lane,
+            'messages': [{'role': 'user', 'content': 'synthetic'}],
+            'stream': streaming,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'Plan', 'schema': original_schema}},
+        }
+        resolved = resolve_chat_completion_route(load_gateway_config(), request)
+        credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+        trace = AttemptTrace()
+        if streaming:
+            import time
+
+            prepared = await _prepared_streaming_iterator(
+                resolved, credentials, registry, resolved.active_route, attempt_trace=trace
+            )
+            assert prepared.fallback_reason == 'provider_invalid_request'
+            output = b''.join(
+                [
+                    chunk
+                    async for chunk in _stream_with_terminal_metrics(
+                        prepared,
+                        resolved_route=resolved,
+                        credentials=credentials,
+                        route=resolved.active_route,
+                        started_at=time.monotonic(),
+                        request_id='synthetic',
+                        attempt_trace=trace,
+                    )
+                ]
+            )
+            assert b'ok' in output and b'[DONE]' in output
+        else:
+            result = await execute_chat_completion(resolved, credentials, registry, attempt_trace=trace)
+            assert result.fallback_used and result.fallback_reason == FailureClass.PROVIDER_INVALID_REQUEST
+            assert result.selected_model == 'gpt-6-luna'
+        assert len(seen) == 2
+        assert events == [
+            dict(component='llm_gateway', from_mode='gemini', to_mode='openai', reason='other', outcome='recovered')
+        ]
+        assert trace.attempts[0].error_class == 'provider_invalid_request'
+        assert trace.attempts[-1].fallback_reason == 'provider_invalid_request'
+
+
+@pytest.mark.parametrize(
+    'mutation', ['byok', 'shared', 'wrong_fallback', 'luna_primary', 'luna_failure', 'credential_denied']
+)
+def test_invalid_request_exception_is_only_reserved_paid_primary_to_luna(mutation):
+    from llm_gateway.gateway.reserved_fallback import can_try_next_provider
+    from llm_gateway.gateway.resolver import is_lkg_eligible
+    from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
+    failed = route.primary
+    assert can_try_next_provider(route, failed, FailureClass.PROVIDER_INVALID_REQUEST)
+    assert not is_lkg_eligible(route, FailureClass.PROVIDER_INVALID_REQUEST)
+    if mutation == 'byok':
+        route = route.model_copy(
+            update={'credential_policy': route.credential_policy.model_copy(update={'mode': CredentialMode.BYOK})}
+        )
+    elif mutation == 'shared':
+        route = route.model_copy(update={'provider_options': {}})
+    elif mutation == 'wrong_fallback':
+        route = route.model_copy(update={'fallbacks': [ProviderRef(provider='openai', model='wrong')]})
+    elif mutation == 'luna_primary':
+        route = route.model_copy(update={'primary': route.fallbacks[0]})
+        failed = route.primary
+    elif mutation == 'luna_failure':
+        failed = route.fallbacks[0]
+    else:
+        route = route.model_copy(
+            update={
+                'credential_policy': route.credential_policy.model_copy(
+                    update={'fallback_eligible_failure_classes': []}
+                )
+            }
+        )
+    assert not can_try_next_provider(route, failed, FailureClass.PROVIDER_INVALID_REQUEST)
+
+
+@pytest.mark.asyncio
+async def test_reserved_schema_translation_runs_through_local_http_endpoint(monkeypatch):
+    from llm_gateway.main import app
+    from llm_gateway.routers import dependencies
+    from models.dream_agent import Plan
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-token')
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
+        schema = json.loads(request.content)['generationConfig']['responseJsonSchema']
+        assert schema['properties']['questions']['items'] == {'$ref': '#/$defs/ReviewItem'}
+        assert '$defs' in schema
+        return httpx.Response(
+            200, json={'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}]}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        vertex = VertexGeminiProvider(http_client=upstream, access_token_supplier=AsyncMock(return_value='synthetic'))
+        monkeypatch.setattr(
+            vertex._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.ACTIVE})
+        )
+        app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'gemini': vertex})
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as local:
+                response = await local.post(
+                    '/v1/chat/completions',
+                    headers={'Authorization': 'Bearer synthetic-token', 'x-omi-service-caller': 'backend'},
+                    json={
+                        'model': 'omi:auto:dream-reasoning',
+                        'messages': [{'role': 'user', 'content': 'synthetic'}],
+                        'response_format': {
+                            'type': 'json_schema',
+                            'json_schema': {'name': 'Plan', 'schema': Plan.model_json_schema()},
+                        },
+                    },
+                )
+        finally:
+            app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()['model'] == 'omi:auto:dream-reasoning'
+    assert Plan.model_validate_json(response.json()['choices'][0]['message']['content']) == Plan()
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.asyncio
+async def test_luna_rejection_exhausts_reserved_fallback_once(monkeypatch, streaming):
+    import llm_gateway.gateway.reserved_fallback as telemetry
+    from llm_gateway.gateway.errors import GatewayProviderRequestRejectedError
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen, events = [], []
+    monkeypatch.setattr(telemetry, 'record_fallback', lambda **event: events.append(event))
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(400, json={'error': {'message': 'Invalid response schema synthetic'}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        vertex = VertexGeminiProvider(http_client=client, access_token_supplier=AsyncMock(return_value='synthetic'))
+        monkeypatch.setattr(
+            vertex._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.ACTIVE})
+        )
+        registry = ProviderRegistry(
+            {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=client)}
+        )
+        resolved = resolve_chat_completion_route(
+            load_gateway_config(),
+            {
+                'model': ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT),
+                'stream': streaming,
+                'messages': [{'role': 'user', 'content': 'synthetic'}],
+            },
+        )
+        credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+        with pytest.raises(GatewayProviderRequestRejectedError):
+            if streaming:
+                await _prepared_streaming_iterator(
+                    resolved, credentials, registry, resolved.active_route, attempt_trace=AttemptTrace()
+                )
+            else:
+                await execute_chat_completion(resolved, credentials, registry)
+        assert len(seen) == 2
+        assert events[0]['outcome'] == 'exhausted' and len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_request_after_first_stream_chunk_never_calls_luna(monkeypatch):
+    from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
+    from llm_gateway.gateway.schemas import FailureClass
+    from llm_gateway.routers.openai_compatible import _stream_with_terminal_metrics
+    import time
+
+    async def stream(*args, **kwargs):
+        yield b'data: {"choices":[{"delta":{"content":"synthetic"}}]}\n\n'
+        raise ProviderFailure(FailureClass.PROVIDER_INVALID_REQUEST)
+
+    vertex = VertexGeminiProvider()
+    monkeypatch.setattr(vertex, 'stream_chat_completion', stream)
+    luna = FakeChatCompletionProvider()
+    resolved = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': ptr.desktop_text_lane_id(ptr.PT_MODEL_CURRENT),
+            'stream': True,
+            'messages': [{'role': 'user', 'content': 'synthetic'}],
+        },
+    )
+    credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+    registry = ProviderRegistry({'gemini': vertex, 'openai': luna})
+    try:
+        prepared = await _prepared_streaming_iterator(
+            resolved, credentials, registry, resolved.active_route, attempt_trace=AttemptTrace()
+        )
+        output = _stream_with_terminal_metrics(
+            prepared,
+            resolved_route=resolved,
+            credentials=credentials,
+            route=resolved.active_route,
+            started_at=time.monotonic(),
+            request_id='synthetic',
+        )
+        assert b'synthetic' in await anext(output)
+        with pytest.raises(ProviderFailure) as failure:
+            await anext(output)
+        assert failure.value.failure_class == FailureClass.PROVIDER_INVALID_REQUEST
+        assert not luna.calls
+    finally:
+        await vertex.aclose()
