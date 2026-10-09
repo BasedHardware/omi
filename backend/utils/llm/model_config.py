@@ -118,14 +118,17 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'web_search': ('sonar-pro', 'perplexity'),
 }
 
+# AI Studio 404s gemini-2.5-* for projects that have not used them
+# ("This model models/gemini-2.5-flash..."). Vertex reservations still serve 2.5.
+BYOK_GEMINI_MODEL = 'gemini-3.5-flash-lite'
 _BYOK_GEMINI_ROUTES: Dict[str, Tuple[str, str]] = {
-    'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
-    'followup': ('gemini-2.5-flash-lite', 'gemini'),
-    'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
-    'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
-    'trends': ('gemini-2.5-flash-lite', 'gemini'),
-    'translation': ('gemini-2.5-flash-lite', 'gemini'),
-    'screen_frame_judge': ('gemini-2.5-flash-lite', 'gemini'),
+    'session_titles': (BYOK_GEMINI_MODEL, 'gemini'),
+    'followup': (BYOK_GEMINI_MODEL, 'gemini'),
+    'onboarding': (BYOK_GEMINI_MODEL, 'gemini'),
+    'app_integration': (BYOK_GEMINI_MODEL, 'gemini'),
+    'trends': (BYOK_GEMINI_MODEL, 'gemini'),
+    'translation': (BYOK_GEMINI_MODEL, 'gemini'),
+    'screen_frame_judge': (BYOK_GEMINI_MODEL, 'gemini'),
     'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
 }
 
