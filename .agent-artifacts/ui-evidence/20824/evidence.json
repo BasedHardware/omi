@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-meeting-brief-calendar-enabled.png",
+      "platform": "desktop-macos",
+      "description": "Live pilot app with Meeting Briefs enabled after the Calendar grant; permissions and settings proof only, not a source-matched card",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-desktop-macos-meeting-brief-card-fixture.png",
+      "platform": "desktop-macos",
+      "description": "Meeting brief card rendered from synthetic, cited test data; a UI fixture, not a live matched calendar meeting",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

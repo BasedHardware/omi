@@ -529,13 +529,15 @@ struct ConversationDetailView: View {
       },
       onMoveToFolder: onMoveToFolder.map { move in { folderId in moveToFolder(folderId, using: move) } },
       onCopyTranscript: copyTranscript,
-      onDraftFollowUp: meetingMemoryBriefsEnabled
-        && MeetingFollowUpDraftComposer.compose(from: displayConversation) != nil
-        ? {
-          guard let text = MeetingFollowUpDraftComposer.compose(from: displayConversation) else { return }
-          followUpDraftText = text
-          showFollowUpDraft = true
-        } : nil,
+      // Compose once per render: the same draft decides the menu item and fills the sheet.
+      onDraftFollowUp: (meetingMemoryBriefsEnabled
+        ? MeetingFollowUpDraftComposer.compose(from: displayConversation) : nil)
+        .map { text in
+          {
+            followUpDraftText = text
+            showFollowUpDraft = true
+          }
+        },
       onDiscussInChat: onDiscussInChat,
       onDelete: { showDeleteConfirmation = true },
       bannerInset: { headerBannerInset },
