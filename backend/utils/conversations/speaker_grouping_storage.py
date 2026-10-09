@@ -62,6 +62,13 @@ def protect_segments(segments: list[dict[str, Any]], uid: str) -> None:
         ]
         if sum(len((payload or '').encode()) for _, payload, _ in serialized) > MAX_BYTES:
             raise ValueError('capacity')
+        for segment, payload, existing in serialized:
+            if payload is None:
+                if not isinstance(existing, str) or len(existing) > MAX_ENCODED_BYTES:
+                    raise ValueError('capacity')
+                plaintext = encryption.decrypt(existing, uid)
+                if plaintext == existing or json.loads(plaintext).get('id') != segment.get('id'):
+                    raise ValueError('authentication')
         encrypted = [
             (segment, encryption.encrypt(payload, uid) if payload else existing)
             for segment, payload, existing in serialized
@@ -71,6 +78,8 @@ def protect_segments(segments: list[dict[str, Any]], uid: str) -> None:
             or sum(len(value) for _, value in encrypted) > MAX_ENCODED_BYTES
         ):
             raise ValueError('capacity')
+        if any(value == payload for (_, payload, _), (_, value) in zip(serialized, encrypted) if payload):
+            raise ValueError('encryption')
         for segment, value in encrypted:
             segment[FIELD] = value
     except Exception:

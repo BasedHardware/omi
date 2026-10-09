@@ -131,6 +131,24 @@ def test_epoch_and_renumbered_partition_survive_reprocessing():
         apply_speaker_resolution(c, result.speaker_ids, result.voice_identities, result.voice_identity_statuses)
 
 
+@pytest.mark.parametrize('fault', ['unserializable', 'plaintext_sidecar', 'encrypt_returns_plaintext'])
+def test_storage_never_falls_back_to_plaintext_or_blocks_transcript(monkeypatch, fault):
+    row = segment(0).model_dump()
+    if fault == 'unserializable':
+        row['provider_speaker'] = {'bad': object()}
+    elif fault == 'plaintext_sidecar':
+        row[storage.FIELD] = json.dumps(
+            {'id': row['id'], 'values': {'speaker_grouping_shadow': {'owner_link': 'user'}}}
+        )
+    else:
+        row['speaker_grouping_shadow'] = {'owner_link': 'user'}
+        monkeypatch.setattr(encryption, 'encrypt', lambda payload, uid: payload)
+    stored = db.encode_conversation_for_write('owner', {'transcript_segments': [row]})
+    restored = json.loads(zlib.decompress(stored['transcript_segments']))[0]
+    assert restored['text'] == 'private words'
+    assert not set(GROUPING_INTERNAL_FIELDS) & set(restored)
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_public_raw_dictionary_projections_remove_all_internal_fields(level):
     c = internal_conversation(level)
