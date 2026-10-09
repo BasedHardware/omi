@@ -118,9 +118,7 @@ class TestSyncBatchUpdateTombstoneGuard:
             noop_ids=[],
         )
 
-        request = SyncBatchRequest(
-            items=[SyncBatchItem(id=NONEXISTENT_TASK_ID, description="Nonexistent")]
-        )
+        request = SyncBatchRequest(items=[SyncBatchItem(id=NONEXISTENT_TASK_ID, description="Nonexistent")])
 
         response = sync_batch_update(request=request, uid=UID)
 
@@ -137,12 +135,36 @@ class TestGetPendingSyncItemsTombstoneGuard:
     def test_get_pending_sync_items_omits_deleted(self, mock_db):
         mock_db.get_pending_apple_reminders_sync.return_value = {
             "pending_export": [
-                {"id": LIVE_TASK_ID, "description": "Live task", "completed": False, "deleted": False, "is_locked": False},
-                {"id": DELETED_TASK_ID, "description": "Deleted task", "completed": False, "deleted": True, "is_locked": False},
+                {
+                    "id": LIVE_TASK_ID,
+                    "description": "Live task",
+                    "completed": False,
+                    "deleted": False,
+                    "is_locked": False,
+                },
+                {
+                    "id": DELETED_TASK_ID,
+                    "description": "Deleted task",
+                    "completed": False,
+                    "deleted": True,
+                    "is_locked": False,
+                },
             ],
             "synced_items": [
-                {"id": "synced-1", "description": "Synced live", "completed": False, "deleted": False, "is_locked": False},
-                {"id": "synced-deleted", "description": "Synced deleted", "completed": False, "deleted": True, "is_locked": False},
+                {
+                    "id": "synced-1",
+                    "description": "Synced live",
+                    "completed": False,
+                    "deleted": False,
+                    "is_locked": False,
+                },
+                {
+                    "id": "synced-deleted",
+                    "description": "Synced deleted",
+                    "completed": False,
+                    "deleted": True,
+                    "is_locked": False,
+                },
             ],
         }
 
