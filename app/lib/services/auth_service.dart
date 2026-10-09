@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -914,18 +915,28 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
+      OnboardingSyncRuntime.wake();
+      final session = captureSessionSnapshot();
+      if (session == null) return;
+      final pendingSourceAtStart = OnboardingSyncRuntime.hasPendingAcquisitionSource;
+      final localSourceAtStart = SharedPreferencesUtil().foundOmiSource;
       final state = await getUserOnboardingState();
-      if (state != null) {
+      if (state != null && isSessionSnapshotCurrent(session)) {
         if (state['completed'] == true) {
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
-        if (acquisitionSource.isNotEmpty) {
+        // A GET started before an upload acknowledgement can carry the older
+        // survey answer even after the outbox has cleared. Do not restore it.
+        if (acquisitionSource.isNotEmpty &&
+            !pendingSourceAtStart &&
+            !OnboardingSyncRuntime.hasPendingAcquisitionSource &&
+            SharedPreferencesUtil().foundOmiSource == localSourceAtStart) {
           SharedPreferencesUtil().foundOmiSource = acquisitionSource;
         }
         // Restore language from server if not already set locally
         final serverLanguage = await getUserPrimaryLanguage();
-        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+        if (serverLanguage != null && serverLanguage.isNotEmpty && isSessionSnapshotCurrent(session)) {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }

@@ -1785,10 +1785,13 @@ def is_backend_onboarding_admitted(uid: str, *, firestore_client: Any = None) ->
     return get_backend_onboarding_admission(uid, firestore_client=firestore_client) is not None
 
 
-def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
-    """Update the user's onboarding state in Firestore (merge with existing)."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'onboarding': onboarding_data}, merge=True)
+def set_user_onboarding_state(uid: str, onboarding_data: dict, *, firestore_client: Any = None) -> None:
+    """Merge only submitted fields; concurrent updates must not replay stale state."""
+    if not onboarding_data:
+        return
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    user_ref.set({'onboarding': onboarding_data}, merge=[f'onboarding.{field}' for field in onboarding_data])
 
 
 def get_user_subscription(uid: str, *, firestore_client: Any | None = None, read_only: bool = False) -> Subscription:
