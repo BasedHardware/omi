@@ -29,6 +29,7 @@ def test_checked_in_dream_schema_and_mobile_dtos_match_real_routes():
     spec = json.loads((root / 'backend/docs/api/dream-openapi.json').read_text())
     assert spec == build_openapi(app, 'dream')
     assert (root / 'app/lib/backend/schema/gen/dream_wire.g.dart').read_text() == build_output(spec, 'dream')
+    assert 'GeneratedDreamRunRequest({' not in build_output(spec, 'dream')
 
 
 @pytest.fixture

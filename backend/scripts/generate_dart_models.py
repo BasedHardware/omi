@@ -945,7 +945,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             constructor_is_const = False
 
     const_prefix = 'const ' if constructor_is_const else ''
-    lines.append(f'  {const_prefix}{class_name}({{')
+    lines.append(f'  {const_prefix}{class_name}({{' if fields else f'  {const_prefix}{class_name}(')
     for field in fields:
         required = 'required ' if field.required else ''
         default = ''
@@ -963,7 +963,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             suffix = ';' if index == len(initializers) - 1 else ','
             lines.append(f'       {initializer}{suffix}')
     else:
-        lines.append('  });')
+        lines.append('  });' if fields else '  );')
     lines.append('')
     lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
     lines.append(f'    return {class_name}(')

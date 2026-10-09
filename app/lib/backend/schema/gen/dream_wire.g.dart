@@ -4,8 +4,8 @@
 
 class GeneratedDreamRunRequest {
 
-  const GeneratedDreamRunRequest({
-  });
+  const GeneratedDreamRunRequest(
+  );
 
   factory GeneratedDreamRunRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedDreamRunRequest(
