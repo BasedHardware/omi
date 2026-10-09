@@ -1833,6 +1833,16 @@ sequenceDiagram
     Note over Backend: Retry exhaustion: after MAX_RETRIES (3),<br/>conversation stays buffered with reset sent_at.<br/>cleanup_processing_conversations picks it up next session.
 ```
 
+Close-code severity: a close the pusher sends for its own rolling update
+(1012 service restart) is expected, self-healing transport churn — buffered
+audio and pending conversations replay on the replacement socket — and logs
+at INFO (`Pusher * Connection closed` lines; FC-lifecycle-close-classified-by-transport-phase).
+Every other close (abnormal 1006, internal 1011, TLS 1015, no close frame)
+keeps the ERROR meaning of those lines. Independently of the close code, a
+close raised by a socket that a reconnect already replaced is informational
+on the flush and receive paths and never tears down the freshly installed
+connection.
+
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
 A manually taught voice is available after a usable embedding is stored and
