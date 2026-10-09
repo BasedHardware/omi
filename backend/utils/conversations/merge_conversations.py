@@ -727,8 +727,14 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments
             # session id would re-derive the same id on the next backlog retry and
-            # resurrect a merge donor the user deleted with the survivor.
-            conversation_tombstones.record_deletion(uid, source_id)
+            # resurrect a merge donor the user deleted with the survivor. Best-effort:
+            # a tombstone write that cannot reach Firestore must not block the purge
+            # the user asked for (the caller's later from-segments retry re-checks the
+            # survivor's tombstone through the same module before recreating).
+            try:
+                conversation_tombstones.record_deletion(uid, source_id)
+            except Exception:
+                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
     record_survivor_deleted(uid, conversation_id, row)
