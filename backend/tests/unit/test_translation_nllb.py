@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import json
 import pytest
 
 from config.translation import TranslationProvider, resolve_translation_profile
@@ -26,7 +25,7 @@ from utils.translation_core.providers import (
     TranslationProviderChain,
     TranslationProviderError,
 )
-from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema
+from llm_gateway.gateway.vertex_schema import vertex_response_json_schema
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -541,10 +540,13 @@ def test_luna_adapter_wraps_provider_failures_as_typed_errors():
     assert raised.value.reason == 'other'
 
 
-def test_luna_translation_batch_schema_is_inlined_for_vertex():
+def test_luna_translation_batch_schema_preserves_references_for_vertex():
     schema = LunaTranslationBatch.model_json_schema()
-    converted = _json_schema_to_vertex_response_schema(schema)
-    dumped = json.dumps(converted)
-    assert '$ref' not in dumped
-    assert '$defs' not in dumped
-    assert converted['properties']['translations']['items']['type'] == 'object'
+    converted = vertex_response_json_schema(schema)
+    item_ref = converted['properties']['translations']['items']['$ref']
+    assert item_ref.startswith('#/$defs/')
+    item_schema = converted['$defs'][item_ref.removeprefix('#/$defs/')]
+    assert item_schema['type'] == 'object'
+    assert item_schema['required'] == schema['$defs'][item_ref.removeprefix('#/$defs/')]['required']
+    assert set(item_schema['properties']) == {'text', 'detected_language'}
+    assert all(prop['type'] == 'string' for prop in item_schema['properties'].values())

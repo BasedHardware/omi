@@ -98,13 +98,24 @@ void main() {
         'queued_changes': 108,
         'runs': [_runJson('r1')],
       };
-      final report = DreamReport.fromJson(wire.GeneratedDreamRunsResponse.fromJson(raw).toJson());
+      final report = DreamReport.fromGenerated(wire.GeneratedDreamRunsResponse.fromJson(raw));
       final run = report.runs.single;
       expect(run.runId, 'r1');
       expect(run.createdAt.toUtc(), DateTime.utc(2026, 10, 9, 11, 0, 47));
       expect(run.edits.single.targetLabel, 'Paraform sync');
       expect(run.vocabulary.single.spelling, 'Béla');
       expect(report.queuedChanges, 108);
+    });
+
+    test('typed adaptation keeps unknown statuses and gives idle run-now results a renderable id', () {
+      final idle = wire.GeneratedDreamRun.fromJson(_runJson('', status: 'idle', trigger: 'manual'));
+      final run = DreamRun.fromGenerated(idle);
+      expect(run.runId, 'idle');
+      expect(run.status, DreamRunStatus.idle);
+      expect(run.manual, isTrue);
+      expect(DreamRun.fromJson(_runJson('')), isNull);
+      expect(DreamRun.fromJson(_runJson('r1', status: 'future_status'))!.status, DreamRunStatus.other);
+      expect(DreamRun.fromJson({..._runJson('r1'), 'records_read': 'invalid'}), isNull);
     });
 
     test('maps run-now refusals to the two explained cases', () {

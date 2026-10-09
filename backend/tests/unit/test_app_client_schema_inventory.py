@@ -36,6 +36,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     # action_item.dart was fully migrated to typedefs (no fromJson/toJson), so it's
     # correctly absent from manual_files entirely — neither generated_backed nor remaining.
     assert 'app/lib/backend/schema/folder.dart' in generated_backed_paths
+    assert 'app/lib/backend/schema/dream_report.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/apps.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/users.dart' in generated_backed_paths
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
@@ -173,6 +174,9 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert report['unmodeled_success_response_count'] == 0
     assert report['app_used_unmodeled_success_response_count'] == 0
     assert report['remaining_manual_dart_json_schema_file_count'] == 0
+    dream_routes = [item for item in report['app_operation_manifest'] if item['normalized_route'] == '/v1/dream/runs']
+    assert {item['http_method'] for item in dream_routes} == {'GET', 'POST'}
+    assert all(item['operations'] and item['raw_response_decode_site_count'] == 0 for item in dream_routes)
     assert report['unmodeled_success_response_count'] == len(report['unmodeled_success_responses'])
     assert report['app_used_unmodeled_success_response_count'] == len(report['app_used_unmodeled_success_responses'])
     assert report['app_operation_manifest_count'] == len(report['app_operation_manifest'])

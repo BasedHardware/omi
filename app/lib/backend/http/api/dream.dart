@@ -14,24 +14,21 @@ Map<String, dynamic> _object(String body) {
   return decoded;
 }
 
-Future<ApiResult<DreamReport>> getDreamReport({int limit = 10}) => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs?limit=$limit', method: 'GET'),
-      // The generated decoder enforces the wire contract; the screen keeps its own lenient model.
-      decode: (body) => DreamReport.fromJson(wire.GeneratedDreamRunsResponse.fromJson(_object(body)).toJson()),
-    );
+Future<ApiResult<DreamReport>> getDreamReport({int limit = 10}) {
+  return executeApi(
+    request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs?limit=$limit', method: 'GET'),
+    // Decode the wire contract once, then adapt typed fields for the screen.
+    decode: (body) => DreamReport.fromGenerated(wire.GeneratedDreamRunsResponse.fromJson(_object(body))),
+  );
+}
 
 /// Runs one pass now. An idle pass (nothing queued) comes back as a run with status idle.
-Future<ApiResult<DreamRun>> runDreamNow() => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs', method: 'POST', body: '{}'),
-      decode: (body) {
-        final json = wire.GeneratedDreamRun.fromJson(_object(body)).toJson();
-        // Idle and deadline passes may carry no run id; give them a stable one so they can render.
-        if ((json['run_id'] as String? ?? '').isEmpty) json['run_id'] = json['status'] ?? 'idle';
-        final run = DreamRun.fromJson(json);
-        if (run == null) throw const FormatException('Malformed dream run');
-        return run;
-      },
-    );
+Future<ApiResult<DreamRun>> runDreamNow() {
+  return executeApi(
+    request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs', method: 'POST', body: '{}'),
+    decode: (body) => DreamRun.fromGenerated(wire.GeneratedDreamRun.fromJson(_object(body))),
+  );
+}
 
 /// Maps a run-now failure to the two refusals the screen explains; anything else is a plain error.
 DreamRunNowRefusal? dreamRunNowRefusal(ApiProblem problem) => switch (problem) {
