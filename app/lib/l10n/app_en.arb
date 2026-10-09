@@ -14868,19 +14868,15 @@
     "@onboardingSetupStepPersonalize": {
         "description": "Onboarding setup checklist step"
     },
-    "onboardingRatingPromptTitle": "While you wait, has Omi been nice to use?",
+    "onboardingRatingPromptTitle": "Are you enjoying Omi?",
     "@onboardingRatingPromptTitle": {
         "description": "Store rating pre-prompt title shown on the onboarding setup page"
     },
-    "onboardingRatingPromptBody": "Rating us 5 stars really helps us out ❤️",
-    "@onboardingRatingPromptBody": {
-        "description": "Store rating pre-prompt body"
-    },
-    "onboardingRatingPromptYes": "Yes, I want to support you!",
+    "onboardingRatingPromptYes": "Yes",
     "@onboardingRatingPromptYes": {
         "description": "Store rating pre-prompt: open the store review sheet"
     },
-    "onboardingRatingPromptNo": "Not really",
+    "onboardingRatingPromptNo": "No",
     "@onboardingRatingPromptNo": {
         "description": "Store rating pre-prompt: decline"
     },
@@ -14907,6 +14903,285 @@
     "importUnsupportedFileType": "This file type can't be imported.",
     "@importUnsupportedFileType": {
         "description": "Error when the file picked for an import has an extension the importer does not accept"
+    },
+    "reviewTitle": "Review",
+    "@reviewTitle": {
+        "description": "Title of the Review page: a few questions the app asks the user to answer"
+    },
+    "reviewEntryTitle": "Questions for you",
+    "@reviewEntryTitle": {
+        "description": "Home card that opens Review; a count badge sits beside it"
+    },
+    "reviewRemaining": "{count} left",
+    "@reviewRemaining": {
+        "description": "Header counter: questions left to answer today",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewQuestionSpeaker": "Who said this?",
+    "@reviewQuestionSpeaker": {
+        "description": "Question card: identify the speaker of a short voice clip"
+    },
+    "reviewQuestionSamePerson": "Same person as “{name}”?",
+    "@reviewQuestionSamePerson": {
+        "description": "Question card: are two contact profiles the same person",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewQuestionSpelling": "How is this spelled?",
+    "@reviewQuestionSpelling": {
+        "description": "Question card: confirm the spelling of a name or term"
+    },
+    "reviewPlayClip": "Play clip",
+    "@reviewPlayClip": {
+        "description": "Accessibility label of the play button for a voice clip"
+    },
+    "reviewStopClip": "Stop clip",
+    "@reviewStopClip": {
+        "description": "Accessibility label of the stop button for a voice clip"
+    },
+    "reviewOpenDetailsHint": "Opens details",
+    "@reviewOpenDetailsHint": {
+        "description": "Accessibility hint: tapping the card opens more context"
+    },
+    "reviewAnswerMe": "Me",
+    "@reviewAnswerMe": {
+        "description": "Answer: the speaker is the user themself"
+    },
+    "reviewAnswerOther": "Other",
+    "@reviewAnswerOther": {
+        "description": "Answer chip that opens the full list of choices"
+    },
+    "reviewAddTask": "Add Task",
+    "@reviewAddTask": {
+        "description": "Button: accept a suggested task (Title Case)"
+    },
+    "reviewAnswerFailed": "Couldn’t save your answer. Try again.",
+    "@reviewAnswerFailed": {
+        "description": "Error toast"
+    },
+    "reviewAnswersConversations": "This answer labels {count} conversations",
+    "@reviewAnswersConversations": {
+        "description": "Shown only when count is 2 or more",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewUnknownSpeaker": "Unknown speaker",
+    "@reviewUnknownSpeaker": {
+        "description": "Label for the speaker being asked about"
+    },
+    "reviewNewPersonName": "Their name",
+    "@reviewNewPersonName": {
+        "description": "Text field label to name a new person"
+    },
+    "reviewSomeoneElse": "Someone Else…",
+    "@reviewSomeoneElse": {
+        "description": "Button: the speaker is someone not listed (Title Case)"
+    },
+    "reviewConfirm": "Confirm",
+    "@reviewConfirm": {
+        "description": "Button"
+    },
+    "reviewConfirmPerson": "Confirm {name}",
+    "@reviewConfirmPerson": {
+        "description": "Button: confirm the chosen person",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewNotSure": "Not Sure",
+    "@reviewNotSure": {
+        "description": "Button (Title Case)"
+    },
+    "reviewOpenConversation": "Conversation",
+    "@reviewOpenConversation": {
+        "description": "Chip that opens the source conversation when it has no title"
+    },
+    "reviewTaskField": "Task",
+    "@reviewTaskField": {
+        "description": "Text field label for the task text"
+    },
+    "reviewDue": "Due",
+    "@reviewDue": {
+        "description": "Row label: due date"
+    },
+    "reviewNoDate": "None",
+    "@reviewNoDate": {
+        "description": "Value when a task has no due date"
+    },
+    "reviewProject": "Project",
+    "@reviewProject": {
+        "description": "Row label: the project a task belongs to"
+    },
+    "reviewReasonAlreadyDone": "Already Done",
+    "@reviewReasonAlreadyDone": {
+        "description": "Dismiss reason chip (Title Case)"
+    },
+    "reviewReasonNotMine": "Not Mine",
+    "@reviewReasonNotMine": {
+        "description": "Dismiss reason chip (Title Case)"
+    },
+    "reviewReasonNotUseful": "Not Useful",
+    "@reviewReasonNotUseful": {
+        "description": "Dismiss reason chip (Title Case)"
+    },
+    "reviewYesMerge": "Yes, Merge",
+    "@reviewYesMerge": {
+        "description": "Button: merge two profiles into one person (Title Case)"
+    },
+    "reviewConversationCount": "Conversations: {count}",
+    "@reviewConversationCount": {
+        "description": "How many conversations a profile appears in",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewSpellingCustom": "Type it",
+    "@reviewSpellingCustom": {
+        "description": "Text field label to type a different spelling"
+    },
+    "reviewLoadFailed": "Couldn’t load your questions.",
+    "@reviewLoadFailed": {
+        "description": "Error state"
+    },
+    "reviewCaughtUpTitle": "Nothing to answer",
+    "@reviewCaughtUpTitle": {
+        "description": "Empty state title"
+    },
+    "reviewCaughtUpBody": "Omi will ask here only when it needs you.",
+    "@reviewCaughtUpBody": {
+        "description": "Empty state body"
+    },
+    "reviewRecentChanges": "Recent Changes",
+    "@reviewRecentChanges": {
+        "description": "Link and page title: changes the app made on its own (Title Case)"
+    },
+    "reviewChangesIntro": "What Omi changed on its own in the last 30 days. Undo anything that looks wrong.",
+    "@reviewChangesIntro": {
+        "description": "Intro line on Recent Changes"
+    },
+    "reviewChangeUndone": "Undone. Omi won’t redo this on its own.",
+    "@reviewChangeUndone": {
+        "description": "Shown under a change the user undid"
+    },
+    "reviewChangeFailed": "Couldn’t update this change. Try again.",
+    "@reviewChangeFailed": {
+        "description": "Error toast"
+    },
+    "reviewChangesLoadFailed": "Couldn’t load recent changes.",
+    "@reviewChangesLoadFailed": {
+        "description": "Error state"
+    },
+    "reviewNoChangesTitle": "No changes yet",
+    "@reviewNoChangesTitle": {
+        "description": "Empty state title"
+    },
+    "reviewNoChangesBody": "When Omi tidies your notes, the changes appear here.",
+    "@reviewNoChangesBody": {
+        "description": "Empty state body"
+    },
+    "reviewShowMore": "Show More",
+    "@reviewShowMore": {
+        "description": "Button (Title Case)"
+    },
+    "entityKeptCurrent": "Kept current by Omi",
+    "@entityKeptCurrent": {
+        "description": "Footnote under a summary the app maintains"
+    },
+    "entityNotRight": "Not right?",
+    "@entityNotRight": {
+        "description": "Button that opens a correction form"
+    },
+    "entityCorrectionTitle": "What’s not right?",
+    "@entityCorrectionTitle": {
+        "description": "Sheet title for correcting a person, organization or project page"
+    },
+    "entityCorrectionHint": "Tell Omi what to fix",
+    "@entityCorrectionHint": {
+        "description": "Text field hint"
+    },
+    "entityCorrectionSaved": "Thanks. Omi will fix it.",
+    "@entityCorrectionSaved": {
+        "description": "Confirmation toast"
+    },
+    "entityCorrectionFailed": "Couldn’t send your correction. Try again.",
+    "@entityCorrectionFailed": {
+        "description": "Error toast"
+    },
+    "entityLoadFailed": "Couldn’t load this page.",
+    "@entityLoadFailed": {
+        "description": "Error state"
+    },
+    "entityProject": "Project",
+    "@entityProject": {
+        "description": "Label above a project page title"
+    },
+    "entityProjects": "Projects",
+    "@entityProjects": {
+        "description": "Section label"
+    },
+    "entityDecisions": "Decisions",
+    "@entityDecisions": {
+        "description": "Section label: decisions made in a project"
+    },
+    "entityOpenTasks": "Open tasks",
+    "@entityOpenTasks": {
+        "description": "Section label"
+    },
+    "entityOpenThreads": "Open threads",
+    "@entityOpenThreads": {
+        "description": "Section label: unresolved items involving this person or organization"
+    },
+    "entityWaitingOn": "Waiting on {name}",
+    "@entityWaitingOn": {
+        "description": "A task blocked on someone",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "entityDue": "Due {date}",
+    "@entityDue": {
+        "description": "Task due date",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "entityWhatOmiKnows": "What Omi knows",
+    "@entityWhatOmiKnows": {
+        "description": "Section label: facts with their sources"
+    },
+    "entityRecentConversations": "Recent conversations",
+    "@entityRecentConversations": {
+        "description": "Section label"
+    },
+    "tasksNoProject": "No project",
+    "@tasksNoProject": {
+        "description": "Group header for tasks without a project"
+    },
+    "tasksGroupByProject": "Group by Project",
+    "@tasksGroupByProject": {
+        "description": "Menu item (Title Case)"
+    },
+    "tasksGroupByDate": "Group by Date",
+    "@tasksGroupByDate": {
+        "description": "Menu item (Title Case)"
     },
     "maxDeviceNameBytesExceeded": "Max 25 bytes ({count} bytes, non-ASCII uses multiple bytes)",
     "@maxDeviceNameBytesExceeded": {

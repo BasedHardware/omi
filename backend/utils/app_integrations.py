@@ -515,7 +515,7 @@ def _proactive_daily_cap_reached(uid: str) -> bool:
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 
 # ---------------------------------------------------------------------------
-# Mentor gate debounce (kill switch: MENTOR_GATE_DEBOUNCE_ENABLED, default off)
+# Mentor gate debounce (always enabled; tuning knobs remain configurable)
 # ---------------------------------------------------------------------------
 #
 # MENTOR_RATE_LIMIT_SECONDS above throttles what the user SEES; it starts only
@@ -532,7 +532,6 @@ MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 # of mentor-active paid users produce 44% of all gate calls). Developers are
 # exempt from the daily ceiling for the same reason they are exempt from the
 # notification cap (#3346): building an app must not be throttled.
-MENTOR_GATE_DEBOUNCE_ENABLED_ENV = 'MENTOR_GATE_DEBOUNCE_ENABLED'
 MENTOR_GATE_MIN_NEW_WORDS_ENV = 'MENTOR_GATE_MIN_NEW_WORDS'
 MENTOR_GATE_MIN_SECONDS_ENV = 'MENTOR_GATE_MIN_SECONDS'
 MENTOR_GATE_DAILY_CAP_ENV = 'MENTOR_GATE_DAILY_CAP'
@@ -540,14 +539,6 @@ MENTOR_GATE_DAILY_CAP_ENV = 'MENTOR_GATE_DAILY_CAP'
 MENTOR_GATE_MIN_NEW_WORDS_DEFAULT = 120
 MENTOR_GATE_MIN_SECONDS_DEFAULT = 90
 MENTOR_GATE_DAILY_CAP_DEFAULT = 60
-
-
-def _mentor_gate_debounce_enabled() -> bool:
-    """Default OFF. This changes when the user is evaluated, so it ships dark."""
-    value = os.getenv(MENTOR_GATE_DEBOUNCE_ENABLED_ENV)
-    if value is None:
-        return False
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def _mentor_gate_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
@@ -706,59 +697,55 @@ def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tupl
     gate_state = None
     gate_now = time.time()
     gate_word_count = _mentor_conversation_word_count(conversation_messages)
-    debounce_enabled = _mentor_gate_debounce_enabled()
-    if debounce_enabled:
-        gate_state = mentor_gate_state.read(uid)
+    gate_state = mentor_gate_state.read(uid)
+    skip_reason = _mentor_gate_debounce_skip_reason(
+        uid, gate_state, now=gate_now, word_count=gate_word_count, conversation_messages=conversation_messages
+    )
+    if skip_reason:
+        # Structured so the saved evaluations are countable in Cloud Logging
+        # without waiting for the billing ledger.
+        logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
+        return None
+    # Serialize eligibility + recording across concurrent same-user workers
+    # (two hosts, or two threads of one). The mirror-read above answers only
+    # "evaluated recently?"; the authoritative decision below runs under a
+    # short-lived claim so two workers cannot both pass and double-bill the
+    # gate LLM call. Contention (claim held) skips this batch — the buffer
+    # keeps accumulating, so the words are only delayed, not lost — while a
+    # claim *error* falls open: a Redis hiccup must not silence the mentor,
+    # and the TTL bounds a holder that crashes.
+    if not mentor_gate_state.claim(uid):
+        logger.info(f"mentor_gate_debounce skipped uid={uid} reason=claim_busy words={gate_word_count}")
+        return None
+    try:
+        # Always re-read the authority under the claim — the mirror answer
+        # (including "no record") can be stale the moment another host
+        # records, and this re-check is what makes the decision genuinely
+        # single-writer.
+        gate_state = mentor_gate_state.read_authoritative(uid)
         skip_reason = _mentor_gate_debounce_skip_reason(
-            uid, gate_state, now=gate_now, word_count=gate_word_count, conversation_messages=conversation_messages
+            uid,
+            gate_state,
+            now=gate_now,
+            word_count=gate_word_count,
+            conversation_messages=conversation_messages,
         )
         if skip_reason:
-            # Structured so the saved evaluations are countable in Cloud Logging
-            # without waiting for the billing ledger.
             logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
             return None
-        # Serialize eligibility + recording across concurrent same-user workers
-        # (two hosts, or two threads of one). The mirror-read above answers only
-        # "evaluated recently?"; the authoritative decision below runs under a
-        # short-lived claim so two workers cannot both pass and double-bill the
-        # gate LLM call. Contention (claim held) skips this batch — the buffer
-        # keeps accumulating, so the words are only delayed, not lost — while a
-        # claim *error* falls open: a Redis hiccup must not silence the mentor,
-        # and the TTL bounds a holder that crashes.
-        if not mentor_gate_state.claim(uid):
-            logger.info(f"mentor_gate_debounce skipped uid={uid} reason=claim_busy words={gate_word_count}")
+        # Resolve entitlement only after every cheap rejection. Free users
+        # consume neither a gate evaluation nor any context/model work.
+        if not mentor_plan_allows_evaluation(uid):
             return None
-        try:
-            # Always re-read the authority under the claim — the mirror answer
-            # (including "no record") can be stale the moment another host
-            # records, and this re-check is what makes the decision genuinely
-            # single-writer.
-            gate_state = mentor_gate_state.read_authoritative(uid)
-            skip_reason = _mentor_gate_debounce_skip_reason(
-                uid,
-                gate_state,
-                now=gate_now,
-                word_count=gate_word_count,
-                conversation_messages=conversation_messages,
-            )
-            if skip_reason:
-                logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
-                return None
-            # Resolve entitlement only after every cheap rejection. Free users
-            # consume neither a gate evaluation nor any context/model work.
-            if not mentor_plan_allows_evaluation(uid):
-                return None
-            _record_mentor_gate_evaluation(
-                uid,
-                now=gate_now,
-                word_count=gate_word_count,
-                previous=gate_state,
-                conversation_messages=conversation_messages,
-            )
-        finally:
-            mentor_gate_state.release(uid)
-    elif not mentor_plan_allows_evaluation(uid):
-        return None
+        _record_mentor_gate_evaluation(
+            uid,
+            now=gate_now,
+            word_count=gate_word_count,
+            previous=gate_state,
+            conversation_messages=conversation_messages,
+        )
+    finally:
+        mentor_gate_state.release(uid)
 
     return frequency, base_threshold
 

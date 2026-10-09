@@ -15,6 +15,53 @@ DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.js
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'review': {
+        'output': DEFAULT_OUTPUT_DIR / 'review_wire.g.dart',
+        'schemas': (
+            'PersonRef',
+            'EntityRef',
+            'EntitySummary',
+            'ReviewEvidence',
+            'TranscriptLine',
+            'SpeakerItem',
+            'TaskItem',
+            'SamePersonItem',
+            'SpellingItem',
+            'ReviewItem',
+            'ReviewItemsResponse',
+            'SpeakerAnswer',
+            'TaskAnswer',
+            'SamePersonAnswer',
+            'SpellingAnswer',
+            'ReviewAnswer',
+            'ReviewAnswerReceipt',
+            'ChangeRef',
+            'ReviewChange',
+            'ReviewChangesResponse',
+        ),
+    },
+    'entity_pages': {
+        'output': DEFAULT_OUTPUT_DIR / 'entity_pages_wire.g.dart',
+        'schemas': (
+            'PersonRef',
+            'EntityRef',
+            'EntitySummary',
+            'ReviewEvidence',
+            'TranscriptLine',
+            'SpeakerItem',
+            'TaskItem',
+            'SamePersonItem',
+            'SpellingItem',
+            'ReviewItem',
+            'FactSource',
+            'Fact',
+            'TaskRef',
+            'ConversationRef',
+            'EntityPage',
+            'EntityCorrection',
+            'EntitiesResponse',
+        ),
+    },
     'proactivity': {
         'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
         'schemas': (

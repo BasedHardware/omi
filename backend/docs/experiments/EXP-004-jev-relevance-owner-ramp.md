@@ -299,3 +299,44 @@ pre-ramp predictions and the parallel keep-all shadow instead of treating a
 shrinking shadow sample as fleet-wide proof. The coordinator must close the sync
 visibility and monitoring/cap definition gaps before claiming automatic fleet
 abort coverage or promoting on those gates.
+
+
+## Closure (2026-10-08)
+
+**Decision: CLOSED as GO**, on the owner's authorization to ship and add
+instrumentation in a single PR. Jev discard has been live at 100% since
+2026-10-06 (PR #20826); threshold 0.80 shipped on 2026-10-05 (PR #20710)
+under the owner's recorded deviation from the original acceptance protocol.
+
+Label evidence comprises 60 human and 53 validated Opus stand-in labels of
+113. The waves were accepted: random hold-out 100% against the 85% bar;
+stand-in agreement with the owner 74.3%. At cutoff 0.80 on the owner's 55
+decided labels, 29 were flagged and 1 keep was lost: 3.4% keep-loss, inside
+the ≤5% GO bar. Cutoff 0.95 would have missed 41 keeps. This does not claim
+the preregistered 250 stratified owner-label bar was met.
+
+Operational evidence covers approximately 18.6k Jev decisions over the ramp:
+non-success 0.016% (3/18,582), p95 0.58s against the 2.5s bar. Scraped-host
+visibility limits described above still apply.
+
+The keep-all arm ran 2026-10-01 → 2026-10-08 at K=2, boosted to K=20 for
+approximately 31 hours on 10-06/07, then stopped early by the owner as
+user-disruptive (PR #20916). Approximately 4.8k keep-all decisions accrued.
+The preregistered per-conversation open-rate join was found unmeasurable as
+designed: the server-side decision record is not exported into the analytics
+event stream, so kept conversation IDs cannot be joined to opens. Per the
+preregistration's own rule, this is reported as a finding, not a passed
+behavioral gate. This PR adds the missing `Relevance Decision Recorded`
+bridge, containing only conversation ID, decision reason, optional arm and
+discarded status, so measurement exists going forward. The ship decision
+rests on label and ops evidence under the owner's deviation; neither the
+14-day sample duration nor its open-rate gate is claimed as satisfied.
+
+Owner flip (`MEMORY_OWNER_JEV_FLIP_*`) is explicitly **PARKED**, outside this
+closure. Its separate bar remains ≥150 source-stratified labels and Wilson
+95% lower bound ≥0.90; it stays absent from prod.
+
+`CONVERSATION_RELEVANCE_JEV_PERCENT` stays 100 as the permanent kill switch.
+`CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT` stays 0: the sample is stopped,
+and kept conversations stay kept. This closure changes no flag values and
+performs no historical decision rewrite.

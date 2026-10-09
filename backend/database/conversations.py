@@ -7,11 +7,10 @@ import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
-
+from database.dream_dirty import after_write
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-
 import utils.other.hume as hume
 from models.audio_file import AudioFile, ChunkSpan
 from models.note_claims import claim_references_segment
@@ -75,10 +74,10 @@ from .first_open_obligations import (
     first_open_effect_is_authorized,
     initialize_first_open_work,
 )
-
 from config.translation import resolve_ondemand_config
 from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
+from utils.llm.model_constants import LUNA_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +117,6 @@ _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
 
 def get_conversation_ids(uid: str) -> List[str]:
     """Return all conversation document IDs for a user without decrypting any fields.
-
     IDs-only projection (``select([])``) — used for bulk operations like account deletion where
     only the IDs are needed (e.g. to purge derived Pinecone vectors).
     """
@@ -126,7 +124,6 @@ def get_conversation_ids(uid: str) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-# *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
 
@@ -243,7 +240,6 @@ def _drop_match_scores(data: dict, reason: str = 'other') -> None:
 
 def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
     """Optional scores cannot push the existing document towards Firestore's ceiling.
-
     Uses only the snapshot already read by the write owner. The 124 KiB
     headroom matches sync's existing budget and covers unknown SDK types.
     """
@@ -856,6 +852,7 @@ def _collect_visible_conversation_page(
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+@after_write('conversations')
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
@@ -867,7 +864,6 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    transaction = db.transaction()
 
     @firestore.transactional
     def _write_processing_result(transaction):
@@ -912,7 +908,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
         transaction.set(conversation_ref, write_data)
 
-    _write_processing_result(transaction)
+    run_transactional(db, _write_processing_result)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -923,6 +919,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     prepare_func=_prepare_conversation_for_write,
     preserve_result=True,
 )
+@after_write('conversations')
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
@@ -932,12 +929,9 @@ def persist_processing_result_with_lifecycle(
 ) -> bool:
     """Merge a processor result into its conversation.
 
-    Deletion and stale sync transcript revisions are refused.  Lifecycle state is not: a discard is the system's
-    own verdict that a conversation held nothing, and a status is bookkeeping
-    about which generation ran, and every processor re-derives what it writes
-    from the content in front of it.  Fencing on either stranded conversations a
-    later sync had filled with speech — transcribed, untitled, and invisible to
-    their owner — to prevent races that had never been observed.
+    Deletion and stale sync transcript revisions are refused. Lifecycle state is not:
+    processors re-derive their verdict from current content, so earlier discard or
+    status bookkeeping must not strand rows a later sync filled with speech.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -951,7 +945,6 @@ def persist_processing_result_with_lifecycle(
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    transaction = db.transaction()
 
     stale_sync_revision = False
     first_completed = False
@@ -1020,16 +1013,19 @@ def persist_processing_result_with_lifecycle(
                 existing.get('structured'), existing.get('user_title')
             ):
                 raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
-            # Recovery never owns the stored transcript. Omit both fields even
-            # though the write decorators encoded the processing snapshot; this
-            # also prevents manual-assignment reapplication from re-encoding it.
-            write_data.pop('transcript_segments', None)
-            write_data.pop('transcript_segments_compressed', None)
-            write_data.pop('data_protection_level', None)
-            # Speaker resolution ran on the processing snapshot; its ids only
-            # describe a transcript this write no longer persists.
-            write_data.pop('speaker_resolution', None)
-            write_data.pop(match_scores.FIELD, None)
+        decision = write_data.get('relevance_decision')
+        if isinstance(decision, dict) and decision.get('trigger') == 'server_recovery':
+            # Recovery enriches the durable capture; neither model normalization
+            # nor a stale snapshot owns its encoding, audio, or speaker metadata.
+            for field in (
+                'transcript_segments',
+                'transcript_segments_compressed',
+                'data_protection_level',
+                'audio_files',
+                'speaker_resolution',
+                match_scores.FIELD,
+            ):
+                write_data.pop(field, None)
 
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old
@@ -1075,7 +1071,7 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
-    persisted = _persist(transaction)
+    persisted = run_transactional(db, _persist)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1098,6 +1094,7 @@ def persist_processing_result_with_lifecycle(
     prepare_func=_prepare_conversation_for_write,
     preserve_result=True,
 )
+@after_write('conversations')
 def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
@@ -1536,6 +1533,7 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         cursor = snapshots[-1]
 
 
+@after_write('conversations')
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
     """Apply ``update_data`` to a conversation.
 
@@ -1707,6 +1705,7 @@ def _finalize_audio_file_group(
     )
 
 
+@after_write('conversations')
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1719,6 +1718,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
+@after_write('conversations')
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
     """
     Update the conversation's displayed summary.
@@ -1741,7 +1741,6 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _update(transaction) -> str:
@@ -1773,12 +1772,13 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                 return 'ok'
         return 'app_result_not_found'
 
-    result = _update(transaction)
+    result = run_transactional(db, _update)
     if result == 'ok' and app_id is None:
         _sync_conversation_search_index(uid, conversation_id)
     return result
 
 
+@after_write('conversations')
 def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
     """
     Update a single segment's text in a conversation.
@@ -1801,7 +1801,6 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         'segment_not_found' if segment_id not found.
     """
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _update_segment_text(transaction) -> str:
@@ -1830,19 +1829,17 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
         doc_level = conversation_data.get('data_protection_level', 'standard')
         prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-        prepared_payload.update(
-            _summary_source_reference_invalidations(conversation_data.get('structured'), segment_id)
-        )
+        prepared_payload.update(summary_source_reference_invalidations(conversation_data.get('structured'), segment_id))
         # Keep the summary/reference invalidation and transcript edit under
         # one server-side revision. Consumers can use this as the freshness
         # boundary without pretending that the old evidence still applies.
         prepared_payload['updated_at'] = datetime.now(timezone.utc)
-        _invalidate_client_processing(prepared_payload)
+        clear_client_processing(prepared_payload)
         _guard_match_score_size(prepared_payload, raw_data, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
-    return _update_segment_text(transaction)
+    return run_transactional(db, _update_segment_text)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
@@ -2068,7 +2065,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not _migrate(db.transaction()):
+        if not run_transactional(db, _migrate):
             continue
 
         # Photos retain their separate batched migration path.
@@ -2261,7 +2258,7 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         transaction.update(secondary_ref, {'external_data': external_data})
         return True
 
-    return link(client.transaction())
+    return run_transactional(client, link)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
@@ -2288,7 +2285,6 @@ def claim_conversation_status(
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _claim(transaction):
@@ -2306,7 +2302,7 @@ def claim_conversation_status(
         transaction.update(conversation_ref, updates)
         return True
 
-    claimed = _claim(transaction)
+    claimed = run_transactional(db, _claim)
     if claimed:
         invalidate_people_stats_cache(uid)
     return claimed
@@ -2352,7 +2348,7 @@ def discard_by_relevance(
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
         return True
 
-    discarded = _discard(db.transaction())
+    discarded = run_transactional(db, _discard)
     if discarded:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2392,7 +2388,7 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         transaction.update(conversation_ref, updates)
         return True
 
-    restored = _restore(db.transaction())
+    restored = run_transactional(db, _restore)
     if restored:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2558,7 +2554,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def _invalidate_client_processing(payload: Dict[str, Any]) -> None:
+def clear_client_processing(payload: Dict[str, Any]) -> None:
     """Stamp an explicit projection clear onto an already-prepared write.
 
     Distinct from omitting the key (generic persist: leave a stored projection)
@@ -2572,7 +2568,7 @@ def _invalidate_client_processing(payload: Dict[str, Any]) -> None:
         payload[field] = firestore.DELETE_FIELD
 
 
-def _summary_source_reference_invalidations(structured: Any, segment_id: str) -> Dict[str, Any]:
+def summary_source_reference_invalidations(structured: Any, segment_id: str) -> Dict[str, Any]:
     """Return structured fields whose evidence includes an edited segment.
 
     Structured summaries remain user-visible after a transcript edit, so this
@@ -2773,9 +2769,7 @@ def bind_client_processing(
         transaction.update(doc_ref, bound_updates)
         return True
 
-    if firestore_client is not None:
-        return run_transactional(client, _bind)
-    return _bind(client.transaction())
+    return run_transactional(client, _bind)
 
 
 def assign_conversation_speaker(
@@ -2884,7 +2878,7 @@ def assign_conversation_speaker(
         extract_learning_receipt_markers(receipt, current)
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
-        _invalidate_client_processing(payload)
+        clear_client_processing(payload)
         _guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
@@ -3097,12 +3091,12 @@ def update_conversation_segments(
         # origin was pinned with the marker and must not move.
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         if invalidate_client_processing:
-            _invalidate_client_processing(prepared_payload)
+            clear_client_processing(prepared_payload)
         elif any(current.get(field) is not None for field in PROJECTION_FAMILY_FIELDS):
             # Opt-out skips the sentinel so the ~0.6s live loop stays cheap when
             # no projection exists. A projection that is really there (overlap
             # with finalize) must still be cleared in this same write.
-            _invalidate_client_processing(prepared_payload)
+            clear_client_processing(prepared_payload)
         _guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
@@ -3226,7 +3220,8 @@ def materialize_translation(
             'translation': value_digest,
             'source_hint': source_hint.strip().lower() or 'detect-v1',
             'policy': policy_version,
-            'model': 'gemini-2.5-flash-lite' if policy_version == 'viewed_v1' else 'legacy-configured',
+            # Policy model identity; provider usage records the actual route, including BYOK.
+            'model': LUNA_MODEL if policy_version == 'viewed_v1' else 'legacy-configured',
             'prompt': 'v1' if policy_version == 'viewed_v1' else 'legacy',
         }
         metadata[segment_id] = by_target
@@ -3554,7 +3549,6 @@ def store_conversation_photos(
     user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    transaction = client.transaction()
 
     @firestore.transactional
     def _store(transaction) -> bool:
@@ -3571,7 +3565,7 @@ def store_conversation_photos(
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
-    return _store(transaction)
+    return run_transactional(client, _store)
 
 
 # ********************************
@@ -3633,7 +3627,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
             target_id=target_id,
             decode=decode,
             encode=encode,
-            invalidate=_invalidate_client_processing,
+            invalidate=clear_client_processing,
             full_ids=full_ids,
         )
         # The commit runs after this returns; remember which row it would grow.

@@ -11,8 +11,7 @@ These tests drive the real ``admit_mentor_evaluation`` — the shared gate the v
 mentor producer rides after the legacy mentor pipeline was deleted — through the
 existing realtime-integration harness (production module, isolated stubs) and
 assert on whether an evaluation was admitted, not on the policy helpers in
-isolation. They also pin the two properties the change lives or dies on: it is OFF
-unless the env says otherwise, and the throttle is shared across hosts (the
+isolation. The throttle is shared across hosts (the
 realtime path runs on both the listen plane and pusher, so a process-local record
 would let each host evaluate once per window).
 """
@@ -77,7 +76,6 @@ def gate(integration_harness, monkeypatch):  # noqa: F811 — pytest fixture inj
     state_module._local.clear()
     monkeypatch.setattr(app, 'get_mentor_notification_frequency', MagicMock(return_value=3))
 
-    monkeypatch.delenv(app.MENTOR_GATE_DEBOUNCE_ENABLED_ENV, raising=False)
     for name in (
         app.MENTOR_GATE_MIN_NEW_WORDS_ENV,
         app.MENTOR_GATE_MIN_SECONDS_ENV,
@@ -100,7 +98,6 @@ def _run(gate, uid='uid-debounce', messages=MESSAGES_LONG):
 
 
 def _enable(gate, **env):
-    gate.monkeypatch.setenv(gate.app.MENTOR_GATE_DEBOUNCE_ENABLED_ENV, 'true')
     for key, value in env.items():
         gate.monkeypatch.setenv(key, str(value))
 
@@ -152,24 +149,6 @@ def test_cheap_rejections_do_not_resolve_entitlement(gate, skip):
     app.mentor_plan_allows_evaluation.reset_mock()
     assert _run(gate, messages=messages) is None
     app.mentor_plan_allows_evaluation.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# Off by default
-# ---------------------------------------------------------------------------
-
-
-def test_disabled_by_default_every_batch_still_evaluates(gate):
-    assert _run(gate) is not None
-    assert _run(gate) is not None, 'the debounce must ship dark; unset env changes nothing'
-    assert gate.shared.data == {}, 'a disabled debounce writes no state'
-
-
-@pytest.mark.parametrize('value', ['false', '0', 'off', 'no', ''])
-def test_explicitly_disabled_values_do_not_enable_it(gate, value):
-    gate.monkeypatch.setenv(gate.app.MENTOR_GATE_DEBOUNCE_ENABLED_ENV, value)
-    assert _run(gate) is not None
-    assert _run(gate) is not None
 
 
 # ---------------------------------------------------------------------------

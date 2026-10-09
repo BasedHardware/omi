@@ -95,10 +95,22 @@ def _live_speaker_rollover() -> Counter:
         return REGISTRY._names_to_collectors['omi_live_speaker_rollover_total']  # type: ignore[attr-defined]
 
 
+def _owner_identity_repair() -> Counter:
+    try:
+        return Counter(
+            'omi_owner_identity_repair_total',
+            'Committed late identity repairs; separate from first-finalization outcomes',
+            ['outcome'],
+        )
+    except ValueError:
+        return REGISTRY._names_to_collectors['omi_owner_identity_repair_total']  # type: ignore[attr-defined]
+
+
 OWNER_RECOGNITION_CONVERSATIONS = _owner_recognition_conversations()
 OWNER_RECOGNITION_OWNER_SHARE = _owner_recognition_owner_share()
 LIVE_SPEAKER_DECISIONS = _live_speaker_decisions()
 LIVE_SPEAKER_ROLLOVER = _live_speaker_rollover()
+OWNER_IDENTITY_REPAIR = _owner_identity_repair()
 
 for _target in ('owner', 'person'):
     for _decision in ('accepted', 'rejected', 'ambiguous', 'pending'):
@@ -106,6 +118,20 @@ for _target in ('owner', 'person'):
 for _carried in ('manual', 'automatic', 'none'):
     for _target in ('owner', 'person'):
         LIVE_SPEAKER_ROLLOVER.labels(carried=_carried, target=_target)
+
+
+for _repair_outcome in ('owner_added', 'owner_removed', 'identity_updated'):
+    OWNER_IDENTITY_REPAIR.labels(outcome=_repair_outcome)
+
+
+def record_owner_identity_repair(before: Mapping[str, Any], after: Mapping[str, Any]) -> None:
+    """Call only after a successful identity CAS, never from computation/finalization."""
+    old_owner = {s.get('id') for s in before.get('transcript_segments') or [] if s.get('is_user')}
+    new_owner = {s.get('id') for s in after.get('transcript_segments') or [] if s.get('is_user')}
+    outcome = (
+        'owner_added' if new_owner - old_owner else 'owner_removed' if old_owner - new_owner else 'identity_updated'
+    )
+    OWNER_IDENTITY_REPAIR.labels(outcome=outcome).inc()
 
 
 def _field(record: Any, name: str) -> Any:
@@ -399,9 +425,9 @@ def record_live_speaker_rollover(
     origins: Mapping[int, str],
     carried_speaker_ids: Optional[set[int]],
 ) -> None:
-    """Count mappings about to be cleared. Automatic ones are not carried today.
+    """Count the prior mappings after manual and automatic carry have been decided.
 
-    ``carried_speaker_ids`` is the receipt's carried speaker ids. None is the
+    ``carried_speaker_ids`` includes receipt ids and validated automatic ids. None is the
     unreported case: a manual origin counts as carried and every automatic
     mapping as dropped. The live rollover path does not use None; it passes the
     receipt set, including an empty one when nobody was copied.

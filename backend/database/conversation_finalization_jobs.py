@@ -1806,13 +1806,7 @@ def scan_in_progress_conversations(
 
 
 def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
-    """Return the self-heal sweep cursor, its CAS generation, and pending verifications.
-
-    Returns ``{'resume_after_path', 'generation', 'pending_verifications'}``.
-    ``pending_verifications`` is a bounded list of
-    ``{'uid', 'conversation_id', 'job_id'}`` entries the follow-up tick
-    re-checks before the job's own dead-letter workflow would own a failure.
-    """
+    """Read the CAS cursor and bounded job identities with optional ``admitted_at`` deadlines."""
     client = _client(firestore_client)
     snapshot = (
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
@@ -1832,7 +1826,11 @@ def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dic
         conversation_id = entry.get('conversation_id')
         job_id = entry.get('job_id')
         if isinstance(uid, str) and isinstance(conversation_id, str) and isinstance(job_id, str):
-            entries.append({'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id})
+            clean_entry: dict[str, Any] = {'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id}
+            admitted_at = entry.get('admitted_at')
+            if isinstance(admitted_at, datetime):
+                clean_entry['admitted_at'] = admitted_at
+            entries.append(clean_entry)
     return {
         'resume_after_path': path if isinstance(path, str) else None,
         'generation': int(data.get('generation', 0)),

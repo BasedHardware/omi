@@ -131,7 +131,9 @@
     "voiceReplyPlayback",
     "pendantVoiceQuestionDropped",
     "onboardingSetupRatingPromptShown",
-    "onboardingSetupRatingPromptAnswered"
+    "onboardingSetupRatingPromptAnswered",
+    "firstSummaryRatingPromptShown",
+    "firstSummaryRatingPromptAnswered"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

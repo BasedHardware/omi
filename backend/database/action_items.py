@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
-
+from database.dream_dirty import after_write
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
     GoogleAPICallError,
@@ -78,7 +78,6 @@ def validate_task_relationship_in_transaction(
 
 def typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
-
     Returns an empty dict when the document has no fields (None payload),
     so callers can safely mutate the result without None checks.
     """
@@ -291,10 +290,9 @@ def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, 
 
 
 # *****************************
-# ********** CREATE ***********
-# *****************************
 
 
+@after_write('action_items')
 def create_action_item(
     uid: str,
     action_item_data: Dict[str, Any],
@@ -404,6 +402,7 @@ def create_action_item(
     return created_id
 
 
+@after_write('action_items')
 def create_action_items_batch(
     uid: str,
     action_items_data: List[Dict[str, Any]],
@@ -1043,6 +1042,7 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 # *****************************
 
 
+@after_write('action_items')
 def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
     """
     Update an action item.
