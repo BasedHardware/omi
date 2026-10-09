@@ -200,6 +200,7 @@ def observe_error(
         streaming=streaming,
         phase='before_output',
         rejection_reason=invalid_request_reason(error),
+        upstream_http_status=error.upstream_http_status,
     )
 
 
@@ -230,6 +231,7 @@ def observe_route_result(
     completion_size: str = 'unknown',
     finish_reason: str = 'unknown',
     rejection_reason: str = 'none',
+    upstream_http_status: int | None = None,
 ) -> None:
     labels = {
         'lane_id': _bounded(lane_id),
@@ -268,7 +270,8 @@ def observe_route_result(
         'model=%s credential_source=%s outcome=%s error_class=%s route_serving_class=%s failure_class=%s '
         'fallback_used=%s fallback_from=%s fallback_to=%s '
         'provider_rejection=%s '
-        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s rejection_reason=%s',
+        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s rejection_reason=%s '
+        'upstream_http_status=%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -292,6 +295,7 @@ def observe_route_result(
         labels['finish_reason'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
         _safe_rejection_reason(rejection_reason) if error_class == 'invalid_request' else 'none',
+        (upstream_http_status if type(upstream_http_status) is int and 100 <= upstream_http_status <= 599 else 'none'),
     )
 
 

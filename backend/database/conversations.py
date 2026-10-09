@@ -929,12 +929,9 @@ def persist_processing_result_with_lifecycle(
 ) -> bool:
     """Merge a processor result into its conversation.
 
-    Deletion and stale sync transcript revisions are refused.  Lifecycle state is not: a discard is the system's
-    own verdict that a conversation held nothing, and a status is bookkeeping
-    about which generation ran, and every processor re-derives what it writes
-    from the content in front of it.  Fencing on either stranded conversations a
-    later sync had filled with speech — transcribed, untitled, and invisible to
-    their owner — to prevent races that had never been observed.
+    Deletion and stale sync transcript revisions are refused. Lifecycle state is not:
+    processors re-derive their verdict from current content, so earlier discard or
+    status bookkeeping must not strand rows a later sync filled with speech.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -1016,16 +1013,19 @@ def persist_processing_result_with_lifecycle(
                 existing.get('structured'), existing.get('user_title')
             ):
                 raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
-            # Recovery never owns the stored transcript. Omit both fields even
-            # though the write decorators encoded the processing snapshot; this
-            # also prevents manual-assignment reapplication from re-encoding it.
-            write_data.pop('transcript_segments', None)
-            write_data.pop('transcript_segments_compressed', None)
-            write_data.pop('data_protection_level', None)
-            # Speaker resolution ran on the processing snapshot; its ids only
-            # describe a transcript this write no longer persists.
-            write_data.pop('speaker_resolution', None)
-            write_data.pop(match_scores.FIELD, None)
+        decision = write_data.get('relevance_decision')
+        if isinstance(decision, dict) and decision.get('trigger') == 'server_recovery':
+            # Recovery enriches the durable capture; neither model normalization
+            # nor a stale snapshot owns its encoding, audio, or speaker metadata.
+            for field in (
+                'transcript_segments',
+                'transcript_segments_compressed',
+                'data_protection_level',
+                'audio_files',
+                'speaker_resolution',
+                match_scores.FIELD,
+            ):
+                write_data.pop(field, None)
 
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old

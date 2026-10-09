@@ -3166,9 +3166,9 @@ def process_conversation(
             # updates goals; users update goals through explicit actions.
             if not jit_defer_expensive:
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
-
-        # Create audio files from chunks if private cloud sync was enabled
-        if not is_reprocess and conversation.private_cloud_sync_enabled:
+        # Recovery preserves admitted audio ids instead of rebuilding old chunks.
+        capture_audio = trigger is not ProcessingTrigger.SERVER_RECOVERY
+        if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
                 if audio_files:
