@@ -289,12 +289,11 @@ def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
     uid: Optional[str] = None,
-    legacy_writer: Optional[Callable[[], Structured]] = None,
     **kwargs: Any,
 ) -> Structured:
     return serve_notes(
         uid,
-        legacy_writer or (lambda: _get_conversation_notes_legacy(prefix, **kwargs)),
+        lambda: _get_conversation_notes_legacy(prefix, **kwargs),
         lambda: _get_shaped_conversation_notes(prefix, **kwargs),
     )
 
@@ -727,97 +726,10 @@ Task: {app.memory_prompt}'''
     return content
 
 
-class SuggestedAppsSelection(BaseModel):
-    suggested_apps: List[str] = Field(
-        description='List of up to 3 app IDs that are most suitable for processing this conversation, ordered by relevance. Empty list if none are suitable.'
-    )
-    reasoning: str = Field(
-        description='Brief explanation of why these apps were selected based on the conversation content.'
-    )
-
-
 class BestAppSelection(BaseModel):
     app_id: str = Field(
         description='The ID of the best app for processing this conversation, or an empty string if none are suitable.'
     )
-
-
-def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[App]) -> Tuple[List[str], str]:
-    """
-    Get top 3 suggested apps for the given conversation based on its structured content
-    and the specific task/outcome each app provides.
-    Returns tuple of (suggested_app_ids, reasoning)
-    """
-    if not apps:
-        return [], "No apps available"
-
-    if not conversation.structured:
-        return [], "No structured content available"
-
-    structured_data = conversation.structured
-    conversation_details = f"""
-    Title: {structured_data.title or 'N/A'}
-    Category: {structured_data.category.value if structured_data.category else 'N/A'}
-    Overview: {structured_data.overview or 'N/A'}
-    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
-    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
-    """
-
-    apps_xml = "<apps>\n"
-    for app in apps:
-        apps_xml += f"""  <app>
-    <id>{app.id}</id>
-    <name>{app.name}</name>
-    <description>{app.description}</description>
-    <memory_prompt>{app.memory_prompt}</memory_prompt>
-  </app>\n"""
-    apps_xml += "</apps>"
-
-    prompt = f"""
-    You are an expert app recommendation system. Your goal is to suggest the top 3 most suitable apps for processing the given conversation based on the conversation's structured content and each app's specific capabilities.
-
-    <conversation_details>
-    {conversation_details.strip()}
-    </conversation_details>
-
-    <available_apps>
-    {apps_xml.strip()}
-    </available_apps>
-
-    Task:
-    1. Analyze the conversation's structured content: title, category, overview, action items, and events.
-    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content and themes.
-    3. Consider the potential value and relevance of each app's output for this specific conversation.
-    4. Select up to 3 apps that would provide the most meaningful and valuable analysis, ordered by relevance (most relevant first).
-
-    Selection Criteria:
-    - **Content Alignment**: App's purpose should directly relate to the conversation's topics, category, or themes
-    - **Value Potential**: App should be able to extract meaningful insights from this specific conversation
-    - **Specificity**: Prefer apps with specific, targeted functionality over generic ones
-    - **Actionability**: Prioritize apps that can provide actionable insights or useful analysis
-
-    Quality Standards:
-    - Only suggest apps that have clear relevance to the conversation content
-    - If fewer than 3 apps are truly suitable, suggest only the relevant ones
-    - If no apps are genuinely suitable, return an empty list
-    - Do not force matches - quality over quantity
-
-    Provide your suggestions with brief reasoning explaining why these apps are most suitable for this conversation.
-    """
-
-    try:
-        with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
-
-        # Validate that suggested app IDs exist in the available apps
-        valid_app_ids = {app.id for app in apps}
-        suggested_apps = [app_id for app_id in response.suggested_apps if app_id in valid_app_ids]
-
-        return suggested_apps, response.reasoning
-
-    except Exception as e:
-        logger.error(f"Error getting suggested apps: {e}")
-        return [], f"Error in app suggestion: {str(e)}"
 
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:

@@ -125,7 +125,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
     ):

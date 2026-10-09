@@ -788,7 +788,6 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
-    monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 

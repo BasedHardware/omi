@@ -855,7 +855,7 @@ class TestExpandedCallsiteCoverage:
         ]:
             assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
         assert calls.count('conv_structure') >= 2, "conv_structure should appear at least twice"
-        assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
+        assert calls.count('conv_app_select') == 1, "conv_app_select should appear exactly once"
 
     def test_memories_all_keys(self):
         import re
