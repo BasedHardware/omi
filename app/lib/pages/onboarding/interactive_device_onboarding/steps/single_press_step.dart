@@ -188,6 +188,22 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       );
     }
 
+    // Dropped empty or came back with no speech detected — invite a retry
+    // instead of leaving the user stuck on "Processing" forever.
+    if (provider.questionFailed) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            context.l10n.voiceQuestionNoSpeech,
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+
     // Listening — Omi with pulsating circles + waveform
     if (provider.voiceSessionActive) {
       return Column(

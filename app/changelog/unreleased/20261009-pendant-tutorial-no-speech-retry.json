@@ -1,0 +1,3 @@
+{
+  "change": "Fix the pendant tutorial's Ask Omi a Question step getting stuck on \"Processing your question\" forever when you pressed twice without speaking or Omi didn't catch what you said."
+}
