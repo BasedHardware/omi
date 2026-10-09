@@ -2,7 +2,7 @@
 """Emit the full Pusher image source closure for promotion freshness checks.
 
 Parses the final-stage COPY instructions from the registered Pusher Dockerfile
-and prints the repo-relative source paths — plus the Helm chart directory — that
+and prints one repo-relative source path per line — including the Helm chart — that
 must be unchanged between a development-qualified SHA and the checked-out
 production SHA.  Using the Dockerfile's own COPY closure instead of a hardcoded
 two-directory subset prevents a stale digest from silently deploying newer shared
@@ -73,7 +73,7 @@ def main() -> int:
     # The Helm chart is a deployment input separate from the Docker image,
     # but a chart change also invalidates a dev qualification.
     paths = sorted(set(image_sources) | {"backend/charts/pusher"})
-    print(" ".join(paths))
+    print("\n".join(paths))
     return 0
 
 

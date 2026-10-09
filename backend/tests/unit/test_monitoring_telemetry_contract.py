@@ -160,7 +160,7 @@ def test_stackdriver_exporter_ingests_firestore_read_count(path):
 # panel that reads as no traffic. Use one_of() and pin the exact string.
 CLOUD_RUN_EXPORTER_FILTER = (
     'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
-    'resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill")'
+    'resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill","notifications-job")'
 )
 
 

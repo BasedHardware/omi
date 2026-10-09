@@ -86,6 +86,11 @@ class HttpPoolManager {
     }
   }
 
+  /// Exercises the fault chokepoint without sending. Production sends go
+  /// through [send] and [sendStreaming].
+  @visibleForTesting
+  void applyJourneyFaultsForTesting(http.BaseRequest request) => _applyJourneyFaults(request);
+
   Future<http.Response> _executeWithRetry(http.Request Function() requestBuilder, Duration timeout, int retries) async {
     http.Response? lastResponse;
     Object? lastError;
