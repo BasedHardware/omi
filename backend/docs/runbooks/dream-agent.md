@@ -1,8 +1,10 @@
 # Dream agent phase 1
 
 The worker defaults off in code. The production runtime declarations enable shadow
-for David's two allowlisted UIDs only; TestFlight stays disabled and all budgets
-keep their defaults. Review API #20966 supplies the effect ledger; #20960 supplies
+for David's two allowlisted UIDs only; TestFlight stays disabled. Prod backend and
+backend-sync declare 24 scheduled passes/user/day, 20 manual runs/user/day and a
+$60 global daily reservation ceiling. Other budget knobs keep their defaults.
+Review API #20966 supplies the effect ledger; #20960 supplies
 the dedicated-only reservation policy. Declaring runtime configuration does not
 deploy it or change cloud resources.
 
@@ -44,10 +46,11 @@ existing authorized Scheduler reconciliation; this code change applies nothing.
 
 Shadow needs no feedback salt: privacy-checked would-file feedback remains in the
 encrypted run report, and nothing enters `dream_feedback`. Before enabling `on`,
-provision Secret Manager item `DREAM_AGENT_FEEDBACK_SALT` (at least 32 characters)
-and bind `DREAM_AGENT_FEEDBACK_SALT=DREAM_AGENT_FEEDBACK_SALT:latest` on
-backend-sync. The existing Review surface must also be enabled for live admission.
-Secret creation, binding and mode promotion require separate authorization.
+confirm the existing Review surface is enabled for live admission. As of
+2026-10-09, `DREAM_AGENT_FEEDBACK_SALT` is provisioned in Secret Manager and bound
+in prod on backend and backend-sync as
+`DREAM_AGENT_FEEDBACK_SALT=DREAM_AGENT_FEEDBACK_SALT:latest`. Mode promotion
+still requires separate authorization.
 
 Each admitted producer write records distinct references at
 `dream_users/{uid}/dirty/{sha256(collection + "/" + id)}`. Each document contains
@@ -300,5 +303,5 @@ stage/streak reporting, gateway lane membership, and local emulator contention.
 These are offline checks; a deployed canary remains separate acceptance evidence.
 
 User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
-sweep host (currently 4 in the production source declarations), along with the
+sweep host (currently 24 in the production source declarations), along with the
 same global spend/token-price limits, so GET presents the scheduler's allowance.

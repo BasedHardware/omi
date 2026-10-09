@@ -71,6 +71,9 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
           speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 10)
       ],
       transcriptSegmentsIncluded: true)
+    let directHydration = try await TranscriptionStorage.shared.upsertFromServerConversation(stale)
+    XCTAssertEqual(directHydration.sessionId, id)
+    XCTAssertFalse(directHydration.changed, "Direct hydration must preserve the confirmed deletion")
     _ = try await TranscriptionStorage.shared.syncServerConversation(stale)
     let session = try await TranscriptionStorage.shared.getSession(id: id)
     XCTAssertEqual(session?.deleted, true)
@@ -302,9 +305,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     XCTAssertEqual(hydrated.overview, "Processed backend overview")
     XCTAssertTrue(hydrated.starred, "Hydration must not erase newer local star mutations")
     XCTAssertEqual(hydrated.folderId, "local-folder", "Hydration must not erase newer local folder mutations")
-    // Delete-survives-hydration is covered by testStaleServerHydrationCannotUndoConfirmedDelete;
-    // this shell was never deleted, so hydration must leave it live.
-    XCTAssertFalse(hydrated.deleted, "Hydration must not mark a live conversation deleted")
+    XCTAssertFalse(hydrated.deleted, "Hydration must keep an active conversation visible")
   }
 
   func testBackendHydratesCompletedCloudReconcileShellEvenWhenLocalTimestampIsNewer() async throws {

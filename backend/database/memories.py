@@ -32,7 +32,7 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_stream_list
 from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -916,16 +916,27 @@ def get_memories_by_ids(
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = budgeted_get_all(database, doc_refs, budget)
 
-    memories: List[Dict[str, Any]] = []
-    for doc in docs:
-        if doc.exists:
-            memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
-            if memory_data:
-                memories.append(memory_data)
+    def _memories_from_docs(docs: List[Any]) -> List[Dict[str, Any]]:
+        memories: List[Dict[str, Any]] = []
+        for doc in docs:
+            if doc.exists:
+                memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
+                if memory_data:
+                    memories.append(memory_data)
+        return memories
 
-    return memories
+    try:
+        docs = budgeted_get_all(database, doc_refs, budget)
+    except ListReadBudgetExhausted as exc:
+        fetched = getattr(exc, 'partial_snapshots', None)
+        if not fetched:
+            raise
+        # Charge exhausted after the batch was fetched. Hand the prepared rows
+        # to the hydration caller and keep the budget flagged truncated.
+        setattr(exc, 'partial_memories', _memories_from_docs(fetched))
+        raise
+    return _memories_from_docs(docs)
 
 
 def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:

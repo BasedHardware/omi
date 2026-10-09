@@ -212,6 +212,10 @@ speaker, summary, memory, or translation. See
 [`transcription-shadow.md`](transcription-shadow.md) for gates, metrics, storage,
 and the known best-effort background-task limit.
 
+The optional cached-evidence alternatives, encrypted shadow receipts, cohort,
+metrics and promotion criteria are documented in the
+[speaker grouping shadow runbook](speaker_grouping_shadow.mdx).
+
 ## 1. Connection + Streaming + Transcription
 
 ### Segment-upload processing shape
@@ -1217,6 +1221,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A typed chain exhaustion on a mid-session rebuild
+(`LiveChainExhausted` from the managed dial) is classified evidence, not a
+crash: the rebuild arms log one
+`STT failover chain exhausted` ERROR line (FC-typed-failure-collapsed-to-generic)
+while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
+`stt_failed` client status carry the operational signal. Untyped dial faults
+keep the `STT failover connect raised` traceback for diagnosis.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure
@@ -3720,6 +3731,12 @@ known coverage holes and raced blobs still refuse globally. Identity eligibility
 uses actual distinct embedded duration independently of optional score logging.
 Version-1 caches remain readable for grouping; entries without duration metadata
 claim no owner evidence until verified audio supplies it.
+When a segment has a proven audio window, an otherwise valid cache hit with
+missing, zero or invalid measured evidence is refreshed from verified PCM under
+the existing attempt/time limits. Nominal transcript duration is never promoted
+to owner evidence. Unplaceable historical grouping remains cache-readable; a
+failed refresh cannot claim new owner evidence. Valid measured cache entries
+remain reusable without another embedding.
 
 New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
 under the same encrypted, deletion-owned audio prefix. New readers prefer it,
@@ -3807,8 +3824,12 @@ Participant grouping marked `resolved` does not by itself suppress the late
 identity retry: only a resolved row already containing an owner label is skipped.
 A completed owner miss can therefore use newly available audio/profile evidence.
 
-`omi_owner_identity_repair_total{outcome}` counts only successful late identity
-CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+`omi_owner_identity_repair_total{outcome}` counts identity changes in successful
+late CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It compares
+decoded transaction-current segments to the actual encoded write after manual
+authority has been reapplied. Missing legacy segment ids use the same stable ids
+as conversation reads. Unchanged identities emit nothing, even when resolution
+metadata is updated. The observer runs once after transaction success. It does not
 observe ordinary finalization again. The existing conversation counter/share
 remain first-finalization snapshots. Metric failure cannot change a committed
 repair into a reported storage failure.
@@ -3846,3 +3867,19 @@ mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
 those pages; observers that lose the same cursor generation cannot multiply a
 single refusal into a fleet-wide alarm burst. Standalone verification pages
 immediately. Recovery never regenerates admitted audio from old chunk snapshots.
+
+### Live capture inactivity observation
+
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.

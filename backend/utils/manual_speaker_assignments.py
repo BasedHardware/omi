@@ -68,6 +68,33 @@ def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int =
     return [sid for _, sid in ranked[:limit]]
 
 
+def manual_assignment_decision(segment: Mapping, receipt: Mapping, rejected: Optional[dict] = None) -> Optional[dict]:
+    """The same winning scoped receipt governs projection and correction scoring."""
+    speakers = _receipt_section(receipt, 'speakers')
+    overrides = _receipt_section(receipt, 'segments')
+    rejected = manual_rejected_speakers(receipt) if rejected is None else rejected
+    by_segment = overrides.get(segment.get('id'))
+    by_speaker = speakers.get(str(segment.get('speaker_id')))
+    negative = rejected.get(segment.get('speaker_id'))
+    if not isinstance(by_segment, dict):
+        by_segment = None
+    if not isinstance(by_speaker, dict):
+        by_speaker = None
+    if not isinstance(negative, dict):
+        negative = None
+    if (
+        by_speaker is not None
+        and by_speaker.get('source') == 'carried'
+        and by_speaker.get('speaker_id_scope') != segment.get('speaker_id_scope')
+    ):
+        by_speaker = None
+    if negative is not None and negative.get('speaker_id_scope') is not None:
+        if negative['speaker_id_scope'] != segment.get('speaker_id_scope'):
+            negative = None
+    decisions = [value for value in (by_segment, by_speaker, negative) if value]
+    return max(decisions, key=lambda value: value.get('generation', 0)) if decisions else None
+
+
 def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     speakers = _receipt_section(receipt, 'speakers')
     overrides = _receipt_section(receipt, 'segments')
@@ -76,28 +103,9 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     rejected = manual_rejected_speakers(receipt)
     result = None
     for index, segment in enumerate(segments):
-        by_segment = overrides.get(segment.get('id'))
-        by_speaker = speakers.get(str(segment.get('speaker_id')))
-        negative = rejected.get(segment.get('speaker_id'))
-        if not isinstance(by_segment, dict):
-            by_segment = None
-        if not isinstance(by_speaker, dict):
-            by_speaker = None
-        if not isinstance(negative, dict):
-            negative = None
-        if (
-            by_speaker is not None
-            and by_speaker.get('source') == 'carried'
-            and by_speaker.get('speaker_id_scope') != segment.get('speaker_id_scope')
-        ):
-            by_speaker = None
-        if negative is not None and negative.get('speaker_id_scope') is not None:
-            if negative['speaker_id_scope'] != segment.get('speaker_id_scope'):
-                negative = None
-        decisions = [value for value in (by_segment, by_speaker, negative) if value]
-        if not decisions:
+        decision = manual_assignment_decision(segment, receipt, rejected)
+        if decision is None:
             continue
-        decision = max(decisions, key=lambda value: value.get('generation', 0))
         is_user = bool(decision.get('is_user', False))
         person_id = decision.get('person_id')
         status = 'user' if is_user else 'not_user' if person_id else 'unknown'
