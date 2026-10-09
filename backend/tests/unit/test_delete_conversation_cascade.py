@@ -84,6 +84,15 @@ class _FakeDocumentReference:
         self.exists = False
         self._store.deleted.append(self.path)
 
+    def create(self, data: dict) -> None:
+        # Real SDK semantics: succeed only when the document does not exist yet.
+        if self.exists:
+            from google.api_core.exceptions import AlreadyExists
+
+            raise AlreadyExists(f'{self.path} already exists')
+        self.data = data
+        self.exists = True
+
 
 class _FakeCollectionReference:
     def __init__(self, path: str, store: "_FakeFirestore"):
