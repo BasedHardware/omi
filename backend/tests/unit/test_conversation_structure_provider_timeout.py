@@ -37,6 +37,7 @@ exactly as httpx does, against a provider that needs longer than the background 
 """
 
 import os
+from contextlib import asynccontextmanager
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
@@ -80,6 +81,13 @@ def slow_provider(monkeypatch):
     call succeeded or failed.
     """
 
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setattr(processing, 'isolated_notes_model', isolated_fake)
     resolved: list[float] = []
 
     def _get_llm(feature, *args, request_timeout=None, **kwargs):

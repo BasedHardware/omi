@@ -39,6 +39,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -79,7 +81,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -247,12 +249,6 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
           category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -279,6 +275,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
         PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -319,7 +317,7 @@ overlay:
           value: 'true'
           category: rollout
         OMI_SHAPED_AGENT_MODE:
-          value: 'cohort'
+          value: 'on'
           category: rollout
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
@@ -377,12 +375,6 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-          value: 'true'
-          category: rollout
-        MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -516,6 +508,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:
@@ -541,7 +535,7 @@ overlay:
             value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
-            value: 'cohort'
+            value: 'on'
             category: rollout
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
           SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
@@ -666,12 +660,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -707,6 +695,11 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -833,12 +826,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -868,6 +855,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -977,12 +966,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -1012,6 +995,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
           PROACTIVITY_V2_POSTHOG_TOKEN:

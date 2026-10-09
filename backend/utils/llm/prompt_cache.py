@@ -19,7 +19,37 @@ import hashlib
 from collections.abc import Mapping
 from typing import Any
 
+
+def model_supports_explicit_cache(model: Any) -> bool:
+    """Check the resolved model, unwrapping bindings and dev shadow clients.
+
+    get_llm records its final BYOK-resolved model in callback metadata because
+    a gateway client's model_name is an auto-lane ID, not the provider model.
+    Unknown identities fail closed; injected clients use their concrete name.
+    """
+    from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
+
+    seen: set[int] = set()
+    while model is not None and id(model) not in seen:
+        seen.add(id(model))
+        fields = vars(model) if hasattr(model, '__dict__') else {}
+        wrapped = fields.get('bound') or fields.get('legacy_model')
+        if wrapped is not None:
+            model = wrapped
+            continue
+        metadata = fields.get('metadata')
+        name = metadata.get('omi_resolved_model') if isinstance(metadata, Mapping) else None
+        if not isinstance(name, str):
+            name = getattr(model, 'model_name', None)
+        if not isinstance(name, str):
+            name = getattr(model, 'model', None)
+        return isinstance(name, str) and uses_explicit_cache_and_chat_sanitizer(name)
+    return False
+
+
 # Below this, the provider never serves a read, so a breakpoint is pure noise.
+
+
 EXPLICIT_CACHE_MINIMUM_TOKENS = 1024
 
 # Deliberately a character heuristic rather than a real tokenizer. This runs on

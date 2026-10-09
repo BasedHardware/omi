@@ -198,6 +198,8 @@ def extract_canonical_l1_memory_candidates(
     # must not transitively import the working-observation provider stack.
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
+    # This is a cache candidate, not provider admission: the extractor resolves
+    # memory_l1 through get_llm before marking content, including BYOK profiles.
     items = extract_l1_memory_archive_items_from_text(
         uid=uid,
         source_id=source_id,

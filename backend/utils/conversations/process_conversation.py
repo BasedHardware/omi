@@ -97,6 +97,7 @@ from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, r
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
+    emit_recorded_decision,
     record_decision,
     rules_only_relevance,
 )
@@ -240,7 +241,6 @@ from utils.conversations.meeting_context import (
     store_meeting_context as _store_meeting_context,
 )
 from utils.conversations.meeting_notes_wiring import (
-    meeting_notes_episode_evidence_enabled as _meeting_notes_episode_evidence_enabled,
     rich_notes_inputs,
     rich_roster_inputs,
 )
@@ -390,14 +390,6 @@ def _get_structured(
 
                 roster: Optional[MeetingRoster] = None
                 meeting_context_block: Optional[str] = None
-                episode_enabled = _meeting_notes_episode_evidence_enabled(uid)
-                episode_items = (
-                    import_module('utils.conversations.episode_evidence').capture_evidence(
-                        conversation, transcript=ext_conv.text
-                    )
-                    if episode_enabled
-                    else []
-                )
                 roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                     uid,
                     conversation,
@@ -405,7 +397,6 @@ def _get_structured(
                     tz_str,
                     include_background=True,
                     include_screen_text=True,
-                    **({'evidence_items': episode_items} if episode_enabled else {}),
                 )
                 prefix = build_conversation_prompt_prefix(
                     uid=uid,
@@ -430,15 +421,7 @@ def _get_structured(
                         meeting_context=meeting_context_block,
                         rich_context_enabled=roster is not None,
                         roster=roster,
-                        **(
-                            {
-                                'episode_evidence': episode_items,
-                                'screen_frames': _frames,
-                                'episode_finished_at': conversation.finished_at,
-                            }
-                            if episode_enabled
-                            else {}
-                        ),
+                        screen_frames=_frames,
                     )
                 validate_structured_source_segment_ids(structured, ())
                 return structured, False
@@ -479,9 +462,6 @@ def _get_structured(
         duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
-
-        episode_enabled = _meeting_notes_episode_evidence_enabled(uid)
-        episode_items = []
 
         def model_discards(on_error: Callable[[Exception], None], neighbor: Optional[Neighbor]) -> bool:
             with track_usage(uid, Features.CONVERSATION_DISCARD):
@@ -594,16 +574,7 @@ def _get_structured(
             tz_str,
             include_background=True,
             include_screen_text=True,
-            **({'evidence_items': episode_items} if episode_enabled else {}),
         )
-        if episode_enabled:
-            episode_items[:0] = import_module('utils.conversations.episode_evidence').capture_evidence(
-                main_conv,
-                transcript=action_items_transcript,
-                speaker_map=speaker_map,
-                roster=roster,
-                desktop_capture=desktop_capture,
-            )
         prefix = build_conversation_prompt_prefix(
             uid=uid,
             conversation_id=prompt_conversation_id,
@@ -633,11 +604,6 @@ def _get_structured(
                 rich_context_enabled=roster is not None,
                 roster=roster,
                 screen_frames=screen_frames,
-                **(
-                    {'episode_evidence': episode_items, 'episode_finished_at': conversation.finished_at}
-                    if episode_enabled
-                    else {}
-                ),
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
@@ -2269,6 +2235,8 @@ def _store_deferred_conversation(
         record_lazy_desktop_deferral(event='fenced')
         return conversation
 
+    emit_recorded_decision(uid, conversation.id, decision)
+
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     record_lazy_desktop_deferral(event='stored')
     return conversation
@@ -2419,6 +2387,7 @@ def _store_deterministic_minimum(
             plan.reason,
         )
         return conversation, False
+    emit_recorded_decision(uid, conversation.id, decision)
     logger.info(
         'free-tier: stored %s uid=%s conv=%s mode=%s reason=%s',
         kind,
@@ -2992,6 +2961,9 @@ def process_conversation(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
         )
         return conversation
+
+    if relevance is not None:
+        emit_recorded_decision(uid, conversation.id, relevance)
 
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a

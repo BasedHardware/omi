@@ -7,13 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from models.structured import ActionItem, NoteClaim, Participant, Section, Structured
+from models.structured import NoteClaim, Structured
 from models.episode_extraction import EpisodeStructuredExtraction
 from models.structured_extraction import RichStructuredExtraction, StructuredExtraction
 from utils.conversations.episode_evidence import (
     EvidenceItem,
-    capture_evidence,
-    claim_violations,
     context_pack_evidence,
     meeting_evidence,
     open_task_evidence,
@@ -21,6 +19,7 @@ from utils.conversations.episode_evidence import (
 )
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
+    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
 )
 from utils.llm.episode_notes_prompts import EPISODE_CONTRACT, episode_static_instructions
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
@@ -74,26 +73,13 @@ def processing():
         yield conversation_processing
 
 
-def test_flag_defaults_off_and_reads_env_at_call_boundary(monkeypatch):
-    from utils.conversations import meeting_notes_wiring as wiring
-
-    monkeypatch.delenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raising=False)
-    assert not wiring.meeting_notes_episode_evidence_enabled()
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', '100')
-    for raw in ('true', '1', 'on', 'YES'):
-        monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', raw)
-        assert wiring.meeting_notes_episode_evidence_enabled('synthetic-owner')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_ENABLED', 'off')
-    assert not wiring.meeting_notes_episode_evidence_enabled()
-
-
 def test_flag_off_prompt_bytes_pinned_to_base(processing):
     from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 
     fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
     static, volatile = (
         processing._conversation_notes_static_instructions,
-        processing._conversation_notes_volatile_instructions,
+        _conversation_notes_volatile_instructions,
     )
     assert static('FORMAT') == fixture['legacy_static']
     assert volatile(**fixture['kwargs']) == fixture['legacy_volatile']
@@ -108,13 +94,7 @@ def test_flag_off_prompt_bytes_pinned_to_base(processing):
     assert 'note_claims' in EpisodeStructuredExtraction.model_json_schema()['properties']
 
 
-def test_adapters_keep_source_time_actor_and_screen_rows():
-    segment = SimpleNamespace(id='s1', start=1.0, end=3.0, is_user=True, speaker='SPEAKER_00', text='Hello')
-    conv = SimpleNamespace(transcript_segments=[segment], source='desktop', started_at=START, finished_at=None)
-    speech, state = capture_evidence(conv)
-    assert speech.id == 'speech:s1' and speech.source_ref == 's1' and speech.actor == 'account owner'
-    assert speech.time == '+1.0s..+3.0s'
-    assert state.source_kind == 'device_state'
+def test_context_adapters_keep_source_time_actor_and_screen_rows():
     pack = SimpleNamespace(
         prior_meetings=[
             SimpleNamespace(title='Earlier', gist='Budget pending', date_label='2026-01-09', open_items=['Check quote'])
@@ -138,22 +118,6 @@ def test_adapters_keep_source_time_actor_and_screen_rows():
     )
 
 
-def test_wrong_provenance_invalid_ids_coverage():
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')]
-    note = valid_note()
-    assert not claim_violations(note, evidence)
-    assert note.note_claims[0].evidence_sources[0].source_kind == 'screen_ocr'
-    assert 'content' not in note.note_claims[0].evidence_sources[0].model_dump()
-    note.note_claims[0].provenance = 'said'
-    assert 'wrong_provenance' in claim_violations(note, evidence)
-    note.note_claims[0].evidence_ids = ['invented']
-    assert 'invalid_evidence_reference' in claim_violations(note, evidence)
-    note.note_claims[0].text = 'not in title'
-    assert 'invalid_claim_span' in claim_violations(note, evidence)
-    note.sections = [Section(heading='Uncovered', body_markdown='- A detail')]
-    assert 'missing_claim_coverage' in claim_violations(note, evidence)
-
-
 def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
     text = episode_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert EPISODE_CONTRACT in text
@@ -165,141 +129,6 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
     assert message['content'][1]['text'] == 'Evidence screen_frame:f1 at +00:10'
     assert message['content'][2]['type'] == 'image_url'
     assert len(screen_frames_message([frame])['content']) == 2
-
-
-def invoke_notes(processing, monkeypatch, responses, *, episode=True, sections=False, cache=False):
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-
-    calls = []
-
-    def invoke(messages):
-        calls.append(messages)
-        return SimpleNamespace(content=json.dumps(responses[min(len(calls) - 1, len(responses) - 1)]))
-
-    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: cache)
-    prefix = ConversationPromptPrefix(
-        conversation_id='synthetic', context='FULL TRANSCRIPT\n', has_usable_content=False
-    )
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')]
-    result = processing.get_conversation_notes(
-        prefix,
-        started_at=START,
-        language_code='en',
-        output_language_code=None,
-        tz='UTC',
-        task_intelligence_capture=False,
-        **({'episode_evidence': evidence} if episode else {}),
-    )
-    return result, calls
-
-
-def test_empty_audio_with_screen_evidence_and_one_vacuity_retry(processing, monkeypatch):
-    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    good = valid_note().model_dump(mode='json')
-    result, calls = invoke_notes(processing, monkeypatch, [bad, good])
-    assert len(calls) == 2
-    assert 'coverage is missing' in calls[-1][-1].content
-    assert result.title == 'Written approval'
-    assert 'EPISODE EVIDENCE' in calls[0][1].content
-    assert 'FULL TRANSCRIPT' not in calls[0][1].content
-
-
-def test_retry_is_bounded_and_remaining_vacuity_accepted(processing, monkeypatch, caplog):
-    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    bad['note_claims'][0]['evidence_ids'] = ['missing']
-    result, calls = invoke_notes(
-        processing, monkeypatch, [valid_note().model_dump(mode='json') | {'overview': 'A brief exchange'}, bad]
-    )
-    assert len(calls) == 2
-    assert result.title == 'Quick chat'  # Structurally valid retry wins.
-    assert len(result.note_claims) == 1
-    assert 'to=vacuity' in caplog.text
-    assert 'to=invalid_evidence_reference' in caplog.text
-    assert 'to=missing_claim_coverage' in caplog.text
-
-
-def test_malformed_retry_retains_initial_note(processing, monkeypatch, caplog):
-    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    result, calls = invoke_notes(processing, monkeypatch, [bad, {'title': {'invalid': 'shape'}}])
-    assert len(calls) == 2 and result.title == 'Quick chat'
-    assert 'to=retry_unavailable' in caplog.text
-
-
-def test_episode_ids_removed_from_initial_and_retry_without_transcript_citations(processing, monkeypatch, caplog):
-    first = valid_note(overview='The message shows approval. [screen_ocr:1]')
-    retry = valid_note(overview='The message shows approval. `screen_frame:invented`')
-    result, calls = invoke_notes(
-        processing, monkeypatch, [first.model_dump(mode='json'), retry.model_dump(mode='json')]
-    )
-    assert len(calls) == 2
-    assert 'screen_' not in result.overview
-    assert all(not section.source_segment_ids for section in result.sections)
-    assert 'to=evidence_id_in_prose' in caplog.text
-
-
-def test_claim_coverage_includes_each_factual_span():
-    note = valid_note(overview='The message shows approval. Ari wrote about medical treatment.')
-    note.note_claims[1].text = 'The message shows approval.'
-    evidence = [EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic thread')]
-    assert 'missing_claim_coverage' in claim_violations(note, evidence)
-    note.note_claims.append(claim('/overview', 'Ari wrote about medical treatment.'))
-    assert not claim_violations(note, evidence)
-
-
-def test_wake_word_metadata_is_server_authored_and_prompted(processing, monkeypatch):
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-    from utils.conversations.wake_word import WAKE_WORD_MARKER
-
-    segments = [
-        SimpleNamespace(id='s1', text='Hey Omi, remind me to send the invoice.', start=0, end=3, is_user=True),
-        SimpleNamespace(id='s2', text=WAKE_WORD_MARKER, start=4, end=5, is_user=True),
-    ]
-    items = capture_evidence(SimpleNamespace(transcript_segments=segments))
-    assert items[0].wake_word_invocation and not items[1].wake_word_invocation
-    assert WAKE_WORD_MARKER not in items[1].content
-    calls = []
-    monkeypatch.setattr(
-        processing,
-        'get_llm',
-        lambda *a, **k: SimpleNamespace(
-            invoke=lambda m: calls.append(m)
-            or SimpleNamespace(content=json.dumps(valid_note().model_dump(mode='json')))
-        ),
-    )
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
-    processing.get_conversation_notes(
-        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
-        started_at=START,
-        language_code='en',
-        output_language_code=None,
-        tz='UTC',
-        task_intelligence_capture=True,
-        episode_evidence=items,
-    )
-    assert 'wake_word_invocation=true' in calls[0][1].content
-    assert 'capture_kind=explicit_command' in calls[0][1].content
-    assert 'bracketed turn header' not in calls[0][1].content
-
-
-def test_flag_off_still_returns_empty_without_audio(processing, monkeypatch):
-    result, calls = invoke_notes(processing, monkeypatch, [], episode=False)
-    assert not calls and result.title == '' and 'note_claims' not in result.model_dump()
-
-
-def test_section_projection_remaps_claims(processing, monkeypatch):
-    note = valid_note()
-    note.sections = [Section(heading='Written decision', body_markdown='- The message shows approval.')]
-    note.note_claims += [
-        claim('/sections/0/heading', 'Written decision'),
-        claim('/sections/0/body_markdown', 'The message shows approval.'),
-    ]
-    result, calls = invoke_notes(processing, monkeypatch, [note.model_dump(mode='json')])
-    assert len(calls) == 1
-    assert result.overview.startswith('## Written decision')
-    overview_claims = [c for c in result.note_claims if c.target == '/overview']
-    assert overview_claims == []
-    assert any(c.target == '/sections/0/body_markdown' for c in result.note_claims)
 
 
 def test_sdk_and_backend_fallback_keep_claims_optional():
@@ -334,91 +163,6 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         ]
         serialized = model.model_validate(legacy).model_dump()['note_claims'][0]
         assert 'private' not in serialized and 'sensitivity' not in serialized['evidence_sources'][0]
-
-
-def test_mixed_remote_channel_does_not_gain_an_actor_from_roster():
-    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-
-    entries = tuple(
-        RosterEntry(display_name=name, email=None, organization=None, kind=kind, source='calendar')
-        for name, kind in (('Owner', 'owner'), ('Ari', 'human'), ('Noor', 'human'))
-    )
-    roster = MeetingRoster(entries=entries, display_title=None, title_is_window_title=False)
-    segment = SimpleNamespace(
-        id='s1', start=0, end=1, text='Approved', speaker='SPEAKER_01', speaker_id=1, is_user=False
-    )
-    conv = SimpleNamespace(transcript_segments=[segment], photos=[])
-    items = capture_evidence(conv, speaker_map={1: 'Ari'}, roster=roster, desktop_capture=True)
-    assert items[0].actor is None
-    assert json.loads(items[-1].content)['speaker_map'] == {'1': None}
-
-
-def test_claim_error_receives_one_retry(processing, monkeypatch):
-    bad = valid_note().model_dump(mode='json')
-    bad['note_claims'][0]['provenance'] = 'said'
-    result, calls = invoke_notes(processing, monkeypatch, [bad, valid_note().model_dump(mode='json')])
-    assert len(calls) == 2 and 'wrong_provenance' in calls[-1][-1].content
-    assert result.note_claims[0].provenance == 'written'
-
-
-def test_actual_flag_off_request_uses_pinned_prompts(processing, monkeypatch):
-    monkeypatch.setattr(processing, 'import_module', lambda name: pytest.fail('flag-off loaded episode runtime'))
-    from langchain_core.output_parsers import PydanticOutputParser
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-    from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
-
-    calls = []
-    monkeypatch.setattr(
-        processing,
-        'get_llm',
-        lambda *a, **k: SimpleNamespace(
-            invoke=lambda messages: (
-                calls.append(messages)
-                or SimpleNamespace(content='{"title":"Budget","overview":"Approved five percent cut"}')
-            )
-        ),
-    )
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
-
-    class FrozenTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return cls(2026, 1, 12, 10, 30, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(processing, 'datetime', FrozenTime)
-    fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
-    for rich in (False, True):
-        result = processing.get_conversation_notes(
-            ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT\nHello.'),
-            started_at=START,
-            language_code='en',
-            output_language_code=None,
-            tz='UTC',
-            task_intelligence_capture=False,
-            rich_context_enabled=rich,
-            meeting_context='BACKGROUND SENTINEL' if rich else None,
-        )
-        schema = PydanticOutputParser(
-            pydantic_object=RichStructuredExtraction if rich else StructuredExtraction
-        ).get_format_instructions()
-        assert calls[-1][0].content == [
-            {'type': 'text', 'text': fixture['rich_static' if rich else 'legacy_static'].replace('FORMAT', schema)}
-        ]
-        kwargs = {
-            **fixture['kwargs'],
-            'density': f'Use 1-2 sections; target ~{95 if rich else 80} words across the entire note.',
-        }
-        expected = (
-            rich_volatile_instructions(
-                legacy_volatile=processing._conversation_notes_volatile_instructions,
-                meeting_context='BACKGROUND SENTINEL',
-                **kwargs,
-            )
-            if rich
-            else processing._conversation_notes_volatile_instructions(**kwargs)
-        )
-        assert calls[-1][1].content == expected
-        assert 'note_claims' not in result.model_dump()
 
 
 def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatch):
@@ -457,103 +201,7 @@ def test_same_bounded_ocr_read_retains_messages_only_for_episode_pack(monkeypatc
     assert 'sensitive reason' in items[0].content
 
 
-def test_invalid_claim_schema_never_invalidates_usable_note(processing, monkeypatch, caplog):
-    bad = valid_note().model_dump(mode='json')
-    bad['note_claims'].append({'provenance': 'invented'})
-    result, calls = invoke_notes(processing, monkeypatch, [bad, bad])
-    assert len(calls) == 2 and result.title == 'Written approval'
-    assert len(result.note_claims) == 2
-    assert 'to=invalid_claim_schema' in caplog.text
-
-
-def test_retry_provider_error_never_invalidates_usable_note(processing, monkeypatch, caplog):
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-
-    bad = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    calls = []
-
-    def invoke(messages):
-        calls.append(messages)
-        if len(calls) == 2:
-            raise TimeoutError('synthetic')
-        return SimpleNamespace(content=json.dumps(bad))
-
-    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
-    result = processing.get_conversation_notes(
-        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
-        started_at=START,
-        language_code='en',
-        output_language_code=None,
-        tz='UTC',
-        task_intelligence_capture=False,
-        episode_evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Synthetic')],
-    )
-    assert len(calls) == 2 and result.title == 'Quick chat'
-    assert 'to=retry_unavailable' in caplog.text
-
-
-def test_unknown_speech_clusters_remain_distinguishable_without_names():
-    segments = [
-        SimpleNamespace(
-            id=f's{index}', text='Synthetic commitment', start=index, end=index + 1, speaker_id=cluster, is_user=False
-        )
-        for index, cluster in enumerate((0, 1, 0))
-    ]
-    items = capture_evidence(SimpleNamespace(transcript_segments=segments))[:3]
-    assert [item.actor for item in items] == [None, None, None]
-    assert [item.diarization_key for item in items] == ['0', '1', '0']
-    note = valid_note()
-    note.note_claims[0].evidence_ids = ['speech:s0']
-    note.note_claims[0].provenance = 'said'
-    claim_violations(note, items)
-    assert note.note_claims[0].evidence_sources[0].diarization_key == '0'
-
-
-def test_empty_retry_keeps_initial_note(processing, monkeypatch, caplog):
-    initial = valid_note('Quick chat', 'A brief exchange').model_dump(mode='json')
-    result, calls = invoke_notes(processing, monkeypatch, [initial, {}])
-    assert len(calls) == 2
-    assert result.title == 'Quick chat' and result.overview == 'A brief exchange'
-    assert 'to=empty_retry' in caplog.text
-
-
-@pytest.mark.parametrize('source', ['screen_activity', 'google'])
-def test_roster_claim_retains_underlying_source(source):
-    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-
-    roster = MeetingRoster(
-        entries=(RosterEntry('Ari', None, None, 'human', source),),
-        display_title=None,
-        title_is_window_title=False,
-    )
-    item = meeting_evidence(roster, None, [])[0]
-    note = Structured(title='Ari', note_claims=[claim('/title', 'Ari', item.id, 'shown')])
-    assert not claim_violations(note, [item])
-    assert json.loads(item.content)['source'] == source
-    assert note.note_claims[0].evidence_sources[0].source_ref == source
-
-
-@pytest.mark.parametrize('field', ['owner_name', 'name', 'email', 'organization', 'role'])
-def test_claim_coverage_includes_owner_and_participant_fields(field):
-    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic identity')
-    note = Structured(title='Synthetic', note_claims=[claim('/title', 'Synthetic', item.id, 'shown')])
-    if field == 'owner_name':
-        note.action_items = [ActionItem(description='Send report', owner_name='Ari')]
-        note.note_claims.append(claim('/action_items/0/description', 'Send report', item.id, 'shown'))
-        target, text = '/action_items/0/owner_name', 'Ari'
-    else:
-        values = {'name': None, 'email': None, 'organization': None, 'role': None, 'source': 'roster'}
-        values[field] = 'Synthetic value'
-        note.participants = [Participant(**values)]
-        target, text = f'/participants/0/{field}', 'Synthetic value'
-    assert 'missing_claim_coverage' in claim_violations(note, [item], drop_invalid=True)
-    note.note_claims.append(claim(target, text, item.id, 'shown'))
-    assert not claim_violations(note, [item])
-
-
-@pytest.mark.parametrize('episode_mode', [True, False])
-def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch, episode_mode):
+def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     wiring = importlib.import_module('utils.conversations.meeting_notes_wiring')
     frame_module = importlib.import_module('utils.conversations.screen_frame_evidence')
     frame = frame_module.ScreenFrameEvidence('frame', START, 'strip', 0.5, ('Screen identity',), 'Private screen text')
@@ -570,7 +218,6 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
     conv = SimpleNamespace(
         id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
     )
-    items = [] if episode_mode else None
     roster, _, _, images = wiring.rich_notes_inputs(
         'synthetic',
         conv,
@@ -578,18 +225,11 @@ def test_frame_text_respects_episode_screen_text_opt_out(processing, monkeypatch
         'UTC',
         include_background=True,
         include_screen_text=False,
-        evidence_items=items,
     )
     assert images == (image,)
     assert observed[0].frame_id == frame.frame_id
-    if episode_mode:
-        assert observed[0].summary == '' and observed[0].names == ()
-        assert 'Private screen text' not in render_episode_evidence(items)
-        assert 'Screen identity' not in render_episode_evidence(items)
-        assert not roster.entries
-    else:
-        assert observed[0].summary == frame.summary
-        assert roster.entries[0].display_name == 'Screen identity'
+    assert observed[0].summary == frame.summary
+    assert roster.entries[0].display_name == 'Screen identity'
 
 
 def test_frame_added_identity_in_calendar_roster_keeps_screen_source():
@@ -614,127 +254,6 @@ def test_frame_added_identity_in_calendar_roster_keeps_screen_source():
     items = meeting_evidence(roster, calendar, [frame])
     assert json.loads(items[1].content)['source'] == 'google'
     assert json.loads(items[2].content)['source'] == 'screen_activity'
-
-
-def test_short_unique_anchor_covers_its_unit_and_headings_need_no_claim():
-    item = EvidenceItem(id='speech:1', source_kind='speech', content='Ari approved a synthetic budget.')
-    note = Structured(
-        title='Budget approval',
-        overview='Ari approved the synthetic budget. They requested an agenda.',
-        sections=[Section(heading='Outcome', body_markdown='- Ari approved the synthetic budget.')],
-        note_claims=[
-            claim('/title', 'Budget approval', item.id, 'said'),
-            claim('/overview', 'synthetic budget', item.id, 'said'),
-            claim('/sections/0/body_markdown', 'synthetic budget', item.id, 'said'),
-        ],
-    )
-    assert 'missing_claim_coverage' in claim_violations(note, [item])
-    note.note_claims.append(claim('/overview', 'requested an agenda', item.id, 'said'))
-    assert not claim_violations(note, [item])
-    note.overview = 'Ari approved the synthetic budget. A private message mentioned the synthetic budget.'
-    assert 'ambiguous_claim_span' in claim_violations(note, [item], drop_invalid=True)
-
-
-def test_expected_counterpart_without_observed_participation_is_not_attendance(processing, monkeypatch):
-    """An expected counterpart with no observed participation is not an attendee.
-
-    The fixture is generic: no real conversation, app, or person. The note is
-    written from the packet and instructions the writer actually receives.
-    """
-    from langchain_core.output_parsers import PydanticOutputParser
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-    from models.structured_extraction import RichStructuredExtraction
-    from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-
-    expected_name = 'Synthetic Counterpart'
-    speech = 'I am still sitting here and have not started anything.'
-    segment = SimpleNamespace(id='s1', start=1.0, end=4.0, is_user=True, speaker_id=0, text=speech)
-    conversation = SimpleNamespace(
-        transcript_segments=[segment], source='desktop', started_at=START, finished_at=START, photos=[]
-    )
-    roster = MeetingRoster(
-        entries=(RosterEntry(expected_name, None, None, 'human', 'screen_activity'),),
-        display_title=None,
-        title_is_window_title=False,
-    )
-    calendar = CalendarMeetingContext(
-        calendar_event_id='synthetic-event',
-        title='Scheduled time',
-        participants=[MeetingParticipant(name=expected_name)],
-        start_time=START,
-        duration_minutes=30,
-    )
-    frame = SimpleNamespace(
-        frame_id='f1',
-        summary='A tile is visible and silent.',
-        names=(expected_name,),
-        role='view',
-        captured_at=START,
-    )
-    evidence = [
-        *capture_evidence(conversation, roster=roster, desktop_capture=True),
-        *meeting_evidence(roster, calendar, [frame]),
-    ]
-    rendered = render_episode_evidence(evidence)
-    packet = json.loads(rendered.split('\n', 1)[1])
-    observed = packet['observed_participation']
-    expected = packet['expected_context']
-    observed_text = json.dumps(observed, ensure_ascii=False)
-    assert expected_name in json.dumps(expected, ensure_ascii=False)
-    assert expected_name not in observed_text
-    assert [row.get('c') for row in observed if row.get('k') == 'speech'] == [speech]
-    assert all(row.get('a') != expected_name for row in observed)
-    assert 'visible_names' not in observed_text
-
-    instructions = episode_static_instructions(
-        PydanticOutputParser(pydantic_object=RichStructuredExtraction).get_format_instructions(),
-        _conversation_notes_static_instructions,
-        include_claims=False,
-    )
-    assert 'Fill participants from the roster and transcript evidence' not in instructions
-    assert 'whose participation was observed' in instructions
-    assert 'not participation' in instructions
-    assert 'Do not describe a meeting, attendance' in instructions
-    assert 'People and AI agents evidenced by the meeting roster or the transcript' not in instructions
-
-    calls = []
-    grounded = valid_note(title='Still sitting here', overview=speech)
-    for entry in grounded.note_claims:
-        entry.evidence_ids = ['evidence:0']
-        entry.provenance = 'said'
-
-    def invoke(messages):
-        calls.append(messages)
-        return SimpleNamespace(content=json.dumps(grounded.model_dump(mode='json')))
-
-    monkeypatch.setattr(processing, 'get_llm', lambda *a, **k: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: False)
-    result = processing.get_conversation_notes(
-        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT\n', has_usable_content=False),
-        started_at=START,
-        language_code='en',
-        output_language_code=None,
-        tz='UTC',
-        task_intelligence_capture=False,
-        episode_evidence=evidence,
-    )
-    system = calls[0][0].content
-    system_text = system[0]['text'] if isinstance(system, list) else system
-    user_text = calls[0][1].content
-    writer_packet = json.loads(user_text.split('EPISODE EVIDENCE', 1)[1].split('\n', 1)[1].split('\n', 1)[0])
-    writer_observed = json.dumps(writer_packet['observed_participation'], ensure_ascii=False)
-    assert expected_name in json.dumps(writer_packet['expected_context'], ensure_ascii=False)
-    assert expected_name not in writer_observed
-    assert speech in writer_observed
-    assert 'FULL TRANSCRIPT' not in user_text
-    assert 'PARTICIPANTS' not in user_text
-    assert 'Do not describe a meeting, attendance' in system_text
-    assert 'Fill participants from the roster and transcript evidence' not in system_text
-    assert not result.participants
-    assert not result.events
-    assert expected_name not in f'{result.title}\n{result.overview}'
-    assert 'agreed' not in result.overview.casefold() and 'decided' not in result.overview.casefold()
 
 
 def test_compact_evidence_preserves_provenance_and_trusted_metadata():
@@ -795,223 +314,3 @@ def test_episode_person_provenance_and_relevance_rules_are_shared():
         {'note_claims': [claim('/title', 'Budget').model_dump()]}
     ).to_structured()
     assert isinstance(output.note_claims[0], NoteClaim)
-
-
-def test_short_aliases_expand_before_validation_and_never_become_speech_citations(processing, monkeypatch):
-    data = valid_note().model_dump(mode='json')
-    for entry in data['note_claims']:
-        entry['evidence_ids'] = ['evidence:0']
-    result, calls = invoke_notes(processing, monkeypatch, [data])
-    assert len(calls) == 1
-    assert all(c.evidence_ids == ['screen_ocr:1'] for c in result.note_claims)
-    assert all(c.evidence_sources[0].id == 'screen_ocr:1' for c in result.note_claims)
-    assert not result.sections
-    assert '"id":"evidence:0"' in calls[0][1].content
-
-
-@pytest.mark.parametrize('ending', ['', '\n', '\r\n'])
-def test_coverage_checks_each_unpunctuated_bullet(ending):
-    item = EvidenceItem(id='speech:1', source_kind='speech', content='Alice agreed; Bob declined.')
-    note = Structured(
-        title='Two responses',
-        sections=[Section(heading='Responses', body_markdown='- Alice agreed\n- Bob declined' + ending)],
-        note_claims=[
-            claim('/title', 'Two responses', item.id, 'inferred'),
-            claim('/sections/0/body_markdown', 'Alice agreed', item.id, 'said'),
-        ],
-    )
-    assert 'missing_claim_coverage' in claim_violations(note, [item])
-    note.note_claims.append(claim('/sections/0/body_markdown', 'Bob declined', item.id, 'said'))
-    assert not claim_violations(note, [item])
-
-
-def test_written_roster_provenance_is_valid():
-    item = EvidenceItem(id='roster:0', source_kind='roster', content='Synthetic roster name')
-    note = Structured(
-        title='Synthetic roster name',
-        note_claims=[claim('/title', 'Synthetic roster name', item.id, 'written')],
-    )
-    assert not claim_violations(note, [item], drop_invalid=True)
-    assert note.note_claims[0].evidence_sources[0].source_kind == 'roster'
-
-
-def test_episode_and_presentation_repairs_share_two_call_budget(processing, monkeypatch, caplog):
-    bad = valid_note().model_dump(mode='json')
-    bad['note_claims'] = []
-    bad['overview'] += ' screen_ocr:1'
-    good = valid_note().model_dump(mode='json')
-    with caplog.at_level('INFO'):
-        result, calls = invoke_notes(processing, monkeypatch, [bad, good])
-    assert len(calls) == 2
-    assert result.title == 'Written approval'
-    assert 'retry_count=1' in caplog.text and 'evidence_id_in_prose' in caplog.text
-    assert 'Prior JSON' not in calls[-1][-1].content
-
-
-def test_large_episode_has_no_full_context_repair(processing, monkeypatch, caplog):
-    from langchain_core.output_parsers import PydanticOutputParser
-    from utils.llm.episode_notes_validation import repair_episode_note
-    from utils.llm.notes_observability import NotesRun
-    from langchain_core.messages import HumanMessage
-
-    note = valid_note()
-    note.note_claims = []
-    run = NotesRun('episode')
-    result = repair_episode_note(
-        note,
-        evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Invented')],
-        model=SimpleNamespace(invoke=lambda _: pytest.fail('long evidence must not retry')),
-        messages=[HumanMessage(content='x' * 120001)],
-        parser=PydanticOutputParser(pydantic_object=EpisodeStructuredExtraction),
-        raw_response='{}',
-        content_str=lambda response: response.content,
-        transcript_segment_ids=(),
-        initial_violations=set(),
-        run=run,
-    )
-    assert result.title == note.title and run.calls == 0
-    assert 'repair_budget_exhausted' in run.violations and run.fallback_to_best_note
-
-
-def test_long_speech_uses_baseline_prompt_with_no_episode_overhead(processing, monkeypatch, caplog):
-    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
-
-    calls, configs = [], []
-
-    def model(*args, **kwargs):
-        configs.append(kwargs)
-        return SimpleNamespace(
-            invoke=lambda messages: calls.append(messages)
-            or SimpleNamespace(
-                content=json.dumps(
-                    {
-                        'title': 'Pricing decision',
-                        'overview': 'Ari approved pricing.',
-                    }
-                )
-            )
-        )
-
-    monkeypatch.setattr(processing, 'get_llm', model)
-    prefix = build_conversation_prompt_prefix(
-        conversation_id='invented',
-        transcript='Ari approved pricing. ' * 15000,
-        started_at=START,
-        timezone_name='UTC',
-        language_code='en',
-    )
-    with caplog.at_level('INFO'):
-        result = processing.get_conversation_notes(
-            prefix,
-            started_at=START,
-            language_code='en',
-            output_language_code=None,
-            tz='UTC',
-            task_intelligence_capture=False,
-            rich_context_enabled=True,
-            episode_evidence=[EvidenceItem(id='speech:1', source_kind='speech', content=prefix.context)],
-        )
-    assert result.title == 'Pricing decision' and len(calls) == 1
-    assert 'EPISODE NOTES CONTRACT' not in str(calls[0][0].content)
-    assert 'FULL TRANSCRIPT' in calls[0][1].content
-    assert 'baseline_long' in caplog.text and 'retry_count=0' in caplog.text
-    assert configs[0]['request_timeout'] == processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
-
-
-def test_episode_static_prefix_keeps_explicit_cache_breakpoint(processing, monkeypatch):
-    monkeypatch.setattr(processing, 'shared_conversation_cache_supported', lambda: True)
-    _, calls = invoke_notes(processing, monkeypatch, [valid_note().model_dump(mode='json')], cache=True)
-    static = calls[0][0].content[0]
-    assert static['prompt_cache_breakpoint'] == {'mode': 'explicit'}
-    assert 'EPISODE NOTES CONTRACT' in static['text']
-    assert 'screen_ocr:1' not in static['text']
-
-
-def test_metadata_off_has_no_coverage_repair_and_optional_claims(processing, monkeypatch, caplog):
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'false')
-    result, calls = invoke_notes(
-        processing, monkeypatch, [{'title': 'Written approval', 'overview': 'The message shows approval.'}]
-    )
-    assert len(calls) == 1
-    assert result.note_claims is None
-    assert 'Do not generate note_claims' in str(calls[0][0].content)
-    assert 'missing_claim' not in caplog.text
-
-
-def test_selected_effort_applies_to_writer_and_repair(processing, monkeypatch):
-    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
-
-    bindings, calls = [], []
-
-    class Model:
-        def bind(self, **options):
-            bindings.append(options)
-            return self
-
-        def invoke(self, messages):
-            calls.append(messages)
-            return SimpleNamespace(
-                content=json.dumps(valid_note('Quick chat', 'A brief exchange').model_dump(mode='json'))
-            )
-
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'high')
-    monkeypatch.setattr(processing, 'get_llm', lambda *a, **kw: Model())
-    processing.get_conversation_notes(
-        ConversationPromptPrefix('synthetic', 'FULL TRANSCRIPT'),
-        started_at=START,
-        language_code='en',
-        output_language_code=None,
-        tz='UTC',
-        task_intelligence_capture=False,
-        episode_evidence=[EvidenceItem(id='screen_ocr:1', source_kind='screen_ocr', content='Ari: agreed')],
-    )
-    assert bindings == [{'reasoning_effort': 'high'}, {'reasoning_effort': 'high'}]
-    assert len(calls) == 2
-
-
-def test_high_effort_budget_falls_back_before_writer_and_preserves_original_frames(processing, monkeypatch, caplog):
-    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
-
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'xhigh')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'false')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'deterministic')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES', '24000')
-    messages, configs = [], []
-
-    def model(*args, **kwargs):
-        configs.append(kwargs)
-        return SimpleNamespace(
-            invoke=lambda value: messages.append(value)
-            or SimpleNamespace(
-                content=json.dumps({'title': 'Pricing approval', 'overview': 'Ari approved the pricing proposal.'})
-            )
-        )
-
-    monkeypatch.setattr(processing, 'get_llm', model)
-    speech = 'Ari approved the pricing proposal. ' * 1500
-    prefix = build_conversation_prompt_prefix(
-        conversation_id='invented', transcript=speech, started_at=START, timezone_name='UTC', language_code='en'
-    )
-    frame = NotesFrameImage('original-frame', '+00:10', 'data:image/jpeg;base64,eA==')
-    with caplog.at_level('INFO'):
-        note = processing.get_conversation_notes(
-            prefix,
-            started_at=START,
-            language_code='en',
-            output_language_code=None,
-            tz='UTC',
-            task_intelligence_capture=False,
-            rich_context_enabled=True,
-            screen_frames=[frame],
-            episode_evidence=[EvidenceItem(id='s', source_kind='speech', content=speech)],
-        )
-    assert note.title == 'Pricing approval'
-    assert len(configs) == len(messages) == 1
-    assert 'max_retries' not in configs[0]  # Only the ordinary baseline model is acquired.
-    assert 'EPISODE NOTES CONTRACT' not in str(messages[0][0].content)
-    assert 'data:image/jpeg;base64,eA==' in str(messages[0][2])
-    receipts = [record.message for record in caplog.records if 'conversation_notes_receipt' in record.message]
-    assert len(receipts) == 1
-    assert 'arm=baseline_budget' in receipts[0]
-    assert 'requested_effort=xhigh' in receipts[0] and 'effort=default' in receipts[0]
-    assert 'thinking_input_baseline' in receipts[0]

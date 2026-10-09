@@ -1,3 +1,5 @@
+import os
+
 """Tests for conversation title/summary timezone correctness (issue #4773).
 
 The two structuring functions used to hand the LLM a raw UTC timestamp and ask it to convert to the
@@ -16,6 +18,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
 
 conv_proc = None
 

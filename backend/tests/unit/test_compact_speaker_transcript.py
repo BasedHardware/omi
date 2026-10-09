@@ -8,7 +8,9 @@ one-name calendar guard), the screenshot-equivalent sanitize path, and
 `get_app_result` stripping.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +22,35 @@ from models.app import App
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(autouse=True)
+def _passthrough_notes_transport(monkeypatch):
+    """Fake models aren't provider clients; skip the real transport isolation."""
+
+    @asynccontextmanager
+    async def _passthrough(model):
+        if not hasattr(model, 'ainvoke'):
+
+            async def ainvoke(messages, *args, **kwargs):
+                return model.invoke(messages)
+
+            model.ainvoke = ainvoke
+        yield model
+
+    monkeypatch.setattr(
+        __import__('utils.llm.conversation_processing', fromlist=['isolated_notes_model']),
+        'isolated_notes_model',
+        _passthrough,
+    )
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+        yield
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -195,7 +226,8 @@ def _joined_prompt(messages) -> str:
 
 def _poisoned_notes_model(captured):
     class Model:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
+            captured.setdefault('calls', []).append(messages)
             captured['messages'] = messages
             return SimpleNamespace(content='''{
                   "title":"Speaker 0 Examines Ultra-Thin Flush Design",
@@ -225,6 +257,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     )
     transcript, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
     prefix = build_conversation_prompt_prefix(
+        uid='uid-notes',
         conversation_id='conv-scrap',
         transcript=transcript,
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
@@ -237,7 +270,6 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
 
     captured: dict = {}
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: _poisoned_notes_model(captured))
-    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
     structured = conversation_processing.get_conversation_notes(
         prefix,
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
@@ -251,8 +283,15 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     assert 'Speaker 0' not in structured.title
     assert 'Speaker 0' not in structured.overview
     assert 'flush is about 9mm' in structured.overview
-    # The speaker-key guidance lives in the static cacheable prefix, the transcript in the
-    # volatile suffix; assert against the whole prompt rather than one message's position.
+    assert len(captured['calls']) == 1
+    assert [message['role'] for message in captured['messages']] == ['system', 'user']
+    assert 'flush is about 9mm' not in _joined_prompt(captured['messages'][:1])
+    evidence = json.loads(captured['messages'][1]['content'])
+    assert evidence['capture_evidence'] == prefix.shaped_context
+    identity = json.loads(evidence['capture_evidence'].split('\nFULL TRANSCRIPT\n', 1)[0])
+    assert identity['speaker_map'] == {'0': None}
+    assert 'prompt_cache_breakpoint' not in json.dumps(captured['messages'])
+    # Speaker guidance lives in the shaped system block; raw cluster identity remains evidence.
     prompt = _joined_prompt(captured['messages'])
     assert 'Speaker keys are diarization clusters, not names' in prompt
 

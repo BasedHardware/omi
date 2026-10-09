@@ -281,11 +281,13 @@ def test_metrics_survive_module_reload():
     share = mod.OWNER_RECOGNITION_OWNER_SHARE
     decisions = mod.LIVE_SPEAKER_DECISIONS
     rollover = mod.LIVE_SPEAKER_ROLLOVER
+    repair = mod.OWNER_IDENTITY_REPAIR
     importlib.reload(mod)
     assert mod.OWNER_RECOGNITION_CONVERSATIONS is first
     assert mod.OWNER_RECOGNITION_OWNER_SHARE is share
     assert mod.LIVE_SPEAKER_DECISIONS is decisions
     assert mod.LIVE_SPEAKER_ROLLOVER is rollover
+    assert mod.OWNER_IDENTITY_REPAIR is repair
     mod.record_live_speaker_decision('owner', 'accepted')
 
 

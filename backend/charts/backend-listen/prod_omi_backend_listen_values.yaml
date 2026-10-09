@@ -197,7 +197,11 @@ env:
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
-    value: "cohort"
+    value: "on"
+  - name: DREAM_AGENT_MODE
+    value: 'shadow'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -224,10 +228,6 @@ env:
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_ENABLED
-    value: 'true'
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_PERCENT
-    value: '1'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
