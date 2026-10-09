@@ -1,3 +1,0 @@
-{
-  "change": "Recovered local tasks now keep repetition, linked context, ownership and ordering when a failed upload is retried"
-}
