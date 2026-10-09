@@ -850,3 +850,27 @@ def test_timeout_alert_only_pages_after_successful_cursor_reclamation(dry_run, a
 
     assert counters['expired'] == 1 and counters['verification_timeouts'] == 1
     assert not any(r.levelname == 'CRITICAL' for r in caplog.records)
+
+
+@pytest.mark.parametrize('reason', ['verify_content_mismatch', 'verify_job_binding', 'dead_letter'])
+@pytest.mark.parametrize('advances', [False, True])
+def test_verification_refusal_pages_only_after_winning_cursor_cas(reason, advances, caplog):
+    state, kwargs = _harness([], mode='heal')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation()
+    if reason == 'verify_content_mismatch':
+        state['conversations']['c1']['audio_files'] = []
+    elif reason == 'verify_job_binding':
+        state['conversations']['c1']['finalization_job_id'] = 'other-job'
+    else:
+        state['jobs']['job-1']['status'] = 'dead_letter'
+    kwargs['cursor_advancer'] = lambda *a, **kw: advances
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['refused'] == 1
+    criticals = [r.getMessage() for r in caplog.records if r.levelname == 'CRITICAL']
+    assert len(criticals) == int(advances)
+    if advances:
+        assert f'reason={reason}' in criticals[0]
+    assert state['finalization_calls'] == []

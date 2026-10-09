@@ -117,6 +117,7 @@ def _verify_pending_attempts(
     job_reader: Callable[..., dict[str, Any] | None] = jobs_db.get_finalization_job,
     counters: dict[str, Any],
     now: datetime,
+    verification_refusals: list[tuple[dict[str, Any], str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Re-check prior-tick admissions; return the still-in-flight entries.
 
@@ -165,7 +166,7 @@ def _verify_pending_attempts(
             _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_queued_timeout')
             continue
         if status != 'completed':
-            _refuse_verification(entry, 'dead_letter', counters)
+            _refuse_verification(entry, 'dead_letter', counters, verification_refusals)
             continue
         try:
             conversation = conversation_reader(uid, conversation_id)
@@ -179,7 +180,7 @@ def _verify_pending_attempts(
             counters['skipped'] += 1
             continue
         if conversation.get('deleted'):
-            _refuse_verification(entry, 'verify_deleted', counters)
+            _refuse_verification(entry, 'verify_deleted', counters, verification_refusals)
             continue
         conv_status = getattr(conversation.get('status'), 'value', conversation.get('status'))
         if conv_status != 'completed':
@@ -190,7 +191,7 @@ def _verify_pending_attempts(
                 counters['verification_timeouts'] += 1
             continue
         if str(conversation.get('finalization_job_id') or '') != job_id:
-            _refuse_verification(entry, 'verify_job_binding', counters)
+            _refuse_verification(entry, 'verify_job_binding', counters, verification_refusals)
             continue
         recorded_ids = {str(value) for value in job.get('selfheal_audio_file_ids') or []}
         current_ids = set(recovery_audio_file_ids(conversation) or [])
@@ -205,7 +206,12 @@ def _verify_pending_attempts(
             _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
             counters['verified'] += 1
         else:
-            _refuse_verification(entry, 'verify_content_mismatch' if not preserved else 'verify_not_rich', counters)
+            _refuse_verification(
+                entry,
+                'verify_content_mismatch' if not preserved else 'verify_not_rich',
+                counters,
+                verification_refusals,
+            )
     return remaining
 
 
@@ -238,9 +244,21 @@ def _keep_or_expire_pending(
     return True
 
 
-def _refuse_verification(entry: dict[str, Any], reason: str, counters: dict[str, Any]) -> None:
+def _refuse_verification(
+    entry: dict[str, Any],
+    reason: str,
+    counters: dict[str, Any],
+    verification_refusals: list[tuple[dict[str, Any], str]] | None = None,
+) -> None:
     _log_action('refused', reason=reason, uid=entry['uid'], conversation_id=entry['conversation_id'])
     counters['refused'] += 1
+    if verification_refusals is not None:
+        verification_refusals.append((entry, reason))
+    else:
+        _page_verification_refusal(entry, reason)
+
+
+def _page_verification_refusal(entry: dict[str, Any], reason: str) -> None:
     logger.critical(
         'selfheal verification failed uid=%s conversation=%s reason=%s',
         entry['uid'],
@@ -338,6 +356,7 @@ def run_selfheal_tick(
         page_cutoff = now - PAGE_AGE
         try:
             cursor = cursor_getter(firestore_client=firestore_client)
+            verification_refusals: list[tuple[dict[str, Any], str]] = []
             pending = _verify_pending_attempts(
                 list(cursor.get('pending_verifications') or []),
                 firestore_client=firestore_client,
@@ -345,6 +364,7 @@ def run_selfheal_tick(
                 job_reader=job_reader,
                 counters=counters,
                 now=now,
+                verification_refusals=verification_refusals,
             )
             scan = scan_fn(
                 page_size=PAGE_SIZE,
@@ -395,7 +415,12 @@ def run_selfheal_tick(
                             )
                         else:
                             logger.warning('selfheal sweep cursor CAS lost; another tick advanced it')
-                    elif counters['verification_timeouts']:
+                    else:
+                        # Only the CAS winner removed these entries. Page every
+                        # refusal once, rather than once per observing replica.
+                        for entry, reason in verification_refusals:
+                            _page_verification_refusal(entry, reason)
+                    if advanced and counters['verification_timeouts']:
                         # Only the writer that actually released the slots pages;
                         # startup ticks on other replicas can read the same backlog.
                         logger.critical(

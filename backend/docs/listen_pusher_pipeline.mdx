@@ -3780,3 +3780,15 @@ deterministic minimum, and enriched processing each emit once per stored decisio
 after the persistence fence. Capture failures never fail processing. This bridge
 supports per-conversation joins to opens going forward (EXP-004 closure); it does
 not backfill the stopped keep-all sample or change intake, promotion, or relevance.
+
+Recovery verification fingerprints the original stored transcript and audio ids.
+Both kept and explicitly discarded recovery results preserve those capture fields
+and their speaker metadata transactionally. Model normalization must not rewrite
+the raw encoding or replace audio appended after the processing snapshot; only
+structured enrichment and lifecycle fields belong to the recovery result.
+
+Verification refusals still page critically for content shrinkage, job-binding
+mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
+those pages; observers that lose the same cursor generation cannot multiply a
+single refusal into a fleet-wide alarm burst. Standalone verification pages
+immediately. Recovery never regenerates admitted audio from old chunk snapshots.

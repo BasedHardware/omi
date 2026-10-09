@@ -3167,8 +3167,13 @@ def process_conversation(
             if not jit_defer_expensive:
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
 
-        # Create audio files from chunks if private cloud sync was enabled
-        if not is_reprocess and conversation.private_cloud_sync_enabled:
+        # Recovery preserves the admitted capture and its audio ids. Rebuilding
+        # from an old chunk snapshot would replace them after the fenced persist.
+        if (
+            not is_reprocess
+            and trigger is not ProcessingTrigger.SERVER_RECOVERY
+            and conversation.private_cloud_sync_enabled
+        ):
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
                 if audio_files:
