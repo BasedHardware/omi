@@ -2,7 +2,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
@@ -11,13 +13,19 @@ import 'package:omi/utils/logger.dart';
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
 class UsageProvider with ChangeNotifier {
-  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest, DateTime Function()? now})
-      : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+  UsageProvider({
+    Future<String?> Function()? deviceTimeZone,
+    UsageRequest? usageRequest,
+    Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
+    DateTime Function()? now,
+  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
+        _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
         _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
+  final Future<UserSubscriptionResponse?> Function() _subscriptionRequest;
   final DateTime Function() _now;
   String? _usageTimeZone;
   String? get usageTimeZone => _usageTimeZone;
@@ -210,7 +218,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final subscription = await getUserSubscription();
+      final subscription = await _subscriptionRequest();
       if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
       if (subscription == null) {
         _error = 'Failed to load subscription data. Please try again later.';
@@ -218,6 +226,7 @@ class UsageProvider with ChangeNotifier {
       }
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
+      await _releasePaywallOnDevicePin(subscription.subscription.plan);
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
@@ -230,6 +239,19 @@ class UsageProvider with ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
+  /// Custom STT outranks the plan. Once the user pays, release that pin so capture returns to Omi
+  /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
+  Future<void> _releasePaywallOnDevicePin(PlanType plan) async {
+    final prefs = SharedPreferencesUtil();
+    final pinned = prefs.paywallOnDeviceSttConfigId;
+    if (!plan.isPaid || pinned.isEmpty) return;
+    if (prefs.customSttConfig.sttConfigId == pinned) {
+      await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    }
+    prefs.paywallOnDeviceSttConfigId = '';
   }
 
   /// Alias for fetchSubscription - refreshes subscription data from backend

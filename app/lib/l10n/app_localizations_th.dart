@@ -9863,11 +9863,6 @@ class AppLocalizationsTh extends AppLocalizations {
       'พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'ไม่ได้บันทึก ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'โปรไฟล์เสียงของ $name';
   }
@@ -12353,4 +12348,249 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'บัญชีนี้กำลังถูกลบ ลงชื่อเข้าใช้ด้วยบัญชีอื่น หรือรอสักครู่แล้วลองอีกครั้ง';
+
+  @override
+  String get onboardingSetupTitle => 'กำลังตั้งค่า Omi ของคุณ';
+
+  @override
+  String get onboardingSetupSubtitle => 'ขอเวลา Omi สักครู่เพื่อปรับให้เหมาะกับคุณ';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'กำลังเตรียมพื้นที่ทำงานของคุณ';
+
+  @override
+  String get onboardingSetupStepLanguage => 'กำลังปรับการถอดเสียงให้เข้ากับภาษาของคุณ';
+
+  @override
+  String get onboardingSetupStepMemory => 'กำลังตั้งค่าความจำของคุณ';
+
+  @override
+  String get onboardingSetupStepDevices => 'กำลังเชื่อมต่ออุปกรณ์ของคุณ';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'กำลังปรับแต่งประสบการณ์ของคุณ';
+
+  @override
+  String get onboardingRatingPromptTitle => 'คุณชอบ Omi ไหม?';
+
+  @override
+  String get onboardingRatingPromptYes => 'ใช่';
+
+  @override
+  String get onboardingRatingPromptNo => 'ไม่';
+
+  @override
+  String get partialRecording => 'การบันทึกบางส่วน';
+
+  @override
+  String get importTranscriptFiles => 'ไฟล์ถอดเสียง';
+
+  @override
+  String get importTranscriptFilesDescription => 'เลือกไฟล์ถอดเสียง SRT, VTT หรือ TXT หรือไฟล์ ZIP ที่รวมไว้';
+
+  @override
+  String get importTooManyAttempts => 'มีการนำเข้ามากเกินไปในขณะนี้ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get importFileTooLarge => 'ไฟล์นี้ใหญ่เกินไปที่จะนำเข้า';
+
+  @override
+  String get importUnsupportedFileType => 'ไม่สามารถนำเข้าไฟล์ประเภทนี้ได้';
+
+  @override
+  String get reviewTitle => 'ตรวจสอบ';
+
+  @override
+  String get reviewEntryTitle => 'คำถามสำหรับคุณ';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'เหลือ $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'ใครพูดสิ่งนี้?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'คนเดียวกับ “$name” ใช่ไหม';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'สะกดอย่างไร';
+
+  @override
+  String get reviewPlayClip => 'เล่นคลิป';
+
+  @override
+  String get reviewStopClip => 'หยุดคลิป';
+
+  @override
+  String get reviewOpenDetailsHint => 'เปิดรายละเอียด';
+
+  @override
+  String get reviewAnswerMe => 'ฉัน';
+
+  @override
+  String get reviewAnswerOther => 'อื่น ๆ';
+
+  @override
+  String get reviewAddTask => 'เพิ่มงาน';
+
+  @override
+  String get reviewAnswerFailed => 'บันทึกคำตอบของคุณไม่ได้ ลองอีกครั้ง';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'คำตอบนี้ติดป้ายการสนทนา $count รายการ';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'ผู้พูดที่ไม่รู้จัก';
+
+  @override
+  String get reviewNewPersonName => 'ชื่อของเขา';
+
+  @override
+  String get reviewSomeoneElse => 'คนอื่น…';
+
+  @override
+  String get reviewConfirm => 'ยืนยัน';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'ยืนยัน $name';
+  }
+
+  @override
+  String get reviewNotSure => 'ไม่แน่ใจ';
+
+  @override
+  String get reviewOpenConversation => 'การสนทนา';
+
+  @override
+  String get reviewTaskField => 'งาน';
+
+  @override
+  String get reviewDue => 'กำหนดส่ง';
+
+  @override
+  String get reviewNoDate => 'ไม่มี';
+
+  @override
+  String get reviewProject => 'โปรเจกต์';
+
+  @override
+  String get reviewReasonAlreadyDone => 'ทำเสร็จแล้ว';
+
+  @override
+  String get reviewReasonNotMine => 'ไม่ใช่ของฉัน';
+
+  @override
+  String get reviewReasonNotUseful => 'ไม่มีประโยชน์';
+
+  @override
+  String get reviewYesMerge => 'ใช่ รวมเลย';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'การสนทนา: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'พิมพ์เอง';
+
+  @override
+  String get reviewLoadFailed => 'โหลดคำถามของคุณไม่ได้';
+
+  @override
+  String get reviewCaughtUpTitle => 'ไม่มีอะไรให้ตอบ';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi จะถามที่นี่เมื่อต้องการคุณเท่านั้น';
+
+  @override
+  String get reviewRecentChanges => 'การเปลี่ยนแปลงล่าสุด';
+
+  @override
+  String get reviewChangesIntro => 'สิ่งที่ Omi เปลี่ยนเองในช่วง 30 วันที่ผ่านมา ย้อนกลับสิ่งที่ดูไม่ถูกต้องได้';
+
+  @override
+  String get reviewChangeUndone => 'ย้อนกลับแล้ว Omi จะไม่ทำซ้ำเอง';
+
+  @override
+  String get reviewChangeFailed => 'อัปเดตการเปลี่ยนแปลงนี้ไม่ได้ ลองอีกครั้ง';
+
+  @override
+  String get reviewChangesLoadFailed => 'โหลดการเปลี่ยนแปลงล่าสุดไม่ได้';
+
+  @override
+  String get reviewNoChangesTitle => 'ยังไม่มีการเปลี่ยนแปลง';
+
+  @override
+  String get reviewNoChangesBody => 'เมื่อ Omi จัดระเบียบบันทึกของคุณ การเปลี่ยนแปลงจะแสดงที่นี่';
+
+  @override
+  String get reviewShowMore => 'แสดงเพิ่มเติม';
+
+  @override
+  String get entityKeptCurrent => 'Omi ดูแลให้เป็นปัจจุบัน';
+
+  @override
+  String get entityNotRight => 'ไม่ถูกต้อง?';
+
+  @override
+  String get entityCorrectionTitle => 'อะไรไม่ถูกต้อง?';
+
+  @override
+  String get entityCorrectionHint => 'บอก Omi ว่าต้องแก้อะไร';
+
+  @override
+  String get entityCorrectionSaved => 'ขอบคุณ Omi จะแก้ไขให้';
+
+  @override
+  String get entityCorrectionFailed => 'ส่งการแก้ไขของคุณไม่ได้ ลองอีกครั้ง';
+
+  @override
+  String get entityLoadFailed => 'โหลดหน้านี้ไม่ได้';
+
+  @override
+  String get entityProject => 'โปรเจกต์';
+
+  @override
+  String get entityProjects => 'โปรเจกต์';
+
+  @override
+  String get entityDecisions => 'การตัดสินใจ';
+
+  @override
+  String get entityOpenTasks => 'งานที่ยังเปิดอยู่';
+
+  @override
+  String get entityOpenThreads => 'เรื่องที่ยังค้างอยู่';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'รอ $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'กำหนดส่ง $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'สิ่งที่ Omi รู้';
+
+  @override
+  String get entityRecentConversations => 'การสนทนาล่าสุด';
+
+  @override
+  String get tasksNoProject => 'ไม่มีโปรเจกต์';
+
+  @override
+  String get tasksGroupByProject => 'จัดกลุ่มตามโปรเจกต์';
+
+  @override
+  String get tasksGroupByDate => 'จัดกลุ่มตามวันที่';
 }

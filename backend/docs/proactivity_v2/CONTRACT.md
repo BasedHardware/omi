@@ -14,7 +14,7 @@ Adding a producer means a registration row and its event-driven caller.
 
 All v2 generation and delivery require server-resolved `proactivity_v2=true`.
 Model-driven work is paid-only in practice: free/basic has a zero-dollar cap.
-Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=v2` or `cohort` (server-side per-user selection).
+Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=cohort` (server-side per-user selection).
 Daily recap generation, scheduling, storage and routes remain outside this budget;
 interesting-memory review remains unchanged. Neither becomes a v2 model producer
 in this build. Task follow-ups never create, complete or modify a task themselves.
@@ -502,20 +502,19 @@ or enablement require explicit coordinator action with new version/evidence.
 | Control | Authority / default |
 | --- | --- |
 | `proactivity_v2` | Server PostHog exposure flag; absent/unknown/error = off for generation and push; no UID bypass. |
-| `MENTOR_PIPELINE` | Server env `legacy|v2|cohort`, default legacy; cohort resolves the same server-side `proactivity_v2` flag/client/cache as admission: true selects v2, false/unknown/error selects unchanged legacy; invalid denies mentor invocation. Mentor owner implements exclusive dispatch; v2 failure never falls back to legacy automatically. |
+| `MENTOR_PIPELINE` | Server env, `cohort` is the only valid value (default unset denies); cohort resolves the same server-side `proactivity_v2` flag/client/cache as admission: true selects v2, false/unknown/error selects nothing — the legacy mentor lane was deleted, so flag errors deny (fail closed) rather than fall back. Invalid values invoke no mentor path and fail the runtime env validator. |
 | Producer registration / health | Provisional targets permit enablement; durable kill overrides registry enabled. |
 | User producer preference | Explicit false wins every admission/publication/push check. |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Must be true for v2; existing sink semantics unchanged for other traffic. |
 
 Server flag resolution caches both true and false per UID for **300 seconds**
 per process, with a **60-second** failure cache and a 4,096-entry LRU bound.
-Concurrent same-user misses share one lookup. Errors still select legacy for
-cohort mentor and deny v2 admission; a content-free warning records exception
+Concurrent same-user misses share one lookup. Errors deny both cohort mentor
+dispatch and v2 admission; a content-free warning records exception
 type and HTTP status at most once per minute per process. Realtime mentor
 validates the env value first, then runs its existing shared paid/opt-in,
-buffering and debounce admission. Only admitted messages resolve a cohort flag;
-`legacy`/`v2` env selection makes no flag lookup on this dispatch path (v2's
-separate generation/publication/push admission still requires the flag).
+buffering and debounce admission. Only admitted messages with a conversation id
+resolve a cohort flag; any non-cohort env value skips mentor dispatch entirely.
 
 Structured events: `proactivity_v2_admission`, `proactivity_v2_budget_reserved`,
 `proactivity_v2_budget_settled`, `proactivity_v2_item_terminal`,
@@ -579,9 +578,9 @@ revisions cannot publish a follow-up. Missing queue bindings keep scheduling off
 | Host / role | Required bindings before cohort enablement |
 | --- | --- |
 | Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; plain `PROACTIVITY_V2_POSTHOG_TOKEN` and matching `PROACTIVITY_V2_POSTHOG_HOST`; integrated routes and registry. |
-| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` for a per-user rollout (true `proactivity_v2` selects v2; false/unknown/error retains legacy), or `v2` only for a host whose mentor users are all enabled; working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
+| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` (true `proactivity_v2` selects v2; false/unknown/error dispatches nothing — the legacy lane was deleted); working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
 | Task create/update/reminder hosts and commitment callback worker | All five queue/project/location bindings above, plus the same PostHog, customer-data and gateway bindings on the worker. Propagate enqueue bindings to every host that invokes reminder scheduling, not just the callback host. |
-| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` (or host-wide `v2`) selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
+| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
 | Mobile, macOS, Windows | Updated generated clients and consumers, ordinary authenticated backend routing, existing notification preferences/permissions. No local flag or UID bypass grants server admission. Live listen sockets carry identity-only v2 wakeups; all desktop content is fetched through the feed. Offline sockets catch up through foreground/active polling. |
 
 V2 flag lookup uses **only** `PROACTIVITY_V2_POSTHOG_TOKEN`, stripped and
@@ -616,9 +615,8 @@ hosts resolve the same bounded cohort before increasing exposure. Allow up to
 and 60 seconds before retrying a failed lookup (see rollback notes below).
 No creation or flag update is performed by this PR.
 
-The rollout defaults remain off: `proactivity_v2` absent/false,
-`MENTOR_PIPELINE=legacy`, and empty commitment queue bindings. Producer registry
-rows are enabled behind those gates, not globally active switches. Once v2 is
+The rollout defaults remain off: `proactivity_v2` absent/false, `MENTOR_PIPELINE`
+unset (which denies mentor dispatch), and empty commitment queue bindings. Producer registry
 explicitly enabled, the mentor draft-usefulness judge defaults to **shadow**;
 this is an internal measurement mode, not a rollout flag. Its prefilter is disabled,
 safety escalation suppresses, follow-ups remain feed-only, and mentor push remains
@@ -651,13 +649,13 @@ Never change the shared PostHog secret as part of rollback. Cached enabled resul
 return disabled. Enablement/ramp changes have the same maximum cache latency;
 flag failures deny immediately on the next uncached check and retry after
 **60 seconds**. Allow this rollback window when checking all serving hosts;
-for an urgent mentor-only rollback, explicitly set `MENTOR_PIPELINE=legacy`
-on every mentor host (effective once that env change reaches the process).
+the legacy mentor lane is gone, so mentor rollback is the `proactivity_v2`
+flag itself, or setting `MENTOR_PIPELINE` to any non-cohort value, which
+denies mentor entirely once that env change reaches the process.
 In-flight calls retain reservations and settle; publication rechecks the cached
 flag and suppresses after disable becomes visible.
-Feed returns disabled, outcomes for existing items still work. Coordinator may
-explicitly flip mentor to legacy. A failed cohort flag lookup selects legacy
-before invoking v2; once v2 is invoked, failures never retry through legacy. Preserve
+Feed returns disabled, outcomes for existing items still work. A failed cohort
+flag lookup denies mentor dispatch before invoking v2; once v2 is invoked, failures never retry through legacy. Preserve
 ledger/budgets/attempt IDs until TTL; no historical rewrite or refund-on-rollback.
 No old ledger backfill. Released clients continue existing routes while the
 integration owner handles retirement using `contracts/client-compat/` policy.

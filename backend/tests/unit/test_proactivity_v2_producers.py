@@ -11,6 +11,7 @@ from config.mentor_v2 import MentorV2Config, mentor_config
 from config.proactivity_v2 import ProactivityDenied
 from utils import proactivity_producers as producers
 from utils import app_integrations as integration
+from utils import proactivity_flags as flags
 from routers import commitment_followup as worker
 from utils import commitment_followup_tasks as scheduler
 from tests.unit.test_proactivity_v2_budget import store
@@ -311,13 +312,15 @@ def test_prompts_legacy_1_bytes_and_config_validation():
 @pytest.mark.parametrize(
     'pipeline,flag,expected',
     [
-        ('legacy', False, 'legacy'),
-        ('v2', True, 'v2'),
+        # legacy/v2 host-wide modes were deleted with the legacy pipeline: any
+        # non-cohort value (including a stale flip) invokes no mentor path.
+        ('legacy', True, 'none'),
+        ('v2', True, 'none'),
         ('typo', True, 'none'),
         ('cohort', True, 'v2'),
-        ('cohort', False, 'legacy'),
-        ('cohort', None, 'legacy'),
-        ('cohort', 'error', 'legacy'),
+        ('cohort', False, 'none'),
+        ('cohort', None, 'none'),
+        ('cohort', 'error', 'none'),
     ],
 )
 async def test_exclusive_dispatch(lane, pipeline, flag, expected):
@@ -325,7 +328,7 @@ async def test_exclusive_dispatch(lane, pipeline, flag, expected):
 
     def resolve(uid):
         if flag == 'error':
-            raise ConnectionError('flag service unavailable')
+            raise flags.ProactivityFlagUnavailable('APIError', 429)
         return flag is True
 
     flag_lookup = MagicMock(side_effect=resolve)
@@ -333,21 +336,16 @@ async def test_exclusive_dispatch(lane, pipeline, flag, expected):
     lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
     admission = MagicMock(return_value=[{'text': 'test'}])
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', admission)
-    old = MagicMock(return_value=None)
     new = AsyncMock(return_value=None)
-    lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
     lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
     lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
     await integration._async_trigger_realtime_integrations('u', [], 'c')
-    assert old.call_count == int(expected == 'legacy')
     assert new.await_count == int(expected == 'v2')
-    assert admission.call_count == int(pipeline != 'typo')
+    assert admission.call_count == int(pipeline == 'cohort')
     assert flag_lookup.call_count == int(pipeline == 'cohort')
-    if pipeline != 'typo':
+    if pipeline == 'cohort':
         admission.assert_called_once_with('u', [])
-    if expected == 'legacy':
-        old.assert_called_once_with('u', admission.return_value)
-    elif expected == 'v2':
+    if expected == 'v2':
         new.assert_awaited_once_with('u', 'c', admission.return_value)
 
 
@@ -368,14 +366,12 @@ async def test_cohort_resolves_only_after_shared_admission(lane, messages):
 
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', admit)
     lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', resolve)
-    new, old = AsyncMock(), MagicMock()
+    new = AsyncMock()
     lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
-    lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
     lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
     await integration._async_trigger_realtime_integrations('u', [], 'c')
     assert calls == (['admit', 'flag'] if messages else ['admit'])
     assert new.await_count == int(bool(messages))
-    old.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -390,28 +386,47 @@ async def test_invalid_flip_during_shared_admission_invokes_neither_lane(lane):
     flag_lookup = MagicMock(side_effect=AssertionError('invalid flip must not resolve flags'))
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', admit)
     lane.monkeypatch.setattr(integration.proactivity_flags, 'enabled', flag_lookup)
-    new, old = AsyncMock(), MagicMock()
+    new = AsyncMock()
     lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
-    lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
     lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
     await integration._async_trigger_realtime_integrations('u', [], 'c')
     flag_lookup.assert_not_called()
     new.assert_not_awaited()
-    old.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_v2_failure_never_invokes_legacy(lane):
-    lane.monkeypatch.setenv('MENTOR_PIPELINE', 'v2')
+async def test_flag_denial_does_not_abort_app_integrations(lane):
+    """A cohort flag error denies the mentor lane only; app lookup still runs."""
+    lane.monkeypatch.setenv('MENTOR_PIPELINE', 'cohort')
     lane.monkeypatch.setattr(integration, 'is_trial_paywalled', lambda *args: False)
     lane.monkeypatch.setattr(integration, 'process_mentor_notification', lambda *args: [{'text': 'test'}])
-    old = MagicMock(return_value=None)
-    lane.monkeypatch.setattr(integration, '_process_mentor_proactive_notification', old)
-    lane.monkeypatch.setattr(producers.spine, 'ensure_admitted', AsyncMock(side_effect=ProactivityDenied('not_paid')))
-    lane.monkeypatch.setattr(integration, 'get_available_apps', lambda *args: [])
-    await integration._async_trigger_realtime_integrations('u', [], 'c')
-    old.assert_not_called()
-    lane.model.assert_not_awaited()
+    lane.monkeypatch.setattr(
+        integration.proactivity_flags,
+        'mentor_pipeline',
+        MagicMock(side_effect=ProactivityDenied('flag_unavailable')),
+    )
+    new = AsyncMock()
+    lane.monkeypatch.setattr(producers, 'evaluate_mentor_event', new)
+    apps = MagicMock(return_value=[])
+    lane.monkeypatch.setattr(integration, 'get_available_apps', apps)
+    assert await integration._async_trigger_realtime_integrations('u', [], 'c') == {}
+    apps.assert_called_once_with('u')
+    new.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mentor_failure_logs_only_metadata(lane, caplog):
+    """The v2 failure log line carries metadata only, never provider content."""
+    secret = 'PRIVATE_TRANSCRIPT_NEVER_STORED_5921'
+
+    async def fail(**kwargs):
+        raise RuntimeError(secret)
+
+    lane.model.side_effect = fail
+    with caplog.at_level('INFO'):
+        assert await mentor(lane) is None
+    assert 'mentor_v2 evaluation_failed' in caplog.text
+    assert secret not in caplog.text
 
 
 @pytest.mark.asyncio

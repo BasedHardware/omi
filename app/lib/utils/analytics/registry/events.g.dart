@@ -514,6 +514,54 @@ final class SpeechProfileContinued extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+final class OnboardingSetupRatingPromptShown extends RegisteredEvent {
+  const OnboardingSetupRatingPromptShown();
+  @override
+  String get wireName => "Onboarding Setup Rating Prompt Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingSetupRatingPromptAnsweredAnswer {
+  support("support"),
+  notReally("not_really");
+  const OnboardingSetupRatingPromptAnsweredAnswer(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingSetupRatingPromptAnswered extends RegisteredEvent {
+  const OnboardingSetupRatingPromptAnswered({required this.answer});
+  final OnboardingSetupRatingPromptAnsweredAnswer answer;
+  @override
+  String get wireName => "Onboarding Setup Rating Prompt Answered";
+  @override
+  Map<String, Object> get properties => {"answer": answer.wireName};
+}
+
+final class FirstSummaryRatingPromptShown extends RegisteredEvent {
+  const FirstSummaryRatingPromptShown();
+  @override
+  String get wireName => "First Summary Rating Prompt Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum FirstSummaryRatingPromptAnsweredAnswer {
+  yes("yes"),
+  no("no");
+  const FirstSummaryRatingPromptAnsweredAnswer(this.wireName);
+  final String wireName;
+}
+
+final class FirstSummaryRatingPromptAnswered extends RegisteredEvent {
+  const FirstSummaryRatingPromptAnswered({required this.answer});
+  final FirstSummaryRatingPromptAnsweredAnswer answer;
+  @override
+  String get wireName => "First Summary Rating Prompt Answered";
+  @override
+  Map<String, Object> get properties => {"answer": answer.wireName};
+}
+
 final class UseWithoutDeviceOnboardingWelcome extends RegisteredEvent {
   const UseWithoutDeviceOnboardingWelcome();
   @override

@@ -6,6 +6,7 @@ import sys
 import uuid
 import logging
 import asyncio
+from importlib import import_module
 from datetime import timezone, timedelta, datetime
 from collections.abc import Mapping, Sequence
 from enum import Enum
@@ -34,13 +35,11 @@ import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
 from database.vector_db import (
-    find_similar_action_items,
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
 )
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
-from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
-from utils.conversations.transcript_chunks import build_transcript_chunks
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
@@ -98,6 +97,7 @@ from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, r
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
+    emit_recorded_decision,
     record_decision,
     rules_only_relevance,
 )
@@ -106,7 +106,6 @@ from utils.conversations.projection_payload import (
     clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,
-    sanitize_untrusted_provenance_field,
     strip_client_processing,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -123,12 +122,19 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.observability.owner_recognition import (
+    emit_finalized_owner_recognition,
+    lookup_owner_voiceprint,
+    owner_recognition_already_observed,
+    owner_recognition_needs_profile,
+)
 from utils.metrics import (
     record_jit_first_open,
     record_lazy_desktop_deferral,
     record_memory_owner_jev,
     record_jev_shadow_outcome,
 )
+from utils.observability.capture_loss import record_capture_loss
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -167,16 +173,14 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
-    get_transcript_structure,
     get_app_result,
     should_discard_conversation,
     get_suggested_apps_for_conversation,
-    get_reprocess_transcript_structure,
-    extract_action_items,
     get_conversation_notes,
     validate_structured_source_segment_ids,
 )
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, build_conversation_prompt_prefix
+from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
@@ -198,7 +202,6 @@ from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
-    retrieve_metadata_fields_from_transcript,
     retrieve_metadata_fields_from_structured,
     obtain_emotional_message,
 )
@@ -239,8 +242,6 @@ from utils.conversations.meeting_context import (
     store_meeting_context as _store_meeting_context,
 )
 from utils.conversations.meeting_notes_wiring import (
-    meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
-    meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
     rich_notes_inputs,
     rich_roster_inputs,
 )
@@ -261,24 +262,6 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
-class SummaryPipelineMode(str, Enum):
-    """The two configurations of the summary pipeline that are actually safe to run.
-
-    Independent booleans for "notes v2" and "apps are opt-in" describe four states, but only
-    two of them are coherent. The missing pair is what makes this an enum rather than two
-    flags: legacy notes + opt-in apps would take the app summary away and fall back to the
-    short first-party overview, which is worse than either whole configuration — a regression
-    reachable purely by flag misconfiguration.
-    """
-
-    # Retire 2026-09-29: legacy path survives only a four-week prod bake of notes v2
-    # (prod-on 2026-09-01). After that date a follow-up PR deletes LEGACY_APP_PRIMARY,
-    # the legacy writers, and CONVERSATION_NOTES_V2_ENABLED itself — v2 becomes the
-    # only path. Do not build on this mode.
-    LEGACY_APP_PRIMARY = 'legacy_app_primary'
-    NOTES_V2_APPS_OPT_IN = 'notes_v2_primary_apps_opt_in'
 
 
 class AppUsageAttribution(str, Enum):
@@ -324,24 +307,9 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     """
 
 
-def summary_pipeline_mode() -> SummaryPipelineMode:
-    """Resolve the pipeline mode once. `CONVERSATION_NOTES_V2_ENABLED` is the only switch.
-
-    Rollback is turning notes v2 off, which restores the previous behaviour wholesale rather
-    than leaving a half-migrated combination running.
-    """
-    if _flag_enabled('CONVERSATION_NOTES_V2_ENABLED'):
-        return SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
-    return SummaryPipelineMode.LEGACY_APP_PRIMARY
-
-
-def _conversation_notes_v2_enabled() -> bool:
-    return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
-
-
 def conversation_apps_opt_in_only() -> bool:
-    # Derived, never independently configured — see SummaryPipelineMode.
-    return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
+    """Summarization apps require explicit selection on the notes v2 path."""
+    return True
 
 
 def _calendar_context_read_enabled() -> bool:
@@ -358,66 +326,6 @@ def _stored_meeting_lookup_enabled() -> bool:
     # does not require a Google OAuth grant or a Redis mapping that may never
     # have been written. The env var exists as a kill switch.
     return _flag_enabled('CONVERSATION_STORED_MEETING_CONTEXT_ENABLED', default=True)
-
-
-def _dedup_excluded_conversation_ids(conversation: Any) -> set:
-    """The conversation's own id plus any merge-source ids. Items from these
-    conversations must never be dedup candidates: on reprocess/merge they are
-    this conversation's previous items — the LLM would suppress re-extracting
-    them, and the save step then deletes them, silently losing the tasks."""
-    excluded = {getattr(conversation, 'id', None)}
-    external_data = getattr(conversation, 'external_data', None) or {}
-    merge_metadata = external_data.get('merge_metadata') or {}
-    excluded.update(merge_metadata.get('source_conversation_ids') or [])
-    excluded.discard(None)
-    return excluded
-
-
-def _fetch_dedup_candidates_for_query(uid: str, query: str, conversation: Any = None) -> List[Dict[str, Any]]:
-    if not query.strip():
-        return []
-
-    excluded_conversation_ids = _dedup_excluded_conversation_ids(conversation) if conversation else set()
-
-    try:
-        similar = find_similar_action_items(uid, query, threshold=0.6, limit=10)
-        if not similar:
-            return []
-
-        items = action_items_db.get_action_items_by_ids(uid, [s['action_item_id'] for s in similar])
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-        eligible: List[Dict[str, Any]] = []
-        for item in items:
-            if item.get('completed', False):
-                continue
-            if item.get('conversation_id') in excluded_conversation_ids:
-                continue
-            last_active = item.get('updated_at') or item.get('created_at')
-            if last_active is None or last_active < cutoff:
-                continue
-            eligible.append(item)
-
-        logger.info(
-            f'dedup_candidates uid={uid} similar={len(similar)} '
-            f'eligible={len(eligible)} top_score={similar[0]["score"]}'
-        )
-        return eligible
-    except Exception as e:
-        logger.exception(f'_fetch_dedup_candidates failed uid={uid}: {e}')
-        return []
-
-
-def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any = None) -> List[Dict[str, Any]]:
-    """Fetch recently active open tasks related to a generated overview."""
-    if not structured or not structured.overview:
-        return []
-    return _fetch_dedup_candidates_for_query(uid, structured.overview, conversation)
-
-
-def _primary_user_name(uid: str) -> Optional[str]:
-    raw_name = get_user_name(uid, use_default=False)
-    return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
 
 
 def _proposes_task_candidates(conversation: Any) -> bool:
@@ -485,64 +393,41 @@ def _get_structured(
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
-                if _conversation_notes_v2_enabled():
-                    roster: Optional[MeetingRoster] = None
-                    meeting_context_block: Optional[str] = None
-                    if _meeting_notes_rich_context_enabled():
-                        roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
-                            uid,
-                            conversation,
-                            calendar_context,
-                            tz_str,
-                            include_background=True,
-                            include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                        )
-                    prefix = build_conversation_prompt_prefix(
-                        conversation_id=prompt_conversation_id,
-                        transcript=ext_conv.text,
-                        started_at=started_at,
-                        timezone_name=tz_str,
-                        language_code=language_code,
-                        calendar_context=calendar_context,
-                        roster=roster,
-                    )
-                    with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                        structured = get_conversation_notes(
-                            prefix,
-                            started_at=started_at,
-                            language_code=language_code,
-                            output_language_code=user_language,
-                            tz=tz_str,
-                            task_intelligence_capture=task_intelligence_capture,
-                            existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
-                            meeting_context=meeting_context_block,
-                            rich_context_enabled=roster is not None,
-                            roster=roster,
-                        )
-                    validate_structured_source_segment_ids(structured, ())
-                    return structured, False
+
+                roster: Optional[MeetingRoster] = None
+                meeting_context_block: Optional[str] = None
+                roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
+                    uid,
+                    conversation,
+                    calendar_context,
+                    tz_str,
+                    include_background=True,
+                    include_screen_text=True,
+                )
+                prefix = build_conversation_prompt_prefix(
+                    uid=uid,
+                    conversation_id=prompt_conversation_id,
+                    transcript=ext_conv.text,
+                    started_at=started_at,
+                    timezone_name=tz_str,
+                    language_code=language_code,
+                    calendar_context=calendar_context,
+                    roster=roster,
+                )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                    structured = get_transcript_structure(
-                        ext_conv.text,
-                        started_at,
-                        language_code,
-                        tz_str,
-                        uid,
-                        calendar_meeting_context=calendar_context,
+                    structured = get_conversation_notes(
+                        prefix,
+                        uid=uid,
+                        started_at=started_at,
+                        language_code=language_code,
                         output_language_code=user_language,
-                        transcript_segment_ids=(),
-                    )
-                with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
-                    structured.action_items = extract_action_items(
-                        ext_conv.text,
-                        started_at,
-                        language_code,
-                        tz_str,
-                        existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
-                        calendar_meeting_context=calendar_context,
-                        output_language_code=user_language,
+                        tz=tz_str,
                         task_intelligence_capture=task_intelligence_capture,
-                        primary_user_name=_primary_user_name(uid),
+                        existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
+                        meeting_context=meeting_context_block,
+                        rich_context_enabled=roster is not None,
+                        roster=roster,
+                        screen_frames=_frames,
                     )
                 validate_structured_source_segment_ids(structured, ())
                 return structured, False
@@ -684,86 +569,47 @@ def _get_structured(
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
-        if _conversation_notes_v2_enabled():
-            roster: Optional[MeetingRoster] = None
-            meeting_context_block: Optional[str] = None
-            desktop_capture, screen_frames = False, ()
-            if _meeting_notes_rich_context_enabled():
-                roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
-                    uid,
-                    main_conv,
-                    calendar_context,
-                    tz_str,
-                    include_background=True,
-                    include_screen_text=_meeting_notes_screen_text_context_enabled(),
-                )
-            prefix = build_conversation_prompt_prefix(
-                conversation_id=prompt_conversation_id,
-                transcript=action_items_transcript,
-                started_at=conv_started_at,
-                timezone_name=tz_str,
-                language_code=language_code,
-                calendar_context=calendar_context,
-                photos=main_conv.photos,
-                speaker_map=speaker_map,
-                transcript_segment_ids=transcript_segment_ids,
-                roster=roster,
-                desktop_meeting_capture=desktop_capture,
-            )
-            with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                structured = get_conversation_notes(
-                    prefix,
-                    started_at=conv_started_at,
-                    language_code=language_code,
-                    output_language_code=user_language,
-                    tz=tz_str,
-                    task_intelligence_capture=task_intelligence_capture,
-                    existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
-                    trusted_wake_word_markers=has_wake_word_marker,
-                    meeting_context=meeting_context_block,
-                    rich_context_enabled=roster is not None,
-                    roster=roster,
-                    screen_frames=screen_frames,
-                )
-            validate_structured_source_segment_ids(structured, transcript_segment_ids)
-            return structured, False
+
+        roster: Optional[MeetingRoster] = None
+        meeting_context_block: Optional[str] = None
+        desktop_capture, screen_frames = False, ()
+        roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
+            uid,
+            main_conv,
+            calendar_context,
+            tz_str,
+            include_background=True,
+            include_screen_text=True,
+        )
+        prefix = build_conversation_prompt_prefix(
+            uid=uid,
+            conversation_id=prompt_conversation_id,
+            transcript=action_items_transcript,
+            started_at=conv_started_at,
+            timezone_name=tz_str,
+            language_code=language_code,
+            calendar_context=calendar_context,
+            photos=main_conv.photos,
+            speaker_map=speaker_map,
+            transcript_segment_ids=transcript_segment_ids,
+            roster=roster,
+            desktop_meeting_capture=desktop_capture,
+        )
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            if PROCESSING_MODES[trigger].run_now:
-                # Legacy (pre-notes-v2) reprocess prompt; it takes no calendar context.
-                structured = get_reprocess_transcript_structure(
-                    transcript_text,
-                    conv_started_at,
-                    language_code,
-                    tz_str,
-                    photos=main_conv.photos,
-                    output_language_code=user_language,
-                    transcript_segment_ids=transcript_segment_ids,
-                )
-            else:
-                structured = get_transcript_structure(
-                    transcript_text,
-                    conv_started_at,
-                    language_code,
-                    tz_str,
-                    uid,
-                    photos=main_conv.photos,
-                    calendar_meeting_context=calendar_context,
-                    output_language_code=user_language,
-                    transcript_segment_ids=transcript_segment_ids,
-                )
-        with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
-            structured.action_items = extract_action_items(
-                action_items_transcript,
-                conv_started_at,
-                language_code,
-                tz_str,
-                photos=main_conv.photos,
-                existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
-                calendar_meeting_context=None if PROCESSING_MODES[trigger].run_now else calendar_context,
+            structured = get_conversation_notes(
+                prefix,
+                uid=uid,
+                started_at=conv_started_at,
+                language_code=language_code,
                 output_language_code=user_language,
+                tz=tz_str,
                 task_intelligence_capture=task_intelligence_capture,
+                existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                 trusted_wake_word_markers=has_wake_word_marker,
-                primary_user_name=_primary_user_name(uid),
+                meeting_context=meeting_context_block,
+                rich_context_enabled=roster is not None,
+                roster=roster,
+                screen_frames=screen_frames,
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
@@ -976,13 +822,12 @@ def trigger_conversation_apps(
         with track_usage(uid, Features.CONVERSATION_APPS):
             transcript = conversation_transcript_for_llm(uid, conversation, people)
             prompt_prefix = None
-            if _conversation_notes_v2_enabled() and conversation.started_at:
+            if conversation.started_at:
                 app_transcript, app_speaker_map = conversation_transcript_and_speaker_map(uid, conversation, people)
                 app_calendar_context = _stored_meeting_context(conversation)
                 app_roster: Optional[MeetingRoster] = None
                 app_desktop_capture = False
-                if _meeting_notes_rich_context_enabled():
-                    app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
+                app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
                     transcript=app_transcript,
@@ -1729,7 +1574,7 @@ def _extract_memories_canonical(
         raw_user_name = get_user_name(uid)
         user_name = raw_user_name.strip() if isinstance(raw_user_name, str) and raw_user_name.strip() else "the user"
         prompt_prefix: Optional[ConversationPromptPrefix] = None
-        if _conversation_notes_v2_enabled() and conversation.started_at:
+        if conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
             prompt_people = Person.deserialize_many_safe(people_records)
@@ -1744,8 +1589,7 @@ def _extract_memories_canonical(
                 prompt_speaker_map = {}
             prompt_roster: Optional[MeetingRoster] = None
             prompt_desktop_capture = False
-            if _meeting_notes_rich_context_enabled():
-                prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
+            prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -2310,20 +2154,6 @@ def _save_action_items(
     )
 
 
-# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
-# retrieval over raw transcript text, which the summary-only conversation vectors miss.
-TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
-
-
-def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments: List[Any] = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
-    chunks = build_transcript_chunks(
-        cast(List[Dict[str, Any]], segments), conversation.started_at or conversation.created_at
-    )
-    if chunks:
-        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
-
-
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid) or ''
@@ -2344,16 +2174,7 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
             elif text_source == ExternalIntegrationConversationSource.other.value:
                 metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
     else:
-        if _conversation_notes_v2_enabled():
-            metadata = retrieve_metadata_fields_from_structured(
-                uid, conversation.created_at, conversation.structured, tz
-            )
-        else:
-            # Legacy path extracts filters from the raw transcript and photos.
-            segments: List[Dict[str, Any]] = [t.dict() for t in conversation.transcript_segments]
-            metadata = retrieve_metadata_fields_from_transcript(
-                uid, conversation.created_at, segments, tz, photos=conversation.photos
-            )
+        metadata = retrieve_metadata_fields_from_structured(uid, conversation.created_at, conversation.structured, tz)
 
     metadata['created_at'] = int(conversation.created_at.timestamp())
 
@@ -2477,6 +2298,8 @@ def _store_deferred_conversation(
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
         record_lazy_desktop_deferral(event='fenced')
         return conversation
+
+    emit_recorded_decision(uid, conversation.id, decision)
 
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     record_lazy_desktop_deferral(event='stored')
@@ -2628,6 +2451,7 @@ def _store_deterministic_minimum(
             plan.reason,
         )
         return conversation, False
+    emit_recorded_decision(uid, conversation.id, decision)
     logger.info(
         'free-tier: stored %s uid=%s conv=%s mode=%s reason=%s',
         kind,
@@ -2827,6 +2651,7 @@ def process_conversation(
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
     recovery_transcript_decoded: bool = True,
+    prior_relevance_decision: Mapping[str, Any] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2836,10 +2661,43 @@ def process_conversation(
     """
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
+    # Snapshot before this call replaces structured or status. Sync intake's
+    # completed status is not an observation; see owner_recognition_already_observed.
+    already_observed = owner_recognition_already_observed(
+        conversation,
+        is_reprocess=is_reprocess,
+        trigger=trigger,
+        prior_relevance_decision=prior_relevance_decision,
+    )
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
+
+    def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # One observation per conversation, on every successful persist. The
+        # free-tier terminal stores and the eager-extraction denial return
+        # through report_persistence, so a new early return that reports a
+        # completed write is observed too. Telemetry must not fail the write.
+        try:
+            profile = None
+            if owner_recognition_needs_profile(completed):
+                profile = lookup_owner_voiceprint(uid, read_embedding=users_db.get_user_speaker_embedding)
+            emit_finalized_owner_recognition(
+                completed,
+                uid=uid,
+                already_observed=already_observed,
+                owner_profile_present=profile,
+            )
+        except Exception:
+            try:
+                logger.warning(
+                    'owner_recognition_outcome emit_failed uid=%s conversation=%s',
+                    uid,
+                    getattr(completed, 'id', None),
+                )
+            except Exception:
+                return
 
     def report_persistence(
         current: bool,
@@ -2847,6 +2705,9 @@ def process_conversation(
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        if current and completed is not None:
+            record_capture_loss(completed)
+            _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
             persistence_observer(current)
         if derived_effects_disposition_observer is not None:
@@ -3165,6 +3026,9 @@ def process_conversation(
         )
         return conversation
 
+    if relevance is not None:
+        emit_recorded_decision(uid, conversation.id, relevance)
+
     # Enrollment is resolved only from backend authority plus the persisted
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.
@@ -3277,11 +3141,7 @@ def process_conversation(
             # trigger_conversation_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
-            if not jit_defer_expensive and (
-                conversation_apps_opt_in_only()
-                or conversation.apps_results
-                or conversation.suggested_summarization_apps
-            ):
+            if not jit_defer_expensive:
                 app_updates = {
                     'apps_results': [result.dict() for result in conversation.apps_results],
                     'suggested_summarization_apps': conversation.suggested_summarization_apps,
@@ -3289,8 +3149,6 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             if not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-                if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
@@ -3308,9 +3166,9 @@ def process_conversation(
             # updates goals; users update goals through explicit actions.
             if not jit_defer_expensive:
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
-
-        # Create audio files from chunks if private cloud sync was enabled
-        if not is_reprocess and conversation.private_cloud_sync_enabled:
+        # Recovery preserves admitted audio ids instead of rebuilding old chunks.
+        capture_audio = trigger is not ProcessingTrigger.SERVER_RECOVERY
+        if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
                 if audio_files:

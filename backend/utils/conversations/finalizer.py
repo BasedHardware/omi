@@ -23,6 +23,7 @@ from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
@@ -205,6 +206,7 @@ async def finalize_persisted_conversation(
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
+                process_with_episode_budget,
                 process_conversation,
                 uid,
                 resolved_language,

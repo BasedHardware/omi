@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from config.translation import TranslationProfile, TranslationProvider
 from utils.llm.clients import get_llm, get_model
+from utils.llm.model_config import LUNA_MODEL
 from utils.observability.fallback import record_fallback
 from utils.translation_core.metrics import TranslationMetrics, get_translation_metrics
 from utils.translation_language import (
@@ -57,29 +58,31 @@ class TranslationProviderError(RuntimeError):
         super().__init__(message)
 
 
-class GeminiTranslationItem(BaseModel):
+class LunaTranslationItem(BaseModel):
     text: str
     detected_language: str
 
 
-class GeminiTranslationBatch(BaseModel):
-    translations: list[GeminiTranslationItem]
+class LunaTranslationBatch(BaseModel):
+    translations: list[LunaTranslationItem]
 
 
-class GeminiViewedTranslationItem(GeminiTranslationItem):
+class LunaViewedTranslationItem(LunaTranslationItem):
     ordinal: int
 
 
-class GeminiViewedTranslationBatch(BaseModel):
-    translations: list[GeminiViewedTranslationItem]
+class LunaViewedTranslationBatch(BaseModel):
+    translations: list[LunaViewedTranslationItem]
 
 
-class GeminiTranslationProvider:
-    provider = TranslationProvider.gemini
-    model_name = 'gemini-2.5-flash-lite'
+class LunaTranslationProvider:
+    """Structured translation through the company-paid Luna gateway lane."""
+
+    provider = TranslationProvider.luna
+    model_name = LUNA_MODEL
 
     def __init__(self, client_factory: Callable[[], Any] | None = None) -> None:
-        self._client_factory = client_factory or _create_gemini_translation_client
+        self._client_factory = client_factory or _create_luna_translation_client
         self._client: Any | None = None
         self._client_lock = Lock()
 
@@ -94,41 +97,39 @@ class GeminiTranslationProvider:
             if profile.policy_version == 'viewed_v1':
                 if get_model('translation') != self.model_name:
                     raise TranslationProviderError(
-                        self.provider, 'config_incomplete', 'Viewed Gemini model is not configured'
+                        self.provider, 'config_incomplete', 'Viewed Luna model is not configured'
                     )
                 client = (
                     get_llm('translation', request_timeout=profile.deadline_seconds, max_retries=0)
-                    if self._client_factory is _create_gemini_translation_client
+                    if self._client_factory is _create_luna_translation_client
                     else self._get_client()
                 )
                 limits = {'max_tokens': profile.max_output_tokens, 'max_output_tokens': profile.max_output_tokens}
                 client = client.model_copy(update=limits) if hasattr(client, 'model_copy') else client
-                response = client.with_structured_output(GeminiViewedTranslationBatch).invoke(
+                response = client.with_structured_output(LunaViewedTranslationBatch).invoke(
                     _viewed_translation_prompt(contents, target_language, source_language)
                 )
-                if not isinstance(response, GeminiViewedTranslationBatch) or [
+                if not isinstance(response, LunaViewedTranslationBatch) or [
                     item.ordinal for item in response.translations
                 ] != list(range(len(contents))):
                     raise TranslationProviderError(
-                        self.provider, 'invalid_response', 'Viewed Gemini response is malformed'
+                        self.provider, 'invalid_response', 'Viewed Luna response is malformed'
                     )
                 if sum(len(item.text) for item in response.translations) > profile.max_output_tokens * 4:
-                    raise TranslationProviderError(
-                        self.provider, 'invalid_response', 'Viewed Gemini output is oversized'
-                    )
+                    raise TranslationProviderError(self.provider, 'invalid_response', 'Viewed Luna output is oversized')
             else:
                 response = (
                     self._get_client()
-                    .with_structured_output(GeminiTranslationBatch)
+                    .with_structured_output(LunaTranslationBatch)
                     .invoke(_translation_prompt(contents, target_language, source_language))
                 )
         except TranslationProviderError:
             raise
         except Exception as error:
-            raise TranslationProviderError(self.provider, 'other', 'Gemini translation request failed') from error
+            raise TranslationProviderError(self.provider, 'other', 'Luna translation request failed') from error
 
-        if not isinstance(response, (GeminiTranslationBatch, GeminiViewedTranslationBatch)):
-            raise TranslationProviderError(self.provider, 'invalid_response', 'Gemini response is malformed')
+        if not isinstance(response, (LunaTranslationBatch, LunaViewedTranslationBatch)):
+            raise TranslationProviderError(self.provider, 'invalid_response', 'Luna response is malformed')
         return [
             ProviderTranslation(text=item.text, detected_language=item.detected_language)
             for item in response.translations
@@ -337,7 +338,7 @@ def default_provider_chain(
 ) -> TranslationProviderChain:
     return TranslationProviderChain(
         providers={
-            TranslationProvider.gemini: GeminiTranslationProvider(),
+            TranslationProvider.luna: LunaTranslationProvider(),
             TranslationProvider.nllb: NllbTranslationProvider(),
         },
         metrics=metrics,
@@ -363,7 +364,8 @@ def _create_nllb_client(profile: TranslationProfile) -> httpx.Client:
     return httpx.Client(base_url=profile.nllb_url, timeout=profile.nllb_timeout_seconds)
 
 
-def _create_gemini_translation_client() -> Any:
+def _create_luna_translation_client() -> Any:
+    """Return the translation feature's Luna gateway client."""
     return get_llm('translation')
 
 
@@ -453,15 +455,15 @@ def _http_reason(status_code: int) -> str:
     return 'provider_4xx'
 
 
-# Gemini is the capacity/outage fallback only. Application failures (unsupported
+# Luna is the capacity/outage fallback only. Application failures (unsupported
 # language, invalid_response, 4xx) must not storm the Vertex translation lane.
-_GEMINI_FALLBACK_REASONS = frozenset({'timeout', 'provider_429', 'provider_5xx', 'other', 'config_incomplete'})
+_LUNA_FALLBACK_REASONS = frozenset({'timeout', 'provider_429', 'provider_5xx', 'other', 'config_incomplete'})
 
 
 def _should_continue_fallback(error: TranslationProviderError, next_provider: TranslationProvider) -> bool:
-    if next_provider != TranslationProvider.gemini:
+    if next_provider != TranslationProvider.luna:
         return True
-    return error.reason in _GEMINI_FALLBACK_REASONS
+    return error.reason in _LUNA_FALLBACK_REASONS
 
 
 def _metric_error(reason: str) -> str:

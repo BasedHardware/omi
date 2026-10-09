@@ -28,13 +28,15 @@ TranscriptSegment _segment(String text) => TranscriptSegment(
       translations: [],
     );
 
-ServerConversation _conversation({String title = 'Venue talk.', String overview = '', bool summaryRetryable = true}) {
+ServerConversation _conversation(
+    {String title = 'Venue talk.', String overview = '', bool summaryRetryable = true, String? captureCoverage}) {
   return ServerConversation(
     id: 'detail-retry',
     createdAt: DateTime(2026, 9, 30, 12),
     structured: Structured(title, overview, emoji: '🧠'),
     transcriptSegments: [_segment('Venue talk. We picked Friday.')],
     summaryRetryable: summaryRetryable,
+    captureCoverage: captureCoverage,
   );
 }
 
@@ -126,5 +128,43 @@ void main() {
     ));
     expect(field.decoration!.hintText, 'Venue talk.');
     expect(field.decoration!.hintText, isNot(l10n.untitledConversation));
+  });
+
+  for (final coverage in <String?>['incomplete', 'mapped', 'unknown', null]) {
+    testWidgets('detail shows partial recording only for incomplete coverage ($coverage)', (tester) async {
+      final original = _conversation(captureCoverage: coverage);
+      // Exercise the generated wire and app cache roundtrip before showing the header.
+      final conversation = ServerConversation.fromJson(original.toGenerated().toJson());
+      expect(conversation.captureCoverage, coverage);
+      expect(ServerConversation.fromJson(conversation.toJson()).captureCoverage, coverage);
+      final detail = _detail(conversation);
+      final folders = FolderProvider(foldersFetcher: () async => []);
+      addTearDown(detail.dispose);
+      addTearDown(folders.dispose);
+      await tester.pumpWidget(_app(detail, ConversationDetailHeader(onOpenRecordings: (_) {}), folders: folders));
+      final badge = find.byKey(const Key('conversation_partial_recording'));
+      expect(badge, coverage == 'incomplete' ? findsOneWidget : findsNothing);
+      if (coverage == 'incomplete') {
+        final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+        expect(find.text(l10n.partialRecording), findsOneWidget);
+        await tester.pumpWidget(_app(
+          detail,
+          MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: ConversationDetailHeader(onOpenRecordings: (_) {})),
+          folders: folders,
+        ));
+        expect(badge, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
+  test('existing nested coverage field is read without inferring coverage on legacy rows', () {
+    final json = _conversation().toJson();
+    json['capture_evidence'] = {'coverage': 'incomplete'};
+    expect(ServerConversation.fromJson(json).captureCoverage, 'incomplete');
+    json.remove('capture_evidence');
+    expect(ServerConversation.fromJson(json).captureCoverage, isNull);
   });
 }

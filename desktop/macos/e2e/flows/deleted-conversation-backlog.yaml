@@ -1,0 +1,29 @@
+version: 2
+name: deleted-conversation-backlog
+tier: manual
+description: Deleted conversation identities resolve the producing Mac outbox without recreating content or purging other sessions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Rewind/Core/ConversationDeletionIdentity.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+
+steps:
+  - id: S1
+    name: Exact local identity and confirmed deletion
+    do: "Run TranscriptionStorageRecoveryTests through xcrun swift test --package-path Desktop --filter TranscriptionStorageRecoveryTests. Verify the UUIDv5 vector agrees with the backend, confirmed deletion resolves both the never-synced producing session and its cached backend row, unrelated sessions remain intact, and the resolved row leaves the finalization queue. Use the isolated SQLite test owner; no production account or bundle."
+
+  - id: S2
+    name: Deleted upload acknowledgement drains once
+    do: "Run LocalSegmentsFinalizationRetryTests through xcrun swift test --package-path Desktop --filter LocalSegmentsFinalizationRetryTests. The scripted HTTP 200 status=deleted response must purge the exact uploading session and its cascading segments before hydration, and a second recovery must issue no additional upload. Normal success and retryable failures must retain their existing behavior."
+
+  - id: S3
+    name: Owner and stale cache fences
+    do: "In TranscriptionStorageRecoveryTests, verify an acknowledgement from a replaced database generation cannot purge a current row with the same integer ID. Replay stale server detail after confirmed deletion and verify the local row stays deleted and its transcript stays empty. Keep hermetic test results separate from live app acceptance."
+
+  - id: S4
+    name: Optional isolated UI acceptance
+    do: "Use only a named omi-* bundle pointed at a local synthetic backend. Create a disposable recording, open its conversation, choose Delete Conversation, and confirm. Refresh Conversations and restart the named bundle; the deleted recording must remain absent while a separate recording remains present. Never launch or alter Stable/Beta, and do not run this against a production account."

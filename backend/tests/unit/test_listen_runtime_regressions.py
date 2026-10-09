@@ -218,8 +218,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
-        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None, window_uid=None):
+        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service, window_uid))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -241,7 +241,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
 
     assert await runtime._bootstrap() is True
     await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
-    assert selected_multi_language_options == [('es', False, None)]
+    assert selected_multi_language_options == [('es', False, None, 'onboarding-user')]
 
 
 @pytest.mark.anyio
@@ -625,7 +625,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None, window_uid=None):
         assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
@@ -1241,10 +1241,12 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
 @pytest.mark.anyio
 async def test_flush_usage_meters_live_speech_seconds_exactly_once(monkeypatch):
-    """Live provider audio minutes come from the VAD speech delta consumed in
+    """BYOK live provider audio minutes come from the VAD speech delta consumed in
     _flush_usage: each flushed millimeter of speech reaches the counter once,
     and a zero delta (the periodic loop's next tick) emits nothing extra."""
     import routers.listen.runtime as runtime_module
+
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
 
     metered = []
     speech_recorded = []

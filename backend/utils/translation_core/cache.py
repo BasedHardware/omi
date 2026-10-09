@@ -15,6 +15,7 @@ from redis.exceptions import RedisError
 
 from config.translation import TranslationProfile
 from utils.translation_core.metrics import TranslationMetrics
+from utils.llm.model_config import LUNA_MODEL
 
 
 @dataclass(frozen=True)
@@ -246,7 +247,7 @@ def viewed_cache_fingerprint(
         [
             'viewed',
             policy_version,
-            'gemini-2.5-flash-lite',
+            LUNA_MODEL,
             'prompt-v1',
             source_language.strip().lower() or 'detect-v1',
             target_language.strip().lower(),

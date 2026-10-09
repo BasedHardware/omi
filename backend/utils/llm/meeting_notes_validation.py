@@ -131,7 +131,7 @@ def _normalize_section_citations(
     return (_clean_after_removal(body) if changed else body), merged
 
 
-def _visible_text_fields(structured: Structured) -> list[tuple[Any, str]]:
+def visible_text_fields(structured: Structured) -> list[tuple[Any, str]]:
     fields: list[tuple[Any, str]] = [(structured, 'title'), (structured, 'overview')]
     for section in structured.sections:
         fields.extend(((section, 'heading'), (section, 'body_markdown')))
@@ -183,7 +183,7 @@ def enforce_structured_presentation_contract(
         if action_item.source_segment_ids != before:
             report.repairs.add('invalid_source_reference')
 
-    for owner, attribute in _visible_text_fields(structured):
+    for owner, attribute in visible_text_fields(structured):
         value = getattr(owner, attribute, '') or ''
         for source_id in valid_ids:
             pattern = _id_pattern(source_id)
@@ -196,9 +196,9 @@ def enforce_structured_presentation_contract(
                 report.violations.add('source_id_in_prose')
         setattr(owner, attribute, value)
 
-    before_fields = [getattr(owner, attribute, '') for owner, attribute in _visible_text_fields(structured)]
+    before_fields = [getattr(owner, attribute, '') for owner, attribute in visible_text_fields(structured)]
     sanitize_structured_speaker_placeholders(structured)
-    after_fields = [getattr(owner, attribute, '') for owner, attribute in _visible_text_fields(structured)]
+    after_fields = [getattr(owner, attribute, '') for owner, attribute in visible_text_fields(structured)]
     if before_fields != after_fields:
         report.repairs.add('speaker_placeholder')
     return report

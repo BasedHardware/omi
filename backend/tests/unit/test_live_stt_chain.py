@@ -94,8 +94,6 @@ def test_allocation_is_stable_bounded_and_default_dark(monkeypatch):
     assert first == [window_allocation(str(i)) for i in range(1000)]
     assert 200 < sum(first) < 300
     assert not window_allocation(None)
-    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false')
-    assert not window_allocation('user')
 
 
 def test_one_percent_canary_leads_without_reordering_vendor_control(monkeypatch):
@@ -518,14 +516,14 @@ def test_parallel_half_open_and_late_success_cannot_erase_a_failure():
 
 
 @pytest.mark.asyncio
-async def test_default_darkness_preserves_fixed_order_and_ignores_fallback_breaker(monkeypatch):
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
+async def test_explicit_custom_session_keeps_fixed_order_and_ignores_fallback_breaker(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'])
     assert st.get_stt_service_for_language('en', window_uid='user') == (st.STTService.modulate, 'multi', 'velma-2')
     st._deepgram_circuit.record_serve_failure()
     soniox = AsyncMock(return_value=socket())
     dg = AsyncMock(return_value=socket())
     _, actual = await st.connect_stt_socket_with_fallback(
+        use_config=False,
         primary_service=st.STTService.modulate,
         connect_primary=AsyncMock(side_effect=RuntimeError()),
         connect_soniox=soniox,
@@ -538,7 +536,9 @@ async def test_default_darkness_preserves_fixed_order_and_ignores_fallback_break
     st._modulate_circuit.record_serve_failure()
     primary = AsyncMock(return_value=socket())
     with pytest.raises(RuntimeError):
-        await st.connect_stt_socket_with_fallback(primary_service=st.STTService.modulate, connect_primary=primary)
+        await st.connect_stt_socket_with_fallback(
+            use_config=False, primary_service=st.STTService.modulate, connect_primary=primary
+        )
     primary.assert_not_called()
 
 
@@ -561,8 +561,6 @@ def test_preflight_does_not_strand_a_start_with_an_open_primary(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     st._modulate_circuit.record_serve_failure()
     assert st.is_stt_available()
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    assert not st.is_stt_available()
 
 
 @pytest.mark.asyncio
@@ -623,18 +621,11 @@ def test_mid_session_metrics_retain_their_bounded_vocabulary():
     assert bucket_reason('connection_lost') == 'connection_lost'
 
 
-def test_soniox_circuit_owns_its_env_only_after_enablement(monkeypatch):
+def test_soniox_circuit_uses_its_configured_threshold(monkeypatch):
     monkeypatch.setenv('SONIOX_CIRCUIT_FAILURE_THRESHOLD', '1')
-    monkeypatch.setenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '2')
     enabled = resilience.soniox_circuit_from_env()
     enabled.record_failure()
     assert enabled.state == 'open'
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    legacy = resilience.soniox_circuit_from_env()
-    legacy.record_failure()
-    assert legacy.state == 'closed'
-    legacy.record_failure()
-    assert legacy.state == 'open'
 
 
 def test_late_probe_callbacks_cannot_consume_a_new_generation_probe():
@@ -672,10 +663,8 @@ def test_shared_typed_account_death_uses_long_cooldown_and_one_probe(monkeypatch
 
 
 @pytest.mark.parametrize('code', [401, 403])
-def test_soniox_auth_uses_shared_type_only_when_enabled(monkeypatch, code):
+def test_soniox_auth_uses_shared_type(code):
     assert soniox_death_reason(code, 'unknown') == PROVIDER_AUTH_REJECTED
-    monkeypatch.delenv('STT_CONNECT_ORDER_FROM_CONFIG')
-    assert soniox_death_reason(code, 'unknown') == 'connection_lost'
     # The upstream budget fix is unconditional, including project budgets.
     assert soniox_death_reason(402, 'project_monthly_budget_exhausted') == PROVIDER_BUDGET_EXHAUSTED
 

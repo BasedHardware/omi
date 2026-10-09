@@ -11,7 +11,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
-from utils.llm import clients, gateway_shadow, gateway_serving, model_config
+from utils.llm import clients, gateway_serving, model_config
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
@@ -32,6 +32,15 @@ from utils.llm.gateway_client import (
 from utils.llm.clients import get_llm_gateway_chat_structured
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 import httpx
+
+
+def _same_client(result, expected):
+    """get_llm stamps omi_resolved_model per invocation via model_copy; identity
+    becomes a fresh wrapper. Assert route equivalence on the wrapped client."""
+    if result is expected:
+        return True
+    name = getattr(expected, 'name', None)
+    return getattr(result, 'name', None) == name and bool(getattr(result, 'metadata', {}).get('omi_resolved_model'))
 
 
 class FakeChatModel(BaseChatModel):
@@ -116,73 +125,6 @@ def test_gateway_langchain_client_injects_request_scoped_usage_attribution() -> 
     assert payload['metadata']['omi_feature'] == 'conversation_processing'
 
 
-def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
-    submitted = []
-    captured_gateway_options = {}
-    legacy = FakeChatModel(name='legacy', calls=[])
-    gateway = FakeChatModel(name='gateway', calls=[])
-
-    def immediate_submit(_executor, fn, *args, **kwargs):
-        submitted.append(fn.__name__)
-        fn(*args, **kwargs)
-
-    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
-    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
-    monkeypatch.delenv('K_SERVICE', raising=False)
-    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
-
-    def fake_gateway(*args, **kwargs):
-        captured_gateway_options.update(kwargs.get('options') or {})
-        return gateway
-
-    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', fake_gateway)
-    monkeypatch.setattr(gateway_shadow, 'submit_with_context', immediate_submit)
-
-    result = clients.get_llm('conv_discard').invoke('hello')
-
-    assert result.content == 'legacy response'
-    assert len(legacy.calls) == 1
-    assert len(gateway.calls) == 1
-    assert captured_gateway_options['request_timeout'] == 35.0
-    assert submitted == ['_run_sync_shadow']
-
-
-def test_get_llm_dev_shadow_wraps_structured_output(monkeypatch):
-    submitted = []
-    legacy = FakeChatModel(name='legacy', calls=[])
-    gateway = FakeChatModel(name='gateway', calls=[])
-
-    def immediate_submit(_executor, fn, *args, **kwargs):
-        submitted.append(fn.__name__)
-        fn(*args, **kwargs)
-
-    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
-    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
-    monkeypatch.delenv('K_SERVICE', raising=False)
-    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
-    monkeypatch.setattr(gateway_shadow, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: gateway)
-    monkeypatch.setattr(gateway_shadow, 'submit_with_context', immediate_submit)
-
-    result = clients.get_llm('chat_extraction').with_structured_output(dict).invoke('hello')
-
-    assert result == {'result': 'legacy'}
-    assert legacy.calls == [{'input': 'hello', 'kwargs': {}}]
-    assert gateway.calls == [{'input': 'hello', 'kwargs': {}}]
-    assert submitted == ['_run_sync_shadow']
-
-
-def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
-    legacy = FakeChatModel(name='legacy', calls=[])
-
-    monkeypatch.setenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, 'true')
-    monkeypatch.setenv('K_SERVICE', 'prod-omi-backend')
-    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
-
-    result = clients.get_llm('conv_discard')
-
-    assert result is legacy
-
-
 def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     captured = {}
     gateway = FakeChatModel(name='gateway', calls=[])
@@ -196,7 +138,6 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
     monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
@@ -221,7 +162,6 @@ def test_memory_l2_gateway_mode_uses_luna_auto_lane_without_direct_fallback(monk
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
     monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
@@ -242,7 +182,6 @@ def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
 
     clients.get_llm("memory_l2", request_timeout=20.0)
@@ -267,7 +206,6 @@ def test_get_llm_gives_a_user_waiting_feature_the_foreground_deadline(monkeypatc
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
 
     clients.get_llm("conv_app_result")
@@ -286,7 +224,6 @@ def test_get_llm_leaves_a_background_feature_on_the_gateway_transport_deadline(m
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
 
     clients.get_llm("conv_folder")
@@ -304,7 +241,6 @@ def test_get_llm_gives_a_byok_user_the_same_feature_deadline(monkeypatch):
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
     monkeypatch.setenv("OMI_ENV_STAGE", "dev")
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm_for_byok", fake_byok_gateway)
     monkeypatch.setattr(clients, "get_byok_profile", lambda: None)
     monkeypatch.setattr(clients, "get_byok_key", lambda provider: "sk-user-key" if provider == "openai" else None)
@@ -324,7 +260,6 @@ def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypa
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(
         clients, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: FailingGateway(name='gateway', calls=[])
     )
@@ -356,7 +291,6 @@ def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_only(monkeypat
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', fake_gateway)
     monkeypatch.setattr(clients, '_create_byok_client', lambda *args, **kwargs: legacy)
@@ -385,7 +319,6 @@ def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypa
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(
         clients,
         'get_byok_key',
@@ -401,6 +334,38 @@ def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypa
     result = clients.get_llm('conv_discard').invoke('hello')
 
     assert result.content == 'byok-direct response'
+
+
+def test_byok_uses_user_key_direct_when_optional_gateway_is_off(monkeypatch):
+    byok = FakeChatModel(name='byok-direct', calls=[])
+    captured = {}
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'off')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(clients, 'get_byok_profile', lambda: None)
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-user-owned-openai' if provider == 'openai' else None,
+    )
+
+    def create_byok(model, provider, api_key, streaming, feature, **_kwargs):
+        captured.update(model=model, provider=provider, api_key=api_key, feature=feature)
+        return byok
+
+    def forbidden_gateway_or_shadow(*_args, **_kwargs):
+        raise AssertionError('direct BYOK must not use the managed gateway or its dev shadow')
+
+    monkeypatch.setattr(clients, '_create_byok_client', create_byok)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', forbidden_gateway_or_shadow)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', forbidden_gateway_or_shadow)
+
+    assert _same_client(clients.get_llm('conv_discard'), byok)
+    assert captured == {
+        'model': model_config.get_model('conv_discard'),
+        'provider': 'openai',
+        'api_key': 'sk-user-owned-openai',
+        'feature': 'conv_discard',
+    }
 
 
 def test_get_llm_uses_feature_profile_when_multiple_byok_keys_are_present(monkeypatch):
@@ -602,13 +567,12 @@ def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
     monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is gateway
+    assert _same_client(result, gateway)
     assert captured == {
         'lane_id': feature_auto_lane_id('chat_agent'),
         'streaming': True,
@@ -618,7 +582,7 @@ def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch
     assert legacy.calls == []
 
 
-def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
+def test_get_llm_chat_agent_managed_route_ignores_optional_direct_switch(monkeypatch):
     captured = {}
     gateway = FakeChatModel(name='gateway', calls=[])
     legacy = FakeChatModel(name='legacy', calls=[])
@@ -630,14 +594,14 @@ def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
     monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is legacy
-    assert captured == {}
+    assert _same_client(result, gateway)
+    assert captured == {'used_gateway': True}
+    assert legacy.calls == []
 
 
 def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):

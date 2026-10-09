@@ -15,6 +15,7 @@ os.environ.setdefault(
 
 import io  # noqa: E402
 import json  # noqa: E402
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -26,7 +27,7 @@ import google.auth.credentials  # noqa: F401,E402
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant  # noqa: E402
 from testing.import_isolation import stub_modules  # noqa: E402
 from utils.conversations import screen_frame_evidence as evidence_mod  # noqa: E402
-from utils.conversations.meeting_context_pack import (  # noqa: E402
+from utils.conversations.meeting_context_render import (
     MAX_CONTEXT_PACK_CHARACTERS,
     MeetingContextPack,
     render_meeting_context_pack,
@@ -157,7 +158,7 @@ class TestSpeakerBindingWithScreenRoster:
     """conversation_prompt_prefix binds the one remote voice to the one remote human."""
 
     def _prefix(self, names, extra_participants=()):
-        from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+        from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
         context = with_screen_frame_participants(
             (
@@ -353,12 +354,12 @@ def _image_urls(message) -> list[str]:
 class TestImagesReachTheProvider:
     def _notes(self, monkeypatch, *, screen_frames, rich=True):
         from utils.llm import conversation_processing
-        from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+        from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
         captured: dict = {}
 
         class Model:
-            def invoke(self, messages):
+            async def ainvoke(self, messages):
                 captured['messages'] = messages
                 payload = {
                     'title': 'Sync',
@@ -371,6 +372,12 @@ class TestImagesReachTheProvider:
                 }
                 return SimpleNamespace(content=json.dumps(payload))
 
+        @asynccontextmanager
+        async def isolated_fake(model):
+            yield model
+
+        monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+        monkeypatch.setattr(conversation_processing, 'isolated_notes_model', isolated_fake)
         monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: Model())
         monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
         conversation_processing.get_conversation_notes(
@@ -392,10 +399,6 @@ class TestImagesReachTheProvider:
 
     def test_no_frames_means_no_extra_message(self, monkeypatch):
         messages = self._notes(monkeypatch, screen_frames=())
-        assert all(not _image_urls(message) for message in messages)
-
-    def test_the_legacy_prompt_never_carries_frames(self, monkeypatch):
-        messages = self._notes(monkeypatch, screen_frames=FRAMES, rich=False)
         assert all(not _image_urls(message) for message in messages)
 
     def _wire_messages(self, client) -> list[dict]:
@@ -422,26 +425,28 @@ class TestImagesReachTheProvider:
 
 
 class TestWiringFlags:
-    """Names/moments ride MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED; images need their own flag."""
+    """Screen text evidence is unconditional; image attachment keeps its own gate."""
 
     def _run(self, monkeypatch, *, screen_text, frames):
         from utils.conversations import meeting_notes_wiring as wiring
 
-        monkeypatch.setenv('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED', 'true' if screen_text else 'false')
         monkeypatch.setenv('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED', 'true' if frames else 'false')
         evidence = (_evidence('a', 2, ['Jordan Rivera'], 'Google Meet call'),)
         loaded: list[str] = []
         monkeypatch.setattr(wiring, 'load_screen_frame_evidence', lambda uid, cid: loaded.append(cid) or evidence)
         monkeypatch.setattr(wiring, 'load_notes_frame_images', lambda *a: FRAMES)
-        monkeypatch.setattr(wiring, 'load_people_documents', lambda uid: [])
-        monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David Zhang', ('david@example.com',)))
         captured: dict = {}
 
         def pack(uid, conversation, roster, **kwargs):
             captured.update(kwargs)
             return None
 
-        monkeypatch.setattr(wiring, 'gather_meeting_context_pack', pack)
+        sources = SimpleNamespace(
+            load_people_documents=lambda uid: [],
+            resolve_owner_identity=lambda uid: ('David Zhang', ('david@example.com',)),
+            gather_meeting_context_pack=pack,
+        )
+        monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
         conversation = SimpleNamespace(
             id='conv-1',
             source='desktop',
@@ -456,9 +461,9 @@ class TestWiringFlags:
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
         return names, images, captured.get('screen_moments'), loaded
 
-    def test_everything_off_reads_no_frames(self, monkeypatch):
+    def test_screen_text_evidence_still_loads_without_images(self, monkeypatch):
         names, images, moments, loaded = self._run(monkeypatch, screen_text=False, frames=False)
-        assert (names, images, moments, loaded) == ([], (), (), [])
+        assert (names, images, moments, loaded) == (['Jordan Rivera'], (), (), ['conv-1'])
 
     def test_screen_text_flag_adds_names_and_moments_but_no_images(self, monkeypatch):
         names, images, moments, _loaded = self._run(monkeypatch, screen_text=True, frames=False)

@@ -1417,6 +1417,34 @@ def upload_speaker_embedding_cache(uid: str, conversation_id: str, data: bytes) 
         blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
 
 
+# The v1 framing stays readable. Evidence-policy results use a separate object:
+# old pusher ignores actual evidence seconds and must never consume these vectors.
+# Keep legacy objects untouched/readable; account/conversation audio deletion
+# purges both names under the same owner-encrypted audio prefix.
+OWNER_EVIDENCE_CACHE_NAME = 'speaker-embeddings.owner-evidence.v1.enc'
+
+
+def _owner_evidence_cache_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'audio/{uid}/{conversation_id}/{OWNER_EVIDENCE_CACHE_NAME}')
+
+
+def download_owner_evidence_cache(uid: str, conversation_id: str) -> Optional[bytes]:
+    try:
+        encrypted = _owner_evidence_cache_blob(uid, conversation_id).download_as_bytes()
+    except BlobNotFound:
+        # No mass v1 invalidation: new consumers can still group legacy vectors,
+        # with zero identity evidence when physical duration is absent.
+        return download_speaker_embedding_cache(uid, conversation_id)
+    return encryption.decrypt_audio_file(encrypted, uid)
+
+
+def upload_owner_evidence_cache(uid: str, conversation_id: str, data: bytes) -> None:
+    blob = _owner_evidence_cache_blob(uid, conversation_id)
+    with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
+        blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
+
+
 # ----------------------------------------------------------------------------
 # Playback artifacts: merged MP3 under playback/, expiry via the bucket's
 # 30-day lifecycle rule on the prefix (existence == validity, no metadata).

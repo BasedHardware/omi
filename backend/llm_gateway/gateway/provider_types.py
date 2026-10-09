@@ -29,6 +29,8 @@ class ProviderFailure(Exception):
     # Seconds-form Retry-After from a provider 429. None when the header is
     # absent or is an HTTP-date; the executor then uses jittered backoff.
     retry_after_seconds: float | None = None
+    # HTTP status only; never carry a response body into terminal telemetry.
+    upstream_http_status: int | None = None
 
     def __str__(self) -> str:
         return self.safe_message

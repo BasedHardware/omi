@@ -22,6 +22,21 @@
      Feature: point to the tests for the core path and main error path.
      No test change: explain why none was needed. -->
 
+## UI evidence
+
+<!-- UI changes need a tracked image reference under
+     .agent-artifacts/ui-evidence/<pr-number-or-branch-slug>/.
+     Filename: <NNN>-<platform>-<slug>.png; ordinals start at 001,
+     platforms: mobile-android|mobile-ios|desktop-macos|desktop-windows|web,
+     slug: lowercase kebab-case, at most 40 chars, describing the screen/state.
+     Sibling evidence.json (JSON, 2-space indent, trailing newline):
+     {"version": 1, "images": [{"file": "001-desktop-macos-chat-home.png", "platform": "desktop-macos", "description": "Chat home", "captured_by": "agent", "source": "visual-audit"}]}
+     captured_by: agent|human; source: visual-audit|playwright-e2e|screencapture|manual.
+     Example: ![Chat home](.agent-artifacts/ui-evidence/my-branch/001-desktop-macos-chat-home.png)
+     If evidence does not apply, write: UI-Evidence: none -- <reason>
+     The reason is optional. Added images still require valid filenames/manifests.
+     Before creating a PR: OMI_PR_BODY_FILE=/tmp/pr-body.md git push -->
+
 ## Failure class (fixes)
 
 <!-- Every `fix:` commit needs this exact, machine-validated declaration. Write one

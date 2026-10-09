@@ -12,6 +12,14 @@ final class LiveActivityManager {
     private var latest: (String, OmiCaptureAttributes.ContentState, Bool)?
     private var activity: Activity<OmiCaptureAttributes>?
     private var suppressedRecordingId: String?
+    /// Cards swiped away stay away for that recording and that kind of card.
+    private var dismissedCards: Set<String> = []
+    /// Actions whose intent is still waiting for Flutter's reply. The card that owns the tapped
+    /// button stays until the reply, even when the action makes capture healthy again.
+    private var actionsInFlight = 0
+    /// When the latest recording entered its current status; connecting and unverified
+    /// count as one, since both mean the pendant has not been heard yet.
+    private var statusClock: (id: String, status: String, since: Date)?
     private var delivery: Task<Void, Never>?
     private var foregroundObserver: NSObjectProtocol?
 
@@ -132,9 +140,9 @@ final class LiveActivityManager {
 
     private func reconcile() async {
         // Whether this process records is known only from the owner's snapshot; wait for it.
-        guard ready, let (id, state, active) = latest else { return }
+        guard ready, let (id, published, active) = latest else { return }
         if let current = activity, current.activityState == .dismissed {
-            suppressedRecordingId = current.attributes.recordingId
+            dismissedCards.insert(Self.cardKey(current.attributes.recordingId, current.contentState.notice))
             activity = nil
         }
         guard enabled, active, !id.isEmpty, ActivityAuthorizationInfo().areActivitiesEnabled else {
@@ -142,12 +150,37 @@ final class LiveActivityManager {
             return
         }
         if let suppressedRecordingId, suppressedRecordingId != id { self.suppressedRecordingId = nil }
+        dismissedCards = dismissedCards.filter { $0.hasPrefix(id + "|") }
+        // Healthy pendant capture is the default and shows nothing; see CapturePresentationPolicy.
+        let since = statusSince(id: id, status: published.status)
+        let battery = Self.pendantBattery()
+        var state = published
+        switch CapturePresentationPolicy.decide(status: state.status, source: state.source,
+                                                statusAge: Date().timeIntervalSince(since), battery: battery) {
+        case .hidden:
+            // perform() reconciles again once the tapped intent has its reply.
+            if actionsInFlight == 0 { await endAll(immediate: true) }
+            return
+        case .recording:
+            state.notice = nil
+        case .notice(let notice):
+            state.notice = notice.rawValue
+            state.noticeSince = since.timeIntervalSince1970
+            state.pendantBattery = battery
+        }
+        let card = Self.cardKey(id, state.notice)
+        if let current = activity, current.contentState.notice != state.notice {
+            // A different kind of card is a new card, so a swipe on one never hides another.
+            await end(current, immediate: true)
+            activity = nil
+        }
         for existing in Activity<OmiCaptureAttributes>.activities {
             if existing.attributes.recordingId != id {
                 await end(existing, immediate: true)
-            } else if activity == nil && existing.activityState != .ended && existing.activityState != .dismissed {
+            } else if activity == nil && existing.activityState != .ended && existing.activityState != .dismissed
+                        && existing.contentState.notice == state.notice {
                 activity = existing
-            } else if let activity, existing.id != activity.id {
+            } else if existing.id != activity?.id {
                 await end(existing, immediate: true)
             }
         }
@@ -158,7 +191,8 @@ final class LiveActivityManager {
         }
         if let activity {
             await update(activity, state: state)
-        } else if suppressedRecordingId != id && UIApplication.shared.applicationState == .active {
+        } else if suppressedRecordingId != id && !dismissedCards.contains(card)
+                    && UIApplication.shared.applicationState == .active {
             do {
                 if #available(iOS 16.2, *) {
                     activity = try Activity.request(attributes: OmiCaptureAttributes(recordingId: id),
@@ -171,6 +205,27 @@ final class LiveActivityManager {
                 NSLog("[LiveActivity] Start unavailable: %@", String(describing: error))
             }
         }
+    }
+
+    private func statusSince(id: String, status: String) -> Date {
+        let group = ["connecting", "unverified"].contains(status) ? "unheard" : status
+        if let clock = statusClock, clock.id == id, clock.status == group { return clock.since }
+        let now = Date()
+        statusClock = (id, group, now)
+        return now
+    }
+
+    private static func cardKey(_ id: String, _ notice: String?) -> String { "\(id)|\(notice ?? "recording")" }
+
+    /// The pendant battery the Home Screen widget shows (AppDelegate's battery channel), when the
+    /// pendant is connected and not charging. Only Omi pendants report charging, so other
+    /// wearables never show this card. Unknown readings are -1.
+    private static func pendantBattery() -> Int? {
+        guard let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12"),
+              defaults.string(forKey: "widget_device_type") == "omi",
+              defaults.bool(forKey: "widget_is_connected"), !defaults.bool(forKey: "widget_is_charging"),
+              let level = defaults.object(forKey: "widget_battery_level") as? Int, level >= 0 else { return nil }
+        return level
     }
 
     /// A live card goes stale when Omi stops refreshing it. A stopped one does not: iOS may suspend
@@ -226,7 +281,10 @@ final class LiveActivityManager {
             return
         }
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Omi recording action")
+        actionsInFlight += 1
         defer {
+            actionsInFlight -= 1
+            enqueue { [weak self] in await self?.reconcile() }
             if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
         }
         do {

@@ -9920,11 +9920,6 @@ class AppLocalizationsNo extends AppLocalizations {
       'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Ikke fanget opp ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Stemmeprofil for $name';
   }
@@ -12419,4 +12414,249 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get accountDeletionInProgressSignInAgain =>
       'Denne kontoen slettes. Logg inn med en annen konto, eller vent noen minutter og prøv igjen.';
+
+  @override
+  String get onboardingSetupTitle => 'Setter opp Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Gi Omi et øyeblikk til å tilpasse seg';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Forbereder arbeidsområdet ditt';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Tilpasser transkripsjonen til språket ditt';
+
+  @override
+  String get onboardingSetupStepMemory => 'Setter opp minnet ditt';
+
+  @override
+  String get onboardingSetupStepDevices => 'Kobler til enhetene dine';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Tilpasser opplevelsen din';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Liker du Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ja';
+
+  @override
+  String get onboardingRatingPromptNo => 'Nei';
+
+  @override
+  String get partialRecording => 'Delvis opptak';
+
+  @override
+  String get importTranscriptFiles => 'Transkripsjonsfiler';
+
+  @override
+  String get importTranscriptFilesDescription => 'Velg SRT-, VTT- eller TXT-transkripsjoner, eller en ZIP med dem';
+
+  @override
+  String get importTooManyAttempts => 'For mange importer akkurat nå. Prøv igjen senere.';
+
+  @override
+  String get importFileTooLarge => 'Denne filen er for stor til å importeres.';
+
+  @override
+  String get importUnsupportedFileType => 'Denne filtypen kan ikke importeres.';
+
+  @override
+  String get reviewTitle => 'Gjennomgang';
+
+  @override
+  String get reviewEntryTitle => 'Spørsmål til deg';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count igjen';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Hvem sa dette?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Samme person som «$name»?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Hvordan staves dette?';
+
+  @override
+  String get reviewPlayClip => 'Spill av klipp';
+
+  @override
+  String get reviewStopClip => 'Stopp klipp';
+
+  @override
+  String get reviewOpenDetailsHint => 'Åpner detaljer';
+
+  @override
+  String get reviewAnswerMe => 'Meg';
+
+  @override
+  String get reviewAnswerOther => 'Annen';
+
+  @override
+  String get reviewAddTask => 'Legg til oppgave';
+
+  @override
+  String get reviewAnswerFailed => 'Svaret ditt kunne ikke lagres. Prøv igjen.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Dette svaret merker $count samtaler';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Ukjent taler';
+
+  @override
+  String get reviewNewPersonName => 'Navnet deres';
+
+  @override
+  String get reviewSomeoneElse => 'Noen andre…';
+
+  @override
+  String get reviewConfirm => 'Bekreft';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Bekreft $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Usikker';
+
+  @override
+  String get reviewOpenConversation => 'Samtale';
+
+  @override
+  String get reviewTaskField => 'Oppgave';
+
+  @override
+  String get reviewDue => 'Frist';
+
+  @override
+  String get reviewNoDate => 'Ingen';
+
+  @override
+  String get reviewProject => 'Prosjekt';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Allerede gjort';
+
+  @override
+  String get reviewReasonNotMine => 'Ikke min';
+
+  @override
+  String get reviewReasonNotUseful => 'Ikke nyttig';
+
+  @override
+  String get reviewYesMerge => 'Ja, slå sammen';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Samtaler: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Skriv det inn';
+
+  @override
+  String get reviewLoadFailed => 'Spørsmålene dine kunne ikke lastes.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Ingenting å svare på';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi spør bare her når den trenger deg.';
+
+  @override
+  String get reviewRecentChanges => 'Nylige endringer';
+
+  @override
+  String get reviewChangesIntro => 'Hva Omi har endret på egen hånd de siste 30 dagene. Angre alt som ser feil ut.';
+
+  @override
+  String get reviewChangeUndone => 'Angret. Omi gjør ikke dette igjen på egen hånd.';
+
+  @override
+  String get reviewChangeFailed => 'Endringen kunne ikke oppdateres. Prøv igjen.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Nylige endringer kunne ikke lastes.';
+
+  @override
+  String get reviewNoChangesTitle => 'Ingen endringer ennå';
+
+  @override
+  String get reviewNoChangesBody => 'Når Omi rydder i notatene dine, vises endringene her.';
+
+  @override
+  String get reviewShowMore => 'Vis mer';
+
+  @override
+  String get entityKeptCurrent => 'Holdt oppdatert av Omi';
+
+  @override
+  String get entityNotRight => 'Stemmer ikke?';
+
+  @override
+  String get entityCorrectionTitle => 'Hva stemmer ikke?';
+
+  @override
+  String get entityCorrectionHint => 'Fortell Omi hva som skal rettes';
+
+  @override
+  String get entityCorrectionSaved => 'Takk. Omi retter det.';
+
+  @override
+  String get entityCorrectionFailed => 'Rettelsen kunne ikke sendes. Prøv igjen.';
+
+  @override
+  String get entityLoadFailed => 'Siden kunne ikke lastes.';
+
+  @override
+  String get entityProject => 'Prosjekt';
+
+  @override
+  String get entityProjects => 'Prosjekter';
+
+  @override
+  String get entityDecisions => 'Beslutninger';
+
+  @override
+  String get entityOpenTasks => 'Åpne oppgaver';
+
+  @override
+  String get entityOpenThreads => 'Åpne tråder';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Venter på $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Frist $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Hva Omi vet';
+
+  @override
+  String get entityRecentConversations => 'Nylige samtaler';
+
+  @override
+  String get tasksNoProject => 'Ingen prosjekt';
+
+  @override
+  String get tasksGroupByProject => 'Grupper etter prosjekt';
+
+  @override
+  String get tasksGroupByDate => 'Grupper etter dato';
 }

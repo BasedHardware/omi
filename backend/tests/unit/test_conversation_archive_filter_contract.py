@@ -180,6 +180,10 @@ def conversations_db():
     utils_other.__path__ = []
     utils_conversations = ModuleType("utils.conversations")
     utils_conversations.__path__ = []
+    utils_llm = ModuleType("utils.llm")
+    utils_llm.__path__ = []
+    utils_llm_model_constants = ModuleType("utils.llm.model_constants")
+    utils_llm_model_constants.LUNA_MODEL = "gpt-6-luna"
 
     fakes = {
         "google": google,
@@ -201,6 +205,8 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.llm": utils_llm,
+        "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
         # database.conversations imports this helper at module load, but archive
         # filtering never calls it; keep the contract isolated from its graph.
@@ -242,6 +248,7 @@ def conversations_db():
         "utils.manual_speaker_assignments",
         os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
     )
+    fakes["models.note_claims"] = load_module_fresh("models.note_claims", str(_BACKEND / "models" / "note_claims.py"))
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
     fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real

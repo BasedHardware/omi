@@ -431,6 +431,10 @@
           "type": "string",
           "description": "Owner id to list. Defaults to the active signed-in owner."
         },
+        "sessionId": {
+          "type": "string",
+          "description": "Optional exact session id; ownership and surface filters still apply."
+        },
         "status": {
           "type": "string",
           "enum": [
@@ -445,6 +449,7 @@
           "enum": [
             "main_chat",
             "task_chat",
+            "workstream",
             "realtime",
             "delegated_agent",
             "background_agent",
@@ -471,6 +476,10 @@
           "type": "string",
           "description": "Owner id to list. Defaults to the active signed-in owner."
         },
+        "sessionId": {
+          "type": "string",
+          "description": "Optional exact session id; ownership and surface filters still apply."
+        },
         "status": {
           "type": "string",
           "enum": [
@@ -485,6 +494,7 @@
           "enum": [
             "main_chat",
             "task_chat",
+            "workstream",
             "realtime",
             "delegated_agent",
             "background_agent",

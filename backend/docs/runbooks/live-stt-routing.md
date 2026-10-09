@@ -319,6 +319,29 @@ sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-li
 sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[15m])) / clamp_min(sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[15m])), 1)
 ```
 
+The bounded companion `omi_stt_routing_cohort_outcomes_total` uses labels
+`routing_arm`, `signal`, `outcome`. Arms are `on` (sticky selected UID),
+`shadow` (static session admitted in shadow mode), and `off` (off mode or an
+unassigned UID in on mode). Capture precedes initialization and is pinned
+through child tasks, replay, provider switches and flag changes. Terminal
+attempt outcomes mirror `omi_live_stt_terminal_total`, including pre-audio
+failure; transcript outcomes mirror the headline session counter for this
+managed subset. Session-end `fallback_exhausted=yes|no` counts whether the
+shared helper emitted any exhausted event for `stt_selection|stt_live_session`;
+`terminal_after_text=yes|no` uses the existing recovery-gated predicate.
+These booleans count each completed socket once, including too-short sessions.
+Existing metrics and serving behavior are unchanged.
+
+`omi_stt_routing_cohort_paid_audio_seconds_total{routing_arm,provider}` emits
+accepted paid-adapter PCM seconds at the same session-end seam. Soniox,
+Modulate and Deepgram admission includes replay, pre-roll and accepted idle
+reopens; rejected sends and idle buffering are excluded until transport
+acceptance. This is an admission proxy, not confirmed wire delivery or vendor
+billing. All bounded children exist from process start. Compare uniform on/off
+configuration, continuous scrapes and matched completion windows; never infer
+cohort from pod track or pool shadow with off silently. First-text latency and
+serving-owned disruption remain separate uninstrumented cohort gates.
+
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 

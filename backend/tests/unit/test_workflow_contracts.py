@@ -535,6 +535,17 @@ def test_backend_hermetic_fork_deferral_stays_neutral_and_requires_skipped_jobs(
     assert '[[ "$SYNC_CLOUD_TASKS_RESULT" == "$sync_required" ]]' in gate
 
 
+def test_python_cli_fork_deferral_uses_the_standard_notice():
+    # #19729 standardized the heavy-CI deferral surface across the ci-tier workflows;
+    # python-cli-ci kept the pre-refactor summary line with no annotation.
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/python-cli-ci.yml").read_text(encoding="utf-8")
+
+    assert "::notice title=Heavy CI deferred::$notice" in workflow
+    assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
+    assert "deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs" not in workflow
+
+
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
@@ -1315,6 +1326,7 @@ _LANE_SOURCE_BINDINGS = {
     'gcp_memory_maintenance_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
+    'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_daily_memory_sweep_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_daily_memory_sweep_job_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
@@ -1811,7 +1823,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
     backend = BACKEND_DIR
     for name in ('reconcile_firestore_indexes.py', 'firestore_field_indexes.py'):
         (scripts_dir / name).write_text((backend / 'scripts' / name).read_text(encoding='utf-8'), encoding='utf-8')
-    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py'):
+    for name in ('__init__.py', 'firestore_index_registry.py', 'firestore_query_types.py', 'review_queries.py'):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
     return control
