@@ -1381,11 +1381,10 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     # Pending export: sync_requested=True, filter exported!=True in Python
     # (avoids composite index + handles missing 'exported' field)
     pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
-    pending_docs = pending_query.stream()
     pending_export: List[Dict[str, Any]] = []
-    for doc in pending_docs:
+    for doc in pending_query.stream():
         data: Dict[str, Any] = typed_doc(doc)
-        if data.get('exported') is True:
+        if data.get('deleted') or data.get('exported') is True:
             continue
         data['id'] = doc.id
         pending_export.append(prepare_action_item_for_read(data))
@@ -1397,12 +1396,12 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
         .where(filter=FieldFilter('exported', '==', True))
         .limit(100)
     )
-    synced_docs = synced_query.stream()
     synced_items: List[Dict[str, Any]] = []
-    for doc in synced_docs:
+    for doc in synced_query.stream():
         data = typed_doc(doc)
-        data['id'] = doc.id
-        synced_items.append(prepare_action_item_for_read(data))
+        if not data.get('deleted'):
+            data['id'] = doc.id
+            synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
     synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
