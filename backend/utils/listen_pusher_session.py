@@ -56,6 +56,40 @@ class PusherReconnectState(str, Enum):
     HALF_OPEN_PROBE = 'half_open_probe'
 
 
+# Close code 1012 (service restart) is the pusher pod's own rolling-update
+# signal: the GKE deployment restarts pusher replicas behind the same service
+# and every live session receives it at once. The session itself treats it as
+# routine — audio runs and pending requests stay buffered and the reconnect
+# loop installs a fresh socket — so it is expected, self-healing transport
+# churn, not a production fault. Anything else (1006 abnormal, 1011 internal,
+# 1015 TLS failure, no close frame at all) keeps the fault meaning of the
+# existing ERROR line.
+PUSHER_EXPECTED_RESTART_CLOSE_CODES = frozenset({1012})
+
+
+def log_pusher_connection_closed(
+    logger: Any,
+    e: ConnectionClosed,
+    message: str,
+    *,
+    uid: str,
+    session_id: str,
+) -> None:
+    """Log one pusher WebSocket close at the severity its close code carries.
+
+    1012 (service restart) logs at INFO: it is the pusher deployment's own
+    rolling-update close, every buffered item replays on the replacement
+    socket, and the reconnect loop recovers without operator action. At ERROR
+    it fired once per live session per restart wave (~x342/30m for the
+    audio-bytes line alone during the 2026-10-09 wave) and buried the genuine
+    abnormal closes that share the message shape.
+    """
+    if e.rcvd is not None and e.rcvd.code in PUSHER_EXPECTED_RESTART_CLOSE_CODES:
+        logger.info(f'{message}: {e} {uid} {session_id}')
+        return
+    logger.error(f'{message}: {e} {uid} {session_id}')
+
+
 PUSHER_MAX_RECONNECT_ATTEMPTS = 6
 PUSHER_DEGRADED_COOLDOWN = 60.0
 PUSHER_RECONNECT_BASE_DELAY = 1.0
@@ -254,7 +288,8 @@ class ListenPusherSession:
 
     async def _transcript_flush(self):
         async with self.transcript_flush_lock:
-            if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
+            pusher_ws = self.pusher_ws
+            if self.pusher_connected and pusher_ws and len(self.segment_buffers) > 0:
                 pending_segments = self.segment_buffers
                 self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
                 try:
@@ -271,7 +306,7 @@ class ListenPusherSession:
                             "utf-8",
                         )
                     )
-                    await self.pusher_ws.send(cast(bytes, data))
+                    await pusher_ws.send(cast(bytes, data))
                 except (asyncio.CancelledError, Exception) as e:
                     self.segment_buffers = deque(
                         (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
@@ -279,8 +314,22 @@ class ListenPusherSession:
                     if isinstance(e, asyncio.CancelledError):
                         raise
                     elif isinstance(e, ConnectionClosed):
-                        logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
-                        self._mark_disconnected()
+                        # Same identity rule as pusher_receive: a close raised by
+                        # a socket a reconnect already replaced must not tear
+                        # down the healthy new connection.
+                        if self.pusher_ws is not pusher_ws:
+                            logger.info(
+                                f"Pusher transcripts closed on a replaced socket: {e} {self.uid} {self.session_id}"
+                            )
+                        else:
+                            log_pusher_connection_closed(
+                                logger,
+                                e,
+                                'Pusher transcripts Connection closed',
+                                uid=self.uid,
+                                session_id=self.session_id,
+                            )
+                            self._mark_disconnected()
                     else:
                         logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
 
@@ -491,8 +540,17 @@ class ListenPusherSession:
                 if isinstance(e, asyncio.CancelledError):
                     raise
                 elif isinstance(e, ConnectionClosed):
-                    logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                    self._mark_disconnected()
+                    # ``pusher_ws`` is the socket this flush snapshotted at entry;
+                    # if a reconnect already installed a replacement, the failed
+                    # socket is stale — its close must not tear down the healthy
+                    # new connection (same identity rule as pusher_receive).
+                    if self.pusher_ws is not pusher_ws:
+                        logger.info(f"Pusher audio_bytes closed on a replaced socket: {e} {self.uid} {self.session_id}")
+                    else:
+                        log_pusher_connection_closed(
+                            logger, e, 'Pusher audio_bytes Connection closed', uid=self.uid, session_id=self.session_id
+                        )
+                        self._mark_disconnected()
                 else:
                     logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
 
@@ -620,7 +678,9 @@ class ListenPusherSession:
                 break
             except ConnectionClosed as e:
                 if self.pusher_ws is sock:
-                    logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
+                    log_pusher_connection_closed(
+                        logger, e, 'Pusher receive connection closed', uid=self.uid, session_id=self.session_id
+                    )
                     self._mark_disconnected()
                 else:
                     logger.info(f"Pusher receive closed on a replaced socket: {e} {self.uid} {self.session_id}")

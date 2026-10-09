@@ -58,6 +58,13 @@ def _optional_historical(name, revision, path):
         return _historical(name, revision, path)
     except subprocess.CalledProcessError as error:
         pytest.skip(f'historical source {revision}:{path} unavailable: {error}')
+    except (ImportError, ModuleNotFoundError) as error:
+        # A pinned historical snapshot can reference modules this tree does
+        # not carry (e.g. origin/main gaining an import after this base was
+        # cut, #20722's config.speaker_match_scores). The parity suite is a
+        # live-vs-main invariant, not a dependency on main's transitive
+        # imports; skip instead of failing the whole file.
+        pytest.skip(f'historical source {revision}:{path} not loadable here: {error}')
 
 
 def _red_enabled():
