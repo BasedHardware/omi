@@ -40,7 +40,13 @@ async def connect(monkeypatch, queries, *, uid='owner', device=DEVICE, profile=O
     host.request.uid = uid
     host.client_device_context = SimpleNamespace(client_device_id=device)
     host.state.speaker_id_enabled = True
-    host.persistence = SimpleNamespace(call=AsyncMock(return_value={}))
+
+    async def read(fn, *args, **kwargs):
+        if fn is cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
+        return {}
+
+    host.persistence = SimpleNamespace(call=AsyncMock(side_effect=read))
     matcher.continuity = OwnerContinuity(matcher)
 
     async def load():
@@ -157,6 +163,7 @@ async def test_short_reconnect_joint_arbitration_withdraws_owner(monkeypatch, re
 async def test_manual_owner_reservation_blocks_reconnect(monkeypatch, redis):
     await seed(monkeypatch)
     matcher, host, _ = await connect(monkeypatch, [OWNER])
+    host.persistence.call.side_effect = None
     host.persistence.call.return_value = {'segments': {'manual': {'is_user': True}}}
     await speak(matcher, 0, 2)
     assert not visible_owner(matcher, 0)
@@ -266,7 +273,11 @@ async def test_accepted_reconnect_owner_survives_same_scope_rollover_after_hint_
     assert visible_owner(matcher, 0), 'accepted proof survives idle revalidation after capsule expiry'
 
     async def read(fn, *args, **kwargs):
-        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        return (
+            {conversation: {} for conversation in args[1]}
+            if fn is cache.authority_snapshot
+            else {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        )
 
     host.persistence.call = AsyncMock(side_effect=read)
     matcher.note_rollover_carry(set())
@@ -291,7 +302,11 @@ async def test_completed_roster_rechecks_short_accept_even_without_rollover_cand
         matcher.person_embeddings['peer'] = {'embedding': OWNER, 'name': 'Peer'}
 
     async def read(fn, *args, **kwargs):
-        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        return (
+            {conversation: {} for conversation in args[1]}
+            if fn is cache.authority_snapshot
+            else {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        )
 
     matcher._load_profiles = AsyncMock(side_effect=load)
     host.persistence.call = AsyncMock(side_effect=read)
@@ -369,7 +384,7 @@ async def test_unavailable_donor_authority_falls_back_to_normal_recognition(monk
     matcher, host, _ = await connect(monkeypatch, [OWNER, OWNER])
 
     async def read(fn, *args, **kwargs):
-        if fn is cache.donor_authority:
+        if fn is cache.authority_snapshot:
             raise ConnectionError('offline')
         return {}
 
@@ -398,7 +413,11 @@ async def test_retained_peer_cannot_publish_owner_or_seed_a_reconnect(monkeypatc
         matcher.person_embeddings = {'user': {'embedding': OWNER, 'name': 'Owner'}}
 
     async def read(fn, *args, **kwargs):
-        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        return (
+            {conversation: {} for conversation in args[1]}
+            if fn is cache.authority_snapshot
+            else {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+        )
 
     matcher._load_profiles = AsyncMock(side_effect=load)
     host.persistence.call = read

@@ -10,6 +10,8 @@ import logging
 from functools import lru_cache
 from typing import Any, Optional
 
+from google.cloud import firestore
+
 from database._client import get_firestore_client
 from database.conversations import conversations_collection, decode_manual_speaker_assignments
 from database.redis_db import create_bounded_redis_client
@@ -84,6 +86,47 @@ def donor_authority(uid: str, conversation: str) -> Optional[dict]:
     return decode_manual_speaker_assignments(
         uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
     )
+
+
+def authority_snapshot(
+    uid: str, conversations: tuple[str, ...], *, firestore_client: Any = None
+) -> dict[str, Optional[dict]]:
+    """Read receiving, acoustic donor and rollover donor at one transaction read time.
+
+    Separate awaited reads can each be current while their combination has
+    never been authoritative. Only projected receipt/privacy fields are read;
+    no transcript or user evidence is written by this transaction.
+    """
+    if not 1 <= len(conversations) <= 3:
+        raise ValueError('owner authority requires one to three conversations')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+
+    @firestore.transactional
+    def read(transaction: Any) -> dict[str, Optional[dict]]:
+        result = {}
+        for conversation in dict.fromkeys(conversations):
+            snapshot = collection.document(conversation).get(
+                transaction=transaction,
+                field_paths=[
+                    'deleted',
+                    'discarded',
+                    'is_locked',
+                    'manual_speaker_assignments',
+                    'manual_speaker_assignments_compressed',
+                ],
+            )
+            data = snapshot.to_dict() if snapshot.exists else None
+            result[conversation] = (
+                decode_manual_speaker_assignments(
+                    uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+                )
+                if data is not None and not any(data.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+                else None
+            )
+        return result
+
+    return read(client.transaction())
 
 
 def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]], revision: int) -> None:

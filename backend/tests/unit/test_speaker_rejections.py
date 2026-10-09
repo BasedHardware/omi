@@ -78,6 +78,8 @@ def world(monkeypatch):
         _segment('s2', 11, 15, speaker_id=7),
     ]
     store.rows[path] = dict(id=CONV, status='in_progress', transcript_segments=segments)
+    for receiving in ('conversation', 'next'):
+        store.rows[('users', UID, 'conversations', receiving)] = dict(id=receiving, status='in_progress')
     store.rows[('users', UID, 'people', 'p1')] = dict(id='p1', name='Sam', speaker_embedding=[1.0, 0.0])
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(voice_profiles_db, 'get_firestore_client', lambda: store)
@@ -717,7 +719,7 @@ def test_final_short_authority_observes_correction_during_prior_await(world, mon
             else:
                 await new._reevaluate_loaded_owner()
         assert corrected
-        assert reads[-1] == 'donor_authority', 'donor validation must follow the profile/current-receipt reads'
+        assert reads[-1] == 'authority_snapshot', 'donor validation must follow the profile/current-receipt reads'
         assert not visible_owner(new, 0), 'a correction committed during awaited work must precede publication'
         assert new.continuity.donor is None
 
@@ -733,7 +735,7 @@ def test_pending_short_authority_keeps_shared_rows_coherent(world, monkeypatch, 
         entered, release = asyncio.Event(), asyncio.Event()
 
         async def read(fn, *args, **kwargs):
-            if fn is continuity_cache.donor_authority:
+            if fn is continuity_cache.authority_snapshot:
                 entered.set()
                 await release.wait()
             return fn(*args, **kwargs)
@@ -768,7 +770,7 @@ def test_final_authority_rebuilds_current_state_after_wait(world, monkeypatch, c
         entered, release = asyncio.Event(), asyncio.Event()
 
         async def read(fn, *args, **kwargs):
-            if fn is continuity_cache.donor_authority:
+            if fn is continuity_cache.authority_snapshot:
                 entered.set()
                 await release.wait()
             return fn(*args, **kwargs)
@@ -806,6 +808,15 @@ def test_manual_query_row_is_installed_coherently_after_name_lookup(world, monke
         async def read(fn, *args, **kwargs):
             if fn is db.get_manual_speaker_receipt:
                 return {'speakers': {'0': {'person_id': 'peer', 'is_user': False, 'generation': 1}}}
+            if fn is continuity_cache.authority_snapshot:
+                return {
+                    conversation: (
+                        {'speakers': {'0': {'person_id': 'peer', 'is_user': False, 'generation': 1}}}
+                        if conversation == 'conversation'
+                        else {}
+                    )
+                    for conversation in args[1]
+                }
             if fn is listen_speakers.user_db.get_person:
                 entered.set()
                 await release.wait()
@@ -824,5 +835,119 @@ def test_manual_query_row_is_installed_coherently_after_name_lookup(world, monke
         assert new._mapping_origin[0] == 'manual'
         assert 0 in new._voice_distances and 0 in new._voice_decisions
         assert new._voice_distances[0]['user'] == pytest.approx(0.0), 'manual voices still retain acoustic competition'
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('phase', ['acquire', 'reevaluate', 'rollover', 'mapped'])
+def test_receiving_correction_during_final_authority_read_blocks_owner(world, monkeypatch, phase):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        receiving = 'next' if phase == 'rollover' else 'conversation'
+        target = ('users', UID, 'conversations', receiving)
+        world.store.rows[target]['transcript_segments'] = [_segment('current', 0, 2, speaker_id=0, scope='new-socket')]
+        new, host, emitted = await connect(monkeypatch, [OWNER], uid=UID)
+        armed = phase == 'acquire'
+        corrected = False
+        reads = []
+
+        async def read(fn, *args, **kwargs):
+            nonlocal corrected
+            reads.append(fn.__name__)
+            if fn is db.get_conversation:
+                return {'id': 'conversation'}
+            if (
+                fn in (continuity_cache.donor_authority, continuity_cache.authority_snapshot)
+                and armed
+                and not corrected
+            ):
+                response = world.client.post(
+                    f'/v1/conversations/{receiving}/speakers/0/reject', json={'kind': 'not_me'}
+                )
+                assert response.status_code == 200
+                assert db.get_manual_speaker_receipt(UID, receiving)['generation'] == 1
+                corrected = True
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        if phase == 'acquire':
+            await speak(new, 0, 2)
+        else:
+            await speak(new, 0, 2)
+            assert visible_owner(new, 0)
+            emitted.clear()
+            armed = True
+            if phase == 'reevaluate':
+                await new._reevaluate_loaded_owner()
+            elif phase == 'mapped':
+                await new._drop_rejected_mapping(0, {'id': 'current'}, new._generation, receiving)
+            else:
+                host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+                new.note_rollover_carry(set())
+                await new.refresh_for_conversation(
+                    receiving, owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+                )
+        assert corrected
+        assert 'authority_snapshot' in reads
+        assert not visible_owner(new, 0), 'receiving correction committed before the snapshot must veto publication'
+        assert new._suggested_person.get(0) != 'user'
+        assert not any(args[0] == 0 and args[1] == 'user' for args in emitted)
+        assert new._voice_distances.keys() <= new._voice_decisions.keys()
+
+    asyncio.run(run())
+
+
+def test_authority_snapshot_binds_all_receipts_to_one_transaction(world, monkeypatch):
+    from_read = type(world.store.collection('users').document(UID)).get
+    transactions = []
+
+    def read(ref, *args, **kwargs):
+        transactions.append(kwargs.get('transaction'))
+        return from_read(ref, *args, **kwargs)
+
+    monkeypatch.setattr(type(world.store.collection('users').document(UID)), 'get', read)
+    snapshots = continuity_cache.authority_snapshot(UID, ('conversation', CONV, 'next'), firestore_client=world.store)
+    assert snapshots == {'conversation': {}, CONV: {}, 'next': {}}
+    assert len(transactions) == 3 and transactions[0] is not None
+    assert all(transaction is transactions[0] for transaction in transactions)
+    assert not transactions[0].has_written
+
+
+@pytest.mark.parametrize('seconds', [2, 5])
+def test_immediate_rollover_donor_correction_during_snapshot_blocks_carry(world, monkeypatch, seconds):
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        new, host, _ = await connect(monkeypatch, [OWNER], uid=UID)
+        world.store.rows[('users', UID, 'conversations', 'conversation')]['transcript_segments'] = [
+            _segment('current', 0, seconds, speaker_id=0, scope='new-socket')
+        ]
+        armed = False
+        corrected = False
+
+        async def read(fn, *args, **kwargs):
+            nonlocal corrected
+            if fn is db.get_conversation:
+                return {'id': 'conversation'}
+            if fn is continuity_cache.authority_snapshot and armed:
+                response = world.client.post(
+                    '/v1/conversations/conversation/speakers/0/reject', json={'kind': 'not_me'}
+                )
+                assert response.status_code == 200
+                corrected = True
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        await speak(new, 0, seconds)
+        assert visible_owner(new, 0)
+        host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+        new.note_rollover_carry(set())
+        armed = True
+        await new.refresh_for_conversation(
+            'next', owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+        )
+        assert corrected
+        assert not visible_owner(
+            new, 0
+        ), 'the immediate donor is part of the same snapshot even for a five-second owner'
 
     asyncio.run(run())

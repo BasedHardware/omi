@@ -3860,3 +3860,9 @@ mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
 those pages; observers that lose the same cursor generation cannot multiply a
 single refusal into a fleet-wide alarm burst. Standalone verification pages
 immediately. Recovery never regenerates admitted audio from old chunk snapshots.
+
+Owner continuity decisions use one final Firestore transaction snapshot for the
+receiving receipt, original acoustic donor and immediate rollover donor (at most
+three projected documents). Live arbitration/publication runs synchronously after
+the snapshot and generation check, so a receiving correction during earlier
+awaits cannot be replaced by a stale automatic owner suggestion.

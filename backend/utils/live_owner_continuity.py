@@ -140,8 +140,10 @@ class OwnerContinuity:
             and donor['voice'] not in manual_rejected_speakers(receipt)
         )
 
-    async def authorize_roster(self) -> tuple[bool, set[tuple[str, int]]]:
-        """One final donor read for the socket's hint and all accepted proofs.
+    async def authorize_roster(
+        self, receiving: str, *, rollover_donor: Optional[str] = None
+    ) -> tuple[tuple[bool, set[tuple[str, int]]], Optional[dict[str, Optional[dict]]]]:
+        """One final authority snapshot for the hint, proofs and receiving receipt.
 
         A socket consumes only one capsule; its proofs share that provenance.
         Fail closed for any mismatched proof instead of sequential reads whose
@@ -150,18 +152,27 @@ class OwnerContinuity:
         """
         hint = self.donor if self.available() else None
         source = hint or next(iter(self.accepted.values()), None)
-        if source is None:
-            return False, set()
+        if source is None and rollover_donor is None:
+            return (False, set()), None
+        conversations = tuple(
+            dict.fromkeys(
+                [receiving]
+                + ([source['conversation']] if source else [])
+                + ([rollover_donor] if rollover_donor else [])
+            )
+        )
         try:
-            receipt = await self.matcher.host.persistence.call(cache.donor_authority, self.uid, source['conversation'])
+            snapshots = await self.matcher.host.persistence.call(cache.authority_snapshot, self.uid, conversations)
         except Exception:
-            receipt = None
+            snapshots = {conversation: None for conversation in conversations}
+        receipt = snapshots.get(source['conversation']) if source else None
         fields = ('conversation', 'voice', 'receipt_generation', 'profile')
 
         def valid(proof: Any) -> bool:
             try:
                 return bool(
                     proof is not None
+                    and source is not None
                     and all(proof.get(field) == source.get(field) for field in fields)
                     and self._authorized(proof, receipt)
                 )
@@ -176,7 +187,7 @@ class OwnerContinuity:
             self.donor = None if not hint_valid else self.donor
             self.accepted = {key: proof for key, proof in self.accepted.items() if key in authorized}
             record_owner_reconnect('rejected', 'donor_authority')
-        return bool(hint_valid), authorized
+        return (bool(hint_valid), authorized), snapshots
 
     def observe(self, voice: int) -> None:
         scope = self.matcher._voice_scopes.get(voice)

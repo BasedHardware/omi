@@ -90,7 +90,7 @@ bounds and run in the existing DB executor.
 
 Each capsule also includes encrypted donor conversation, voice/scope and manual receipt generation. Every shortened acquisition reads the donor's current eligible row and strict manual receipt; any committed receipt-generation change, missing/ineligible donor or failed authority read revokes the hint, including after consumption and after the donor socket closes. The existing assignment/rejection transaction supplies the durable version fence; no socket callback is required. Accepted short owners retain that proof for same-scope rollover beyond the capsule TTL, and recheck its profile and durable manual authority on mapped speech, profile revalidation and rollover. Because mapped voices skip the embedding queue, new transcript observations also trigger an idle authority check at most once every 30 seconds; short owners remain excluded from capsule publication.
 
-The donor check is the final awaited read before shortened acquisition, rollover, or roster revalidation publishes an identity. One socket consumes one capsule, so one returned donor-authority snapshot covers its hint and accepted proofs; mismatched proof provenance fails closed. After this read the matcher rechecks generation and rebuilds current evidence, then arbitrates and publishes synchronously. Provisional query scores remain local through receipt and authority awaits: cancellation cannot leave a shared distance row without its decision, and a different voice can still finish ordinary recognition while the probe waits.
+The final awaited transaction snapshot covers receiving and donor authority before shortened acquisition, rollover, or roster revalidation publishes an identity. One socket consumes one capsule, so the returned snapshot covers its hint and accepted proofs; mismatched proof provenance fails closed. After this read the matcher rechecks generation and rebuilds current evidence, then arbitrates and publishes synchronously. Provisional query scores remain local through receipt and authority awaits: cancellation cannot leave a shared distance row without its decision, and a different voice can still finish ordinary recognition while the probe waits.
 
 Opening a socket atomically consumes the previous capsule and advances the
 writer token. Concurrent opens consume at most one donor; late older sockets
@@ -129,3 +129,13 @@ denominator, not the lookup count. Rejections distinguish `no_device`, `absent`,
 Accepted decisions have `reason="accepted"`; later joint withdrawal remains
 visible through existing live decision/contention and final conversation metrics.
 No production metrics or account data were read for this implementation.
+
+The final decision reads the receiving conversation, original acoustic donor,
+and (at rollover) immediate donor in one Firestore transaction snapshot, bounded
+to three receipt/privacy projections. Corrections committed before that snapshot
+are honored across all three authorities; separate receipt objects from earlier
+awaits cannot authorize publication. A missing/ineligible document or failed
+snapshot vetoes automatic owner publication. The matcher rechecks its generation
+and rebuilds current evidence after the transaction, then arbitrates and publishes
+without yielding. Ordinary matching with no short proof or rollover keeps its
+existing receipt read and five-second policy.

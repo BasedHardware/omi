@@ -276,15 +276,21 @@ class SpeakerMatcher:
                     read_failed = True
                     current_receipt = {'segments': {'reserved': {'is_user': True}}}
             receipt = donor.get('manual_speaker_assignments') or {}
-            authority = await self._short_authority(
+            authority, current_receipt, final_donor_receipt = await self._final_authority(
+                current_receipt,
+                rollover_donor=donor.get('id') if candidates else None,
                 include_short=any(
                     sum(seconds for _, seconds in evidence) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
                     for _, evidence, _ in retained.values()
-                )
+                ),
             )
-            # The original acoustic donor (which may precede the rollover
-            # donor) is checked after every profile/receipt await. Everything
-            # through arbitration and publication below is synchronous.
+            if candidates:
+                if final_donor_receipt is None:
+                    read_failed = True
+                else:
+                    receipt = final_donor_receipt
+            # Receiving, acoustic donor and immediate rollover donor authority
+            # share one final transaction snapshot. Publication does not yield.
             epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
             owner = self.person_embeddings.get(USER_SELF_PERSON_ID)
             gate = None
@@ -523,7 +529,7 @@ class SpeakerMatcher:
                 return
         if generation != self._generation or conversation_id != self._profile_conversation_id:
             return
-        authority = await self._short_authority()
+        authority, receipt, _ = await self._final_authority(receipt)
         if generation != self._generation or conversation_id != self._profile_conversation_id:
             return
         rejected = manual_rejected_speakers(receipt)
@@ -726,12 +732,13 @@ class SpeakerMatcher:
             return
         if generation != self._generation or self._profile_conversation_id != conversation_id:
             return
+        authority, receipt, _ = await self._final_authority(receipt)
         revoked = (
             self._mapping_origin.get(speaker_id) == 'automatic'
             and self.speaker_to_person.get(speaker_id, (None,))[0] == USER_SELF_PERSON_ID
             and sum(seconds for _, seconds in self.speaker_evidence.get(speaker_id, ()))
             < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
-            and not await self.continuity.authorize(voice=speaker_id)
+            and (self._voice_scopes.get(speaker_id, ''), speaker_id) not in authority[1]
         )
         if generation != self._generation or self._profile_conversation_id != conversation_id:
             return
@@ -762,13 +769,32 @@ class SpeakerMatcher:
             return replace(decision, person_id=None)
         return decision
 
-    async def _short_authority(self, *, include_short: bool = False) -> tuple[bool, set[tuple[str, int]]]:
-        if include_short or any(
-            sum(seconds for _, seconds in self.speaker_evidence.get(voice, ())) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
-            for voice in self._voice_centroids
+    async def _final_authority(
+        self,
+        receipt: Mapping[str, Any],
+        *,
+        include_short: bool = False,
+        rollover_donor: Optional[str] = None,
+    ) -> tuple[tuple[bool, set[tuple[str, int]]], Mapping[str, Any], Optional[dict]]:
+        if (
+            rollover_donor
+            or include_short
+            or any(
+                sum(seconds for _, seconds in self.speaker_evidence.get(voice, ())) < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS
+                for voice in self._voice_centroids
+            )
         ):
-            return await self.continuity.authorize_roster()
-        return False, set()
+            authority, snapshots = await self.continuity.authorize_roster(
+                self._profile_conversation_id or '', rollover_donor=rollover_donor
+            )
+            if snapshots is not None:
+                current = snapshots.get(self._profile_conversation_id or '')
+                # A missing/ineligible receiving document or a failed snapshot
+                # cannot authorize an automatic owner decision.
+                receipt = current if current is not None else {'segments': {'reserved': {'is_user': True}}}
+                return authority, receipt, snapshots.get(rollover_donor) if rollover_donor else None
+            return authority, receipt, None
+        return (False, set()), receipt, None
 
     def _rebuild_voice_decisions(self, authority: tuple[bool, set[tuple[str, int]]]) -> set[int]:
         """Recompute the current roster after the final authority await, without yielding."""
@@ -1008,7 +1034,10 @@ class SpeakerMatcher:
                     rejected = manual_rejected_speakers(receipt)
                 except Exception as error:
                     logger.warning('Speaker ID receipt load failed type=%s', type(error).__name__)
-                    owner_reserved = True
+                    receipt = {'segments': {'reserved': {'is_user': True}}}
+            authority, receipt, _ = await self._final_authority(receipt, include_short=short_reconnect)
+            owner_reserved = manual_owner_reserved(receipt)
+            rejected = manual_rejected_speakers(receipt)
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
@@ -1073,7 +1102,6 @@ class SpeakerMatcher:
                 )
                 self._record_exit('manual_decision', speaker_id)
                 return
-            authority = await self._short_authority(include_short=short_reconnect)
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return

@@ -9,6 +9,7 @@ import pytest
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from database import conversations as conversations_db
+from database import live_owner_continuity as continuity_cache
 from routers.listen.speakers import SpeakerMatcher
 from tests.unit.test_live_speaker_carry import _CarryHarness, _segment, _stamped_epoch, SCOPE
 from tests.unit.test_listen_speaker_id_failover import FailoverStack, CONV, UID
@@ -131,6 +132,8 @@ async def test_carry_arbitrates_voice_matched_during_donor_read(monkeypatch):
         matcher.person_embeddings['user'] = owner
 
     async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
         if fn is mod.conversations_db.get_conversation:
             await matcher.match(1, dict(audio_segment('new', 6, 5), speaker_id_scope=SCOPE))
             assert matcher.speaker_to_person[1][0] == 'user'
@@ -176,6 +179,8 @@ async def test_carry_revalidates_current_prints_and_corrects_emitted_owner(monke
     incoming = [TranscriptSegment(**_segment(f'new{v}', speaker_id=v)) for v in (0, 1)]
 
     async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
         return {'id': 'old'} if fn.__name__ == 'get_conversation' else {}
 
     async def load():
@@ -289,6 +294,8 @@ async def test_rollover_keeps_competing_voice_when_paid_roster_becomes_owner_onl
         matcher.person_embeddings = {'user': {'embedding': owner, 'name': 'Owner'}}
 
     async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
         return {'id': 'old'} if fn is mod.conversations_db.get_conversation else {}
 
     matcher._load_profiles = AsyncMock(side_effect=load)
@@ -366,6 +373,11 @@ async def test_rollover_logs_bounded_reason_for_each_prior_owner(monkeypatch, ca
     async def read(fn, *args, **kwargs):
         if case == 'read_failed':
             raise RuntimeError('offline')
+        if fn is continuity_cache.authority_snapshot:
+            return {
+                conversation: (manual if case == 'late_manual' and conversation == 'old' else {})
+                for conversation in args[1]
+            }
         if fn is mod.conversations_db.get_conversation:
             return dict(donor, manual_speaker_assignments=manual) if case == 'late_manual' else donor
         return {}
