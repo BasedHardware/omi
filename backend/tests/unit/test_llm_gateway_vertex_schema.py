@@ -14,50 +14,7 @@ from models.dream_agent import Plan, Triage
 from utils.llm import vertex_pt_routing as ptr
 from utils.translation_core.providers import LunaTranslationBatch
 
-# Vertex v1 GenerationConfig.response_json_schema's documented keyword set.
-# Keep this independent of the converter so additions require a contract review.
-SUPPORTED = {
-    '$id',
-    '$defs',
-    '$ref',
-    '$anchor',
-    'type',
-    'format',
-    'title',
-    'description',
-    'enum',
-    'items',
-    'prefixItems',
-    'minItems',
-    'maxItems',
-    'minimum',
-    'maximum',
-    'anyOf',
-    'oneOf',
-    'properties',
-    'additionalProperties',
-    'required',
-    'propertyOrdering',
-}
-
-
-def assert_vertex_subset(node):
-    assert isinstance(node, dict)
-    assert set(node) <= SUPPORTED
-    if 'enum' in node:
-        assert all(isinstance(value, (str, int, float)) and not isinstance(value, bool) for value in node['enum'])
-    if '$ref' in node:
-        assert all(key.startswith('$') for key in node)
-    for key in ('properties', '$defs'):
-        for child in node.get(key, {}).values():
-            assert_vertex_subset(child)
-    for key in ('items', 'additionalProperties'):
-        child = node.get(key)
-        if isinstance(child, dict):
-            assert_vertex_subset(child)
-    for key in ('anyOf', 'oneOf', 'prefixItems'):
-        for child in node.get(key, []):
-            assert_vertex_subset(child)
+from tests.support.vertex_contract import assert_vertex_subset
 
 
 @pytest.mark.parametrize('model', [Plan, Triage, LunaTranslationBatch])
