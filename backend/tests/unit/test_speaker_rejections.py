@@ -10,6 +10,7 @@ from collections import deque
 from copy import deepcopy
 from datetime import datetime, timezone
 import os
+import time
 from types import SimpleNamespace
 
 import fakeredis
@@ -593,7 +594,7 @@ def test_rejected_voice_cannot_contend_the_owner(world, monkeypatch):
     assert any(args[0] == 5 and args[1] == 'user' for args, kwargs in emitted if not kwargs.get('retracted'))
 
 
-@pytest.mark.parametrize('after_consumption', [False, True, 'accepted'])
+@pytest.mark.parametrize('after_consumption', [False, True, 'accepted', 'rollover'])
 def test_donor_correction_route_revokes_closed_socket_hint(world, monkeypatch, after_consumption):
     client = fakeredis.FakeRedis()
     monkeypatch.setattr(continuity_cache, '_client', lambda: client)
@@ -617,7 +618,7 @@ def test_donor_correction_route_revokes_closed_socket_hint(world, monkeypatch, a
             assert new.continuity.donor
             new.host.persistence.call = read
             assert await new.continuity.authorize(), 'uncorrected donor must genuinely authorize reuse'
-            if after_consumption == 'accepted':
+            if after_consumption in ('accepted', 'rollover'):
                 await speak(new, 0, 2)
                 assert visible_owner(new, 0)
         response = world.client.post(f'/v1/conversations/{CONV}/speakers/4/reject', json={'kind': 'not_me'})
@@ -626,10 +627,22 @@ def test_donor_correction_route_revokes_closed_socket_hint(world, monkeypatch, a
         if new is None:
             new, _, _ = await connect(monkeypatch, [OWNER, OWNER], uid=UID)
         new.host.persistence.call = read
-        await speak(new, 0, 2)
+        if after_consumption == 'rollover':
+            new.host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
+            await new.refresh_for_conversation(
+                'next', owner_carry_scope='new-socket', owner_carry_donor={'id': 'conversation'}
+            )
+        elif after_consumption == 'accepted':
+            monotonic = time.monotonic()
+            monkeypatch.setattr(time, 'monotonic', lambda: monotonic + 31)
+            new.observe_segment(0, 'new-socket', 'after-correction')
+            await new.continuity.refresh()
+            assert not visible_owner(new, 0), 'idle observation path must revoke without another embedding'
+        else:
+            await speak(new, 0, 2)
         assert not visible_owner(new, 0), 'persisted donor correction revokes even a consumed capsule'
         assert new.continuity.donor is None
-        await speak(new, 0, 3, start=3)
+        await speak(new, 0, 5 if after_consumption == 'rollover' else 3, start=3)
         assert visible_owner(new, 0), 'independent five-second recognition still works'
 
     asyncio.run(run())

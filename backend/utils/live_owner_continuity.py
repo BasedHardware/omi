@@ -42,6 +42,8 @@ class OwnerContinuity:
         self._published = False
         self._published_observed_at = 0.0
         self._revision = 0
+        self._last_authority_check = time.monotonic()
+        self._authority_observed_at = 0.0
         self.attempted: set[int] = set()
         self.accepted: dict[tuple[str, int], dict[str, Any]] = {}
         self.observed: dict[tuple[str, int], float] = {}
@@ -153,9 +155,26 @@ class OwnerContinuity:
         """The matcher queue deliberately skips mapped voices; refresh on its idle tick."""
         from utils.transcribe_store import conversations_db
 
+        matcher = self.matcher
+        observed_at = max(self.observed.values(), default=0.0)
+        if (
+            any(
+                identity[0] == 'user'
+                and matcher._mapping_origin.get(voice) == 'automatic'
+                and (matcher._voice_scopes.get(voice, ''), voice) in self.accepted
+                and sum(seconds for _, seconds in matcher.speaker_evidence.get(voice, ())) < 5.0
+                for voice, identity in matcher.speaker_to_person.items()
+            )
+            and observed_at > self._authority_observed_at
+            and time.monotonic() - self._last_authority_check >= 30.0
+        ):
+            # Mapped transcript observations bypass match(). Short accepts cannot
+            # publish a capsule, but still need durable correction revalidation.
+            self._last_authority_check = time.monotonic()
+            self._authority_observed_at = observed_at
+            await matcher._reevaluate_loaded_owner()
         if not self.refresh_due():
             return
-        matcher = self.matcher
         generation, conversation = matcher._generation, matcher._profile_conversation_id
         if not conversation:
             return

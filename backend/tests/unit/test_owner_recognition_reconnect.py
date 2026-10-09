@@ -257,9 +257,13 @@ async def test_accepted_reconnect_owner_survives_same_scope_rollover_after_hint_
     host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='new-socket'))
     await speak(matcher, 0, 2)
     assert visible_owner(matcher, 0)
-    clock = time.time()
+    clock, monotonic = time.time(), time.monotonic()
     monkeypatch.setattr(time, 'time', lambda: clock + 121)
+    monkeypatch.setattr(time, 'monotonic', lambda: monotonic + 121)
     assert not matcher.continuity.available()
+    matcher.observe_segment(0, 'new-socket', 'after-expiry')
+    await matcher.continuity.refresh()
+    assert visible_owner(matcher, 0), 'accepted proof survives idle revalidation after capsule expiry'
 
     async def read(fn, *args, **kwargs):
         return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
