@@ -275,7 +275,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
 
     let storedLocalShell = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let localShell = try XCTUnwrap(storedLocalShell)
-    XCTAssertTrue(localShell.backendSynced)
+    XCTAssertTrue(localShell.backendSynced && !localShell.deleted)
     XCTAssertEqual(localShell.finalizationStrategy, .localSegments)
     XCTAssertEqual(localShell.title ?? "", "")
     XCTAssertEqual(localShell.overview ?? "", "")
@@ -302,7 +302,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     XCTAssertEqual(hydrated.overview, "Processed backend overview")
     XCTAssertTrue(hydrated.starred, "Hydration must not erase newer local star mutations")
     XCTAssertEqual(hydrated.folderId, "local-folder", "Hydration must not erase newer local folder mutations")
-    XCTAssertTrue(hydrated.deleted, "Hydration must not resurrect locally deleted conversations")
+    XCTAssertFalse(hydrated.deleted, "Hydration must preserve an active conversation")
   }
 
   func testBackendHydratesCompletedCloudReconcileShellEvenWhenLocalTimestampIsNewer() async throws {
