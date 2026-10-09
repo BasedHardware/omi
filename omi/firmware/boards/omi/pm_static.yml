@@ -1,4 +1,6 @@
 app:
+  # Discrepancy: end_address - size = 0x10200, not the address below (0xf200).
+  # mcuboot_primary_app also starts at 0x10200; verify generated partitions.yml.
   address: 0xf200
   end_address: 0x100000
   region: flash_primary
