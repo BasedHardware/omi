@@ -81,6 +81,7 @@ class GatewayError(Exception):
         self.provider = 'none'
         self.model = 'none'
         self.provider_rejection = ProviderRejection.NONE
+        self.upstream_http_status: int | None = None
 
     def with_provider_context(
         self,
@@ -88,10 +89,12 @@ class GatewayError(Exception):
         provider: str,
         model: str,
         provider_rejection: ProviderRejection = ProviderRejection.NONE,
+        upstream_http_status: int | None = None,
     ) -> 'GatewayError':
         self.provider = provider
         self.model = model
         self.provider_rejection = provider_rejection
+        self.upstream_http_status = upstream_http_status
         return self
 
     def to_error_dict(self) -> dict[str, str | None]:

@@ -1014,6 +1014,7 @@ def _map_provider_failure(
         provider=provider_ref.provider,
         model=provider_ref.model,
         provider_rejection=exc.provider_rejection,
+        upstream_http_status=exc.upstream_http_status,
     )
 
 
