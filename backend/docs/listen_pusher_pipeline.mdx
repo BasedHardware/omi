@@ -1446,6 +1446,13 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
+Reminder effects read the saved task lifecycle after persistence rather than
+using extraction state. Cancelled, superseded, completed, deleted and undated
+tasks do not arm reminders. An unavailable post-create reminder read emits
+degraded telemetry and skips that reminder step without failing the committed
+extraction or blocking vector/export continuation. This is not a durable
+reminder retry; transport and offline-device delivery remain best effort.
+
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
 links, completion, edited descriptions/dates, folders, manual assignments and
@@ -3647,7 +3654,11 @@ Live identity consumes positioned provider fragments, accumulating distinct
 intervals in the existing ring before embedding. Overlaps and repeats count
 once; successful extraction reserves its intervals. Account for the clip that
 the three-entry evidence deque will evict before gating the next extraction.
-A rejected voice can then reach another five-second decision on later clean audio.
+A rejected voice, including a far/noisy rejection, can then reach another
+five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
+the usable remainder only if its actual PCM duration still meets the extraction
+floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+remainder reports `window_shorter_than_minimum`.
 
 Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
 runner-up gap of at least `0.10` stay `unknown` / `pending` while additional
@@ -3664,10 +3675,27 @@ recognition remains free on every plan. Held-out calibration found no safe
 acceptance lift from wider thresholds; the pending band must not be interpreted
 as a measured recall improvement.
 
+Each conversation admits at most 128 voice ids, with at most 128 pending intervals
+per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
+uncarried voices' attempts; validated automatic owner carry and copied manual
+mappings retain their attempts. Same-conversation profile refresh does not reset
+them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
+opportunities within both budgets, regardless of their initial distance: noisy
+early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+all evidenced voices and withdraws competing automatic owner mappings.
+Near-threshold misses, print-margin ambiguity, owner contention and missing prints
+stay retryable. No new exit reason is added.
+Retained evidence can still be re-arbitrated or rechecked against a recovered owner
+without another embedding request.
 
-Each socket admits at most 128 voice ids, with at most 128 pending intervals per
-voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
-Failures consume attempts; quotas survive conversation/profile refresh. All
+The socket token bucket starts with 16 attempts, has capacity 16, and refills
+at 240/3600 attempts per monotonic wall second (one every 15 seconds). Over `t`
+hours since socket creation, attempts are bounded by `16 + 240*t`: at most 256
+in the first hour and 240/hour in steady state, at no more than 10 seconds of
+query PCM per attempt. Idle credit is capped at 16. Failures spend tokens and
+reservation is synchronous before awaiting extraction; parallel voices share
+the same bucket. Client audio timestamps cannot accelerate refill, and neither
+conversation churn nor profile refresh resets the socket's tokens/refill clock. All
 associated automatic voice state shares admission. Rollover prunes idle locks;
 held/waited locks retire only after their last user finishes. Generation checks
 prevent old work from publishing. Live unknown/ambiguous remains an abstention

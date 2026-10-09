@@ -381,8 +381,6 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   func testStaticGuardTasksStoreHasNoUnrestrictedSQLiteMutationCallSites() throws {
-    let lines = try productionSource("Stores/TasksStore.swift")
-      .components(separatedBy: .newlines)
     let mutationNames = [
       "syncTaskActionItems(",
       "insertLocalActionItem(",
@@ -400,15 +398,18 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       "updateSortOrders(",
     ]
 
-    for (index, line) in lines.enumerated() {
-      guard mutationNames.contains(where: line.contains) else { continue }
-      let windowEnd = min(lines.endIndex, index + 16)
-      let callWindow = lines[index..<windowEnd].joined(separator: "\n")
-      XCTAssertTrue(
-        callWindow.contains("authorization:"),
-        "TasksStore SQLite mutation at line \(index + 1) must carry LocalMutationAuthorization")
+    for sourcePath in ["Stores/TasksStore.swift", "Stores/UnsyncedTaskSyncOperations.swift"] {
+      let lines = try productionSource(sourcePath).components(separatedBy: .newlines)
+      for (index, line) in lines.enumerated() {
+        guard mutationNames.contains(where: line.contains) else { continue }
+        let windowEnd = min(lines.endIndex, index + 16)
+        let callWindow = lines[index..<windowEnd].joined(separator: "\n")
+        XCTAssertTrue(
+          callWindow.contains("authorization:"),
+          "\(sourcePath) SQLite mutation at line \(index + 1) must carry LocalMutationAuthorization")
+      }
+      XCTAssertFalse(lines.joined(separator: "\n").contains("updateChatSessionId"))
     }
-    XCTAssertFalse(lines.joined(separator: "\n").contains("updateChatSessionId"))
     let storageSource = try productionSource("Rewind/Core/ActionItemStorage.swift")
     XCTAssertFalse(storageSource.contains("func updateChatSessionId"))
     XCTAssertNil(

@@ -572,14 +572,14 @@ class OnboardingStateUpdate(BaseModel):
 @router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
 def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
-    current_state = get_user_onboarding_state(uid)
+    updates = {}
     if data.completed is not None:
-        current_state['completed'] = data.completed
+        updates['completed'] = data.completed
     if data.acquisition_source is not None:
-        current_state['acquisition_source'] = data.acquisition_source
+        updates['acquisition_source'] = data.acquisition_source
     if data.device_onboarding_completed is not None:
-        current_state['device_onboarding_completed'] = data.device_onboarding_completed
-    set_user_onboarding_state(uid, current_state)
+        updates['device_onboarding_completed'] = data.device_onboarding_completed
+    set_user_onboarding_state(uid, updates)
     return {'status': 'ok'}
 
 
