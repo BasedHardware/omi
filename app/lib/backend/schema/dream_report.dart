@@ -2,6 +2,10 @@
 /// surface: the backend answers 404 unless the account is in the dream cohort.
 library;
 
+import 'dart:convert';
+
+import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
+
 String _str(Object? value) => value is String ? value : '';
 int _int(Object? value) => value is num ? value.toInt() : 0;
 double _double(Object? value) => value is num ? value.toDouble() : 0;
@@ -64,8 +68,12 @@ class DreamTerm {
 }
 
 class DreamFeedback {
-  const DreamFeedback(
-      {required this.component, required this.failureClass, required this.severity, required this.count});
+  const DreamFeedback({
+    required this.component,
+    required this.failureClass,
+    required this.severity,
+    required this.count,
+  });
 
   final String component;
   final String failureClass;
@@ -119,6 +127,21 @@ class DreamRun {
 
   bool get isEmpty => edits.isEmpty && questions.isEmpty && slowTasks.isEmpty && vocabulary.isEmpty && feedback.isEmpty;
 
+  static DreamRun fromGeneratedWireJson(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) throw const FormatException('Expected a JSON object');
+    return fromGenerated(wire.GeneratedDreamRun.fromJson(decoded));
+  }
+
+  /// Projects the validated run-now response, including passes without a persisted run id.
+  static DreamRun fromGenerated(wire.GeneratedDreamRun generated) {
+    final json = generated.toJson();
+    if ((json['run_id'] as String? ?? '').isEmpty) json['run_id'] = json['status'] ?? 'idle';
+    final run = fromJson(json);
+    if (run == null) throw const FormatException('Malformed dream run');
+    return run;
+  }
+
   /// Returns null for a row without an id or timestamp so one malformed run never hides the rest.
   static DreamRun? fromJson(Map<String, dynamic> json) {
     final id = _str(json['run_id']);
@@ -167,6 +190,14 @@ class DreamReport {
   final List<DreamRun> runs;
 
   int get manualRunsLeft => (manualRunsLimit - manualRunsToday).clamp(0, manualRunsLimit);
+
+  static DreamReport fromGeneratedWireJson(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) throw const FormatException('Expected a JSON object');
+    return fromGenerated(wire.GeneratedDreamRunsResponse.fromJson(decoded));
+  }
+
+  static DreamReport fromGenerated(wire.GeneratedDreamRunsResponse generated) => fromJson(generated.toJson());
 
   static DreamReport fromJson(Map<String, dynamic> json) => DreamReport(
         live: json['mode'] == 'on',

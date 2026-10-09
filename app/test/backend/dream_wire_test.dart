@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/gen/dream_wire.g.dart';
 
 Map<String, dynamic> completedRun() => {
@@ -33,7 +36,7 @@ Map<String, dynamic> completedRun() => {
         {
           'kind': 'person',
           'spelling': 'Qorbi',
-          'aliases': ['Qorby']
+          'aliases': ['Qorby'],
         },
       ],
       'feedback': [
@@ -90,6 +93,30 @@ void main() {
       expect(run.edits, isEmpty);
       expect(run.errorType, json['error_type']);
     }
+  });
+
+  test('display adapters use the generated boundary and retain idle run projection', () {
+    final report = DreamReport.fromGeneratedWireJson(
+      jsonEncode({
+        'mode': 'shadow',
+        'passes_today': 3,
+        'passes_limit': 4,
+        'manual_runs_today': 1,
+        'manual_runs_limit': 3,
+        'queued_changes': 108,
+        'runs': [completedRun()],
+      }),
+    );
+    expect(report.runs.single.runId, 'synthetic-run');
+    expect(report.runs.single.edits.single.targetLabel, 'Conversation · Synthetic sync');
+    expect(report.manualRunsLeft, 2);
+    final idle = completedRun()
+      ..['run_id'] = ''
+      ..['status'] = 'idle';
+    expect(DreamRun.fromGeneratedWireJson(jsonEncode(idle)).runId, 'idle');
+    expect(() => DreamRun.fromGeneratedWireJson('[]'), throwsFormatException);
+    expect(() => DreamReport.fromGeneratedWireJson('null'), throwsFormatException);
+    expect(() => DreamRun.fromGeneratedWireJson(jsonEncode(completedRun()..remove('run_id'))), throwsFormatException);
   });
 
   test('generated decoder rejects malformed run lists and missing mandatory fields', () {
