@@ -432,11 +432,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ),
       ),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        BackgroundInterruptProcessLaunch.mark();
-      }
-    });
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
@@ -730,12 +725,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   Widget build(BuildContext context) {
-    // Home's build completed successfully: record that this process has painted
-    // Home so a later Home classifies as `resume`. Marking here (not in a
-    // post-frame callback) means a build exception skips the mark — Flutter
-    // catches rebuild errors and post-frame callbacks still fire after them.
-    BackgroundInterruptProcessLaunch.mark();
-    return MyUpgradeAlert(
+    final content = MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
@@ -874,6 +864,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ),
       ),
     );
+    // The widget tree constructed without throwing: Home built successfully.
+    // Marking here (not in initState, not in a post-frame callback) means a
+    // build exception skips the mark — Flutter catches rebuild errors and
+    // post-frame callbacks still fire after them, so neither of those proves
+    // success. A later Home then truthfully classifies as cold_start.
+    BackgroundInterruptProcessLaunch.mark();
+    return content;
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.
