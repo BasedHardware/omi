@@ -304,7 +304,7 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
     ],
 )
 @pytest.mark.asyncio
-async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, lane, streaming):
+async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, capsys, lane, streaming):
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     seen, events = [], []
@@ -374,6 +374,16 @@ async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, lane,
         ]
         assert trace.attempts[0].error_class == 'provider_invalid_request'
         assert trace.attempts[-1].fallback_reason == 'provider_invalid_request'
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        rejection = [line for line in lines if line.get('event') == 'vertex_provider_rejection']
+        assert len(rejection) == 1
+        assert rejection[0]['lane'] == lane
+        assert rejection[0]['route'] == resolved.active_route.route_artifact_id
+        assert rejection[0]['request_id'] == 'unknown'
+        assert rejection[0]['provider'] == 'gemini'
+        assert rejection[0]['model'] == ptr.PT_MODEL_CURRENT
+        assert rejection[0]['failure_class'] == 'provider_invalid_request'
+        assert rejection[0]['reason'] == 'schema_complexity'
 
 
 @pytest.mark.parametrize(
