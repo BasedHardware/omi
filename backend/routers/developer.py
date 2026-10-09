@@ -2139,15 +2139,28 @@ def _create_conversation_from_segments(
     if request.client_session_id:
         # A delete committing while processing ran must win: re-check intent
         # before the final persist, otherwise the loser of the admission race
-        # re-persists the row the user just deleted. The next retry of this
-        # upload gets the deleted ack, but the doc would already be back.
+        # re-persists the row the user just deleted. Both identities are
+        # checked (derived uuid5 and the raw session id, matching admission),
+        # and a hit also purges the processing/processing-completed row this
+        # call may have created or completed, so the retired identity is not
+        # published by our own response path.
+        suppress_id = None
         if conversation_tombstones.is_deleted(uid, conversation.id):
+            suppress_id = conversation.id
+        elif conversation_tombstones.is_deleted(uid, request.client_session_id):
+            suppress_id = request.client_session_id
+        if suppress_id is not None:
             logger.info(
-                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s",
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s suppress_id=%s",
                 uid,
                 sanitize(request.client_session_id),
                 conversation.id,
+                suppress_id,
             )
+            try:
+                conversations_db.delete_conversation(uid, conversation.id)
+            except Exception:
+                logger.exception('tombstone suppress row cleanup failed uid=%s conversation=%s', uid, conversation.id)
             return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",

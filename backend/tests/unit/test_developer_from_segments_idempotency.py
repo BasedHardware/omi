@@ -144,6 +144,7 @@ from database.firestore_read_metrics import FirestoreReadSite  # noqa: E402
 import routers.developer as developer  # noqa: E402
 import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
+from models.structured import Structured  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 from utils.conversations.meeting_treatment import meeting_treatment_verdict  # noqa: E402
 
@@ -958,15 +959,24 @@ def test_deleted_ack_also_matches_raw_session_id_tombstone(monkeypatch):
 
 def test_pre_persist_tombstone_check_suppresses_delete_race_winner(monkeypatch):
     """A delete committing while processing runs must win: the final persist is
-    preceded by a re-check, and a hit returns the deleted ack instead of writing."""
+    preceded by a re-check (both identities), and a hit returns the deleted ack,
+    purges the processing row, and never reaches the final persist."""
     cid = developer._from_segments_conversation_id('uid1', 'race-session')
-    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, key: key == cid)
+    # The tombstone appears only AFTER processing started (the delete committed
+    # in that window), so admission passes and the pre-persist re-check fires.
+    tombstoned = {'after_process': False}
+
+    def lookup(uid, key):
+        return tombstoned['after_process'] and key in (cid, 'race-session')
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     persisted = MagicMock()
-    created = {}
+    purged = []
 
     def fake_process(uid, language, obj, **kwargs):
-        created['row'] = obj
+        # The delete commits while processing runs.
+        tombstoned['after_process'] = True
         conv = Conversation(
             id=cid,
             created_at=obj.created_at,
@@ -980,9 +990,14 @@ def test_pre_persist_tombstone_check_suppresses_delete_race_winner(monkeypatch):
 
     monkeypatch.setattr(developer, 'process_conversation', fake_process)
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
+    # The admission path's create-if-absent must stay hermetic: stub the whole
+    # admission so the race window is simulated without Firestore.
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', lambda uid, key: purged.append(key))
     response = developer._create_conversation_from_segments('uid1', _request(client_session_id='race-session'))
     assert response.status == 'deleted'
     persisted.assert_not_called()
+    assert purged == [cid]
 
 
 def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
