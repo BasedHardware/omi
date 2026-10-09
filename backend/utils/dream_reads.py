@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from database import review_store
 from database import conversations, action_items, users, candidates, screen_activity, dream_store
+from utils.dream_prompt import fits_triage
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
@@ -63,25 +64,32 @@ def read_record(uid, ref):
     return None
 
 
-def read_changes(uid, lease):
-    events = dream_store.events(uid, lease)
+def read_changes(uid, lease, caps, vocabulary=None):
+    dirty = dream_store.dirty_refs(uid, limit=dream_store.WRITE_CHUNK)
     records = {}
-    for event in events:
-        for collection, key in event['refs']:
-            ref = f'{collection}/{key}'
-            if ref in records:
-                continue
-            try:
-                row = read_record(uid, ref)
-            except review_store.ReviewNotFound:
-                row = None
-            except HTTPException as exc:
-                if exc.status_code not in {402, 404}:
-                    raise
-                row = None
-            if row:
-                records[ref] = row
-    # Only touched identities, never a full user history.
+    consumed = []
+    for snapshot in dirty:
+        item = snapshot.to_dict()
+        # An update after admission belongs to a later pass, even if observed now.
+        if item['last_changed_at'] > lease['started_at']:
+            continue
+        ref = f"{item['collection']}/{item['id']}"
+        try:
+            row = read_record(uid, ref)
+        except review_store.ReviewNotFound:
+            row = None
+        except HTTPException as exc:
+            if exc.status_code not in {402, 404}:
+                raise
+            row = None
+        if row:
+            candidate = {**records, ref: row}
+            if not fits_triage(candidate, caps, vocabulary):
+                break
+            records[ref] = row
+        consumed.append(item)
+    # Only touched identities, never a full user history. Enrichment shares the
+    # same prompt budget; it cannot displace dirty references already selected.
     identities = set()
     for ref, row in list(records.items()):
         if ref.startswith('conversations/'):
@@ -95,14 +103,24 @@ def read_changes(uid, lease):
     for entity_id in sorted(identities)[:20]:
         node = resolve_entity(uid, entity_id)
         facts, decisions, _ = _facts(uid, [node['entity_id']], {})
-        records['entity/' + entity_id] = {
-            **node,
-            'facts': [f.model_dump(mode='python') for f in facts],
-            'decisions': [f.model_dump(mode='python') for f in decisions],
+        candidate = {
+            **records,
+            'entity/'
+            + entity_id: {
+                **node,
+                'facts': [f.model_dump(mode='python') for f in facts],
+                'decisions': [f.model_dump(mode='python') for f in decisions],
+            },
         }
-    if events:
+        if not fits_triage(candidate, caps, vocabulary):
+            break
+        records = candidate
+    if records and consumed:
         for row in screen_activity.get_screen_activity(
-            uid, start_date=events[0]['at'], end_date=lease['started_at'], limit=30
+            uid, start_date=min(item['last_changed_at'] for item in consumed), end_date=lease['started_at'], limit=30
         ):
-            records['screen/' + row['id']] = row
-    return records, (events[-1]['sequence'] if events else lease['watermark'])
+            candidate = {**records, 'screen/' + row['id']: row}
+            if not fits_triage(candidate, caps, vocabulary):
+                break
+            records = candidate
+    return records, consumed

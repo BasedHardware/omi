@@ -16438,5 +16438,290 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-redis-cache-conn-warn",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Redis cache - connection-class write failures",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[10m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-09T14:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "2",
+      "summary": "Listen or pusher is skipping Redis cache writes because of auth, connection, or timeout errors.",
+      "threshold": "cache-write fail-open increase over 10m > 0, sustained for 10m",
+      "user_impact": "Requests can keep succeeding while best-effort Redis writes are skipped. If this continues, in-progress conversation pointers and meeting mappings go stale, and a credential drift can grow into listen-session failures.",
+      "scope": "omi_fallback_total component=other from_mode=cache_write reason=auth_error|connection_error|timeout outcome=degraded on jobs backend-listen-metrics and pusher-metrics. capacity_full is excluded.",
+      "verification": "Run this alert expression and split the increase by reason and job. Confirm Redis reachability and that the listen and pusher Redis password still matches Redis Cloud. Do not read customer payloads.",
+      "safe_next_action": "For auth_error, update the Redis password secret and roll only the affected deployment after the new secret is confirmed. For connection_error or timeout, check Redis Cloud status and pod connectivity before changing credentials.",
+      "evaluated_bad": "Not measured in Prometheus. The 2026-10-08 dev incident raised AuthenticationError before this counter existed and failed every listen accept. That shape is about one cache_write fail-open per accept.",
+      "evaluated_good": "Healthy Redis auth emits none of these reasons, so the 10m increase is 0."
+    },
+    "labels": {
+      "alert_identity": "omi-redis-cache-conn-warn",
+      "component": "live-transcription",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-redis-cache-conn-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Redis cache - connection-class write failures degrading sessions",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 0.5",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-09T14:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "2",
+      "summary": "Redis auth, connection, or timeout errors are skipping cache writes on a large share of accepted listen sessions.",
+      "threshold": "fail-open count / listen accepts > 0.5 with at least 50 accepts in 5m, for 5m",
+      "user_impact": "In-progress conversation pointers and meeting mappings are missing on many live sessions. Before this fail-open, the same Redis auth errors returned 500 on listen accept.",
+      "scope": "omi_fallback_total component=other from_mode=cache_write reason=auth_error|connection_error|timeout outcome=degraded on jobs backend-listen-metrics and pusher-metrics, divided by omi_listen_accepted_total on backend-listen-metrics. capacity_full is excluded.",
+      "verification": "Confirm the 5m ratio on this expression, then split by reason and job. A ratio near 1 with auth_error is a credential drift, not a capacity event.",
+      "safe_next_action": "Verify the failing job and reason, then restore Redis auth or connectivity for that deployment. Do not widen maxmemory or mute the warning while the ratio stays above 0.5.",
+      "evaluated_bad": "Not measured in Prometheus. The 2026-10-08 dev incident failed every listen accept on AuthenticationError, which this ratio treats as about 1.0.",
+      "evaluated_good": "Healthy Redis auth emits none of these reasons, so the ratio is 0 even when listen accepts are above 50."
+    },
+    "labels": {
+      "alert_identity": "omi-redis-cache-conn-page",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

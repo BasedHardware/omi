@@ -10,18 +10,33 @@ def mode() -> str:
     return value if value in {'shadow', 'on'} else 'off'
 
 
-def eligible(uid: str, user: dict) -> bool:
-    allowlist = {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
-    if uid in allowlist:
-        return True
+def _allowlisted(uid: str) -> bool:
+    return uid in {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
+
+
+def _testflight_minimum_build() -> int | None:
     minimum_build = os.getenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '').strip()
     if not minimum_build or os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() != 'true':
-        return False
+        return None
     try:
         minimum = int(minimum_build)
     except ValueError:
+        return None
+    return minimum if minimum >= 1 else None
+
+
+def may_be_eligible(uid: str) -> bool:
+    """Cheap pre-check before reading the user document; False means `eligible` is False."""
+    return uid != canary_uid() and (_allowlisted(uid) or _testflight_minimum_build() is not None)
+
+
+def eligible(uid: str, user: dict) -> bool:
+    if uid == canary_uid() or user.get('dream_canary'):
         return False
-    if minimum < 1:
+    if _allowlisted(uid):
+        return True
+    minimum = _testflight_minimum_build()
+    if minimum is None:
         return False
     app_build = user.get('dream_app_build')
     return (
@@ -30,6 +45,20 @@ def eligible(uid: str, user: dict) -> bool:
         and not isinstance(app_build, bool)
         and app_build >= minimum
     )
+
+
+def canary_uid() -> str:
+    value = os.getenv('DREAM_AGENT_CANARY_UID', '').strip()
+    # Reserved synthetic namespace; a user document marker is also required.
+    return value if value.startswith('dream-canary-') and '/' not in value and len(value) <= 128 else ''
+
+
+def canary_eligible(uid: str, user: dict) -> bool:
+    return bool(canary_uid()) and uid == canary_uid() and user.get('dream_canary') is True
+
+
+def self_report_enabled() -> bool:
+    return os.getenv('DREAM_SELF_REPORT_MODE', 'off').strip().lower() == 'on'
 
 
 def number(key: str, default: float) -> float:
@@ -49,6 +78,8 @@ class Caps:
     undo_rate: float = 0.2
     undo_min_samples: int = 10
     anonymous_k: int = 20
+    manual_runs: int = 3
+    completion_tokens: int = 4096
 
     @classmethod
     def from_env(cls):
@@ -61,6 +92,7 @@ class Caps:
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
+            manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )
 
     @property

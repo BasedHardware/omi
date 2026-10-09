@@ -529,6 +529,25 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
         pass
 
 
+CONVERSATION_RELEVANCE_RESCUE_TOTAL = Counter(
+    'omi_conversation_relevance_rescue_total',
+    'R03/R08 second opinions; shadow never changes verdicts. No transcript or user labels.',
+    ['mode', 'rule', 'outcome'],
+)
+
+
+def record_conversation_relevance_rescue(*, mode: str, rule: str, outcome: str) -> None:
+    """Bounded content-free labels; telemetry never changes relevance."""
+    try:
+        CONVERSATION_RELEVANCE_RESCUE_TOTAL.labels(
+            mode=mode if mode in {'shadow', 'on'} else 'other',
+            rule=rule if rule in {'filler_only', 'no_content_words'} else 'other',
+            outcome=outcome if outcome in {'rescue', 'discard_stands', 'error_keep'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
 # Jev decision model (utils/llm/jev_client.py, #14835). One increment per
 # caller-visible Jev question, after its retry. `lane` names the product
 # decision, never a user; every non-success outcome means the caller kept its
@@ -1078,6 +1097,11 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
 # Wall seconds of live /v4/listen sessions by who could have watched them in real
 # time (routers/listen/realtime_demand.py). The input for routing background
 # capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS = Gauge(
+    'omi_listen_live_no_audio_sessions',
+    'Open backend-STT sockets awaiting first decoded frame for 300s, or receiving no raw byte frames for 300s afterward',
+)
+
 OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
     'omi_listen_realtime_demand_seconds_total',
     'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',

@@ -2006,15 +2006,32 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
         },
     )
 
-    for idx, action_item in enumerate(conversation.structured.action_items[: len(action_item_ids)]):
-        if identity.reconcile_kept_reminder(uid, action_item_ids[idx], action_item, sync_action_item_reminder):
+    try:
+        saved_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
+    except Exception:
+        # Tasks are already committed. Defer reminders rather than guessing from
+        # extraction state or turning this derived read into a processing failure.
+        logger.warning('action_item_reminder_state_read_unavailable conversation_id=%s', conversation.id)
+        record_fallback(
+            component='other',
+            from_mode='task_reminder_state_read',
+            to_mode='task_write_only',
+            reason='other',
+            outcome='degraded',
+        )
+        saved_items = []
+    for action_item in saved_items:
+        if identity.reconcile_kept_reminder(uid, action_item['id'], action_item, sync_action_item_reminder):
             continue
-        if action_item.due_at:
+        if action_item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
-                action_item_id=action_item_ids[idx],
-                description=action_item.description,
-                due_at=action_item.due_at.isoformat(),
+                action_item_id=action_item['id'],
+                description=action_item.get('description', ''),
+                due_at=action_item['due_at'].isoformat(),
+                completed=bool(action_item.get('completed')),
+                status=action_item.get('status'),
+                deleted=bool(action_item.get('deleted')),
             )
 
     created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, identity.items)]
@@ -3102,9 +3119,9 @@ def process_conversation(
             # updates goals; users update goals through explicit actions.
             if not jit_defer_expensive:
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
-
-        # Create audio files from chunks if private cloud sync was enabled
-        if not is_reprocess and conversation.private_cloud_sync_enabled:
+        # Recovery preserves admitted audio ids instead of rebuilding old chunks.
+        capture_audio = trigger is not ProcessingTrigger.SERVER_RECOVERY
+        if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
                 if audio_files:

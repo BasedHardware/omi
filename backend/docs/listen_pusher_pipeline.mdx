@@ -1217,6 +1217,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A typed chain exhaustion on a mid-session rebuild
+(`LiveChainExhausted` from the managed dial) is classified evidence, not a
+crash: the rebuild arms log one
+`STT failover chain exhausted` ERROR line (FC-typed-failure-collapsed-to-generic)
+while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
+`stt_failed` client status carry the operational signal. Untyped dial faults
+keep the `STT failover connect raised` traceback for diagnosis.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure
@@ -1446,6 +1453,13 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
+Reminder effects read the saved task lifecycle after persistence rather than
+using extraction state. Cancelled, superseded, completed, deleted and undated
+tasks do not arm reminders. An unavailable post-create reminder read emits
+degraded telemetry and skips that reminder step without failing the committed
+extraction or blocking vector/export continuation. This is not a durable
+reminder retry; transport and offline-device delivery remain best effort.
+
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
 links, completion, edited descriptions/dates, folders, manual assignments and
@@ -1673,6 +1687,17 @@ the job is dead-lettered, and self-heal reports `dead_letter` rather than
 verifying a contradictory discard. The finalizer also carries the stored
 restore marker into relevance assessment, so a restored row never receives
 a discard decision.
+The sweep verification queue has a one-hour admission deadline. It releases
+expired queued jobs, expired leases, and completed jobs whose conversation
+never completed before scanning for new admissions in the same tick. A live
+lease remains protected. Legacy entries use job creation time; entries without
+a timestamp receive a fixed first-observation deadline. BYOK-blocked jobs
+never occupy verification slots. Expiry does not verify content, clear job
+ownership, or mint another recovery generation: the durable reconciler owns
+platform-key replay and the BYOK policy owns blocked jobs. Completed-job
+timeouts page once per tick with an aggregate critical alert; content shrinkage,
+job-binding and other completion refusals still page individually.
+
 Any other minimal result ends the job on its first occurrence instead of
 retrying the same content. That lease-fenced terminal write sets a still-bound
 conversation to completed and visible with its transcript retained; explicit
@@ -1814,6 +1839,16 @@ sequenceDiagram
 
     Note over Backend: Retry exhaustion: after MAX_RETRIES (3),<br/>conversation stays buffered with reset sent_at.<br/>cleanup_processing_conversations picks it up next session.
 ```
+
+Close-code severity: a close the pusher sends for its own rolling update
+(1012 service restart) is expected, self-healing transport churn — buffered
+audio and pending conversations replay on the replacement socket — and logs
+at INFO (`Pusher * Connection closed` lines; FC-lifecycle-close-classified-by-transport-phase).
+Every other close (abnormal 1006, internal 1011, TLS 1015, no close frame)
+keeps the ERROR meaning of those lines. Independently of the close code, a
+close raised by a socket that a reconnect already replaced is informational
+on the flush and receive paths and never tears down the freshly installed
+connection.
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
@@ -3636,11 +3671,48 @@ Live identity consumes positioned provider fragments, accumulating distinct
 intervals in the existing ring before embedding. Overlaps and repeats count
 once; successful extraction reserves its intervals. Account for the clip that
 the three-entry evidence deque will evict before gating the next extraction.
-A rejected voice can then reach another five-second decision on later clean audio.
+A rejected voice, including a far/noisy rejection, can then reach another
+five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
+the usable remainder only if its actual PCM duration still meets the extraction
+floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+remainder reports `window_shorter_than_minimum`.
 
-Each socket admits at most 128 voice ids, with at most 128 pending intervals per
-voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
-Failures consume attempts; quotas survive conversation/profile refresh. All
+Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
+runner-up gap of at least `0.10` stay `unknown` / `pending` while additional
+fresh audio or the finished-conversation pass can resolve them. This is an
+evidence-state distinction: rejected voices already retry, and the band adds
+no model calls, acceptance, or identity authority. Owner contention remains
+`ambiguous`; insufficient runner-up margin and distances at or above `0.70`
+remain `no_match`. A pending revalidation withdraws earlier automatic labels
+on every segment, preserving manual, carried and channel authority. Optional
+capture score snapshots also record `unknown` / `pending`; live decision logs
+include the explicit `decision` kind. Acceptance stays
+strictly below `0.65`, conversation matching stays at `0.50`, and owner
+recognition remains free on every plan. Held-out calibration found no safe
+acceptance lift from wider thresholds; the pending band must not be interpreted
+as a measured recall improvement.
+
+Each conversation admits at most 128 voice ids, with at most 128 pending intervals
+per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
+uncarried voices' attempts; validated automatic owner carry and copied manual
+mappings retain their attempts. Same-conversation profile refresh does not reset
+them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
+opportunities within both budgets, regardless of their initial distance: noisy
+early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+all evidenced voices and withdraws competing automatic owner mappings.
+Near-threshold misses, print-margin ambiguity, owner contention and missing prints
+stay retryable. No new exit reason is added.
+Retained evidence can still be re-arbitrated or rechecked against a recovered owner
+without another embedding request.
+
+The socket token bucket starts with 16 attempts, has capacity 16, and refills
+at 240/3600 attempts per monotonic wall second (one every 15 seconds). Over `t`
+hours since socket creation, attempts are bounded by `16 + 240*t`: at most 256
+in the first hour and 240/hour in steady state, at no more than 10 seconds of
+query PCM per attempt. Idle credit is capped at 16. Failures spend tokens and
+reservation is synchronous before awaiting extraction; parallel voices share
+the same bucket. Client audio timestamps cannot accelerate refill, and neither
+conversation churn nor profile refresh resets the socket's tokens/refill clock. All
 associated automatic voice state shares admission. Rollover prunes idle locks;
 held/waited locks retire only after their last user finishes. Generation checks
 prevent old work from publishing. Live unknown/ambiguous remains an abstention
@@ -3655,6 +3727,12 @@ known coverage holes and raced blobs still refuse globally. Identity eligibility
 uses actual distinct embedded duration independently of optional score logging.
 Version-1 caches remain readable for grouping; entries without duration metadata
 claim no owner evidence until verified audio supplies it.
+When a segment has a proven audio window, an otherwise valid cache hit with
+missing, zero or invalid measured evidence is refreshed from verified PCM under
+the existing attempt/time limits. Nominal transcript duration is never promoted
+to owner evidence. Unplaceable historical grouping remains cache-readable; a
+failed refresh cannot claim new owner evidence. Valid measured cache entries
+remain reusable without another embedding.
 
 New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
 under the same encrypted, deletion-owned audio prefix. New readers prefer it,
@@ -3742,8 +3820,12 @@ Participant grouping marked `resolved` does not by itself suppress the late
 identity retry: only a resolved row already containing an owner label is skipped.
 A completed owner miss can therefore use newly available audio/profile evidence.
 
-`omi_owner_identity_repair_total{outcome}` counts only successful late identity
-CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+`omi_owner_identity_repair_total{outcome}` counts identity changes in successful
+late CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It compares
+decoded transaction-current segments to the actual encoded write after manual
+authority has been reapplied. Missing legacy segment ids use the same stable ids
+as conversation reads. Unchanged identities emit nothing, even when resolution
+metadata is updated. The observer runs once after transaction success. It does not
 observe ordinary finalization again. The existing conversation counter/share
 remain first-finalization snapshots. Metric failure cannot change a committed
 repair into a reported storage failure.
@@ -3769,3 +3851,31 @@ deterministic minimum, and enriched processing each emit once per stored decisio
 after the persistence fence. Capture failures never fail processing. This bridge
 supports per-conversation joins to opens going forward (EXP-004 closure); it does
 not backfill the stopped keep-all sample or change intake, promotion, or relevance.
+
+Recovery verification fingerprints the original stored transcript and audio ids.
+Both kept and explicitly discarded recovery results preserve those capture fields
+and their speaker metadata transactionally. Model normalization must not rewrite
+the raw encoding or replace audio appended after the processing snapshot; only
+structured enrichment and lifecycle fields belong to the recovery result.
+
+Verification refusals still page critically for content shrinkage, job-binding
+mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
+those pages; observers that lose the same cursor generation cannot multiply a
+single refusal into a fleet-wide alarm burst. Standalone verification pages
+immediately. Recovery never regenerates admitted audio from old chunk snapshots.
+
+### Live capture inactivity observation
+
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.

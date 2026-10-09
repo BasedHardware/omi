@@ -1,3 +1,4 @@
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
@@ -33,6 +34,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -239,11 +241,6 @@ Future _init() async {
 
   FlutterForegroundTask.initCommunicationPort();
 
-  // Service manager
-  if (!_serviceManagerInitialized) {
-    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
-    _serviceManagerInitialized = true;
-  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -297,10 +294,21 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // Persisted override must be live before auth resolution and product traffic.
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+  // ConnectivityService snapshots its health-check URLs when ServiceManager
+  // initializes, so initialize it only after restoring (or clearing) the
+  // persisted override. This also makes release builds pin their flavor URL
+  // before the first connectivity probe.
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   await PhysicalQualification.startupStage(
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
   );
+  OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -328,6 +336,7 @@ Future _init() async {
     () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
   );
   if (isAuth) {
+    OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
       authMethod:
@@ -559,6 +568,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _deinit() {
+    unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
@@ -584,6 +594,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      OnboardingSyncRuntime.setActive(true);
       unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
@@ -592,6 +603,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      OnboardingSyncRuntime.setActive(false);
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.setForeground(false);

@@ -12447,4 +12447,147 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => '按日期分组';
+
+  @override
+  String get dreamReportTitle => 'Dream 报告';
+
+  @override
+  String get dreamReportShadowBanner => '预览模式：Dream 会显示它将要更改的内容，但目前不会更改你账户中的任何内容。';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream 会自动应用这些更改。你可以在“最近更改”中撤销任何更改。';
+
+  @override
+  String get dreamReportRunNow => '立即运行';
+
+  @override
+  String get dreamReportRunLimit => '今天的手动运行次数已用完';
+
+  @override
+  String get dreamReportRunInProgress => '已有一次运行正在进行。请一分钟后重试。';
+
+  @override
+  String get dreamReportRunFailed => '无法运行 Dream。请重试。';
+
+  @override
+  String get dreamReportIdle => '暂时没有新内容需要查看。';
+
+  @override
+  String get dreamReportLoadFailed => '无法加载 Dream 报告。';
+
+  @override
+  String get dreamReportEmptyTitle => '还没有运行记录';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream 大约每小时查看一次你账户中的更改。';
+
+  @override
+  String get dreamReportScheduled => '定时';
+
+  @override
+  String get dreamReportManual => '手动';
+
+  @override
+  String dreamReportFailed(String error) {
+    return '失败（$error）';
+  }
+
+  @override
+  String get dreamReportTimedOut => '已达时间上限而停止';
+
+  @override
+  String get dreamReportNothingFound => '没有需要修复的内容';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '已读取 $records 项 · $tokens 个 token';
+  }
+
+  @override
+  String get dreamReportWouldFix => '将会修复';
+
+  @override
+  String get dreamReportFixed => '已修复';
+
+  @override
+  String get dreamReportWouldAsk => '将会询问你';
+
+  @override
+  String get dreamReportWouldSuggestTasks => '将会建议任务';
+
+  @override
+  String get dreamReportLearnedWords => '学到的词语';
+
+  @override
+  String get dreamReportFeedback => '已报告给 Omi 团队';
+
+  @override
+  String get dreamReportDeletedItem => '已删除的项目';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '今天已运行 $count/$limit 次';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项更改等待处理',
+      one: '1 项更改等待处理',
+      zero: '没有等待处理的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天还可手动运行 $count 次',
+      one: '今天还可手动运行 1 次',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes 项修复',
+      one: '1 项修复',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks 条建议',
+      one: '1 条建议',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已跳过 $count 项较早的更改',
+      one: '已跳过 1 项较早的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '出于隐私考虑，已扣留 $count 份报告',
+      one: '出于隐私考虑，已扣留 1 份报告',
+    );
+    return '$_temp0';
+  }
 }

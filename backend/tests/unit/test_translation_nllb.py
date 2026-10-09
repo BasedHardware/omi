@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import json
 import pytest
 
 from config.translation import TranslationProvider, resolve_translation_profile
@@ -26,7 +25,7 @@ from utils.translation_core.providers import (
     TranslationProviderChain,
     TranslationProviderError,
 )
-from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema
+from llm_gateway.gateway.vertex_wire import _vertex_request
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -541,10 +540,20 @@ def test_luna_adapter_wraps_provider_failures_as_typed_errors():
     assert raised.value.reason == 'other'
 
 
-def test_luna_translation_batch_schema_is_inlined_for_vertex():
+def test_luna_translation_batch_schema_uses_vertex_json_schema():
     schema = LunaTranslationBatch.model_json_schema()
-    converted = _json_schema_to_vertex_response_schema(schema)
-    dumped = json.dumps(converted)
-    assert '$ref' not in dumped
-    assert '$defs' not in dumped
-    assert converted['properties']['translations']['items']['type'] == 'object'
+    payload = _vertex_request(
+        {
+            'messages': [{'role': 'user', 'content': 'synthetic translation'}],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': schema}},
+        }
+    )
+    config = payload['generationConfig']
+    assert config['responseMimeType'] == 'application/json'
+    assert 'responseSchema' not in config
+    converted = config['responseJsonSchema']
+    items = converted['properties']['translations']['items']
+    assert items == {'$ref': '#/$defs/LunaTranslationItem'}
+    assert converted['$defs']['LunaTranslationItem']['type'] == 'object'
+    assert converted['$defs']['LunaTranslationItem']['required'] == ['text', 'detected_language']
+    assert schema == LunaTranslationBatch.model_json_schema()

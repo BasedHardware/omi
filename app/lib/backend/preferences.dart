@@ -634,6 +634,10 @@ class SharedPreferencesUtil {
 
   set deviceName(String value) => saveString('deviceName', value);
 
+  String get customBackendUrl => getString('customBackendUrl');
+
+  set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
   String get deviceName => getString('deviceName');
 
   bool get deviceIsV2 => getBool('deviceIsV2');
@@ -888,8 +892,8 @@ class SharedPreferencesUtil {
   String get transcriptionModel => getString('transcriptionModel3', defaultValue: 'soniox');
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
-  bool get firstSummaryRatingPending => getBool('firstSummaryRatingPending'); // set at onboarding end
-  set firstSummaryRatingPending(bool value) => saveBool('firstSummaryRatingPending', value);
+  String get ratingAskAnswer => getString('ratingAskAnswer'); // '' until "Are you enjoying Omi?" is answered
+  set ratingAskAnswer(String value) => saveString('ratingAskAnswer', value); // 'yes' | 'no'
 
   bool get onboardingCompleted => getBool('onboardingCompleted');
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);

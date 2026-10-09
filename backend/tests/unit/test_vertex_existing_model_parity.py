@@ -149,12 +149,16 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', [200, 302, 400, 401, 429, 500])
-async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missing_usage(monkeypatch, status):
+@pytest.mark.parametrize('token_delay_seconds', [0.0, 0.25])
+async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missing_usage(
+    monkeypatch, status, token_delay_seconds
+):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.REGIONAL_LOCATION_ENV, 'us-central1')
     monkeypatch.setenv('LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS', 'false')
     monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
     seen = []
+    now = [100.0]
 
     def handler(request):
         seen.append(request)
@@ -172,10 +176,11 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
         )
 
     async def token():
+        now[0] += token_delay_seconds
         return 'synthetic-token'
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: now[0])
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model='gemini-embedding-001'),
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
@@ -215,6 +220,7 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
     assert outgoing.headers['authorization'] == 'Bearer synthetic-token'
     assert outgoing.headers['content-type'] == 'application/json'
     assert outgoing.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    # A single predict preserves its exact wire timeout after authentication.
     assert outgoing.extensions['timeout'] == dict(connect=60.0, read=60.0, write=60.0, pool=60.0)
     assert json.loads(outgoing.content) == {
         'instances': [{'content': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}]

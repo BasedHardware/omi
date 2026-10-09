@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.459",
+      "date": "2026-10-09",
+      "changes": [
+        "Recovered local tasks now keep repetition, linked context, ownership and ordering when a failed upload is retried"
+      ]
+    },
+    {
+      "version": "0.12.458",
+      "date": "2026-10-09",
+      "changes": [
+        "Fixed deleted recordings reappearing when your Mac retries older uploads"
+      ]
+    },
+    {
+      "version": "0.12.457",
+      "date": "2026-10-09",
+      "changes": [
+        "Copy link now reuses an existing share link instead of failing when the conversation is already shared."
+      ]
+    },
+    {
       "version": "0.12.456",
       "date": "2026-10-08",
       "changes": [
