@@ -175,8 +175,8 @@ describe("device health stats route", () => {
     const phone = sent.find((query) => query.includes("FROM pairs"));
     expect(pendant).toBeTruthy();
     expect(phone).toBeTruthy();
-    expect(pendant!.match(/quantileIf\(0\.5\)/g)).toHaveLength(1);
-    expect(pendant!.match(/quantileIf\(0\.9\)/g)).toHaveLength(1);
+    expect(pendant!.match(/quantileIf\(0\.5\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g)).toHaveLength(1);
+    expect(pendant!.match(/quantileIf\(0\.9\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g)).toHaveLength(1);
     expect(pendant).toContain("BETWEEN 0.1 AND 100");
     expect(pendant).toContain("timestamp >= now() - INTERVAL 14 DAY");
     expect(phone).toContain("Phone Battery Sample");
