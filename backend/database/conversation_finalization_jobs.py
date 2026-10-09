@@ -1806,10 +1806,7 @@ def scan_in_progress_conversations(
 
 
 def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
-    """Read the CAS sweep cursor and bounded pending job identities/deadlines.
-
-    Legacy entries without ``admitted_at`` remain readable for TTL migration.
-    """
+    """Read the CAS cursor and bounded job identities with optional ``admitted_at`` deadlines."""
     client = _client(firestore_client)
     snapshot = (
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
