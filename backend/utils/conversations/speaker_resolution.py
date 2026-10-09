@@ -46,6 +46,7 @@ from utils.conversations.audio_placement import (
     prepare_audio_coverage,
     saved_sync_window,
 )
+from utils.conversations.speaker_grouping_shadow import compare_and_select
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
@@ -1462,11 +1463,13 @@ def _resolve(
             seconds = min(seconds, sum(b - a for a, b in fresh))
             covered_windows.append((low, high))
         score_durations[sid] = seconds
+    voiceprints = load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair)
+    manual_speakers = _manual_speakers(receipt)
     resolution = resolve_conversation_speakers(
         segments,
         vectors,
-        manual_speakers=_manual_speakers(receipt),
-        voiceprints=load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair),
+        manual_speakers=manual_speakers,
+        voiceprints=voiceprints,
         embedding_seconds=score_durations,
         abstained_segment_ids=abstained,
     )
@@ -1485,6 +1488,18 @@ def _resolve(
         )
         _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields)
         return
+
+    resolution = compare_and_select(
+        uid,
+        conversation,
+        resolution,
+        vectors,
+        manual_speakers=manual_speakers,
+        voiceprints=voiceprints,
+        embedding_seconds=score_durations,
+        abstained_segment_ids=abstained,
+        receipt=receipt,
+    )
 
     try:
         if match_scores.enabled():

@@ -601,10 +601,16 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
 def test_canonical_read_preserves_lock_and_returns_only_a_preview(service_mod, monkeypatch):
     backend = service_mod.CanonicalMemoryBackend(db_client=_Db())
     secret = "LOCKED_SECRET_CONTENT_" * 10
+    locked = _locked_memory(service_mod, content=secret)
+
+    def _forbid_full_fetch(*_args, **_kwargs):
+        raise AssertionError("offset read must not full-fetch canonical memories")
+
+    monkeypatch.setattr(service_mod, "read_canonical_memories", _forbid_full_fetch)
     monkeypatch.setattr(
         service_mod,
-        "read_canonical_memories",
-        lambda *args, **kwargs: [_locked_memory(service_mod, content=secret)],
+        "read_canonical_scan_page",
+        lambda *args, **kwargs: ([(locked, (locked.updated_at, locked.id))], True),
     )
 
     result = backend.read("uid-test")
@@ -863,6 +869,7 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
     assert result["total_count"] == 2
     service.read.assert_called_once_with(
         "uid-test",
+        authoritative=True,
         limit=service_mod.HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
         offset=0,
         include_pending_processing=False,

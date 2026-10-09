@@ -13,6 +13,7 @@ from models.other import Person
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
 from models.note_claims import current_note_claims
+from models.transcript_segment import strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     for segment in conv.get('transcript_segments') or []:
         if isinstance(segment, dict):
             segment.pop('speaker_match_scores', None)
+            strip_grouping_internal_fields(segment)
     return conv
 
 
