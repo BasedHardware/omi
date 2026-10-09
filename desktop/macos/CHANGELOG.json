@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.457",
+      "date": "2026-10-09",
+      "changes": [
+        "Copy link now reuses an existing share link instead of failing when the conversation is already shared."
+      ]
+    },
+    {
       "version": "0.12.456",
       "date": "2026-10-08",
       "changes": [
