@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Optional
 from prometheus_client import REGISTRY, Counter, Histogram
 
 from models.conversation_enums import ConversationSource, ConversationStatus
+from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import structured_is_rich
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
@@ -183,9 +184,33 @@ for _repair_outcome in ('owner_added', 'owner_removed', 'identity_updated'):
 
 
 def record_owner_identity_repair(before: Mapping[str, Any], after: Mapping[str, Any]) -> None:
-    """Call only after a successful identity CAS, never from computation/finalization."""
-    old_owner = {s.get('id') for s in before.get('transcript_segments') or [] if s.get('is_user')}
-    new_owner = {s.get('id') for s in after.get('transcript_segments') or [] if s.get('is_user')}
+    """Observe readable transaction snapshots after CAS; unchanged identities emit nothing."""
+
+    def identities(record):
+        result = {}
+        for i, raw in enumerate(record.get('transcript_segments') or []):
+            # Both sides must use the client model's defaults and provenance
+            # projection. Materializing an absent legacy field is not a repair.
+            # Set the stable legacy id before construction to avoid UUID defaults.
+            sid = raw.get('id') or legacy_conversation_segment_id(record['id'], i)
+            s = TranscriptSegment(**{**raw, 'id': sid}).model_dump()
+            result[sid] = (
+                s['is_user'],
+                s['person_id'],
+                s['speaker_id'],
+                s['speaker'],
+                s['speaker_id_scope'],
+                s['speaker_identity_status'],
+                s['speaker_match_source'],
+                s['speaker_label_source'],
+            )
+        return result
+
+    old, new = identities(before), identities(after)
+    if old == new:
+        return
+    old_owner = {sid for sid, identity in old.items() if identity[0]}
+    new_owner = {sid for sid, identity in new.items() if identity[0]}
     outcome = (
         'owner_added' if new_owner - old_owner else 'owner_removed' if old_owner - new_owner else 'identity_updated'
     )
