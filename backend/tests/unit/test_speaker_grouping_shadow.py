@@ -276,3 +276,18 @@ def test_metric_helper_refuses_unbounded_label_values():
         shadow.count('uid-not-a-variant', 'owner_same')
     with pytest.raises(ValueError, match='unbounded'):
         shadow.count('provider_strict', 'conversation-id-not-an-outcome')
+
+
+def test_fresh_capture_text_repair_cannot_certify_absorbing_provider_id():
+    a, b = segment(0), segment(1)
+    a.text = 'This is an incomplete thought'
+    b.text = 'little addition'
+    a.start, a.end = 0, 2
+    b.start, b.end = 2, 3
+    combined = TranscriptSegment.combine_segments([], [a, b]).segments
+    assert len(combined) == 1
+    assert shadow.provider_key(combined[0]) is None
+    assert combined[0].provider_speaker['id'] == -1
+    fresh = segment(2)
+    fresh._clear_audio_evidence()
+    assert shadow.provider_key(fresh) is None

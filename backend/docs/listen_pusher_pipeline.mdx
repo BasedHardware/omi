@@ -3863,7 +3863,8 @@ conversation-wide rewriting irreversibly merges provider partitions and neither
 preserved even with shadow off, so future cohort enrollment can reuse it. Never
 infer a provider prior from historical rewritten IDs without this mapping, absent
 scopes, or synthesized default IDs: skip and count missing provenance instead.
-Post-resolution text redistribution or absorption across original IDs invalidates
+Known text redistribution or absorption across provider IDs, including capture
+sentence repair before first resolution, invalidates
 the prior and frozen predictions. Stored allocated provider IDs are a scoped
 partition prior, **not certified raw provider tokens or physical-speaker truth**;
 ingress normalization/older text merging may already have lost boundaries. A

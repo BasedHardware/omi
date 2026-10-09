@@ -222,8 +222,7 @@ class TranscriptSegment(BaseModel):
         self._capture_merge_proof = None
 
     def _clear_audio_evidence(self) -> None:
-        if self.provider_speaker is not None:
-            self.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
+        self.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
         self.speaker_grouping_shadow = None
         self._clear_audio_capture_window()
         self._audio_capture_reason = 'partial_redistribution'
@@ -483,6 +482,15 @@ class TranscriptSegment(BaseModel):
         removed_ids: List[str] = []
 
         def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
+            if child is not None and parent is not None and not (child.provider_speaker or parent.provider_speaker):
+                # Capture sentence repair can absorb a different provider partition
+                # before resolution has had a chance to preserve either original.
+                if (child.speaker_id_scope, child.speaker_id, child.stt_provider) != (
+                    parent.speaker_id_scope,
+                    parent.speaker_id,
+                    parent.stt_provider,
+                ):
+                    parent.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
             if child is not None and parent is not None and (child.provider_speaker or parent.provider_speaker):
                 if child.provider_speaker != parent.provider_speaker:
                     parent.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
