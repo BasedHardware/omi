@@ -1911,8 +1911,7 @@ environments:
           MENTOR_PIPELINE: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2065,8 +2064,7 @@ environments:
           MENTOR_PIPELINE: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-            category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2383,8 +2381,7 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2626,8 +2623,7 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2836,8 +2832,7 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -3012,8 +3007,7 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
-              category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
