@@ -11,10 +11,21 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
+from llm_gateway.gateway.providers import VertexGeminiProvider, OpenAICompatibleChatCompletionProvider
+from llm_gateway.gateway.resolver import resolve_chat_completion_route
+from llm_gateway.gateway.vertex_wire import _vertex_request
+from llm_gateway.main import app as gateway_app
+from llm_gateway.routers import dependencies
+from config.vertex_reservations import State
+from utils.llm import vertex_pt_routing as ptr
+
 from config.dream_agent import eligible
 from database import dream_canary as storage, dream_store, conversations
 from routers import dream_sweep
 from tests.support.dream_firestore import DreamFirestore
+from tests.support.vertex_contract import assert_vertex_subset, assert_local_references
 from utils import dream_canary, dream_reads, dream_transport, dream_agent
 
 UID = 'dream-canary-synthetic'
@@ -136,3 +147,165 @@ def test_scheduler_prod_and_paused_dev_auth_match_sweep():
     assert canary['target']['uri'] == sweep['target']['uri'].replace('/sweep', '/canary')
     dev = next(row for row in config['environments']['dev']['jobs'] if row['name'] == canary['name'])
     assert dev['state'] == 'PAUSED'
+
+
+@pytest.mark.parametrize('reject_vertex', [False, True])
+@pytest.mark.parametrize('oversized', [False, True])
+def test_real_canary_requests_through_gateway_vertex_contract(store, monkeypatch, capsys, reject_vertex, oversized):
+    """Seed/read/shape/transport/resolve/translate both lanes with no provider IO.
+
+    Reasoning's selected records depend on triage output; force a valid spelling
+    cluster rather than claiming to reproduce the lost production response.
+    """
+    db, original_client = store
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-token')
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
+    monkeypatch.setattr(
+        dream_transport,
+        'llm_gateway_headers',
+        lambda **k: {
+            'Authorization': 'Bearer synthetic-token',
+            'x-omi-service-caller': 'backend',
+            'x-omi-request-id': '00000000-0000-4000-8000-000000000001',
+        },
+    )
+    requests, vertex_bodies = [], []
+    config = load_gateway_config()
+    triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
+    plan = {}
+    if oversized:
+        triage = {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}] * 13}
+        plan = {
+            'vocabulary': [
+                {
+                    'kind': 'jargon',
+                    'spelling': 'synthetic',
+                    'aliases': ['synthetic'] * 6,
+                    'evidence': ['conversations/' + storage.RECORD_ID] * 11,
+                }
+            ]
+            * 101
+        }
+
+    def upstream(request):
+        body = json.loads(request.content)
+        if request.url.host == 'us-central1-aiplatform.googleapis.com':
+            vertex_bodies.append(body)
+            assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
+            assert 'gemini-2.5-flash:generateContent' in request.url.path
+            if reject_vertex:
+                return httpx.Response(
+                    400,
+                    json={
+                        'error': {
+                            'status': 'INVALID_ARGUMENT',
+                            'message': 'The specified schema produces a constraint that has too many states for serving. '
+                            'Typical causes include long array length limits (especially when nested). private-user-content',
+                            'details': [
+                                {
+                                    '@type': 'type.googleapis.com/google.rpc.BadRequest',
+                                    'fieldViolations': [
+                                        {
+                                            'field': 'generation_config.response_json_schema.properties.private-name',
+                                            'description': 'private-user-content',
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    'candidates': [{'content': {'parts': [{'text': json.dumps(plan)}]}, 'finishReason': 'STOP'}],
+                    'usageMetadata': {'promptTokenCount': 30, 'candidatesTokenCount': 20, 'totalTokenCount': 50},
+                },
+            )
+        # Both the actual Luna triage and a recovered reasoning call run through
+        # the real OpenAI adapter. The main schema stays unchanged on fallback.
+        assert body['model'] == 'gpt-6-luna'
+        value = triage if body['response_format']['json_schema']['name'] == 'Triage' else plan
+        return httpx.Response(
+            200,
+            json={
+                'object': 'chat.completion',
+                'id': 'synthetic',
+                'model': 'gpt-6-luna',
+                'choices': [{'message': {'role': 'assistant', 'content': json.dumps(value)}, 'finish_reason': 'stop'}],
+                'usage': {'prompt_tokens': 30, 'completion_tokens': 20, 'total_tokens': 50},
+            },
+        )
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as provider_client:
+            vertex = VertexGeminiProvider(
+                http_client=provider_client, access_token_supplier=AsyncMock(return_value='synthetic')
+            )
+            monkeypatch.setattr(
+                vertex._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_CURRENT: State.ACTIVE})
+            )
+            registry = ProviderRegistry(
+                {'gemini': vertex, 'openai': OpenAICompatibleChatCompletionProvider(http_client=provider_client)}
+            )
+            gateway_app.dependency_overrides[dependencies.get_provider_registry] = lambda: registry
+            gateway_app.dependency_overrides[dependencies.get_gateway_config] = lambda: config
+            try:
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=gateway_app), base_url='http://synthetic'
+                ) as local:
+
+                    async def post(url, **kwargs):
+                        requests.append(kwargs['json'])
+                        return await local.post('/v1/chat/completions', **kwargs)
+
+                    monkeypatch.setattr(
+                        dream_transport,
+                        'get_llm_gateway_client',
+                        lambda: type('Client', (), {'post': staticmethod(post)})(),
+                    )
+                    return await dream_canary.check()
+            finally:
+                gateway_app.dependency_overrides.clear()
+
+    result = asyncio.run(run())
+    assert result['status'] == 'pass', result
+    assert [row['model'] for row in requests] == [dream_transport.TRIAGE_LANE, dream_transport.MAIN_LANE]
+    assert len(vertex_bodies) == 1  # Triage is Luna, reasoning is reserved Gemini.
+    for request in requests:
+        assert set(request) == {'model', 'messages', 'stream', 'max_completion_tokens', 'response_format'}
+        assert request['stream'] is False and request['max_completion_tokens'] == 256
+        resolved = resolve_chat_completion_route(config, request)
+        provider_request = provider_request_for(resolved, resolved.active_route.primary)
+        payload = ptr.model_payload(_vertex_request(provider_request), ptr.PT_MODEL_CURRENT)
+        assert set(payload) == {'contents', 'systemInstruction', 'generationConfig'}
+        assert len(payload['contents']) == 1 and payload['contents'][0]['role'] == 'user'
+        assert payload['systemInstruction']['parts'][0]['text']
+        assert all(part['text'] for part in payload['contents'][0]['parts'])
+        generation = payload['generationConfig']
+        assert set(generation) == {'maxOutputTokens', 'responseMimeType', 'responseJsonSchema', 'thinkingConfig'}
+        assert generation['maxOutputTokens'] == 256
+        assert generation['thinkingConfig'] == {'thinkingBudget': 0}
+        assert generation['responseMimeType'] == 'application/json'
+        assert generation['responseJsonSchema']['type'] == 'object'
+        assert_vertex_subset(generation['responseJsonSchema'])
+        assert_local_references(generation['responseJsonSchema'])
+        assert 'maxItems' not in json.dumps(generation['responseJsonSchema'])
+        assert 'minItems' not in json.dumps(generation['responseJsonSchema'])
+        if request['model'] == dream_transport.MAIN_LANE:
+            assert payload == vertex_bodies[0]
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
+    rejections = [line for line in logs if line.get('event') == 'vertex_provider_rejection']
+    assert len(rejections) == int(reject_vertex)
+    if reject_vertex:
+        assert rejections[0]['request_id'] == '00000000-0000-4000-8000-000000000001'
+        assert rejections[0]['lane'] == dream_transport.MAIN_LANE
+        assert rejections[0]['route'] == 'route.dream_reasoning.001'
+        assert rejections[0]['failure_class'] == 'provider_invalid_request'
+        assert rejections[0]['vertex_status'] == 'INVALID_ARGUMENT'
+        assert rejections[0]['vertex_field'] == 'generationConfig.responseJsonSchema'
+        assert rejections[0]['reason'] == 'schema_too_many_states'
+    assert 'private-user-content' not in json.dumps(logs)
+    assert 'private-name' not in json.dumps(logs)
