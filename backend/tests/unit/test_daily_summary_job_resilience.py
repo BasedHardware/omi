@@ -887,3 +887,26 @@ def test_current_day_generation_metric_excludes_backfill(created, retry, expecte
         assert {
             outcome: metrics.RECIPIENTS.labels(outcome=outcome)._value.get() - before[outcome] for outcome in before
         } == {outcome: int(outcome == expected) for outcome in before}
+
+
+def test_cursor_age_metric_retains_abandonment_signature_then_resets_on_fresh_tick() -> None:
+    with _loaded_job() as (notifications, db, _redis, _fallbacks):
+        now = datetime(2026, 10, 9, 22, tzinfo=timezone.utc)
+        original = now - timedelta(days=6)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications._get_timezones_grouped_by_hour = lambda _at: {22: ['UTC']}
+        db.get_users_for_daily_summary_indexed = lambda *_args: []
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(22, 'failing-recipient', original),
+        )
+        assert asyncio.run(notifications.send_daily_summary_notification()).complete
+        assert notifications.daily_summary_metrics.RESUMED_COHORT_AGE._value.get() == 518400
+        assert asyncio.run(notifications.send_daily_summary_notification()).complete
+        assert notifications.daily_summary_metrics.RESUMED_COHORT_AGE._value.get() == 0
