@@ -691,6 +691,43 @@ def test_incomplete_saved_cohort_is_retained_instead_of_replaced_by_current_hour
         assert notifications.summary_budget.cursor_cohort_utc(saved) == original
 
 
+def test_a_cursor_stuck_past_its_staleness_bound_is_abandoned_so_current_recipients_are_not_starved() -> None:
+    """A recipient who can never succeed (an invalid token, say) keeps getting
+    retried and rewriting the checkpoint every tick, which renews its Redis TTL
+    and defeats the staleness bound documented in daily_summary_budget.py. That
+    pins every execution on the same dead cohort forever, and the *current*
+    cohort below is never reached -- every other recipient's recap silently
+    stops too, for as long as the one broken recipient keeps failing."""
+    with _loaded_job() as (notifications, notification_db, redis, _fallbacks):
+        now = datetime(2026, 10, 9, 6, 0, tzinfo=timezone.utc)
+        stuck_at = now - timedelta(seconds=notifications.summary_budget.JOB_CURSOR_TTL_SECONDS, hours=1)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+        notifications.datetime = FixedDateTime
+        notifications._get_timezones_grouped_by_hour = lambda at: {at.hour: ['UTC']}
+        notifications.summary_budget.write_job_cursor(
+            notifications.summary_budget.job_cursor_key(),
+            notifications.summary_budget.make_cursor(stuck_at.hour, 'stuck-uid', stuck_at),
+        )
+        reads = []
+
+        def selector(zones, hour):
+            reads.append(hour)
+            return []
+
+        notification_db.get_users_for_daily_summary_indexed = selector
+        outcome = asyncio.run(notifications.send_daily_summary_notification())
+
+        assert reads == [now.hour], 'the dead cohort must not be re-queried; only the current cohort runs'
+        assert outcome.ok and outcome.complete
+        saved = notifications.summary_budget.read_job_cursor(notifications.summary_budget.job_cursor_key())
+        assert saved is None, 'the stale checkpoint must be cleared, not rewritten pointing at the same dead cohort'
+
+
 def test_due_local_hours_include_half_and_quarter_hour_zones() -> None:
     with _loaded_job() as (notifications, _db, _redis, _fallbacks):
         now = datetime(2026, 10, 3, 16, 15, tzinfo=timezone.utc)
