@@ -5,6 +5,7 @@ Provides chat tools for public holidays, upcoming holidays, long weekends, and
 supported country codes through the public Nager.Date API.
 """
 
+from datetime import datetime, timezone
 import json
 from contextlib import asynccontextmanager
 from typing import Any, Optional
@@ -45,34 +46,91 @@ class ChatToolResponse(BaseModel):
 
 class HolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: Optional[int] = Field(default=None, validate_default=True, ge=1970, le=2100)
+    limit: Optional[int] = Field(default=None, validate_default=True, ge=1, le=MAX_ITEMS)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default_limit=MAX_ITEMS)
 
 
 class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    limit: int = Field(default=8, ge=1, le=MAX_ITEMS)
+    limit: Optional[int] = Field(default=None, validate_default=True, ge=1, le=MAX_ITEMS)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default_limit=8)
 
 
 class LongWeekendRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: Optional[int] = Field(default=None, validate_default=True, ge=1970, le=2100)
+    limit: Optional[int] = Field(default=None, validate_default=True, ge=1, le=MAX_ITEMS)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default_limit=MAX_ITEMS)
+
+
+def _current_utc_year() -> int:
+    return datetime.now(timezone.utc).year
+
+
+def _normalize_year(value: Any) -> int:
+    if value is None or value == "":
+        return _current_utc_year()
+    if isinstance(value, bool):
+        raise ValueError("year must be an integer, not a boolean")
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"invalid year: {value!r}")
+    if year < 1970 or year > 2100:
+        raise ValueError(f"year must be between 1970 and 2100, got {year}")
+    return year
+
+
+def _normalize_limit(value: Any, default_limit: int = MAX_ITEMS) -> int:
+    if value is None or value == "":
+        return default_limit
+    if isinstance(value, bool):
+        raise ValueError("limit must be an integer, not a boolean")
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"invalid limit: {value!r}")
+    if limit < 1 or limit > MAX_ITEMS:
+        raise ValueError(f"limit must be between 1 and {MAX_ITEMS}, got {limit}")
+    return limit
 
 
 def _normalize_country_code(value: Any) -> str:
@@ -291,7 +349,13 @@ async def list_supported_countries() -> ChatToolResponse:
             return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            if isinstance(item, dict):
+                code = item.get("countryCode")
+                name = item.get("name")
+                if code and name:
+                    lines.append(f"- {code}: {name}")
+        if len(lines) == 1:
+            return ChatToolResponse(error="country list request returned no valid countries")
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
