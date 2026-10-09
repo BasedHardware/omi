@@ -864,7 +864,6 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    transaction = db.transaction()
 
     @firestore.transactional
     def _write_processing_result(transaction):
@@ -909,7 +908,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
         transaction.set(conversation_ref, write_data)
 
-    _write_processing_result(transaction)
+    run_transactional(db, _write_processing_result)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -949,7 +948,6 @@ def persist_processing_result_with_lifecycle(
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    transaction = db.transaction()
 
     stale_sync_revision = False
     first_completed = False
@@ -1073,7 +1071,7 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
-    persisted = _persist(transaction)
+    persisted = run_transactional(db, _persist)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1743,7 +1741,6 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _update(transaction) -> str:
@@ -1775,7 +1772,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                 return 'ok'
         return 'app_result_not_found'
 
-    result = _update(transaction)
+    result = run_transactional(db, _update)
     if result == 'ok' and app_id is None:
         _sync_conversation_search_index(uid, conversation_id)
     return result
@@ -1804,7 +1801,6 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         'segment_not_found' if segment_id not found.
     """
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _update_segment_text(transaction) -> str:
@@ -1843,7 +1839,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         transaction.update(doc_ref, prepared_payload)
         return 'ok'
 
-    return _update_segment_text(transaction)
+    return run_transactional(db, _update_segment_text)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
@@ -2069,7 +2065,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not _migrate(db.transaction()):
+        if not run_transactional(db, _migrate):
             continue
 
         # Photos retain their separate batched migration path.
@@ -2262,7 +2258,7 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         transaction.update(secondary_ref, {'external_data': external_data})
         return True
 
-    return link(client.transaction())
+    return run_transactional(client, link)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
@@ -2289,7 +2285,6 @@ def claim_conversation_status(
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def _claim(transaction):
@@ -2307,7 +2302,7 @@ def claim_conversation_status(
         transaction.update(conversation_ref, updates)
         return True
 
-    claimed = _claim(transaction)
+    claimed = run_transactional(db, _claim)
     if claimed:
         invalidate_people_stats_cache(uid)
     return claimed
@@ -2353,7 +2348,7 @@ def discard_by_relevance(
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
         return True
 
-    discarded = _discard(db.transaction())
+    discarded = run_transactional(db, _discard)
     if discarded:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2393,7 +2388,7 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         transaction.update(conversation_ref, updates)
         return True
 
-    restored = _restore(db.transaction())
+    restored = run_transactional(db, _restore)
     if restored:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2774,9 +2769,7 @@ def bind_client_processing(
         transaction.update(doc_ref, bound_updates)
         return True
 
-    if firestore_client is not None:
-        return run_transactional(client, _bind)
-    return _bind(client.transaction())
+    return run_transactional(client, _bind)
 
 
 def assign_conversation_speaker(
@@ -3556,7 +3549,6 @@ def store_conversation_photos(
     user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    transaction = client.transaction()
 
     @firestore.transactional
     def _store(transaction) -> bool:
@@ -3573,7 +3565,7 @@ def store_conversation_photos(
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
-    return _store(transaction)
+    return run_transactional(client, _store)
 
 
 # ********************************
