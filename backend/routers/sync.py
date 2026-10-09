@@ -20,7 +20,6 @@ from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.legal_holds import DestructiveOperationInProgress
 from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
@@ -2295,6 +2294,10 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
+    from database.legal_holds import (
+        DestructiveOperationInProgress,
+    )  # deferred: sync.py imported with database stubbed in test isolation
+
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
 
     Response semantics drive the queue: 2xx consumes the task, 409 while the
@@ -2432,6 +2435,10 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
 
 
 async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
+    from database.legal_holds import (
+        DestructiveOperationInProgress,
+    )  # deferred: sync.py imported with database stubbed in test isolation
+
     """schema_version 2: build the conversation-level dense MP3 + spans and stamp
     the doc (conversation_audio). Upload precedes the stamp so a stamped
     fingerprint always implies a servable blob. Freshness is re-checked from the
