@@ -23,6 +23,7 @@ import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
+import 'native_project_task_sections.dart';
 import 'project_task_sections.dart';
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
@@ -284,12 +285,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           PullDownMenuItem(
             title: _groupByProject ? context.l10n.tasksGroupByDate : context.l10n.tasksGroupByProject,
             iconWidget: Icon(_groupByProject ? Icons.event_outlined : Icons.folder_outlined, size: 18),
-            onTap: () {
-              OmiHaptics.light();
-              final review = context.read<ReviewProvider?>();
-              if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
-              setState(() => _groupByProject = !_groupByProject);
-            },
+            onTap: _toggleGroupByProject,
           ),
         PullDownMenuItem(
           title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
@@ -311,6 +307,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         },
       ),
     );
+  }
+
+  /// Both presentations' "Group by project" / "Group by date": the first switch on loads the projects.
+  void _toggleGroupByProject() {
+    OmiHaptics.light();
+    final review = context.read<ReviewProvider?>();
+    if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
+    setState(() => _groupByProject = !_groupByProject);
   }
 
   Widget _buildNoSearchResultsContent() {
@@ -503,6 +507,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final loading = provider.isLoading && provider.actionItems.isEmpty;
     final selectedCount = provider.selectedCount;
     final allSelected = provider.actionItems.isNotEmpty && selectedCount == provider.actionItems.length;
+    // Watched so the toggle appears with Review and the groups follow the loaded projects.
+    final reviewOn = context.watch<ReviewProvider?>()?.isOn ?? false;
+    final groupTitle = _groupByProject ? l10n.tasksGroupByDate : l10n.tasksGroupByProject;
     final visible =
         failed ? const <String, List<ActionItemWithMetadata>>{} : _nativeVisibleTasks(provider, categorizedItems);
     final taskIds = {for (final items in visible.values) ...items.map((item) => 'task_${item.id}')};
@@ -528,6 +535,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               action: (_) => allSelected ? provider.clearSelection() : provider.selectAllItems()),
           NativeRow('tasks_completed', provider.showCompletedView ? l10n.hideCompletedTasks : l10n.showCompletedTasks,
               action: (_) => provider.toggleShowCompletedView()),
+          if (reviewOn) NativeRow('tasks_group', groupTitle, action: (_) => _toggleGroupByProject()),
         ] else if (reordering) ...[
           NativeRow('tasks_home', l10n.home,
               symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
@@ -549,9 +557,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             'completed': provider.showCompletedView ? l10n.hideCompletedTasks : l10n.showCompletedTasks,
             'select': l10n.selectActionItems,
             'selectAll': allSelected ? l10n.deselectAllTasksMenu : l10n.selectAllTasksMenu,
+            if (reviewOn) 'groupByProject': groupTitle,
             if (!provider.isSearching) 'reorder': l10n.edit,
           }, action: (value) {
             if (value == 'completed') provider.toggleShowCompletedView();
+            if (value == 'groupByProject' && reviewOn) _toggleGroupByProject();
             if (value == 'select') {
               _searchFocusNode.unfocus();
               provider.startSelection();
@@ -609,8 +619,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               title: _getCategoryTitle(context, category),
               footer: l10n.tasksCountLabel(items.length),
               collapsible: category == TaskCategory.overdue || category == TaskCategory.noDeadline,
-              reorder: reordering ? (value) => _applyNativeReorder(provider, category, value) : null,
+              reorder: reordering ? (value) => _applyNativeReorder(provider, id, value) : null,
             )
+          else if (isNativeProjectSection(id))
+            nativeProjectTaskSection(
+                context, id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
+                reorder: reordering ? (value) => _applyNativeReorder(provider, id, value) : null)
           else
             // Search results are one flat list in match order, open and completed alike, as in Flutter.
             NativeSection(id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
@@ -640,6 +654,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       final matches = provider.filteredActionItems;
       return {if (matches.isNotEmpty) 'search': matches};
     }
+    if (_groupByProject) return nativeProjectTaskGroups(context, categorizedItems.values);
     return {
       for (final category in TaskCategory.values)
         if (_getOrderedItems(category, categorizedItems[category] ?? []) case final items when items.isNotEmpty)
@@ -742,14 +757,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  /// '_reorder:<category>' is an exact permutation of the category's current rows. The new order is
-  /// stored as sort orders, and a moved row deeper than its new predecessor allows is clamped, the same
-  /// as a drop without horizontal travel. Category moves go through Set Due Date.
-  void _applyNativeReorder(ActionItemsProvider provider, TaskCategory category, Object? value) {
+  /// '_reorder:<section>' is an exact permutation of a category's or project group's current rows. The new
+  /// order is stored as sort orders, and a moved row deeper than its new predecessor allows is clamped, the
+  /// same as a drop without horizontal travel. Category moves go through Set Due Date.
+  void _applyNativeReorder(ActionItemsProvider provider, String sectionId, Object? value) {
     final current =
-        orderedTaskItems(_categorizeItems(provider.actionItems, provider.showCompletedView)[category] ?? []);
-    final byId = {for (final item in current) 'task_${item.id}': item};
-    if (value is! List ||
+        _nativeVisibleTasks(provider, _categorizeItems(provider.actionItems, provider.showCompletedView))[sectionId];
+    final byId = {for (final item in current ?? const <ActionItemWithMetadata>[]) 'task_${item.id}': item};
+    if (current == null ||
+        value is! List ||
         value.length != current.length ||
         value.toSet().length != value.length ||
         !value.every(byId.containsKey) ||

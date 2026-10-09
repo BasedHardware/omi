@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,17 +6,23 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/action_items/project_task_sections.dart';
+import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
+import 'package:omi/pages/entities/entity_page.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -120,7 +127,8 @@ ActionItemWithMetadata _task(String id,
         DateTime? dueAt,
         bool completed = false,
         bool exported = false,
-        DateTime? createdAt}) =>
+        DateTime? createdAt,
+        String? project}) =>
     ActionItemWithMetadata(
         id: id,
         description: 'Task $id',
@@ -130,7 +138,8 @@ ActionItemWithMetadata _task(String id,
         dueAt: dueAt,
         createdAt: createdAt ?? _now,
         exported: exported,
-        exportPlatform: exported ? 'todoist' : null);
+        exportPlatform: exported ? 'todoist' : null,
+        workstreamId: project);
 
 /// Today holds a hierarchy (parent > child > grandchild, then sibling); the other categories one row each.
 List<ActionItemWithMetadata> _fixture() => [
@@ -143,6 +152,48 @@ List<ActionItemWithMetadata> _fixture() => [
       _task('shipped', dueAt: _today.add(const Duration(days: 1)), exported: true),
       _task('done', dueAt: _today, completed: true),
     ];
+
+const _gamma = EntityRef(entityId: 'gamma', type: EntityType.project, name: 'gamma');
+const _zeta = EntityRef(entityId: 'zeta', type: EntityType.project, name: 'Zeta');
+const _alpha = EntityRef(entityId: 'alpha', type: EntityType.project, name: 'alpha');
+final _projects = {
+  for (final project in [_gamma, _zeta, _alpha]) project.entityId: project
+};
+
+/// gamma holds four tasks (two dated, two undated, g4 under g1), alpha and Zeta one each (a tie broken by
+/// name, ignoring case), and two tasks belong to no known project: an unknown workstream and none.
+List<ActionItemWithMetadata> _projectFixture() => [
+      _task('z1', project: 'zeta', dueAt: _today),
+      _task('g1', project: 'gamma', sortOrder: 4000, dueAt: _today.add(const Duration(days: 3))),
+      _task('g3', project: 'gamma', sortOrder: 2000),
+      _task('g2', project: 'gamma', sortOrder: 3000, dueAt: _today.add(const Duration(days: 1))),
+      _task('g4', project: 'gamma', sortOrder: 1000, indent: 1),
+      _task('ghost', project: 'ghost', dueAt: _today),
+      _task('a1', project: 'alpha', dueAt: _today.subtract(const Duration(days: 2))),
+      _task('free'),
+      _task('gdone', project: 'gamma', dueAt: _today, completed: true),
+    ];
+
+const _dateSections = ['today', 'tomorrow', 'later', 'noDeadline', 'overdue'];
+const _groupedSections = ['project:gamma', 'project:alpha', 'project:zeta', 'project_none'];
+
+/// A Review provider that is on (or off), answering project loads with [projects] and counting them.
+ReviewProvider _review({bool on = true, Map<String, EntityRef>? projects, List<int>? loads}) {
+  final review = ReviewProvider(loadProjects: () async {
+    loads?.add(1);
+    return ApiSuccess((projects ?? _projects).values.toList());
+  });
+  if (on) review.availability = ReviewAvailability.on;
+  addTearDown(review.dispose);
+  return review;
+}
+
+class _Pushes extends NavigatorObserver {
+  final pushed = <Route<dynamic>>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => pushed.add(route);
+}
 
 /// Answers each native presentation with [reply] for its snapshot, and records the snapshots.
 List<Map> _answerPresentations(Map<String, Object?> Function(Map snapshot) reply) {
@@ -182,6 +233,15 @@ class _Page {
         ...surface.sections.expand((section) => section.rows),
       ].firstWhere((row) => row.id == id);
   NativeRow task(String id) => row('task_$id');
+  Iterable<String> get sectionIds => surface.sections.map((section) => section.id);
+  List<String> rowIds(String section) => [for (final row in this.section(section).rows) row.id];
+
+  /// The section ids of the last snapshot the native view received.
+  List<Object?> get publishedSectionIds => [
+        for (final section
+            in (host.calls.lastWhere((call) => call.$2.method == 'update').$2.arguments as Map)['sections'] as List)
+          (section as Map)['id'],
+      ];
 
   /// Sends [id] from the native view, as Swift's command would, and rethrows a refusal.
   Future<void> send(String id, [Object? value]) async {
@@ -193,7 +253,11 @@ class _Page {
 }
 
 Future<_Page> _pump(WidgetTester tester,
-    {bool connected = false, List<ActionItemWithMetadata>? items, ApiViewPhase? failedPhase}) async {
+    {bool connected = false,
+    List<ActionItemWithMetadata>? items,
+    ApiViewPhase? failedPhase,
+    ReviewProvider? review,
+    List<NavigatorObserver> observers = const []}) async {
   final host = NativeTestHost.install();
   final calls = _Calls();
   final provider = failedPhase == null ? _FakeTasks(items ?? _fixture(), calls) : _FailedTasks(failedPhase, calls);
@@ -204,11 +268,13 @@ Future<_Page> _pump(WidgetTester tester,
       ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
       ChangeNotifierProvider(create: (_) => GoalsProvider()),
       ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => _Integrations(connected: connected)),
+      if (review != null) ChangeNotifierProvider<ReviewProvider>.value(value: review),
     ],
-    child: const MaterialApp(
+    child: MaterialApp(
+      navigatorObservers: observers,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: [Locale('en')],
-      home: Scaffold(body: ActionItemsPage(selectionBarInFallback: true)),
+      supportedLocales: const [Locale('en')],
+      home: const Scaffold(body: ActionItemsPage(selectionBarInFallback: true)),
     ),
   ));
   await provider.ensureLoaded();
@@ -548,5 +614,213 @@ void main() {
       expect(page.surface.toolbar.map((row) => row.id), isNot(contains('tasks_menu')));
       expect(page.surface.sections.every((section) => section.reorder == null), isTrue);
     });
+  });
+
+  group('group by project', () {
+    Future<_Page> grouped(WidgetTester tester,
+        {List<int>? loads, Map<String, EntityRef>? projects, List<NavigatorObserver> observers = const []}) async {
+      final page = await _pump(tester,
+          items: _projectFixture(), review: _review(loads: loads, projects: projects), observers: observers);
+      await page.send('tasks_menu', 'groupByProject');
+      return page;
+    }
+
+    testWidgets('is offered only while Review is on', (tester) async {
+      var page = await _pump(tester, items: _projectFixture());
+      expect(page.row('tasks_menu').options.keys, isNot(contains('groupByProject')), reason: 'no Review provider');
+      page = await _pump(tester, items: _projectFixture(), review: _review(on: false));
+      expect(page.row('tasks_menu').options.keys, isNot(contains('groupByProject')), reason: 'Review is off');
+      await expectLater(page.send('tasks_menu', 'groupByProject'), _refused);
+      expect(page.sectionIds, _dateSections, reason: 'nothing changes');
+      await page.send('tasks_menu', 'select');
+      expect(page.surface.toolbar.map((row) => row.id), isNot(contains('tasks_group')));
+    });
+
+    testWidgets('switching on loads the projects once, with a light haptic, and switching off restores dates',
+        (tester) async {
+      final haptics = <Object?>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      final loads = <int>[];
+      final page = await _pump(tester, items: _projectFixture(), review: _review(loads: loads));
+      expect(page.row('tasks_menu').options['groupByProject'], _l10n.tasksGroupByProject);
+
+      await page.send('tasks_menu', 'groupByProject');
+      expect(loads, hasLength(1));
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(page.row('tasks_menu').options['groupByProject'], _l10n.tasksGroupByDate);
+      expect(page.sectionIds, _groupedSections);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'the grouped projection stays native');
+      await tester.pump();
+      expect(page.publishedSectionIds, _groupedSections, reason: 'the native view received the groups');
+
+      await page.send('tasks_menu', 'groupByProject');
+      expect(page.sectionIds, _dateSections);
+      expect(page.row('tasks_menu').options['groupByProject'], _l10n.tasksGroupByProject);
+      await page.send('tasks_menu', 'groupByProject');
+      expect(loads, hasLength(1), reason: 'loaded projects are reused');
+      expect(page.sectionIds, _groupedSections);
+    });
+
+    testWidgets('groups in the classic order with titles, counts and due-date order', (tester) async {
+      final page = await grouped(tester);
+      expect(page.rowIds('project:gamma'), ['project_open:gamma', 'task_g2', 'task_g1', 'task_g4', 'task_g3']);
+      expect(page.rowIds('project:alpha'), ['project_open:alpha', 'task_a1']);
+      expect(page.rowIds('project:zeta'), ['project_open:zeta', 'task_z1']);
+      expect(page.rowIds('project_none'), ['task_ghost', 'task_free'], reason: 'unknown and missing projects, last');
+      expect([for (final section in page.surface.sections) section.title],
+          ['gamma', 'alpha', 'Zeta', _l10n.tasksNoProject]);
+      expect(page.section('project:gamma').footer, _l10n.tasksCountLabel(4));
+      expect(page.surface.sections.any((section) => section.collapsible), isFalse);
+      expect(page.row('project_open:gamma').kind, 'navigation');
+      expect(page.task('g4').indent, 1);
+      expect(page.task('g4').options.keys, contains('outdent'));
+      expect(page.task('g2').options.keys, isNot(contains('indent')), reason: 'first in its group');
+
+      await page.send('tasks_menu', 'completed');
+      expect(page.sectionIds, ['project:gamma']);
+      expect(page.rowIds('project:gamma'), ['project_open:gamma', 'task_gdone']);
+      expect(page.surface.sections.expand((section) => section.rows).where((row) => row.id.startsWith('tasks_clear')),
+          isEmpty,
+          reason: 'project headers carry no clear action');
+    });
+
+    testWidgets('a project row opens its page; the no-project group has none', (tester) async {
+      final routes = _Pushes();
+      final page = await grouped(tester, observers: [routes]);
+      expect(page.section('project_none').rows.where((row) => row.kind == 'navigation'), isEmpty);
+      // Inspect the pushed route without building it: the project page loads over the network.
+      final reply = await page.host.sendFromNative(
+          page.host.created.last, const MethodCall('action', {'id': 'project_open:alpha', 'value': null}));
+      const StandardMethodCodec().decodeEnvelope(reply!);
+      final route = routes.pushed.last as PageRoute;
+      final navigator = tester.element(find.byType(Navigator).first);
+      final built = switch (route) {
+        MaterialPageRoute(:final builder) || CupertinoPageRoute(:final builder) => builder(navigator),
+        _ => throw TestFailure('Unexpected route $route'),
+      };
+      expect(built, isA<EntityPage>().having((page) => page.entityId, 'entityId', 'alpha'));
+      route.navigator!.removeRoute(route);
+      await tester.pump();
+    });
+
+    testWidgets('search shows the flat matches; selection keeps the groups and cascades within one', (tester) async {
+      final page = await grouped(tester);
+      await page.send('_search', 'Task g');
+      expect(page.sectionIds, ['search'], reason: 'search wins over grouping, as in Flutter');
+      await page.send('_search', '');
+      expect(page.sectionIds, _groupedSections);
+
+      await page.send('task_a1', 'select');
+      expect(page.sectionIds, _groupedSections);
+      expect(page.surface.toolbar.map((row) => row.id), contains('tasks_group'));
+      expect(page.surface.selection!.selectable, isNot(contains('project_open:gamma')));
+      expect(page.surface.selection!.validFor(page.surface.sections), isTrue);
+      await page.send('_selection', ['task_a1', 'task_g1']);
+      expect(page.provider.selectedItems, {'g1', 'g4', 'a1'}, reason: 'g4 follows g1 in its group');
+      expect(find.byType(UiKitView), findsOneWidget);
+
+      await page.send('tasks_group');
+      expect(page.sectionIds, _dateSections);
+    });
+
+    testWidgets('edit mode reorders within one project group only', (tester) async {
+      final page = await grouped(tester);
+      await page.send('tasks_menu', 'reorder');
+      expect(
+          page.surface.sections.where((section) => section.id != 'pagination').every((s) => s.reorder != null), isTrue);
+      expect(page.rowIds('project:gamma'), ['task_g2', 'task_g1', 'task_g4', 'task_g3'], reason: 'no open row');
+      expect(find.byType(UiKitView), findsOneWidget);
+
+      await page.send('_reorder:project:gamma', ['task_g4', 'task_g2', 'task_g1', 'task_g3']);
+      expect(page.calls.sortOrders, [
+        {'g4': 1000, 'g2': 2000, 'g1': 3000, 'g3': 4000}
+      ]);
+      expect(page.calls.indents, [('g4', 0)]);
+
+      await expectLater(page.send('_reorder:project:gamma', ['task_g2', 'task_g1', 'task_g4', 'task_a1']), _refused);
+      await expectLater(page.send('_reorder:project:alpha', ['task_z1']), _refused);
+      await expectLater(page.send('_reorder:today', ['task_z1', 'task_ghost']), _refused);
+      expect(page.calls.sortOrders, hasLength(1));
+    });
+
+    testWidgets('stays valid with no projects', (tester) async {
+      final page = await grouped(tester, projects: const {});
+      expect(page.sectionIds, ['project_none']);
+      expect(page.section('project_none').rows, hasLength(8));
+      expect(find.byType(UiKitView), findsOneWidget);
+    });
+
+    testWidgets('stays valid with many projects, long names and an unknown workstream', (tester) async {
+      final many = {
+        for (var i = 0; i < 60; i++)
+          'p$i': EntityRef(entityId: 'p$i', type: EntityType.project, name: '${'Long project name ' * 20}$i'),
+      };
+      final page = await _pump(tester,
+          items: [for (var i = 0; i < 60; i++) _task('t$i', project: 'p$i'), _task('orphan', project: 'gone')],
+          review: _review(projects: many));
+      await page.send('tasks_menu', 'groupByProject');
+      expect(page.sectionIds, hasLength(61));
+      expect(page.sectionIds.toSet(), hasLength(61));
+      expect(page.sectionIds.last, 'project_none');
+      expect(page.section('project:p0').title, many['p0']!.name);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'the projection is valid');
+    });
+  });
+
+  testWidgets('classic and native list the same groups from groupTasksByProject', (tester) async {
+    final expected = groupTasksByProject(
+        categorizeTasks(_projectFixture(), false).values.expand((items) => items).toList(), _projects);
+    expect([for (final (id, _) in expected) id], ['gamma', 'alpha', 'zeta', null]);
+    final expectedRows = [for (final (_, items) in expected) ...items.map((item) => item.id)];
+
+    final native =
+        await _pump(tester, items: _projectFixture(), review: _review(projects: _projects)..projects = _projects);
+    await native.send('tasks_menu', 'groupByProject');
+    expect(
+        [for (final section in native.surface.sections) ...section.rows.where((r) => r.kind == 'task')]
+            .map((r) => r.id),
+        [for (final id in expectedRows) 'task_$id']);
+
+    // The classic list, on a fresh page with no native host: open the menu and group by project.
+    await tester.pumpWidget(const SizedBox());
+    IosNativeSurface.debugNativeHostForTest = false;
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final provider = _FakeTasks(_projectFixture(), _Calls());
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppearanceProvider(read: () => 'dark', write: (_) async {})),
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+        ChangeNotifierProvider(create: (_) => GoalsProvider()),
+        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => _Integrations()),
+        ChangeNotifierProvider<ReviewProvider>.value(value: _review()..projects = _projects),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: ActionItemsPage()),
+      ),
+    ));
+    await provider.ensureLoaded();
+    await tester.pumpAndSettle();
+    expect(find.byType(UiKitView), findsNothing);
+    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(_l10n.tasksGroupByProject));
+    await tester.pumpAndSettle();
+    double top(Finder finder) => tester.getTopLeft(finder).dy;
+    final headers = ['gamma', 'alpha', 'zeta'].map((id) => top(find.byKey(ValueKey('project_header_$id')))).toList();
+    expect(headers, orderedEquals([...headers]..sort()));
+    final rows = [for (final id in expectedRows) top(find.text('Task $id'))];
+    expect(rows, orderedEquals([...rows]..sort()), reason: 'classic rows run in the shared order');
+    expect(top(find.text(_l10n.tasksNoProject)), lessThan(top(find.text('Task ghost'))));
+    expect(top(find.text(_l10n.tasksNoProject)), greaterThan(top(find.text('Task z1'))));
   });
 }
