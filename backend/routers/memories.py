@@ -23,6 +23,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
@@ -778,13 +779,23 @@ def get_memories(
                 as_of=as_of,
             )
         except MemoryBackingStoreUnavailable as exc:
-            # First page must succeed whenever the legacy offset read can serve
-            # it. Catch the typed backing-store failure — not detail strings —
-            # so a renamed or newly added unavailable message still degrades
-            # instead of escaping as a hard 503. The cursor path, both keyset
-            # scans, and the scan-row budget all raise this type. Unrelated
-            # errors (4xx, other 503s) propagate. The fallback runs on the
-            # SAME request budget, never a fresh unbudgeted window (#11831).
+            if exc.detail == MEMORY_LIST_SCAN_BUDGET_DETAIL:
+                # The keyset walk already holds the honest prefix. Do not
+                # restart through the offset reader: that path used to stream
+                # the entire canonical collection and return an empty 200 when
+                # the request budget died (#11831).
+                logger.warning(
+                    "memories first-page keyset scan budget exhausted; not falling back to offset read stream=%s",
+                    exc.stream,
+                )
+                return _finalize([], truncated=True, next_cursor=None)
+            # Other backing-store failures (cursor secret, a historical index
+            # still building) may still use the offset reader. That reader
+            # walks the canonical keyset and the budgeted historical index —
+            # never the unbounded canonical collection stream. Catch the typed
+            # failure, not detail strings, so a renamed unavailable message
+            # still degrades. Unrelated errors propagate. The fallback runs on
+            # the SAME request budget, never a fresh unbudgeted window.
             record_fallback(
                 component='firestore_read',
                 from_mode='cursor_page',
