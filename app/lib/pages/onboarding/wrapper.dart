@@ -452,6 +452,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
+          SharedPreferencesUtil().firstSummaryRatingPending = true;
           SharedPreferencesUtil().remove(_resumeKey);
           _completeOnboardingTelemetry();
           updateUserOnboardingState(completed: true);

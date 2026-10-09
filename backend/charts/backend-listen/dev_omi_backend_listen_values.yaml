@@ -219,6 +219,8 @@ env:
     value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED

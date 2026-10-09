@@ -10,18 +10,31 @@ def mode() -> str:
     return value if value in {'shadow', 'on'} else 'off'
 
 
-def eligible(uid: str, user: dict) -> bool:
-    allowlist = {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
-    if uid in allowlist:
-        return True
+def _allowlisted(uid: str) -> bool:
+    return uid in {s.strip() for s in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if s.strip()}
+
+
+def _testflight_minimum_build() -> int | None:
     minimum_build = os.getenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '').strip()
     if not minimum_build or os.getenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false').lower() != 'true':
-        return False
+        return None
     try:
         minimum = int(minimum_build)
     except ValueError:
-        return False
-    if minimum < 1:
+        return None
+    return minimum if minimum >= 1 else None
+
+
+def may_be_eligible(uid: str) -> bool:
+    """Cheap pre-check before reading the user document; False means `eligible` is False."""
+    return _allowlisted(uid) or _testflight_minimum_build() is not None
+
+
+def eligible(uid: str, user: dict) -> bool:
+    if _allowlisted(uid):
+        return True
+    minimum = _testflight_minimum_build()
+    if minimum is None:
         return False
     app_build = user.get('dream_app_build')
     return (

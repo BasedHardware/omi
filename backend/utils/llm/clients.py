@@ -819,6 +819,12 @@ def get_llm(
             route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
 
+    # Preserve the final route identity per invocation without mutating a cached
+    # SDK client. Gateway model_name is only an auto-lane ID; prompt callers need
+    # the post-profile, post-key-fallback model to decide content compatibility.
+    if isinstance(result, BaseChatModel):
+        result = result.model_copy(update={'metadata': {**(result.metadata or {}), 'omi_resolved_model': model}})
+
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key

@@ -1,8 +1,10 @@
 # Dream agent phase 1
 
-The worker defaults off. This change introduces no deployment, scheduled resource,
-production flag operation or provider request. It stacks on Review API #20966;
-#20960 supplies the dedicated-only reservation policy.
+The worker defaults off in code. The production runtime declarations enable shadow
+for David's two allowlisted UIDs only; TestFlight stays disabled and all budgets
+keep their defaults. Review API #20966 supplies the effect ledger; #20960 supplies
+the dedicated-only reservation policy. Declaring runtime configuration does not
+deploy it or change cloud resources.
 
 Run an authorized local/dev shadow pass from the repository root:
 
@@ -22,10 +24,30 @@ vocabulary, or files developer feedback. Report `expires_at` is 30 days; it is
 metadata only until an operator configures TTL. No retention policy is changed
 by this PR.
 
-The existing `modal/memory_maintenance_job.py` runtime calls the bounded dream
-queue drain. Its current deployment is dev-only. A production cadence would
-need a separately authorized job/workflow and Scheduler binding; this PR adds
-neither. Existing consolidation and daily-sweep jobs remain in place.
+Production uses the existing `backend-sync` Cloud Run service and internal
+`POST /v2/dream-agent/sweep`, registered in `route_policy_manifest.yaml`. It uses
+the same `verify_cloud_tasks_oidc` dependency, sync task audience and invoker
+identity as the sequencer sweep; Firebase user tokens cannot invoke it.
+`deploy/scheduler/jobs.yaml` declares `dream-agent-sweep-hourly` for prod at
+`0 * * * *` UTC, with a 180-second attempt deadline. The drain itself has a
+120-second wall-clock bound including queue reads, admission and report writes;
+the route middleware allows 150 seconds. Responses contain only complete, failed,
+not-admitted and deadline counts. Off performs no Firestore reads.
+
+There is no dev Scheduler entry: dev shares prod Firestore. The existing dev
+`modal/memory_maintenance_job.py` also calls the bounded drain, but its dream mode
+remains off. Production writer settings cover backend-listen, pusher (live finalization), backend,
+backend-sync, backend-sync-backfill and backend-integration so the existing
+post-write hooks actually enqueue the allowlisted cohort. Existing consolidation
+and daily-sweep jobs remain in place. Apply Scheduler declarations through the
+existing authorized Scheduler reconciliation; this code change applies nothing.
+
+Shadow needs no feedback salt: privacy-checked would-file feedback remains in the
+encrypted run report, and nothing enters `dream_feedback`. Before enabling `on`,
+provision Secret Manager item `DREAM_AGENT_FEEDBACK_SALT` (at least 32 characters)
+and bind `DREAM_AGENT_FEEDBACK_SALT=DREAM_AGENT_FEEDBACK_SALT:latest` on
+backend-sync. The existing Review surface must also be enabled for live admission.
+Secret creation, binding and mode promotion require separate authorization.
 
 Each admitted producer write cheaply records references in `dream_users/{uid}`
 and sequence-numbered `events` documents. Conversation processing, canonical
@@ -123,7 +145,7 @@ not a user endpoint. It reads at most 10,000 reports from the current epoch.
 Feedback collection requires `on`; shadow stores only privacy-checked would-file
 reports in the user's encrypted run document.
 
-Local safety suites: `test_dream_agent.py`, `test_dream_lanes.py` and
+Local safety suites: `test_dream_sweep.py`, `test_dream_agent.py`, `test_dream_lanes.py` and
 `test_dream_tools.py`, `test_dream_memory_merge.py`, and `test_dream_cohort.py`, through `backend/test.sh`. Repository typechecking,
 Firestore query guards, Review/harness regressions and `make preflight` are
 separate checks. No live canary or deployed acceptance is claimed.

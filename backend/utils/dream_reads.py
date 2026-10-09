@@ -67,8 +67,8 @@ def read_changes(uid, lease):
     events = dream_store.events(uid, lease)
     records = {}
     for event in events:
-        for collection, key in event['refs']:
-            ref = f'{collection}/{key}'
+        for item in event['refs']:
+            ref = f"{item['collection']}/{item['id']}"
             if ref in records:
                 continue
             try:

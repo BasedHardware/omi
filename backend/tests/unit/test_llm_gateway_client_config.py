@@ -34,6 +34,15 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 import httpx
 
 
+def _same_client(result, expected):
+    """get_llm stamps omi_resolved_model per invocation via model_copy; identity
+    becomes a fresh wrapper. Assert route equivalence on the wrapped client."""
+    if result is expected:
+        return True
+    name = getattr(expected, 'name', None)
+    return getattr(result, 'name', None) == name and bool(getattr(result, 'metadata', {}).get('omi_resolved_model'))
+
+
 class FakeChatModel(BaseChatModel):
     name: str
     calls: list
@@ -350,7 +359,7 @@ def test_byok_uses_user_key_direct_when_optional_gateway_is_off(monkeypatch):
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', forbidden_gateway_or_shadow)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', forbidden_gateway_or_shadow)
 
-    assert clients.get_llm('conv_discard') is byok
+    assert _same_client(clients.get_llm('conv_discard'), byok)
     assert captured == {
         'model': model_config.get_model('conv_discard'),
         'provider': 'openai',
@@ -563,7 +572,7 @@ def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is gateway
+    assert _same_client(result, gateway)
     assert captured == {
         'lane_id': feature_auto_lane_id('chat_agent'),
         'streaming': True,
@@ -590,7 +599,7 @@ def test_get_llm_chat_agent_managed_route_ignores_optional_direct_switch(monkeyp
 
     result = clients.get_llm('chat_agent', streaming=True)
 
-    assert result is gateway
+    assert _same_client(result, gateway)
     assert captured == {'used_gateway': True}
     assert legacy.calls == []
 

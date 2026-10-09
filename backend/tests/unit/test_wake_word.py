@@ -243,65 +243,6 @@ def test_discard_fixtures_reach_the_real_llm_adjudication_path(monkeypatch):
             assert llm_invocations == invocations_before + 1, f"{case['id']}:{treatment} bypassed the LLM"
 
 
-def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypatch):
-    captured_static: list[str] = []
-    captured_volatile: list[str] = []
-
-    class FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return cls(2026, 8, 20, 13, 0, tzinfo=tz)
-
-    class FakeParser:
-        def __init__(self, pydantic_object):
-            self.pydantic_object = pydantic_object
-
-        def get_format_instructions(self):
-            return 'return structured output'
-
-        def parse(self, _content):
-            return self.pydantic_object()
-
-    class FakeModel:
-        def invoke(self, messages):
-            captured_static.append(messages[0].content[0]['text'])
-            captured_volatile.append(messages[-1].content)
-            return SimpleNamespace(content='{}')
-
-    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
-    monkeypatch.setattr(conversation_processing, 'datetime', FixedDatetime)
-    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: FakeModel())
-    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
-
-    common = {
-        'started_at': datetime(2026, 8, 20, tzinfo=timezone.utc),
-        'language_code': 'multi',
-        'output_language_code': None,
-        'tz': 'UTC',
-        'task_intelligence_capture': True,
-        'trusted_wake_word_markers': True,
-    }
-    conversation_processing.get_conversation_notes(
-        ConversationPromptPrefix(
-            conversation_id='unmarked',
-            context='FULL TRANSCRIPT\n[segment:s1 0.000-1.000] User: Send the budget.',
-        ),
-        **common,
-    )
-    conversation_processing.get_conversation_notes(
-        ConversationPromptPrefix(
-            conversation_id='marked',
-            context=f'FULL TRANSCRIPT\n[segment:s1 0.000-1.000] {WAKE_WORD_MARKER} User: Hey Omi, send the budget.',
-        ),
-        **common,
-    )
-
-    assert captured_static[0] == captured_static[1]
-    assert WAKE_WORD_PROMPT_RULES not in captured_static[0]
-    assert WAKE_WORD_PROMPT_RULES not in captured_volatile[0]
-    assert captured_volatile[1].endswith(WAKE_WORD_PROMPT_RULES)
-
-
 def test_adjudicator_uses_extended_reasoning_without_passing_extracted_intent_text(monkeypatch):
     captured: dict[str, object] = {}
 

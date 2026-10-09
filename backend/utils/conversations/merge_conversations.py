@@ -31,6 +31,7 @@ from utils.memory.retraction_scope import (
     historical_source_conversation_ids,
     retraction_can_be_skipped,
 )
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator, OMI_SPEAKER_ID_SENTINEL
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
@@ -440,6 +441,31 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     """
     merged = []
     cumulative_offset = 0.0
+    allocator = ConversationSpeakerIdAllocator()
+    # Full source-receipt migration is outside this change. Never move a
+    # manual voice's numeric authority while its receipt remains at the source.
+    reallocate = not any(
+        conv.get('manual_speaker_assignments')
+        or any(s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or []))
+        for conv in conversations
+    )
+
+    def copy_segment(segment, source):
+        copied = copy.deepcopy(segment)
+        speaker_id = copied.get('speaker_id')
+        if (
+            isinstance(speaker_id, (int, str))
+            and str(speaker_id).isdigit()
+            and int(speaker_id) != OMI_SPEAKER_ID_SENTINEL
+        ):
+            if not copied.get('speaker_id_scope'):
+                # Unidentified legacy inputs cannot establish a new voice scope.
+                if source.get('id'):
+                    copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
+            if reallocate and copied.get('speaker_id_scope'):
+                copied['speaker_id'] = int(speaker_id)
+                allocator.assign(copied)
+        return copied
 
     for i, conv in enumerate(conversations):
         # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
@@ -450,7 +476,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
         if i == 0:
             # First conversation - use segments as-is
-            merged.extend([copy.deepcopy(s) for s in segments])
+            merged.extend([copy_segment(s, conv) for s in segments])
             if segments:
                 cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
@@ -471,7 +497,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
-                seg_copy = copy.deepcopy(seg)
+                seg_copy = copy_segment(seg, conv)
                 seg_copy["start"] = (seg.get("start") or 0) + offset
                 seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)

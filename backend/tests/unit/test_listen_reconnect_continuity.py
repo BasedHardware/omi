@@ -190,7 +190,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     transcript = conversation.transcript_segments[0].text
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *args: (transcript, transcript, {0: 'David'}))
     monkeypatch.setattr(pc, 'track_usage', lambda *args, **kwargs: nullcontext())
-    monkeypatch.setattr(pc, '_meeting_notes_episode_evidence_enabled', lambda uid: False)
     # Isolate the persisted meeting stamp from optional roster/background reads.
     monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, ()))
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])

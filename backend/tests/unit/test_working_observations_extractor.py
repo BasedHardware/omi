@@ -22,6 +22,8 @@ from utils.llm.usage_tracker import get_current_context
 
 
 class FakeLLM:
+    model_name = "gpt-6-luna"
+
     def __init__(self, content):
         self.content = content
         self.calls = []
