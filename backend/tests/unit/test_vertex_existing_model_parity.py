@@ -220,9 +220,8 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
     assert outgoing.headers['authorization'] == 'Bearer synthetic-token'
     assert outgoing.headers['content-type'] == 'application/json'
     assert outgoing.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
-    # Authentication spends the shared request budget; the wire must not reset it.
-    remaining = 60.0 - token_delay_seconds
-    assert outgoing.extensions['timeout'] == dict(connect=remaining, read=remaining, write=remaining, pool=remaining)
+    # A single predict preserves its exact wire timeout after authentication.
+    assert outgoing.extensions['timeout'] == dict(connect=60.0, read=60.0, write=60.0, pool=60.0)
     assert json.loads(outgoing.content) == {
         'instances': [{'content': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}]
     }
