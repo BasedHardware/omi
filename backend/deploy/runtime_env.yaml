@@ -1095,6 +1095,7 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -1247,6 +1248,7 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
               category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -1995,6 +1997,7 @@ environments:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+          NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -2094,6 +2097,7 @@ environments:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+          NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -2461,6 +2465,7 @@ environments:
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -2609,6 +2614,7 @@ environments:
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
               category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -2676,6 +2682,7 @@ environments:
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -2814,6 +2821,7 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
               category: rollout}
@@ -2878,6 +2886,7 @@ environments:
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
@@ -2993,6 +3002,7 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
               category: rollout}

@@ -1731,6 +1731,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
+        {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2049,6 +2050,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
+        {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2122,6 +2124,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
+        {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
@@ -3476,6 +3479,39 @@ def test_mentor_pipeline_runtime_values(pipeline, kind):
         config = {'MENTOR_PIPELINE': {'env_var': 'MENTOR_PIPELINE', 'default': pipeline}}
     # The legacy/v2 modes were removed: only cohort validates (no errors).
     assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline != 'cohort')
+
+
+# Every deployed service that runs process_conversation. Registry notes name
+# Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration
+# and GKE backend-listen and pusher. An omitted flag on any one of them
+# fail-closes shaped notes on that host alone.
+_PROCESS_CONVERSATION_COHOSTS = {
+    'gke/backend-listen',
+    'gke/pusher',
+    'cloud_run/backend',
+    'cloud_run/backend-sync',
+    'cloud_run/backend-sync-backfill',
+    'cloud_run/backend-integration',
+}
+
+
+def test_shaped_notes_enabled_on_every_process_conversation_cohost():
+    # Legacy notes are gone, so an unset OMI_SHAPED_AGENT_MODE fail-closes every
+    # kept conversation as the generic HTTP 500 at process_conversation._get_structured.
+    # The flag must resolve identically on every cohost, in every environment.
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    expected = {'value': 'on', 'category': 'rollout'}
+    for env_name in ('dev', 'prod'):
+        env_config = validator._get_env_config(manifest, env_name)
+        blocks = dict(_manifest_env_blocks(env_config))
+        overlay = validator._load_yaml(ROOT / f'deploy/runtime_env/{env_name}.overlay.yaml')['overlay']
+        overlay_blocks = dict(_manifest_env_blocks(overlay))
+        for scope in sorted(_PROCESS_CONVERSATION_COHOSTS):
+            assert scope in blocks, f'{env_name} manifest omits process_conversation cohost {scope}'
+            assert scope in overlay_blocks, f'{env_name} overlay omits process_conversation cohost {scope}'
+            assert blocks[scope]['OMI_SHAPED_AGENT_MODE'] == expected, f'{env_name} manifest {scope}'
+            assert overlay_blocks[scope]['OMI_SHAPED_AGENT_MODE'] == expected, f'{env_name} overlay {scope}'
 
 
 def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():

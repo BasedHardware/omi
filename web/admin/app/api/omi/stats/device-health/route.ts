@@ -39,9 +39,15 @@ export function parseDeviceHealthDays(raw: string | null): number {
   return Math.min(parsed, DEVICE_HEALTH_MAX_DAYS);
 }
 
+// Watch firmware leaks in from connected non-pendant devices: the stored
+// label is a watchOS version (26.6, 27.0, 27.0.1). Pendant majors are a
+// single digit (1, 2, 3), so a two-digit major is not a pendant. 1.0.4
+// stays — it is the original Friend pendant, and the label names it.
 export function pendantHealthQuery(days: number): string {
   return `
-    SELECT properties.firmware AS firmware,
+    SELECT trim(properties.firmware) AS firmware,
+           coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
+           any(properties.device_model) AS device_model,
            count() AS events,
            uniqExact(person_id) AS users,
            countIf(toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100) AS n_valid_drain,
@@ -51,7 +57,12 @@ export function pendantHealthQuery(days: number): string {
            countIf(toFloat(properties.cliff_count) > 0) AS n_with_cliffs
     FROM events
     WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
-    GROUP BY firmware ORDER BY events DESC LIMIT 15
+      AND nullIf(trim(properties.firmware),'') IS NOT NULL
+      AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
+      AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
+    GROUP BY firmware, os
+    HAVING uniqExact(person_id) >= 20
+    ORDER BY users DESC
   `;
 }
 
@@ -62,12 +73,16 @@ export function pendantHealthQuery(days: number): string {
 // bounded — a filter that exists only inside the CTE 504s.
 // Unknown charging counts as drain on either endpoint; only an explicit
 // true excludes the interval. `!= true` drops NULL and would hide those pairs.
+// app_version is aggregated with max() so the bar label can show it without
+// adding a GROUP BY key — one OS + build stays one row. String max is
+// deterministic; these versions are 1.0.558-style, not zero-padded.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (
       SELECT person_id,
              coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
              coalesce(properties.$app_build, properties.app_build) AS build,
+             coalesce(nullIf(properties.$app_version,''), nullIf(properties.app_version,''), '') AS app_version,
              timestamp,
              toFloat(properties.battery_level) AS level,
              properties.battery_charging AS charging
@@ -77,13 +92,14 @@ export function phoneHealthQuery(days: number): string {
         AND coalesce(nullIf(properties.$os_name,''), properties.platform) IN ('Android','iOS')
     ),
     pairs AS (
-      SELECT os, build, person_id, timestamp, level, charging,
+      SELECT os, build, app_version, person_id, timestamp, level, charging,
              dateDiff('second', lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY person_id ORDER BY timestamp), timestamp) AS elapsed_s,
              lagInFrame(level, 1, level) OVER (PARTITION BY person_id ORDER BY timestamp) - level AS level_drop,
              lagInFrame(charging, 1, charging) OVER (PARTITION BY person_id ORDER BY timestamp) AS prev_charging
       FROM samples
     )
     SELECT os, build,
+           max(app_version) AS app_version,
            count() AS n_pairs,
            uniqExact(person_id) AS users,
            round(quantile(0.5)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p50_drain_per_hour,
@@ -113,6 +129,9 @@ export function phoneEventCountQuery(days: number): string {
 
 export interface PendantHealthRow {
   firmware: string;
+  os: string;
+  device_model: string;
+  firmware_label: string;
   events: number;
   users: number;
   n_valid_drain: number;
@@ -125,6 +144,7 @@ export interface PendantHealthRow {
 export interface PhoneHealthRow {
   os: string;
   build: string;
+  app_version: string;
   label: string;
   n_pairs: number;
   users: number;
@@ -186,33 +206,64 @@ function asRows(results: unknown[]): unknown[][] {
   return results.filter((row): row is unknown[] => Array.isArray(row));
 }
 
+function firmwareLabel(
+  firmware: string,
+  os: string,
+  deviceModel: string
+): string {
+  // 1.0.4 is the original Friend pendant. Name it so the bar is not read as
+  // a current Omi build. device_model is on the row; a blank any() still
+  // means Friend v1 because that firmware is the hardware.
+  const model = deviceModel.trim();
+  const friendV1 =
+    firmware === "1.0.4" && (model.length === 0 || /^friend\b/i.test(model));
+  const version = friendV1 ? `${firmware} (Friend v1)` : firmware;
+  const platform = os.trim();
+  return platform.length > 0 ? `${version} · ${platform}` : version;
+}
+
+function phoneLabel(os: string, build: string, appVersion: string): string {
+  const version = appVersion.trim();
+  const buildPart = build.length > 0 ? `(${build})` : "";
+  const parts = [os, version, buildPart].filter((part) => part.length > 0);
+  return parts.join(" ") || "unknown";
+}
+
 function mapPendant(rows: unknown[][]): PendantHealthRow[] {
-  return rows.map((row) => ({
-    firmware: text(row[0]) || "unknown",
-    events: count(row[1]),
-    users: count(row[2]),
-    n_valid_drain: count(row[3]),
-    p50_drain_valid: finiteNumber(row[4]),
-    p90_drain_valid: finiteNumber(row[5]),
-    avg_connected_frac: finiteNumber(row[6]),
-    n_with_cliffs: count(row[7]),
-  }));
+  return rows.map((row) => {
+    const firmware = text(row[0]) || "unknown";
+    const os = text(row[1]);
+    const deviceModel = text(row[2]);
+    return {
+      firmware,
+      os,
+      device_model: deviceModel,
+      firmware_label: firmwareLabel(firmware, os, deviceModel),
+      events: count(row[3]),
+      users: count(row[4]),
+      n_valid_drain: count(row[5]),
+      p50_drain_valid: finiteNumber(row[6]),
+      p90_drain_valid: finiteNumber(row[7]),
+      avg_connected_frac: finiteNumber(row[8]),
+      n_with_cliffs: count(row[9]),
+    };
+  });
 }
 
 function mapPhone(rows: unknown[][]): PhoneHealthRow[] {
   return rows.map((row) => {
     const os = text(row[0]);
     const build = text(row[1]);
-    const label =
-      [os, build].filter((part) => part.length > 0).join(" ") || "unknown";
+    const appVersion = text(row[2]);
     return {
       os,
       build,
-      label,
-      n_pairs: count(row[2]),
-      users: count(row[3]),
-      p50_drain_per_hour: finiteNumber(row[4]),
-      p90_drain_per_hour: finiteNumber(row[5]),
+      app_version: appVersion,
+      label: phoneLabel(os, build, appVersion),
+      n_pairs: count(row[3]),
+      users: count(row[4]),
+      p50_drain_per_hour: finiteNumber(row[5]),
+      p90_drain_per_hour: finiteNumber(row[6]),
     };
   });
 }

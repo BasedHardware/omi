@@ -249,6 +249,9 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
           category: rollout
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -375,6 +378,9 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
+          category: rollout
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -660,6 +666,9 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -700,6 +709,8 @@ overlay:
             category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Shadow dogfood: infra failures on 2026-10-09 consumed the default 2 passes/day.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
@@ -826,6 +837,9 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -855,6 +869,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
@@ -966,6 +983,9 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
             category: rollout
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -995,6 +1015,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}

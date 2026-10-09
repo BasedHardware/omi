@@ -11,6 +11,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
@@ -1291,6 +1292,9 @@ def delete_conversation(
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
 
+    # Commit intent before retraction or cleanup; failures must never undo this guard.
+    conversation_tombstones.record_deletion(uid, conversation_id)
+
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
@@ -1303,7 +1307,7 @@ def delete_conversation(
             except ConversationReplacementConflictError as error:
                 logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
                 # Concurrent same-account memory writes kept winning the
-                # account-global control CAS. Nothing has been deleted yet, so
+                # account-global control CAS. Primary content has not been deleted yet, so
                 # fail closed with a retryable answer instead of an opaque 500;
                 # the retraction is idempotent, a retried delete is safe (#11726).
                 raise HTTPException(
