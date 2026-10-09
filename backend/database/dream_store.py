@@ -193,7 +193,7 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
         data = state.get(transaction=tx).to_dict() or {}
         if (data.get('lease') or {}).get('run_id') != lease['run_id']:
             raise RuntimeError('dream_lease_lost')
-        budget = (spend.get(transaction=tx).to_dict() or {}) if refund and release else {}
+        budget = (spend.get(transaction=tx).to_dict() or {}) if refund else {}
         # Read before writing, including the bounded queue query. This makes
         # acknowledging versions and deciding whether the queue drained atomic.
         queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database) if success else []
@@ -228,7 +228,7 @@ def finish(uid, lease, report, *, success, consumed=(), release=True, refund=Fal
             'dirty_dropped_reported': lease['dirty_dropped'],
             'score': max(0, data['score'] - lease['score']) if success and not remaining else data['score'],
         }
-        if refund and release:
+        if refund:
             # A midnight completion must not decrement the new day's allowance.
             if data.get('day') == lease['day']:
                 patch['passes'] = max(0, int(data.get('passes', 0)) - 1)

@@ -35,11 +35,14 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None):
     completion = min(4096 if lane == MAIN_LANE else 768, remaining)
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
+    # Resolve local configuration before marking the provider outcome unknown.
+    client = get_llm_gateway_client()
+    url = get_llm_gateway_base_url() + '/v1/chat/completions'
     async with get_llm_gateway_semaphore():
         if usage_sink is not None:
             usage_sink['usage_unknown'] = True
-        response = await get_llm_gateway_client().post(
-            get_llm_gateway_base_url() + '/v1/chat/completions',
+        response = await client.post(
+            url,
             headers=headers,
             json={
                 'model': lane,

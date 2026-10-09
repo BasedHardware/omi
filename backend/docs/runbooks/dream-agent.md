@@ -123,6 +123,8 @@ All knobs are declared in `config/feature-flags.yaml`:
 Admission reserves the entire pass ceiling ($0.24 with defaults), and keeps it
 reserved through success or ambiguous failure. Idle passes and confirmed first-call
 gateway rejections release the reservation and decrement the admission count.
+Local configuration failures and timeouts before any model dispatch also refund
+spend/admissions; a timeout retains the worker-safety lease.
 Token usage is captured before typed-output validation, so an invalid paid response
 still counts. A rejection after a successful triage call still counts; transport
 failures with unknown usage retain the reservation. Refunds use the admission UTC

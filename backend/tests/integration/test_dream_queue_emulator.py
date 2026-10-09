@@ -58,3 +58,12 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     assert database.collection('dream_spend').document(lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
         0.24
     )
+
+    lease = dream_store.acquire(uid, Caps(), firestore_client=database)
+    dream_store.finish(uid, lease, {'tokens': 0}, success=False, release=False, refund=True, firestore_client=database)
+    data = state.get().to_dict()
+    assert data['passes'] == 1 and data['lease']['run_id'] == lease['run_id']
+    assert database.collection('dream_spend').document(lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
+        0.24
+    )
+    assert dream_store.acquire(uid, Caps(), firestore_client=database) is None

@@ -200,7 +200,7 @@ async def run_pass(uid, *, caps=None, turn=None):
     except Exception as exc:
         report.update(status='failed', error_type=type(exc).__name__)
         release = not isinstance(exc, TimeoutError)
-        refund = release and report['tokens'] == 0 and not report['usage_unknown']
+        refund = report['tokens'] == 0 and not report['usage_unknown']
         if refund:
             report['cost_usd_reserved'] = 0
         # No raw exception strings: provider bodies or user text may be embedded.

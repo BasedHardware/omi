@@ -298,3 +298,40 @@ def test_trim_does_not_drop_spare_refs_when_a_pass_drains_after_count(queue, mon
     assert dream_store.dirty_count(UID) == 500
     assert original(UID, newest=False)[0].to_dict()['id'] == '0'
     assert queue.rows[('dream_users', UID)].get('dirty_dropped', 0) == 0
+
+
+def test_local_gateway_config_failure_refunds_before_dispatch(queue, monkeypatch):
+    seed(queue, 1)
+    client = type('Client', (), {'post': AsyncMock(side_effect=AssertionError('request dispatched'))})()
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
+    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
+
+    def missing_url():
+        raise RuntimeError('synthetic missing configuration')
+
+    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', missing_url)
+    report = asyncio.run(dream_agent.run_pass(UID))
+    state = queue.rows[('dream_users', UID)]
+    assert report['status'] == 'failed' and report['tokens'] == 0
+    assert state['passes'] == 0 and state['lease'] is None
+    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    client.post.assert_not_called()
+
+
+def test_pre_model_timeout_refunds_but_retains_worker_safety_lease(queue, monkeypatch):
+    seed(queue, 1)
+
+    def timed_out(*args):
+        raise TimeoutError('synthetic storage timeout')
+
+    monkeypatch.setattr(dream_reads, 'read_changes', timed_out)
+    turn = AsyncMock(side_effect=AssertionError('model invoked'))
+    report = asyncio.run(dream_agent.run_pass(UID, turn=turn))
+    state = queue.rows[('dream_users', UID)]
+    assert report['status'] == 'failed' and report['tokens'] == 0
+    assert report['cost_usd_reserved'] == 0
+    assert state['passes'] == 0 and state['lease']['run_id'] == report['run_id']
+    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert dream_store.acquire(UID, Caps()) is None
+    assert dream_store.dirty_count(UID) == 1
+    turn.assert_not_called()
