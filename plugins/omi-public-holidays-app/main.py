@@ -102,6 +102,9 @@ class HolidayRequest(BaseModel):
     def normalize_limit(cls, value: Any) -> int:
         return _normalize_limit(value)
 
+NEXT_HOLIDAY_DEFAULT_LIMIT = 8
+
+
 class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
     limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
@@ -367,4 +370,3 @@ async def list_supported_countries() -> ChatToolResponse:
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
 
-# __BOUNTY_20991_PATCHED__

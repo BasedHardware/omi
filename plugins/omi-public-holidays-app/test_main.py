@@ -326,7 +326,3 @@ class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-# __BOUNTY_20991_PATCHED__
-
-# __STUB_GE_LE_PATCHED__
