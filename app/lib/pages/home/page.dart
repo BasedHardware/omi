@@ -165,6 +165,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     identityEpoch: () => AnalyticsManager.identityEpoch,
     enabled: () => AnalyticsManager.identityKnown && AnalyticsManager.trackingEnabled,
     emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
+    // PackageInfo build number, cached before UI start. Same source as the
+    // app_build super-property, readable before AnalyticsManager finishes init.
+    currentBuild: () => PlatformManager.instance.appBuild,
   );
 
   CaptureProvider? _captureProvider;
@@ -422,7 +425,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    unawaited(_backgroundResourceTelemetry.recoverInterrupted());
+    unawaited(
+      _backgroundResourceTelemetry.recoverInterrupted(
+        launchContext: classifyBackgroundInterruptLaunch(
+          processAlreadyObserved: BackgroundInterruptProcessLaunch.markObserved(),
+        ),
+      ),
+    );
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
