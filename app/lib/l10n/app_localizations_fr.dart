@@ -12763,4 +12763,149 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Grouper par date';
+
+  @override
+  String get dreamReportTitle => 'Rapport Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Mode aperçu : Dream montre ce qu\'il modifierait, mais rien ne change encore dans votre compte.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream applique ces modifications automatiquement. Annulez-les depuis Modifications récentes.';
+
+  @override
+  String get dreamReportRunNow => 'Lancer maintenant';
+
+  @override
+  String get dreamReportRunLimit => 'Plus de lancement manuel aujourd\'hui';
+
+  @override
+  String get dreamReportRunInProgress => 'Un passage est déjà en cours. Réessayez dans une minute.';
+
+  @override
+  String get dreamReportRunFailed => 'Impossible de lancer Dream. Réessayez.';
+
+  @override
+  String get dreamReportIdle => 'Rien de nouveau à examiner pour l\'instant.';
+
+  @override
+  String get dreamReportLoadFailed => 'Impossible de charger le rapport Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Aucun passage pour l\'instant';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream examine ce qui a changé dans votre compte environ toutes les heures.';
+
+  @override
+  String get dreamReportScheduled => 'Planifié';
+
+  @override
+  String get dreamReportManual => 'Manuel';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Échec ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Arrêté à sa limite de temps';
+
+  @override
+  String get dreamReportNothingFound => 'Rien à corriger';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records éléments lus · $tokens jetons';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Corrigerait';
+
+  @override
+  String get dreamReportFixed => 'Corrigé';
+
+  @override
+  String get dreamReportWouldAsk => 'Vous demanderait';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Suggérerait des tâches';
+
+  @override
+  String get dreamReportLearnedWords => 'Mots appris';
+
+  @override
+  String get dreamReportFeedback => 'Signalé à l\'équipe Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Élément supprimé';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count passages sur $limit aujourd\'hui';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count modifications en attente',
+      one: '1 modification en attente',
+      zero: 'Aucune modification en attente',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lancements manuels restants aujourd\'hui',
+      one: '1 lancement manuel restant aujourd\'hui',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes corrections',
+      one: '1 correction',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks suggestions',
+      one: '1 suggestion',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count anciennes modifications ignorées',
+      one: '1 ancienne modification ignorée',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count signalements retenus pour la confidentialité',
+      one: '1 signalement retenu pour la confidentialité',
+    );
+    return '$_temp0';
+  }
 }
