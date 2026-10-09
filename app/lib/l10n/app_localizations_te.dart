@@ -12488,17 +12488,227 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'మీ అనుభవం వ్యక్తిగతీకరించబడుతోంది';
 
   @override
-  String get onboardingRatingPromptTitle => 'వేచి ఉన్నప్పుడు, Omi వాడటం బాగుందా?';
+  String get onboardingRatingPromptTitle => 'మీకు Omi నచ్చుతోందా?';
 
   @override
-  String get onboardingRatingPromptBody => '5 స్టార్ రేటింగ్ ఇస్తే మాకు నిజంగా చాలా సహాయం ❤️';
+  String get onboardingRatingPromptYes => 'అవును';
 
   @override
-  String get onboardingRatingPromptYes => 'అవును, నేను మీకు మద్దతు ఇవ్వాలనుకుంటున్నాను!';
-
-  @override
-  String get onboardingRatingPromptNo => 'అంతగా లేదు';
+  String get onboardingRatingPromptNo => 'కాదు';
 
   @override
   String get partialRecording => 'పాక్షిక రికార్డింగ్';
+
+  @override
+  String get importTranscriptFiles => 'ట్రాన్స్‌క్రిప్ట్ ఫైల్‌లు';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT లేదా TXT ట్రాన్స్‌క్రిప్ట్‌లను లేదా వాటి ZIP ఫైల్‌ను ఎంచుకోండి';
+
+  @override
+  String get importTooManyAttempts => 'ప్రస్తుతం చాలా ఎక్కువ దిగుమతులు జరుగుతున్నాయి. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get importFileTooLarge => 'ఈ ఫైల్ దిగుమతి చేయడానికి చాలా పెద్దది.';
+
+  @override
+  String get importUnsupportedFileType => 'ఈ రకమైన ఫైల్‌ను దిగుమతి చేయలేరు.';
+
+  @override
+  String get reviewTitle => 'సమీక్ష';
+
+  @override
+  String get reviewEntryTitle => 'మీ కోసం ప్రశ్నలు';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count మిగిలాయి';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'ఇది ఎవరు చెప్పారు?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '“$name” అనే వ్యక్తి ఇతనేనా?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'ఇది ఎలా రాస్తారు?';
+
+  @override
+  String get reviewPlayClip => 'క్లిప్ ప్లే చేయండి';
+
+  @override
+  String get reviewStopClip => 'క్లిప్ ఆపండి';
+
+  @override
+  String get reviewOpenDetailsHint => 'వివరాలను తెరుస్తుంది';
+
+  @override
+  String get reviewAnswerMe => 'నేను';
+
+  @override
+  String get reviewAnswerOther => 'ఇతర';
+
+  @override
+  String get reviewAddTask => 'టాస్క్ జోడించండి';
+
+  @override
+  String get reviewAnswerFailed => 'మీ సమాధానాన్ని సేవ్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'ఈ సమాధానం $count సంభాషణలకు లేబుల్ ఇస్తుంది';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'తెలియని మాట్లాడేవారు';
+
+  @override
+  String get reviewNewPersonName => 'వారి పేరు';
+
+  @override
+  String get reviewSomeoneElse => 'వేరే వ్యక్తి…';
+
+  @override
+  String get reviewConfirm => 'నిర్ధారించండి';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '$name ను నిర్ధారించండి';
+  }
+
+  @override
+  String get reviewNotSure => 'ఖచ్చితంగా తెలియదు';
+
+  @override
+  String get reviewOpenConversation => 'సంభాషణ';
+
+  @override
+  String get reviewTaskField => 'టాస్క్';
+
+  @override
+  String get reviewDue => 'గడువు';
+
+  @override
+  String get reviewNoDate => 'ఏదీ లేదు';
+
+  @override
+  String get reviewProject => 'ప్రాజెక్ట్';
+
+  @override
+  String get reviewReasonAlreadyDone => 'ఇప్పటికే పూర్తయింది';
+
+  @override
+  String get reviewReasonNotMine => 'నాది కాదు';
+
+  @override
+  String get reviewReasonNotUseful => 'ఉపయోగకరం కాదు';
+
+  @override
+  String get reviewYesMerge => 'అవును, విలీనం చేయండి';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'సంభాషణలు: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'టైప్ చేయండి';
+
+  @override
+  String get reviewLoadFailed => 'మీ ప్రశ్నలను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get reviewCaughtUpTitle => 'సమాధానం ఇవ్వడానికి ఏమీ లేదు';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi కి మీ అవసరం ఉన్నప్పుడే ఇక్కడ అడుగుతుంది.';
+
+  @override
+  String get reviewRecentChanges => 'ఇటీవలి మార్పులు';
+
+  @override
+  String get reviewChangesIntro => 'గత 30 రోజుల్లో Omi స్వయంగా మార్చినవి. తప్పుగా కనిపించిన వాటిని రద్దు చేయండి.';
+
+  @override
+  String get reviewChangeUndone => 'రద్దు చేయబడింది. Omi దీన్ని స్వయంగా మళ్లీ చేయదు.';
+
+  @override
+  String get reviewChangeFailed => 'ఈ మార్పును అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get reviewChangesLoadFailed => 'ఇటీవలి మార్పులను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get reviewNoChangesTitle => 'ఇంకా మార్పులు లేవు';
+
+  @override
+  String get reviewNoChangesBody => 'Omi మీ నోట్స్‌ను చక్కబెట్టినప్పుడు, మార్పులు ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get reviewShowMore => 'మరిన్ని చూపండి';
+
+  @override
+  String get entityKeptCurrent => 'Omi ద్వారా తాజాగా ఉంచబడింది';
+
+  @override
+  String get entityNotRight => 'సరిగా లేదా?';
+
+  @override
+  String get entityCorrectionTitle => 'ఏది సరిగా లేదు?';
+
+  @override
+  String get entityCorrectionHint => 'ఏమి సరిచేయాలో Omi కి చెప్పండి';
+
+  @override
+  String get entityCorrectionSaved => 'ధన్యవాదాలు. Omi దీన్ని సరిచేస్తుంది.';
+
+  @override
+  String get entityCorrectionFailed => 'మీ సవరణను పంపలేకపోయాం. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get entityLoadFailed => 'ఈ పేజీని లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get entityProject => 'ప్రాజెక్ట్';
+
+  @override
+  String get entityProjects => 'ప్రాజెక్ట్‌లు';
+
+  @override
+  String get entityDecisions => 'నిర్ణయాలు';
+
+  @override
+  String get entityOpenTasks => 'తెరిచి ఉన్న టాస్క్‌లు';
+
+  @override
+  String get entityOpenThreads => 'తెరిచి ఉన్న అంశాలు';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '$name కోసం వేచి ఉంది';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'గడువు $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omi కి తెలిసినవి';
+
+  @override
+  String get entityRecentConversations => 'ఇటీవలి సంభాషణలు';
+
+  @override
+  String get tasksNoProject => 'ప్రాజెక్ట్ లేదు';
+
+  @override
+  String get tasksGroupByProject => 'ప్రాజెక్ట్ ప్రకారం సమూహపరచండి';
+
+  @override
+  String get tasksGroupByDate => 'తేదీ ప్రకారం సమూహపరచండి';
 }

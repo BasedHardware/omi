@@ -12449,17 +12449,228 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Deneyiminiz kişiselleştiriliyor';
 
   @override
-  String get onboardingRatingPromptTitle => 'Beklerken, Omi\'yi kullanmak hoşunuza gitti mi?';
+  String get onboardingRatingPromptTitle => 'Omi\'yi beğeniyor musunuz?';
 
   @override
-  String get onboardingRatingPromptBody => '5 yıldız vermeniz bize gerçekten çok yardımcı olur ❤️';
+  String get onboardingRatingPromptYes => 'Evet';
 
   @override
-  String get onboardingRatingPromptYes => 'Evet, size destek olmak istiyorum!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pek değil';
+  String get onboardingRatingPromptNo => 'Hayır';
 
   @override
   String get partialRecording => 'Kısmi kayıt';
+
+  @override
+  String get importTranscriptFiles => 'Transkript dosyaları';
+
+  @override
+  String get importTranscriptFilesDescription =>
+      'SRT, VTT veya TXT transkriptlerini ya da bunları içeren bir ZIP dosyasını seçin';
+
+  @override
+  String get importTooManyAttempts => 'Şu anda çok fazla içe aktarma var. Daha sonra tekrar deneyin.';
+
+  @override
+  String get importFileTooLarge => 'Bu dosya içe aktarmak için çok büyük.';
+
+  @override
+  String get importUnsupportedFileType => 'Bu dosya türü içe aktarılamaz.';
+
+  @override
+  String get reviewTitle => 'İnceleme';
+
+  @override
+  String get reviewEntryTitle => 'Size sorular';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count kaldı';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Bunu kim söyledi?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '“$name” ile aynı kişi mi?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Bu nasıl yazılır?';
+
+  @override
+  String get reviewPlayClip => 'Klibi oynat';
+
+  @override
+  String get reviewStopClip => 'Klibi durdur';
+
+  @override
+  String get reviewOpenDetailsHint => 'Ayrıntıları açar';
+
+  @override
+  String get reviewAnswerMe => 'Ben';
+
+  @override
+  String get reviewAnswerOther => 'Diğer';
+
+  @override
+  String get reviewAddTask => 'Görev ekle';
+
+  @override
+  String get reviewAnswerFailed => 'Yanıtınız kaydedilemedi. Tekrar deneyin.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Bu yanıt $count konuşmayı etiketler';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Bilinmeyen konuşmacı';
+
+  @override
+  String get reviewNewPersonName => 'Adı';
+
+  @override
+  String get reviewSomeoneElse => 'Başka biri…';
+
+  @override
+  String get reviewConfirm => 'Onayla';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '$name kişisini onayla';
+  }
+
+  @override
+  String get reviewNotSure => 'Emin değilim';
+
+  @override
+  String get reviewOpenConversation => 'Konuşma';
+
+  @override
+  String get reviewTaskField => 'Görev';
+
+  @override
+  String get reviewDue => 'Son tarih';
+
+  @override
+  String get reviewNoDate => 'Yok';
+
+  @override
+  String get reviewProject => 'Proje';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Zaten yapıldı';
+
+  @override
+  String get reviewReasonNotMine => 'Benim değil';
+
+  @override
+  String get reviewReasonNotUseful => 'Faydalı değil';
+
+  @override
+  String get reviewYesMerge => 'Evet, birleştir';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Konuşmalar: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Yaz';
+
+  @override
+  String get reviewLoadFailed => 'Sorularınız yüklenemedi.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Yanıtlanacak bir şey yok';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi burada yalnızca size ihtiyaç duyduğunda soru soracak.';
+
+  @override
+  String get reviewRecentChanges => 'Son değişiklikler';
+
+  @override
+  String get reviewChangesIntro =>
+      'Omi’nin son 30 günde kendi kendine yaptığı değişiklikler. Yanlış görünen her şeyi geri alın.';
+
+  @override
+  String get reviewChangeUndone => 'Geri alındı. Omi bunu kendi kendine tekrarlamayacak.';
+
+  @override
+  String get reviewChangeFailed => 'Bu değişiklik güncellenemedi. Tekrar deneyin.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Son değişiklikler yüklenemedi.';
+
+  @override
+  String get reviewNoChangesTitle => 'Henüz değişiklik yok';
+
+  @override
+  String get reviewNoChangesBody => 'Omi notlarınızı düzenlediğinde değişiklikler burada görünür.';
+
+  @override
+  String get reviewShowMore => 'Daha fazla göster';
+
+  @override
+  String get entityKeptCurrent => 'Omi tarafından güncel tutuluyor';
+
+  @override
+  String get entityNotRight => 'Doğru değil mi?';
+
+  @override
+  String get entityCorrectionTitle => 'Neresi doğru değil?';
+
+  @override
+  String get entityCorrectionHint => 'Omi’ye neyi düzelteceğini söyleyin';
+
+  @override
+  String get entityCorrectionSaved => 'Teşekkürler. Omi düzeltecek.';
+
+  @override
+  String get entityCorrectionFailed => 'Düzeltmeniz gönderilemedi. Tekrar deneyin.';
+
+  @override
+  String get entityLoadFailed => 'Bu sayfa yüklenemedi.';
+
+  @override
+  String get entityProject => 'Proje';
+
+  @override
+  String get entityProjects => 'Projeler';
+
+  @override
+  String get entityDecisions => 'Kararlar';
+
+  @override
+  String get entityOpenTasks => 'Açık görevler';
+
+  @override
+  String get entityOpenThreads => 'Açık konular';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '$name bekleniyor';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Son tarih: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omi’nin bildikleri';
+
+  @override
+  String get entityRecentConversations => 'Son konuşmalar';
+
+  @override
+  String get tasksNoProject => 'Proje yok';
+
+  @override
+  String get tasksGroupByProject => 'Projeye göre grupla';
+
+  @override
+  String get tasksGroupByDate => 'Tarihe göre grupla';
 }

@@ -1,5 +1,17 @@
 # Managed model credentials
 
+Task threads resolve their creation profile before continuity preparation or
+journal reads. The shared workstream resolver uses the owner's stored profile
+and defaults to managed Omi when no preference exists; preparation must not
+implicitly pin Claude and its separate billing account. Existing sessions keep
+their provider. After a Claude failure, a user whose current choice is Omi AI can
+explicitly switch that idle thread with its expected profile generation, retaining
+the journal and without automatically resending the failed request.
+Reopened threads read the exact owned session's bounded latest-run summary;
+matching execution-profile generations and an idle session are required before
+restoring recovery. Unknown provenance and errors from an earlier profile are
+omitted, and optional recovery reads cannot replace a newer foreground error.
+
 AuthService owns the managed session. Each pi-mono HTTP request asks Swift for
 current Authorization and usable BYOK headers through the existing Unix socket
 relay. The runtime retains reply routing identities only, with a 30-second timeout.

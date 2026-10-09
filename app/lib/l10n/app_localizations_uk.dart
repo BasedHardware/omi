@@ -12465,17 +12465,226 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Персоналізуємо ваш досвід';
 
   @override
-  String get onboardingRatingPromptTitle => 'Поки чекаєте, вам приємно користуватися Omi?';
+  String get onboardingRatingPromptTitle => 'Вам подобається Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Оцінка в 5 зірок дуже нам допоможе ❤️';
+  String get onboardingRatingPromptYes => 'Так';
 
   @override
-  String get onboardingRatingPromptYes => 'Так, хочу вас підтримати!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Не дуже';
+  String get onboardingRatingPromptNo => 'Ні';
 
   @override
   String get partialRecording => 'Частковий запис';
+
+  @override
+  String get importTranscriptFiles => 'Файли розшифровок';
+
+  @override
+  String get importTranscriptFilesDescription => 'Виберіть розшифровки SRT, VTT або TXT чи ZIP-архів із ними';
+
+  @override
+  String get importTooManyAttempts => 'Зараз забагато імпортів. Спробуйте пізніше.';
+
+  @override
+  String get importFileTooLarge => 'Цей файл завеликий для імпорту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файли цього типу не можна імпортувати.';
+
+  @override
+  String get reviewTitle => 'Перегляд';
+
+  @override
+  String get reviewEntryTitle => 'Запитання до вас';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Залишилося: $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Хто це сказав?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Це та сама людина, що й «$name»?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Як це пишеться?';
+
+  @override
+  String get reviewPlayClip => 'Відтворити фрагмент';
+
+  @override
+  String get reviewStopClip => 'Зупинити фрагмент';
+
+  @override
+  String get reviewOpenDetailsHint => 'Відкриває подробиці';
+
+  @override
+  String get reviewAnswerMe => 'Я';
+
+  @override
+  String get reviewAnswerOther => 'Інше';
+
+  @override
+  String get reviewAddTask => 'Додати завдання';
+
+  @override
+  String get reviewAnswerFailed => 'Не вдалося зберегти відповідь. Спробуйте ще раз.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Ця відповідь позначить розмови: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Невідомий мовець';
+
+  @override
+  String get reviewNewPersonName => 'Ім’я';
+
+  @override
+  String get reviewSomeoneElse => 'Хтось інший…';
+
+  @override
+  String get reviewConfirm => 'Підтвердити';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Підтвердити: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Не впевнений';
+
+  @override
+  String get reviewOpenConversation => 'Розмова';
+
+  @override
+  String get reviewTaskField => 'Завдання';
+
+  @override
+  String get reviewDue => 'Строк';
+
+  @override
+  String get reviewNoDate => 'Немає';
+
+  @override
+  String get reviewProject => 'Проєкт';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Уже зроблено';
+
+  @override
+  String get reviewReasonNotMine => 'Не моє';
+
+  @override
+  String get reviewReasonNotUseful => 'Некорисно';
+
+  @override
+  String get reviewYesMerge => 'Так, об’єднати';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Розмови: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Ввести вручну';
+
+  @override
+  String get reviewLoadFailed => 'Не вдалося завантажити ваші запитання.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Нічого відповідати';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi запитає тут, лише коли ви йому знадобитесь.';
+
+  @override
+  String get reviewRecentChanges => 'Нещодавні зміни';
+
+  @override
+  String get reviewChangesIntro => 'Що Omi змінив сам за останні 30 днів. Скасуйте все, що виглядає неправильно.';
+
+  @override
+  String get reviewChangeUndone => 'Скасовано. Omi не робитиме цього знову сам.';
+
+  @override
+  String get reviewChangeFailed => 'Не вдалося оновити цю зміну. Спробуйте ще раз.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Не вдалося завантажити нещодавні зміни.';
+
+  @override
+  String get reviewNoChangesTitle => 'Змін поки немає';
+
+  @override
+  String get reviewNoChangesBody => 'Коли Omi наведе лад у ваших нотатках, зміни з’являться тут.';
+
+  @override
+  String get reviewShowMore => 'Показати більше';
+
+  @override
+  String get entityKeptCurrent => 'Актуальність підтримує Omi';
+
+  @override
+  String get entityNotRight => 'Неправильно?';
+
+  @override
+  String get entityCorrectionTitle => 'Що неправильно?';
+
+  @override
+  String get entityCorrectionHint => 'Скажіть Omi, що виправити';
+
+  @override
+  String get entityCorrectionSaved => 'Дякуємо. Omi це виправить.';
+
+  @override
+  String get entityCorrectionFailed => 'Не вдалося надіслати виправлення. Спробуйте ще раз.';
+
+  @override
+  String get entityLoadFailed => 'Не вдалося завантажити цю сторінку.';
+
+  @override
+  String get entityProject => 'Проєкт';
+
+  @override
+  String get entityProjects => 'Проєкти';
+
+  @override
+  String get entityDecisions => 'Рішення';
+
+  @override
+  String get entityOpenTasks => 'Відкриті завдання';
+
+  @override
+  String get entityOpenThreads => 'Відкриті питання';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Очікування відповіді: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Строк: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Що знає Omi';
+
+  @override
+  String get entityRecentConversations => 'Нещодавні розмови';
+
+  @override
+  String get tasksNoProject => 'Без проєкту';
+
+  @override
+  String get tasksGroupByProject => 'Групувати за проєктом';
+
+  @override
+  String get tasksGroupByDate => 'Групувати за датою';
 }

@@ -94,6 +94,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
@@ -182,9 +183,13 @@ def test_explicitly_selected_planned_job_can_be_created():
 
     assert differences == [resource]
     assert messages == [f"APPLIED {resource}: missing, state"]
-    assert [
-        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
-    ] == [("post", "frame-request-retention-hourly")]
+    # Cloud Scheduler v1 create takes the full job name in the body; it has no jobId parameter.
+    posts = [(url, kwargs) for method, url, kwargs in session.calls if method == "post"]
+    assert len(posts) == 1
+    url, kwargs = posts[0]
+    assert url.endswith("/projects/based-hardware-dev/locations/us-central1/jobs")
+    assert "params" not in kwargs
+    assert kwargs["json"]["name"] == resource
 
 
 def test_check_validates_a_planned_job_after_it_exists():

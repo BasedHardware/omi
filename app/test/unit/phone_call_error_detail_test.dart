@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/http/api/phone_calls.dart';
+import 'package:omi/backend/http/error_detail.dart';
 
 void main() {
   group('errorDetailMessage', () {
@@ -16,12 +16,7 @@ void main() {
 
     test('renders the quota map instead of throwing on it', () {
       final body = jsonEncode({
-        'detail': {
-          'error': 'phone_call_quota_exceeded',
-          'monthly_limit': 5,
-          'monthly_used': 5,
-          'reset_at': 1767225600,
-        },
+        'detail': {'error': 'phone_call_quota_exceeded', 'monthly_limit': 5, 'monthly_used': 5, 'reset_at': 1767225600},
       });
       expect(errorDetailMessage(body), contains('5 calls'));
     });
