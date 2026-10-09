@@ -72,7 +72,7 @@ def test_authenticated_off_is_cheap_noop(client, monkeypatch):
     assert response.json() == {'complete': 0, 'failed': 0, 'not_admitted': 0, 'deadline': 0}
 
 
-def test_route_returns_counts_only(client, monkeypatch):
+def test_route_returns_counts_only(client, monkeypatch, caplog):
     monkeypatch.setattr(
         cloud_tasks.id_token,
         'verify_oauth2_token',
@@ -93,9 +93,13 @@ def test_route_returns_counts_only(client, monkeypatch):
             ]
         ),
     )
-    response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
+    with caplog.at_level('INFO', logger='routers.dream_sweep'):
+        response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
     assert response.json() == {'complete': 1, 'failed': 1, 'not_admitted': 1, 'deadline': 1}
     assert UID not in response.text and 'private' not in response.text
+    logged = caplog.text
+    assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 failure_types=synthetic:1' in logged
+    assert UID not in logged and 'private' not in logged
 
 
 @pytest.fixture
