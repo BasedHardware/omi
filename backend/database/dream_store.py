@@ -6,6 +6,7 @@ spend is reserved before inference; ambiguous failures retain their reservation.
 """
 
 import os
+from hashlib import sha256
 
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -33,38 +34,86 @@ def state_ref(database, uid):
     return database.collection('dream_users').document(uid)
 
 
+DIRTY_LIMIT = 500
+WRITE_CHUNK = 400  # Leave room for state/report writes in Firestore's 500-write limit.
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def dirty_id(collection, key):
+    # Hashing also handles opaque ids containing ':' without collisions or path injection.
+    return sha256((collection + '/' + key).encode()).hexdigest()
+
+
 def mark_dirty(uid, refs, *, firestore_client=None):
     # Every product write calls this; outside the cohort it must cost no Firestore read.
-    if not may_be_eligible(uid):
+    if mode() == 'off' or not refs or not may_be_eligible(uid):
         return
     database = client(firestore_client)
     user = database.collection('users').document(uid).get().to_dict() or {}
     if not eligible(uid, user):
         return
     state = state_ref(database, uid)
-    # Plan ids come from the shared catalog, never a duplicate plan list.
     plan = (user.get('subscription') or {}).get('plan', user.get('plan', ''))
     weight = 2 if plan in PAID_PLAN_IDS else 1
-
-    @firestore.transactional
-    def write(tx):
-        data = state.get(transaction=tx).to_dict() or {}
-        seq = int(data.get('sequence', 0))
-        for start in range(0, len(refs), 5):
-            seq += 1
-            event = state.collection('events').document(str(seq))
-            tx.set(
-                event,
+    refs = list(dict.fromkeys(refs))
+    for start in range(0, len(refs), WRITE_CHUNK):
+        batch = database.batch()
+        for collection, key in refs[start : start + WRITE_CHUNK]:
+            batch.set(
+                state.collection('dirty').document(dirty_id(collection, key)),
                 {
-                    'sequence': seq,
-                    # Firestore rejects arrays nested directly in arrays.
-                    'refs': [{'collection': c, 'id': k} for c, k in refs[start : start + 5]],
-                    'at': datetime.now(timezone.utc),
+                    'collection': collection,
+                    'id': key,
+                    'version': str(uuid4()),
+                    'last_changed_at': firestore.SERVER_TIMESTAMP,
+                    'change_count': firestore.Increment(1),
                 },
+                merge=True,
             )
-        tx.set(state, {**data, 'sequence': seq, 'score': int(data.get('score', 0)) + weight})
+        # Bump once in the final chunk: a concurrent pass must not clear the
+        # score before this product write has finished queuing all its refs.
+        if start + WRITE_CHUNK >= len(refs):
+            batch.set(state, {'score': firestore.Increment(weight)}, merge=True)
+        batch.commit()
+        trim_dirty(uid, firestore_client=database)
 
-    write(database.transaction())
+
+def dirty_count(uid, *, transaction=None, firestore_client=None):
+    # Aggregation reads index entries, not every document's contents. Under the
+    # 500-ref cap it costs one billed read and avoids a per-write state transaction.
+    query = state_ref(client(firestore_client), uid).collection('dirty')
+    return int(query.count().get(transaction=transaction)[0][0].value)
+
+
+def dirty_refs(uid, *, limit=DIRTY_LIMIT, newest=True, transaction=None, firestore_client=None):
+    query = state_ref(client(firestore_client), uid).collection('dirty')
+    return list(
+        query.order_by('last_changed_at', direction='DESCENDING' if newest else 'ASCENDING')
+        .limit(max(1, min(limit, DIRTY_LIMIT)))
+        .stream(transaction=transaction)
+    )
+
+
+def trim_dirty(uid, *, firestore_client=None):
+    database = client(firestore_client)
+    state = state_ref(database, uid)
+    while (excess := dirty_count(uid, firestore_client=database) - DIRTY_LIMIT) > 0:
+        oldest = dirty_refs(uid, limit=min(excess, WRITE_CHUNK), newest=False, firestore_client=database)
+
+        @firestore.transactional
+        def trim(tx):
+            # Recheck size in the transaction: a pass may have drained records
+            # after the outer count. Only prune current excess, never spare refs.
+            excess_now = max(0, dirty_count(uid, transaction=tx, firestore_client=database) - DIRTY_LIMIT)
+            # Fence each observed version: concurrent refreshes must survive.
+            current = [(s, s.reference.get(transaction=tx).to_dict() or {}) for s in oldest]
+            victims = [s for s, row in current if row.get('version') == s.to_dict()['version']][:excess_now]
+            for snapshot in victims:
+                tx.delete(snapshot.reference)
+            if victims:
+                tx.set(state, {'dirty_dropped': firestore.Increment(len(victims))}, merge=True)
+
+        trim(database.transaction())
 
 
 def candidates(*, limit=100, firestore_client=None):
@@ -110,8 +159,10 @@ def acquire(uid, caps: Caps, *, now=None, firestore_client=None):
         lease = {
             'run_id': run_id,
             'day': day,
-            'watermark': int(data.get('watermark', 0)),
-            'sequence': data['sequence'],
+            'watermark': data.get('watermark') if isinstance(data.get('watermark'), datetime) else EPOCH,
+            'dirty_dropped': int(data.get('dirty_dropped', 0)),
+            'dirty_dropped_reported': int(data.get('dirty_dropped_reported', 0)),
+            'reservation_usd': caps.reservation_usd,
             'score': data['score'],
             'mode': mode(),
             'started_at': now,
@@ -129,18 +180,12 @@ def assert_lease(uid, run_id, *, firestore_client=None):
         raise RuntimeError('dream_lease_lost')
 
 
-def events(uid, lease, *, firestore_client=None):
-    query = state_ref(client(firestore_client), uid).collection('events')
-    query = query.where(filter=firestore.FieldFilter('sequence', '>', lease['watermark']))
-    query = query.where(filter=firestore.FieldFilter('sequence', '<=', lease['sequence']))
-    return [s.to_dict() for s in query.order_by('sequence').limit(4).stream()]
-
-
-def finish(uid, lease, report, *, success, watermark=None, release=True, firestore_client=None):
+def finish(uid, lease, report, *, success, consumed=(), release=True, refund=False, firestore_client=None):
     database = client(firestore_client)
     state = state_ref(database, uid)
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
-    # Reuse encrypted content encoding; no private plaintext in run docs.
+    spend = database.collection('dream_spend').document(lease['day'])
+    report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     encoded = _review_store().encode_doc(uid, {'source': report})
 
     @firestore.transactional
@@ -148,8 +193,23 @@ def finish(uid, lease, report, *, success, watermark=None, release=True, firesto
         data = state.get(transaction=tx).to_dict() or {}
         if (data.get('lease') or {}).get('run_id') != lease['run_id']:
             raise RuntimeError('dream_lease_lost')
-        end = watermark if success else lease['watermark']
-        drained = end == lease['sequence']
+        budget = (spend.get(transaction=tx).to_dict() or {}) if refund else {}
+        # Read before writing, including the bounded queue query. This makes
+        # acknowledging versions and deciding whether the queue drained atomic.
+        queued = dirty_refs(uid, newest=False, transaction=tx, firestore_client=database) if success else []
+        versions = {item['version'] for item in consumed}
+        acknowledged = [s for s in queued if s.to_dict()['version'] in versions]
+        remaining = [s for s in queued if s.to_dict()['version'] not in versions]
+        watermark = lease['watermark']
+        if success and consumed:
+            frontier = max(item['last_changed_at'] for item in consumed)
+            if remaining:
+                frontier = min(
+                    frontier, min(s.to_dict()['last_changed_at'] for s in remaining) - timedelta(microseconds=1)
+                )
+            watermark = max(watermark, frontier)
+        for snapshot in acknowledged:
+            tx.delete(snapshot.reference)
         tx.set(
             run,
             {
@@ -160,15 +220,20 @@ def finish(uid, lease, report, *, success, watermark=None, release=True, firesto
                 'success': success,
             },
         )
-        tx.set(
-            state,
-            {
-                **data,
-                'lease': None if release else lease,
-                'watermark': end,
-                'score': max(0, data['score'] - lease['score']) if drained else data['score'],
-            },
-        )
+        patch = {
+            'lease': None if release else lease,
+            # The dirty set is authoritative; never filter reads by this diagnostic
+            # frontier, which must remain behind older unread references.
+            'watermark': watermark,
+            'dirty_dropped_reported': lease['dirty_dropped'],
+            'score': max(0, data['score'] - lease['score']) if success and not remaining else data['score'],
+        }
+        if refund:
+            # A midnight completion must not decrement the new day's allowance.
+            if data.get('day') == lease['day']:
+                patch['passes'] = max(0, int(data.get('passes', 0)) - 1)
+            tx.set(spend, {'reserved_usd': max(0, float(budget.get('reserved_usd', 0)) - lease['reservation_usd'])})
+        tx.update(state, patch)
 
     complete(database.transaction())
 

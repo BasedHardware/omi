@@ -49,16 +49,51 @@ and bind `DREAM_AGENT_FEEDBACK_SALT=DREAM_AGENT_FEEDBACK_SALT:latest` on
 backend-sync. The existing Review surface must also be enabled for live admission.
 Secret creation, binding and mode promotion require separate authorization.
 
-Each admitted producer write cheaply records references in `dream_users/{uid}`
-and sequence-numbered `events` documents. Conversation processing, canonical
-memory appends, legacy memory compatibility writes, tasks and Candidates signal
-the queue. Self-writes do not dirty it again. Paid plans have weight two, other
-plans one, using the shared plan catalog. Drain considers the highest weighted
-score first, at most 100 users per invocation. Each pass reads up to four events
-(five source references each), touches their entities/facts, and adds up to 30
-synced OCR rows. A sequence watermark advances only after a successful pass;
-arrivals after admission survive completion. The model sees bounded excerpts;
-mutation tools retain complete snapshots and fence the current records.
+Each admitted producer write records distinct references at
+`dream_users/{uid}/dirty/{sha256(collection + "/" + id)}`. Each document contains
+`collection`, `id`, a unique `version`, server `last_changed_at`, and an atomic
+`change_count`. Repeated writes replace the version/time and increment the count
+without adding queue entries. State `score` still increments once per product
+write (paid plans weight two, other plans one). Conversation processing,
+canonical memory appends, legacy memory compatibility writes, tasks and
+Candidates signal the queue. Self-writes do not dirty it again.
+
+The ordinary enqueue reads the cohort user's document, batch-merges one dirty
+document per distinct reference and atomically increments state score. It does
+not transactionally read state. A count aggregation checks the 500-reference cap;
+overflow transactions delete the oldest observed versions, preserving concurrent
+refreshes. `dirty_dropped` accumulates pruning losses in state; each encrypted run
+report counts drops since the previous report. Large writes are chunked at 400
+references, with cap enforcement after each chunk. The cap is enforced before an
+enqueue returns successfully; storage failures or in-flight concurrent writes
+can leave transient overflow, which the next successful enqueue trims.
+
+For a single-reference write below the cap, the previous cost was two document
+reads (user + transactional state) and two writes (state + event), plus retries on
+state contention. The new cost is one document read, one count aggregation
+(normally one billed read below 1,000 index entries), and two writes (state +
+dirty), without state-transaction retries. A chunk of n distinct references now
+writes n dirty documents plus one score write on the final chunk, versus the old
+one event per five references plus state. Overflow adds bounded query/document
+reads and deletes. Coalescing reduces pass reads and retained documents for
+repeated writes; it does not claim fewer billed writes for multi-reference batches.
+
+Drain considers the highest weighted score first, at most 100 users per
+invocation. A pass reads distinct queued references newest first, at most 400
+before enrichment, stopping when their conservatively encoded triage excerpts
+would exceed `min(6000, Caps.tokens / 3)` including schema/framing/completion.
+Touched identities and up to 30 synced OCR rows share that budget. Records
+changed after admission stay queued. Successful completion deletes only the
+versions actually selected; failed passes retain the queue. Missing or invisible
+records are acknowledged without purchasing inference. A pass with no visible
+records returns `not_admitted` and refunds its provisional admission/reservation.
+
+The dirty set is authoritative. The timestamp `watermark` is a diagnostic
+frontier and never advances past older unread references; it does not filter the
+queue. Existing shadow-only sequence `events` documents are ignored and are not
+backfilled or deleted. No historical customer records are rewritten. The model
+sees bounded excerpts; mutation tools retain complete snapshots and fence the
+current records.
 
 Triage uses `omi:auto:dream-triage` (Luna). Empty triage buys no reasoning. Main
 reasoning uses `omi:auto:dream-reasoning`: Luna before #20960, then the gateway's
@@ -75,7 +110,7 @@ All knobs are declared in `config/feature-flags.yaml`:
 | `DREAM_AGENT_UID_ALLOWLIST` | empty |
 | `DREAM_AGENT_TESTFLIGHT_ENABLED` | false |
 | `DREAM_AGENT_TOKENS_PER_PASS` | 24,000 across both stages |
-| `DREAM_AGENT_PASSES_PER_DAY` | 2 per user, UTC; failed/shadow admissions count |
+| `DREAM_AGENT_PASSES_PER_DAY` | 2 per user, UTC; billable/ambiguous failed and shadow admissions count |
 | `DREAM_AGENT_EDITS_PER_PASS` | 10, shared with slow task proposals and vocabulary |
 | `DREAM_AGENT_DAILY_USD` | $20 global daily reservation ceiling |
 | `DREAM_AGENT_MAX_USD_PER_TOKEN` | $0.00001 conservative upper bound |
@@ -86,7 +121,14 @@ All knobs are declared in `config/feature-flags.yaml`:
 | `DREAM_AGENT_FEEDBACK_SALT` | unset; storage refuses without a 32-character secret |
 
 Admission reserves the entire pass ceiling ($0.24 with defaults), and keeps it
-reserved through success or ambiguous failure. Reports distinguish this ceiling
+reserved through success or ambiguous failure. Idle passes and confirmed first-call
+gateway rejections release the reservation and decrement the admission count.
+Local configuration failures and timeouts before any model dispatch also refund
+spend/admissions; a timeout retains the worker-safety lease.
+Token usage is captured before typed-output validation, so an invalid paid response
+still counts. A rejection after a successful triage call still counts; transport
+failures with unknown usage retain the reservation. Refunds use the admission UTC
+day, even if completion crosses midnight. Reports distinguish this ceiling
 from measured tokens and their conservative cost upper bound; they do not claim
 an actual provider bill. The provider adapter bounds input using encoded bytes
 plus framing/schema overhead, and limits completion before purchasing a call.
@@ -145,7 +187,13 @@ not a user endpoint. It reads at most 10,000 reports from the current epoch.
 Feedback collection requires `on`; shadow stores only privacy-checked would-file
 reports in the user's encrypted run document.
 
-Local safety suites: `test_dream_sweep.py`, `test_dream_agent.py`, `test_dream_lanes.py` and
+Local safety suites: `test_dream_queue.py`, `test_dream_sweep.py`, `test_dream_agent.py`, `test_dream_lanes.py` and
 `test_dream_tools.py`, `test_dream_memory_merge.py`, and `test_dream_cohort.py`, through `backend/test.sh`. Repository typechecking,
 Firestore query guards, Review/harness regressions and `make preflight` are
 separate checks. No live canary or deployed acceptance is claimed.
+
+The queue fixture's ordered reads, atomic transforms and transaction deletes are
+also checked against a local Firestore emulator by
+`tests/integration/test_dream_queue_emulator.py`, selected explicitly through
+`backend/test.sh` with `BACKEND_PYTEST_MARK_EXPR=integration`. Use only a loopback
+emulator and the synthetic `demo-dream-coalesce` project.

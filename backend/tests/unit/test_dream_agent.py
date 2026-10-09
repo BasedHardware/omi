@@ -10,9 +10,9 @@ import pytest
 from config.dream_agent import Caps, eligible
 from database import dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Triage, Cluster, Term, FrameQuestion, SlowTask
-from utils import dream_agent, dream_tools, dream_transport
+from utils import dream_agent, dream_tools, dream_transport, dream_prompt
 from utils.llm import shaped_agent
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.support.dream_firestore import DreamFirestore
 
 UID = 'synthetic-owner'
 NOW = datetime(2026, 10, 8, tzinfo=timezone.utc)
@@ -20,7 +20,7 @@ NOW = datetime(2026, 10, 8, tzinfo=timezone.utc)
 
 @pytest.fixture
 def admission(monkeypatch):
-    database = StrictFirestore()
+    database = DreamFirestore()
     database.rows[('users', UID)] = {}
     database.rows[('dream_users', UID)] = {'sequence': 2, 'watermark': 0, 'score': 2}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
@@ -125,12 +125,12 @@ def test_aggregate_hides_rare_patterns_and_does_not_double_count_salts():
 
 @pytest.fixture
 def pass_context(monkeypatch):
-    lease = {'run_id': 'synthetic-run', 'mode': 'shadow', 'watermark': 0, 'sequence': 1, 'score': 1}
+    lease = {'run_id': 'synthetic-run', 'mode': 'shadow', 'watermark': dream_store.EPOCH, 'score': 1}
     records = {'conversations/c1': {'id': 'c1', 'structured': {'title': 'Meeting'}}}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: lease)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a, **k: None)
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, 1))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
@@ -286,12 +286,28 @@ def test_dirty_hook_uses_created_task_id_and_suppresses_dream_writes(monkeypatch
 def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
     lease = dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission)
     state = admission.rows[('dream_users', UID)]
-    state.update(sequence=3, score=4)
+    state.update(score=4)
+    from datetime import timedelta
+
+    consumed = [{'version': 'read-version', 'last_changed_at': NOW}]
+    state_path = ('dream_users', UID, 'dirty')
+    admission.rows[(*state_path, 'read')] = {'version': 'read-version', 'last_changed_at': NOW}
+    admission.rows[(*state_path, 'arrival')] = {
+        'version': 'arrival-version',
+        'last_changed_at': NOW + timedelta(seconds=1),
+    }
     dream_store.finish(
-        UID, lease, {'proposed': {'private': 'synthetic text'}}, success=True, watermark=2, firestore_client=admission
+        UID,
+        lease,
+        {'proposed': {'private': 'synthetic text'}},
+        success=True,
+        consumed=consumed,
+        firestore_client=admission,
     )
     state = admission.rows[('dream_users', UID)]
-    assert state['watermark'] == 2 and state['sequence'] == 3 and state['score'] == 2
+    assert state['watermark'] == NOW and state['score'] == 4
+    assert (*state_path, 'read') not in admission.rows
+    assert (*state_path, 'arrival') in admission.rows
     assert state['lease'] is None
     report = admission.rows[('users', UID, 'dream_runs', lease['run_id'])]
     assert 'review_encrypted_v1' in report['source']
@@ -300,11 +316,9 @@ def test_completed_watermark_preserves_arrivals_and_encrypts_report(admission):
 
 def test_timeout_retains_lease_and_spend_reservation(admission):
     lease = dream_store.acquire(UID, Caps(), now=NOW, firestore_client=admission)
-    dream_store.finish(
-        UID, lease, {'status': 'failed'}, success=False, watermark=2, release=False, firestore_client=admission
-    )
+    dream_store.finish(UID, lease, {'status': 'failed'}, success=False, release=False, firestore_client=admission)
     assert admission.rows[('dream_users', UID)]['lease'] == lease
-    assert admission.rows[('dream_users', UID)]['watermark'] == 0
+    assert admission.rows[('dream_users', UID)]['watermark'] == dream_store.EPOCH
     assert admission.rows[('dream_spend', NOW.date().isoformat())]['reserved_usd'] == pytest.approx(0.24)
 
 
@@ -334,7 +348,7 @@ def test_feedback_storage_has_no_uid_and_rotates_distinct_hash(monkeypatch):
 
 
 def test_excerpts_keep_transcript_evidence_when_summary_is_large():
-    excerpt = dream_agent.excerpts(
+    excerpt = dream_prompt.excerpts(
         {
             'conversations/c1': {
                 'structured': {'title': 'x' * 10000},
@@ -353,7 +367,7 @@ def test_large_input_stops_before_gateway_access(monkeypatch):
             dream_transport.model_turn(
                 UID,
                 dream_transport.MAIN_LANE,
-                dream_agent.mount(Plan, 100),
+                dream_prompt.mount(Plan, 100),
                 [{'role': 'user', 'content': 'x' * 10000}],
             )
         )
@@ -361,9 +375,9 @@ def test_large_input_stops_before_gateway_access(monkeypatch):
 
 def test_evidence_shrinks_to_the_triage_budget():
     records = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
-    messages = dream_agent.evidence_message(records, Triage, 6000, chars=240)
+    messages = dream_prompt.evidence_message(records, Triage, 6000, chars=240)
     assert len(__import__('json').loads(messages[0]['content'])['records']) == 50
-    framed = dream_agent.mount(Triage, 6000).messages(messages)
+    framed = dream_prompt.mount(Triage, 6000).messages(messages)
     assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000
 
 
