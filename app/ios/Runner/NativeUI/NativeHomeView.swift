@@ -406,14 +406,20 @@ private struct NativeConversationView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 20) {
                             if selectedTab == 0 {
-                                Text(markdown(detail.summary?.isEmpty == false
-                                              ? detail.summary ?? "" : state.snapshot.copy.noSummary))
-                                    .textSelection(.enabled)
+                                // Blank lines separate paragraphs, which get the reader's paragraph rhythm.
+                                let summary = detail.summary?.isEmpty == false ? detail.summary ?? "" : state.snapshot.copy.noSummary
+                                VStack(alignment: .leading, spacing: 14) {
+                                    ForEach(Array(paragraphs(summary).enumerated()), id: \.offset) { _, paragraph in
+                                        Text(markdown(paragraph)).lineSpacing(3)
+                                    }
+                                }
+                                .textSelection(.enabled)
                             } else if let segments = detail.transcript, !segments.isEmpty {
                                 ForEach(segments) { segment in
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(segment.speaker).font(.subheadline).foregroundStyle(.secondary)
-                                        Text(segment.text).textSelection(.enabled)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(segment.speaker).font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(NativeSpeakerTint.color(for: segment.speaker))
+                                        Text(segment.text).lineSpacing(2).textSelection(.enabled)
                                     }
                                 }
                             } else {
@@ -478,6 +484,11 @@ private struct NativeConversationView: View {
             guard !Task.isCancelled, available else { detail = nil; return }
             failed = true
         }
+    }
+
+    private func paragraphs(_ text: String) -> [String] {
+        let parts = text.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return parts.isEmpty ? [text] : parts
     }
 
     private func markdown(_ text: String) -> AttributedString {

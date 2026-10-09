@@ -492,11 +492,11 @@ struct NativeSurfaceView: View {
                     }
             case "transcript":
                 Button { Task { await state.send(row.id) } } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(row.subtitle).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !row.subtitle.isEmpty { NativeSpeakerTint.subtitle(row.subtitle) }
                         Text(nativeHighlighted(AttributedString(row.title), query: state.snapshot.searchValue))
-                            .foregroundStyle(.primary)
-                    }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .foregroundStyle(.primary).lineSpacing(2)
+                    }.frame(maxWidth: .infinity, minHeight: NativeMetrics.rowHeight, alignment: .leading)
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain).contextMenu {
                     ForEach(row.options) { option in
@@ -720,14 +720,16 @@ struct NativeSurfaceView: View {
                             }
                         }
                         ForEach(state.snapshot.sections) { section in
-                            if !section.title.isEmpty { Text(section.title).font(.headline) }
+                            if !section.title.isEmpty {
+                                Text(section.title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                            }
                             ForEach(section.rows) { row in
                                 rowView(row)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, row.kind == "rich_text" ? 4 : 8)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(row.id == projection.currentId ? Color.primary.opacity(0.08) : .clear,
-                                                in: RoundedRectangle(cornerRadius: 12))
+                                                in: RoundedRectangle(cornerRadius: NativeMetrics.blockRadius, style: .continuous))
                                     .id(row.id)
                                     .background(GeometryReader { geometry in
                                         Color.clear.preference(key: NativeChatMessageFramesPreference.self,
@@ -902,15 +904,27 @@ struct NativeSurfaceView: View {
                         else { Text(.init(row.title)) }
                     }.textSelection(.enabled)
                 }
-                if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
-                if row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil) {
+                let hasButton = row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil)
+                // An explicit symbol with a subtitle is a labelled control ("↻ Try again"); the subtitle is its title.
+                let labelled = hasButton && row.symbol != nil && !row.subtitle.isEmpty
+                if !row.subtitle.isEmpty && !labelled { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
+                if labelled, let symbol = row.symbol {
+                    Button { Task { await state.send(row.id) } } label: {
+                        // With the bordered style's padding the capsule keeps the 44 pt hit target.
+                        Label(row.subtitle, systemImage: symbol).font(.subheadline.weight(.semibold))
+                            .frame(minHeight: 32)
+                    }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                    .accessibilityLabel(row.subtitle)
+                } else if hasButton {
                     Button { Task { await state.send(row.id) } } label: {
                         Image(systemName: row.symbol ?? "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.subtitle)
                 }
             }.padding(row.kind == "message_user" ? 14 : 0)
-                .background(row.kind == "message_user" ? Color(uiColor: .secondarySystemGroupedBackground) : .clear,
-                    in: RoundedRectangle(cornerRadius: 20))
+                // Secondary system background reads on the chat's own background in light and dark.
+                .background(row.kind == "message_user" ? Color(uiColor: .secondarySystemBackground) : .clear,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             if row.kind != "message_user" { Spacer(minLength: 10) }
         }.background(GeometryReader { geometry in
             Color.clear.preference(key: NativeChatMessageFramesPreference.self,

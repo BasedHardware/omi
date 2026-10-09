@@ -1282,6 +1282,7 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Open"].exists)
         XCTAssertFalse(app.buttons["Open"].exists)
         XCTAssertTrue(app.buttons["Try again"].exists)
+        XCTAssertGreaterThanOrEqual(app.buttons["Try again"].frame.height, 44, "The labelled retry keeps its hit target")
         capture(app, "native-chat-rich-ai-message")
         // Neither an unlisted link in a reply nor one in a reader row without options leaves the app.
         for link in ["another site", "unlisted note"] {

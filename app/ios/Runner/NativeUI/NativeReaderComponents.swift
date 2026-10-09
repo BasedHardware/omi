@@ -11,12 +11,18 @@ struct NativeRichTextView: View {
         nativeHighlighted((try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(source), query: query)
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(Array((row.blocks ?? []).enumerated()), id: \.offset) { _, block in
-                HStack(alignment: .top, spacing: 10) {
-                    if !block.prefix.isEmpty { Text(block.prefix).frame(minWidth: 16, alignment: .trailing) }
+        let blocks = row.blocks ?? []
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if !block.prefix.isEmpty {
+                        Text(block.prefix).foregroundStyle(.secondary).monospacedDigit()
+                            .frame(minWidth: 18, alignment: .trailing)
+                    }
                     content(block).frame(maxWidth: .infinity, alignment: .leading)
-                }.padding(.leading, CGFloat(block.indent) * 16)
+                }
+                .padding(.leading, CGFloat(block.indent) * 20)
+                .padding(.top, index == 0 ? 0 : Self.spacing(before: block, after: blocks[index - 1]))
             }
         }.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             .environment(\.openURL, OpenURLAction { url in
@@ -27,18 +33,46 @@ struct NativeRichTextView: View {
                 return .handled
             })
     }
+    /// Space above a block: headings get more above than below, list items stay close, paragraphs breathe.
+    private static func spacing(before block: NativeSurfaceRow.RichBlock, after previous: NativeSurfaceRow.RichBlock) -> CGFloat {
+        if block.kind == "heading" { return (block.level ?? 1) <= 2 ? 22 : 18 }
+        if previous.kind == "heading" { return 8 }
+        if !block.prefix.isEmpty && !previous.prefix.isEmpty { return 6 }
+        return 12
+    }
+
+    private static func headingFont(_ level: Int?) -> Font {
+        switch level ?? 1 {
+        case 1: return .title2.bold()
+        case 2: return .title3.weight(.semibold)
+        case 3: return .headline
+        default: return .subheadline.weight(.semibold)
+        }
+    }
+
+    /// Code and tables sit on a translucent fill, so they read on the chat, reader and list-cell backgrounds alike.
+    private static var blockBackground: some View {
+        RoundedRectangle(cornerRadius: NativeMetrics.blockRadius, style: .continuous)
+            .fill(Color(uiColor: .tertiarySystemFill))
+    }
+
     @ViewBuilder private func content(_ block: NativeSurfaceRow.RichBlock) -> some View {
         switch block.kind {
         case "heading":
-            Text(rich(block.text)).font(block.level == 1 ? .title2.bold() : .headline)
+            Text(rich(block.text)).font(Self.headingFont(block.level))
                 .accessibilityAddTraits(.isHeader)
         case "quote":
-            HStack { RoundedRectangle(cornerRadius: 2).fill(.secondary).frame(width: 3)
-                Text(rich(block.text)).foregroundStyle(.secondary) }.fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 1.5).fill(.tertiary).frame(width: 3)
+                Text(rich(block.text)).foregroundStyle(.secondary).lineSpacing(3).padding(.vertical, 2)
+            }.fixedSize(horizontal: false, vertical: true)
         case "code":
-            ScrollView(.horizontal) { Text(nativeHighlighted(AttributedString(block.text), query: query)).font(.body.monospaced()).padding(12) }
-                .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-        case "rule": Divider()
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(nativeHighlighted(AttributedString(block.text), query: query)).font(.callout.monospaced())
+                    .lineSpacing(2).padding(.horizontal, 14).padding(.vertical, 12)
+            }
+            .background(Self.blockBackground)
+        case "rule": Divider().padding(.vertical, 4)
         case "image":
             if let url = URL(string: block.uri ?? "") {
                 AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }
@@ -46,8 +80,8 @@ struct NativeRichTextView: View {
                 if !block.text.isEmpty { Text(nativeHighlighted(AttributedString(block.text), query: query)).font(.caption).foregroundStyle(.secondary) }
             }
         case "table":
-            ScrollView(.horizontal) {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 10) {
                     ForEach(Array((block.cells ?? []).enumerated()), id: \.offset) { index, cells in
                         GridRow { ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
                             Text(rich(cell)).fontWeight(index == 0 ? .semibold : .regular)
@@ -55,10 +89,50 @@ struct NativeRichTextView: View {
                         } }
                         if index == 0 { Divider().gridCellUnsizedAxes(.horizontal) }
                     }
-                }.padding(12)
-            }.background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-        default: Text(rich(block.text)).lineSpacing(4)
+                }.padding(.horizontal, 14).padding(.vertical, 12)
+            }.background(Self.blockBackground)
+        default: Text(rich(block.text)).lineSpacing(3)
         }
+    }
+}
+
+/// A stable tint per speaker label: the same label always gets the same hue, across launches and devices.
+/// Each hue reads at least 4.5:1 on the light and dark reading and card backgrounds; Increase Contrast uses
+/// the label colour instead.
+enum NativeSpeakerTint {
+    private static let hues: [(light: UInt32, dark: UInt32)] = [
+        (0x0A64C8, 0x5AA6FF), (0x1B7A33, 0x5AD27A), (0xB04E00, 0xFFA94D), (0x7A3DBD, 0xC59BFF),
+        (0xBE1A5A, 0xFF7EAB), (0x0D7280, 0x4FD0DB), (0x4A4DC2, 0xA0A2FF), (0x8A5A2C, 0xD6AC80),
+    ]
+
+    static func color(for speaker: String) -> Color {
+        // FNV-1a, because Swift's own hash is seeded per process and would change between launches.
+        var hash: UInt32 = 2_166_136_261
+        for byte in speaker.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+        let hue = hues[Int(hash % UInt32(hues.count))]
+        return Color(uiColor: UIColor { traits in
+            if traits.accessibilityContrast == .high { return .label }
+            let rgb = traits.userInterfaceStyle == .dark ? hue.dark : hue.light
+            return UIColor(red: CGFloat((rgb >> 16) & 0xFF) / 255, green: CGFloat((rgb >> 8) & 0xFF) / 255,
+                           blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
+        })
+    }
+
+    /// A transcript row's subtitle, which its owner joins as "speaker · details": the speaker in its tint and
+    /// semibold, the details secondary. The text, and so the row's accessibility label, is unchanged.
+    static func subtitle(_ subtitle: String, font: Font = .subheadline) -> Text {
+        let range = subtitle.range(of: " · ")
+        let speaker = String(subtitle[..<(range?.lowerBound ?? subtitle.endIndex)])
+        var styled = AttributedString(speaker)
+        styled.font = font.weight(.semibold)
+        styled.foregroundColor = color(for: speaker)
+        if let range {
+            var details = AttributedString(String(subtitle[range.lowerBound...]))
+            details.font = font
+            details.foregroundColor = .secondary
+            styled += details
+        }
+        return Text(styled)
     }
 }
 

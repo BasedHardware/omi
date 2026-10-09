@@ -11,6 +11,12 @@ remaining feature parity checks are complete. iOS 26+ uses Apple's `GlassEffectC
 `.glassEffect` and `.buttonStyle(.glass)` for controls. Earlier systems use standard native
 controls and materials. Reading content stays opaque and text uses the system type ramp.
 
+Shared presentation rules live in Swift only and use snapshot copy alone: `NativeMetrics` (card
+radius matching inset-grouped cells, block radius, 44 pt rows, system-blue accent for selection
+marks and tags), centred `NativeEmptyState` (ContentUnavailableView on iOS 17+), one
+`NativeSectionHeader` style for Home's titled sections, and `NativeBadge` for a subtitle that is
+a short all-caps tag. Transcript speakers get a stable `NativeSpeakerTint` hue from their label.
+
 Home is one SwiftUI screen: device/header actions, authoritative capture status and controls,
 recovery notices, recaps, recordings, dated conversations and the bottom controls share the
 same layout. Flutter no longer puts a small native list below its own Home header.
