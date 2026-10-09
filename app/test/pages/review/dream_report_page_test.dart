@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/dream.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/dream_report.dart';
+import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/dream_report_page.dart';
@@ -85,6 +86,25 @@ void main() {
       expect(run.vocabulary.single.aliases, ['Bella']);
       expect(report.live, isFalse);
       expect(report.manualRunsLeft, 3);
+    });
+
+    test('the generated wire round-trips into the screen model', () {
+      final raw = {
+        'mode': 'shadow',
+        'passes_today': 3,
+        'passes_limit': 4,
+        'manual_runs_today': 0,
+        'manual_runs_limit': 3,
+        'queued_changes': 108,
+        'runs': [_runJson('r1')],
+      };
+      final report = DreamReport.fromJson(wire.GeneratedDreamRunsResponse.fromJson(raw).toJson());
+      final run = report.runs.single;
+      expect(run.runId, 'r1');
+      expect(run.createdAt.toUtc(), DateTime.utc(2026, 10, 9, 11, 0, 47));
+      expect(run.edits.single.targetLabel, 'Paraform sync');
+      expect(run.vocabulary.single.spelling, 'Béla');
+      expect(report.queuedChanges, 108);
     });
 
     test('maps run-now refusals to the two explained cases', () {

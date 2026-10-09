@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/dream_report.dart';
+import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 /// The caller's own dream-agent report and a run-now trigger. Both answer 404 unless the account
@@ -15,20 +16,18 @@ Map<String, dynamic> _object(String body) {
 
 Future<ApiResult<DreamReport>> getDreamReport({int limit = 10}) => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs?limit=$limit', method: 'GET'),
-      decode: (body) => DreamReport.fromJson(_object(body)),
+      // The generated decoder enforces the wire contract; the screen keeps its own lenient model.
+      decode: (body) => DreamReport.fromJson(wire.GeneratedDreamRunsResponse.fromJson(_object(body)).toJson()),
     );
 
 /// Runs one pass now. An idle pass (nothing queued) comes back as a run with status idle.
 Future<ApiResult<DreamRun>> runDreamNow() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/dream/runs', method: 'POST', body: '{}'),
       decode: (body) {
-        final json = _object(body);
-        // An idle pass may carry no run id; give it a stable synthetic one so it can render.
-        final run = DreamRun.fromJson({
-          'run_id': 'idle',
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          ...json,
-        });
+        final json = wire.GeneratedDreamRun.fromJson(_object(body)).toJson();
+        // Idle and deadline passes may carry no run id; give them a stable one so they can render.
+        if ((json['run_id'] as String? ?? '').isEmpty) json['run_id'] = json['status'] ?? 'idle';
+        final run = DreamRun.fromJson(json);
         if (run == null) throw const FormatException('Malformed dream run');
         return run;
       },

@@ -179,9 +179,13 @@ class _StatusCard extends StatelessWidget {
                 onPressed: canRun ? onRunNow : null,
               ),
               const SizedBox(width: OmiSpacing.sm),
-              Text(
-                report.manualRunsLeft > 0 ? l10n.dreamReportRunsLeft(report.manualRunsLeft) : l10n.dreamReportRunLimit,
-                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              Expanded(
+                child: Text(
+                  report.manualRunsLeft > 0
+                      ? l10n.dreamReportRunsLeft(report.manualRunsLeft)
+                      : l10n.dreamReportRunLimit,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
               ),
             ],
           ),
