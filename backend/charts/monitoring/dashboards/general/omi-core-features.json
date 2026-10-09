@@ -3380,17 +3380,17 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Every settled attempt, split by how it ended. Stacked so total throughput and the failure share read together.",
+          "description": "Current-day recap recipient outcomes per cohort pass. Selected recipients can also generate or fail; outcomes are not additive. Backfill generation is excluded.",
           "fieldConfig": {
             "defaults": {
               "custom": {
                 "drawStyle": "line",
-                "fillOpacity": 40,
+                "fillOpacity": 10,
                 "lineWidth": 1,
                 "showPoints": "never",
                 "stacking": {
                   "group": "A",
-                  "mode": "normal"
+                  "mode": "none"
                 }
               },
               "unit": "short",
@@ -3445,17 +3445,17 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Every settled attempt, split by how it ended. Stacked so total throughput and the failure share read together.",
+          "description": "Completed and incomplete cohort passes. One job execution can process a resumed cohort and a current cohort.",
           "fieldConfig": {
             "defaults": {
               "custom": {
                 "drawStyle": "line",
-                "fillOpacity": 40,
+                "fillOpacity": 10,
                 "lineWidth": 1,
                 "showPoints": "never",
                 "stacking": {
                   "group": "A",
-                  "mode": "normal"
+                  "mode": "none"
                 }
               },
               "unit": "short",
@@ -3510,17 +3510,17 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Every settled attempt, split by how it ended. Stacked so total throughput and the failure share read together.",
+          "description": "Saved cohort age observed at tick start, before age-out. A fresh tick records zero; the red line marks the 7200-second abandonment bound.",
           "fieldConfig": {
             "defaults": {
               "custom": {
                 "drawStyle": "line",
-                "fillOpacity": 40,
+                "fillOpacity": 10,
                 "lineWidth": 1,
                 "showPoints": "never",
                 "stacking": {
                   "group": "A",
-                  "mode": "normal"
+                  "mode": "none"
                 },
                 "thresholdsStyle": {
                   "mode": "line"
@@ -3578,12 +3578,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Share of settled attempts that succeeded, over the dashboard's selected time range. Denominator is success+failure only: 'cancelled' is user-initiated and 'stale' means the outcome was never recorded, so neither belongs in a success rate. Deliberately has no clamp on the denominator: with no traffic this reads 'no traffic' rather than a red 0%, because absence and total failure are different states.",
+          "description": "Latest maximum saved-cohort age observed at tick start. Red at 7200 seconds; an abandonment tick retains its diagnostic age until a fresh tick records zero.",
           "fieldConfig": {
             "defaults": {
-              "max": 100,
               "min": 0,
-              "noValue": "no traffic",
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [

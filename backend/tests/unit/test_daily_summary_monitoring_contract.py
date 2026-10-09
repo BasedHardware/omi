@@ -65,6 +65,8 @@ def test_recap_dashboard_four_panels_and_no_grid_overlap():
         'Cohort age now',
     ]
     assert panels[-1]['targets'][0]['instant'] is True
+    assert 'max' not in panels[-1]['fieldConfig']['defaults'], 'cohort age must not inherit a percent clamp'
+    assert panels[0]['fieldConfig']['defaults']['custom']['stacking']['mode'] == 'none'
     for panel in panels[2:]:
         assert panel['fieldConfig']['defaults']['unit'] == 's'
         assert panel['fieldConfig']['defaults']['thresholds']['steps'][-1] == {'color': 'red', 'value': 7200}

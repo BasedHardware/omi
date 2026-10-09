@@ -482,6 +482,7 @@ def patch_service(
 JOB_DONE_VOLUME = 'gmp-job-lifecycle'
 JOB_DONE_FILE = '/var/run/gmp-job/done'
 JOB_COLLECTOR_COMMAND = (
+    'export K_SERVICE="${CLOUD_RUN_JOB:?Cloud Run job identity missing}"; '
     '/run-gmp-entrypoint & collector=$!; '
     'trap "kill -TERM $collector; wait $collector" TERM INT; '
     'while [ ! -f /var/run/gmp-job/done ]; do '
@@ -497,13 +498,18 @@ def patch_job(
     patched = cast(ConfigDict, json.loads(json.dumps(job)))
     if patched.get('kind') != 'Job':
         raise ValueError('expected a Cloud Run Job export')
-    task_template = patched['spec']['template']['spec']['template']
+    execution_template = patched['spec']['template']
+    task_template = execution_template['spec']['template']
     containers = task_template['spec']['containers']
     applications = [c for c in containers if c.get('name') != SIDECAR_NAME]
     if len(applications) != 1:
         raise ValueError('job must have exactly one application container')
     application_name = applications[0].get('name') or 'notifications-job'
-    synthetic = {'spec': {'template': task_template}}
+    # Jobs put annotations on the execution template, containers on the task.
+    # https://cloud.google.com/run/docs/reference/yaml/v1#cloud_run_job_yaml
+    synthetic = {
+        'spec': {'template': {'metadata': execution_template.get('metadata', {}), 'spec': task_template['spec']}}
+    }
     rendered = patch_service(
         synthetic,
         project_number=project_number,
@@ -516,6 +522,7 @@ def patch_job(
     )['spec']['template']
     rendered['metadata'].pop('name', None)
     rendered['metadata']['annotations'].pop('run.googleapis.com/cpu-throttling', None)
+    rendered['metadata']['annotations'].pop('run.googleapis.com/execution-environment', None)
     app, collector = rendered['spec']['containers']
     env = [
         e for e in app.get('env', []) if e['name'] not in ('PROMETHEUS_SIDECAR_PORT', 'PROMETHEUS_SIDECAR_DONE_FILE')
@@ -534,14 +541,16 @@ def patch_job(
     app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
     app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
     # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.
-    collector['env'] = [{'name': 'K_SERVICE', 'value': patched['metadata']['name']}]
+    # Set K_SERVICE inside the process, not the deployed env (reserved on services).
+    # CLOUD_RUN_JOB is supplied by Cloud Run to every job container.
     collector.pop('livenessProbe', None)
     collector['command'] = ['/bin/sh', '-c']
     collector['args'] = [JOB_COLLECTOR_COMMAND]
     collector['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
     rendered['spec']['volumes'] = [v for v in rendered['spec']['volumes'] if v['name'] != JOB_DONE_VOLUME]
     rendered['spec']['volumes'].append({'name': JOB_DONE_VOLUME, 'emptyDir': {'medium': 'Memory', 'sizeLimit': '1Mi'}})
-    patched['spec']['template']['spec']['template'] = rendered
+    execution_template['metadata'] = rendered['metadata']
+    task_template['spec'] = rendered['spec']
     patched.pop('status', None)
     for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
         patched['metadata'].pop(field, None)

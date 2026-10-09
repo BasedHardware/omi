@@ -787,10 +787,15 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent():
         'metadata': {'name': 'notifications-job'},
         'spec': {
             'template': {
+                'metadata': {
+                    'annotations': {
+                        'run.googleapis.com/vpc-access-connector': 'keep',
+                        'run.googleapis.com/secrets': 'existing:projects/123/secrets/existing',
+                    }
+                },
                 'spec': {
                     'taskCount': 1,
                     'template': {
-                        'metadata': {'annotations': {'run.googleapis.com/vpc-access-connector': 'keep'}},
                         'spec': {
                             'timeoutSeconds': '600',
                             'maxRetries': 0,
@@ -798,7 +803,7 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent():
                             'containers': [{'image': 'app:sha', 'env': [{'name': 'FLAG', 'value': 'on'}]}],
                         },
                     },
-                }
+                },
             }
         },
     }
@@ -812,10 +817,17 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent():
     assert {'name': 'FLAG', 'value': 'on'} in app['env']
     assert {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'} in app['env']
     assert collector['image'] == module.SIDECAR_IMAGE
-    assert collector['env'] == [{'name': 'K_SERVICE', 'value': 'notifications-job'}]
+    assert not collector.get('env'), 'do not deploy reserved service environment variables on a job'
+    assert 'export K_SERVICE="${CLOUD_RUN_JOB:?' in collector['args'][0]
     assert 'sleep 35; kill -TERM' in collector['args'][0]
     assert (
-        task['metadata']['annotations']['run.googleapis.com/container-dependencies']
+        patched['spec']['template']['metadata']['annotations']['run.googleapis.com/container-dependencies']
         == '{"collector":["notifications-job"]}'
     )
     assert job['spec']['template']['spec']['template']['spec']['containers'][0].get('name') is None
+    assert 'metadata' not in task, 'job task templates must not acquire service annotations'
+    annotations = patched['spec']['template']['metadata']['annotations']
+    assert annotations['run.googleapis.com/vpc-access-connector'] == 'keep'
+    assert annotations['run.googleapis.com/secrets'] == (
+        'cloud-run-gmp-config:projects/123/secrets/cloud-run-gmp-config,existing:projects/123/secrets/existing'
+    )

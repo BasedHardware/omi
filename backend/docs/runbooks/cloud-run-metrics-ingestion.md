@@ -221,10 +221,14 @@ Rollback Cloud Run traffic with the existing recovery workflows. Rolling back to
 ## Notifications job metrics
 
 `gcp_notifications_job.yml` uses the same pinned collector/config-secret helper
-with `--job`. A Job has a nested task template and no revision traffic. GMP
+with `--job`. A Job has a nested task template and no revision traffic.
+[Job YAML](https://docs.cloud.google.com/run/docs/reference/yaml/v1#cloud_run_job_yaml)
+puts secrets/start-order annotations on the outer execution template and
+containers/volumes on its inner task template; the helper preserves this split. GMP
 reads `K_SERVICE` for its namespace (see [upstream metadata mapping](https://github.com/GoogleCloudPlatform/run-gmp-sidecar/blob/main/confgenerator/util.go));
 Cloud Run Jobs supply `CLOUD_RUN_JOB` instead, so the helper explicitly gives
-only the collector `K_SERVICE=notifications-job`. The resulting GMP target
+only the collector process `K_SERVICE=$CLOUD_RUN_JOB` inside its wrapper
+(without deploying a reserved service env name). The resulting GMP target
 has `namespace=notifications-job` and `cluster=__run__`. Both dedicated exporter
 values retain the service namespaces and add this exact namespace to `one_of`.
 The kube-prometheus-stack values own the scrape and name normalization, not
