@@ -19,19 +19,21 @@ Future<ApiResult<wire.GeneratedSpeakerTagPromptsResponse>> getSpeakerTagPrompts(
       decode: (body) => wire.GeneratedSpeakerTagPromptsResponse.fromJson(_object(body)),
     );
 
-Future<ApiResult<bool>> markSpeakerTagPromptsShown(List<String> promptIds, {bool setShown = true}) {
+String _shownRequestBody(List<String> promptIds, bool setShown) {
   final body = wire.GeneratedSpeakerTagPromptsShownRequest(promptIds: promptIds, setShown: setShown).toJson();
   // The default request remains compatible with servers predating per-card telemetry.
   if (setShown) body.remove('set_shown');
-  return executeApi(
-    request: ApiRequest(
-      url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/shown',
-      method: 'POST',
-      body: jsonEncode(body),
-    ),
-    decode: (body) => wire.GeneratedSpeakerTagPromptsShownResponse.fromJson(_object(body)).firstTime,
-  );
+  return jsonEncode(body);
 }
+
+Future<ApiResult<bool>> markSpeakerTagPromptsShown(List<String> promptIds, {bool setShown = true}) => executeApi(
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/shown',
+        method: 'POST',
+        body: _shownRequestBody(promptIds, setShown),
+      ),
+      decode: (body) => wire.GeneratedSpeakerTagPromptsShownResponse.fromJson(_object(body)).firstTime,
+    );
 
 Future<ApiResult<void>> dismissSpeakerTagPrompts() => executeApi<void>(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/dismiss', method: 'POST'),

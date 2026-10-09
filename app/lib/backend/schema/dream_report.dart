@@ -2,6 +2,8 @@
 /// surface: the backend answers 404 unless the account is in the dream cohort.
 library;
 
+import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
+
 String _str(Object? value) => value is String ? value : '';
 int _int(Object? value) => value is num ? value.toInt() : 0;
 double _double(Object? value) => value is num ? value.toDouble() : 0;
@@ -119,6 +121,13 @@ class DreamRun {
 
   bool get isEmpty => edits.isEmpty && questions.isEmpty && slowTasks.isEmpty && vocabulary.isEmpty && feedback.isEmpty;
 
+  static DreamRun? fromGenerated(wire.GeneratedDreamRun value) {
+    final json = value.toJson();
+    // Idle and deadline passes may have no run id; preserve their stable display id.
+    if ((json['run_id'] as String? ?? '').isEmpty) json['run_id'] = json['status'] ?? 'idle';
+    return fromJson(json);
+  }
+
   /// Returns null for a row without an id or timestamp so one malformed run never hides the rest.
   static DreamRun? fromJson(Map<String, dynamic> json) {
     final id = _str(json['run_id']);
@@ -167,6 +176,8 @@ class DreamReport {
   final List<DreamRun> runs;
 
   int get manualRunsLeft => (manualRunsLimit - manualRunsToday).clamp(0, manualRunsLimit);
+
+  static DreamReport fromGenerated(wire.GeneratedDreamRunsResponse value) => fromJson(value.toJson());
 
   static DreamReport fromJson(Map<String, dynamic> json) => DreamReport(
         live: json['mode'] == 'on',

@@ -12,7 +12,7 @@ new client call site cannot drift from backend-owned OpenAPI authority silently.
 - Normalizes Dart string interpolation (`$id` / `${expr}`) to param placeholders
   and strips query strings.
 - Excludes out-of-scope protocols (streaming/SSE/multipart/WebSocket) and
-  asserts each in-scope route exists in the app-client OpenAPI spec.
+  asserts each in-scope route exists in a backend-owned Flutter OpenAPI surface.
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ from typing import Set
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+# Dream DTOs have a separate backend-owned surface and generated Flutter group.
+DREAM_SPEC_PATH = ROOT_DIR / 'backend' / 'docs' / 'api' / 'dream-openapi.json'
 FLUTTER_HTTP_ROOT = ROOT_DIR / 'app' / 'lib' / 'backend' / 'http'
 
 # Unlike the desktop inventories, every route this extractor finds is in scope:
@@ -78,8 +80,11 @@ def _in_scope(routes: Set[str]) -> Set[str]:
 
 
 def _load_spec_paths() -> Set[str]:
-    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
-    return set(spec.get('paths', {}).keys())
+    return {
+        route
+        for path in (SPEC_PATH, DREAM_SPEC_PATH)
+        for route in json.loads(path.read_text(encoding='utf-8')).get('paths', {})
+    }
 
 
 def _covered_by_spec(route: str, spec_paths: Set[str]) -> bool:
@@ -112,7 +117,7 @@ def test_every_in_scope_flutter_rest_route_exists_in_app_client_openapi():
     missing = sorted(r for r in routes if not _covered_by_spec(r, spec_paths) and r not in KNOWN_MISSING_ROUTES)
     assert not missing, (
         'Flutter REST routes hardcoded under app/lib/backend/http are missing from the '
-        'app-client OpenAPI spec. Either add the backend route + response_model, document '
+        'backend-owned Flutter OpenAPI specs. Either add the backend route + response_model, document '
         'the route as out of scope in OUT_OF_SCOPE_PREFIXES, or, if it is a known gap '
         f'already tracked, add it to KNOWN_MISSING_ROUTES with a follow-up owner: {missing}'
     )
