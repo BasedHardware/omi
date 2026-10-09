@@ -590,6 +590,26 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         endpoint = self._endpoint(provider_ref.model, method='predict')
         payload = _vertex_embedding_predict_request(request)
         instances = payload['instances']
+        if len(instances) == 1:
+            # A single predict keeps the existing per-request wire timeout.
+            # Only batches need to share a shrinking budget across requests.
+            headers = _vertex_headers(await self._vertex_access_token(), ptr.REQUEST_TYPE_SHARED)
+            vector = await self._create_embedding_instance(
+                endpoint,
+                instances[0],
+                headers=headers,
+                credentials=credentials,
+                model=provider_ref.model,
+                timeout_ms=timeout_ms,
+            )
+            return ProviderResponse(
+                response={
+                    'object': 'list',
+                    'data': [{'object': 'embedding', 'embedding': vector, 'index': 0}],
+                    'model': provider_ref.model,
+                },
+                accounting=ProviderResponseMetadata(usage=None),
+            )
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
         vectors: list[list[float] | None] = [None] * len(instances)
         pending = iter(enumerate(instances))
