@@ -1,6 +1,6 @@
 import pytest
 
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import TranscriptSegment, transcript_segment_for_client
 
 
 def _segment(text, speaker="SPEAKER_00", is_user=False, start=0.0, end=1.0):
@@ -603,3 +603,281 @@ def test_segments_as_string_defaults_to_user_when_name_missing():
     rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
 
     assert rendered.startswith("User: Hello.")
+
+
+def test_cross_speaker_repair_skipped_for_late_arriving_segment():
+    """A segment that starts before the current tail is not its continuation.
+
+    Late arrivals from an earlier batch are appended after a newer tail (see
+    TestCrossBatchSegmentOrdering in test_modulate_stt.py) and only sorted afterwards.
+    Repairing across that pair rewrote the tail's end to the late arrival's start,
+    producing end < start, and moved the tail speaker's words onto the other speaker.
+    """
+    existing = _segment("This is the second utterance. And I was", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("going to say something else here.", speaker="SPEAKER_01", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the second utterance. And I was"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[0].end >= segments[0].start
+    assert segments[1].text == "going to say something else here."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_skipped_across_long_silence():
+    """Ten minutes apart with different speakers is not one split sentence.
+
+    Without a gap bound the older segment was deleted outright and its words were
+    reattributed to the later speaker at the later timestamp.
+    """
+    existing = _segment("So the plan is", speaker="SPEAKER_00", start=0.0, end=3.0)
+    much_later = _segment("we should go with option two.", speaker="SPEAKER_01", start=600.0, end=605.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [much_later])
+
+    assert len(segments) == 2
+    assert segments[0].text == "So the plan is"
+    assert segments[0].start == pytest.approx(0.0)
+    assert segments[1].text == "we should go with option two."
+    assert segments[1].start == pytest.approx(600.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_still_applies_to_adjacent_segments():
+    """The guard must not disable repair for the contiguous case it exists for."""
+    existing = _segment("How are", speaker="SPEAKER_00", start=0.0, end=3.0)
+    following = _segment("you doing today?", speaker="SPEAKER_01", start=3.1, end=6.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [following])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_01"
+    assert segments[0].text == "How are you doing today?"
+    assert removed_ids == [existing.id]
+
+
+def test_same_speaker_merge_skipped_for_late_arriving_segment():
+    """A same-speaker segment that starts before the current tail is not its continuation.
+
+    Unlike the cross-speaker repair above, this path only checked the gap between
+    a.end and b.start, not their relative order: a late arrival from an earlier batch
+    landed within 3 seconds of the tail's end and was absorbed into it, reversing the
+    text order and producing an end that preceded the start.
+    """
+    existing = _segment("This is the later statement.", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("This was the earlier statement.", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the later statement."
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[1].text == "This was the earlier statement."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_lowercase_continuation_merge_skipped_for_late_arriving_segment():
+    """Same guard for the lowercase-continuation predicate, which had no order check at all."""
+    existing = _segment("this is the later statement", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("this was the earlier statement", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "this is the later statement"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[1].text == "this was the earlier statement"
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def _sync_source(start, end):
+    return {'type': 'sync', 'start': start, 'end': end}
+
+
+def test_same_speaker_merge_unions_consistent_sync_sources():
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source == {'type': 'sync', 'start': 100.0, 'end': 107.0}
+
+
+def test_merge_clears_source_whose_window_outlives_its_segment():
+    """A source window wider than its segment would launder unproven audio
+    into the merged union; the union is refused, not repaired."""
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.5)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_same_speaker_merge_unions_overlapping_consistent_sources():
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.5)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.5)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source == {'type': 'sync', 'start': 100.0, 'end': 107.0}
+
+
+def test_merge_clears_source_when_only_one_side_carries_it():
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+@pytest.mark.parametrize(
+    'bad_source',
+    [
+        {'type': 'other', 'start': 104.0, 'end': 107.0},
+        {'type': 'sync', 'start': 'x', 'end': 107.0},
+        {'type': 'sync', 'start': 107.0, 'end': 104.0},
+        {'type': 'sync'},
+        'sync',
+    ],
+)
+def test_merge_clears_source_on_malformed_side(bad_source):
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = bad_source
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_merge_clears_source_on_inconsistent_offset():
+    """B's source sits on a different clock: the union would claim coverage the
+    merged window cannot honestly map, so the proof is dropped, not averaged."""
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(500.0, 503.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_merge_clears_source_across_an_absolute_hiatus():
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(106.0, 109.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+@pytest.mark.parametrize(
+    'end_mismatch',
+    [
+        {'type': 'sync', 'start': 100.0, 'end': 104.4},
+        {'type': 'sync', 'start': 99.9, 'end': 104.0},
+    ],
+)
+def test_merge_clears_source_whose_endpoint_does_not_match_its_segment(end_mismatch):
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = end_mismatch
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_backward_merge_redistribution_clears_sync_sources():
+    """Partial sentence redistribution across speakers cannot be honestly
+    proven by either side's window: both are cleared, not guessed."""
+    a = _segment("Hello there. and then", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("we continue speaking.", speaker="SPEAKER_01", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+    assert all(segment.audio_source is None for segment in segments)
+
+
+def test_delayed_merge_with_unknown_side_clears_earlier_union():
+    a = _segment("first part", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("second part", speaker="SPEAKER_00", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+    assert segments[0].audio_source is not None
+
+    c = _segment("third part", speaker="SPEAKER_00", start=7.0, end=9.0)
+    segments, _, _ = TranscriptSegment.combine_segments(segments, [c])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_absorbed_sentence_without_enlarged_window_clears_source():
+    a = _segment("an incomplete thought", speaker="SPEAKER_00", start=0.0, end=4.0)
+    b = _segment("that continues", speaker="SPEAKER_01", start=4.0, end=7.0)
+    a.audio_source = _sync_source(100.0, 104.0)
+    b.audio_source = _sync_source(104.0, 107.0)
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].audio_source is None
+
+
+def test_audio_source_persists_python_only_and_is_stripped_for_clients():
+    segment = TranscriptSegment(
+        text="sync line",
+        speaker="SPEAKER_00",
+        speaker_id=0,
+        is_user=False,
+        start=0.0,
+        end=1.0,
+        audio_source={'type': 'sync', 'start': 100.0, 'end': 101.0},
+    )
+
+    python_dump = segment.model_dump()
+    assert python_dump['audio_source'] == {'type': 'sync', 'start': 100.0, 'end': 101.0}
+    json_dump = segment.model_dump(mode='json')
+    assert 'audio_source' not in json_dump
+    assert 'audio_source' not in transcript_segment_for_client(python_dump)
+    assert 'audio_source' not in TranscriptSegment.model_json_schema().get('properties', {})
+    restored = TranscriptSegment(**python_dump)
+    assert restored.audio_source == {'type': 'sync', 'start': 100.0, 'end': 101.0}
+
+    plain = TranscriptSegment(text="no source", speaker="SPEAKER_00", speaker_id=0, is_user=False, start=0.0, end=1.0)
+    assert 'audio_source' not in plain.model_dump()

@@ -52,8 +52,8 @@ def test_foundation_does_not_silently_cross_capture_cutover_gate() -> None:
     }
     assert isinstance(defaults["defer_memory_extraction"], ast.Constant)
     assert defaults["defer_memory_extraction"].value is False
-    assert isinstance(defaults["bypass_jit_first_open"], ast.Constant)
-    assert defaults["bypass_jit_first_open"].value is False
+    # JIT bypass is part of the trigger's mode, never a caller flag.
+    assert "bypass_jit_first_open" not in {argument.arg for argument in process.args.args + process.args.kwonlyargs}
 
     finalizer = _function(
         _module_tree(BACKEND_DIR / "utils/conversations/finalizer.py"),
@@ -93,7 +93,7 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         "database.conversations": (),
         "database.notifications": ("get_user_time_zone",),
         "database.users": (),
-        "database.vector_db": (),
+        "database.vector_db": ("search_transcript_chunks",),
         "models.other": ("Person",),
         "utils.conversations.factory": ("deserialize_conversation",),
         "utils.conversations.render": ("conversation_to_citation_card", "conversations_to_string"),
@@ -110,6 +110,27 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         for attr in attrs:
             setattr(module, attr, MagicMock())
         install(name, module)
+
+    class ChatTranscriptSearch:
+        def __init__(self, rows, searched):
+            self.rows = rows
+            self.searched = searched
+
+        @property
+        def conversation_ids(self):
+            return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+    transcript_search = sys.modules["utils.conversations.mcp_transcript_search"]
+    transcript_search.ChatTranscriptSearch = ChatTranscriptSearch
+    transcript_search.chat_transcript_coverage_note = lambda _searched: ""
+    transcript_search.chat_transcript_excerpts = lambda _conversations, _search: {}
+    transcript_search.merge_chat_conversation_ids = lambda keywords, transcripts, vectors, limit: list(
+        dict.fromkeys(keywords + transcripts + vectors)
+    )[: limit * 2]
+    transcript_search.merge_summary_and_transcript_ids = lambda chunk_ids, summary_ids, limit: list(
+        dict.fromkeys(chunk_ids + summary_ids)
+    )[:limit]
+    transcript_search.search_chat_transcript_chunks = lambda *args, **kwargs: ChatTranscriptSearch([], False)
 
     chat_scope = sys.modules["utils.retrieval.chat_scope"]
     chat_scope.chat_scope_from_config = lambda _configurable: None
@@ -423,11 +444,7 @@ def _invoke_tool(conversation_tools_module, tool, arguments: dict, *, config: di
         conversation_tools_module.agent_config_context.reset(token)
 
 
-def test_feature_gate_requires_uid_scoped_request_opt_in(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
+def test_feature_gate_requires_uid_scoped_request_opt_in(conversation_tools_module) -> None:
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({}) is False
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
     assert (
@@ -459,21 +476,14 @@ def test_feature_gate_requires_uid_scoped_request_opt_in(
     )
 
 
-def test_feature_gate_never_activates_from_process_environment_alone(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
-    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
-
-
-def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module) -> None:
     """Without an explicit opt-in, the released formatter and deserializer remain authoritative."""
 
-    monkeypatch.delenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, raising=False)
     raw = _conversation_fixture()
     conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[raw])
-    legacy_conversation = types.SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": raw["id"]})
+    legacy_conversation = types.SimpleNamespace(
+        id=raw["id"], transcript_segments=[], model_dump=lambda: {"id": raw["id"]}
+    )
     conversation_tools_module.deserialize_conversation = MagicMock(return_value=legacy_conversation)
     conversation_tools_module.conversations_to_string = MagicMock(return_value="LEGACY_FORMAT_RESULT")
 
@@ -510,7 +520,9 @@ def test_gate_on_search_clamps_hydration_ids_before_database_read(conversation_t
     conversation_tools_module.vector_db.query_vectors = MagicMock(
         return_value=[f"vector-{index}" for index in range(20)]
     )
-    conversation_tools_module.merge_conversation_search_ids.return_value = [f"result-{index}" for index in range(40)]
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(
+        return_value=[f"result-{index}" for index in range(40)]
+    )
     conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[])
     config = _tool_config(enabled=True)
 
@@ -523,6 +535,59 @@ def test_gate_on_search_clamps_hydration_ids_before_database_read(conversation_t
 
     hydrated_ids = conversation_tools_module.conversations_db.get_conversations_by_id.call_args.args[1]
     assert hydrated_ids == [f"result-{index}" for index in range(20)]
+
+
+def test_gate_on_transcript_hit_returns_bounded_summary_card_before_hydration(conversation_tools_module) -> None:
+    raw = _conversation_fixture()
+    raw['transcript_segments'][0]['text'] = 'The private invoice was 47 dollars.'
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
+    conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    conversation_tools_module.vector_db.index = object()
+    conversation_tools_module.vector_db.embeddings = MagicMock()
+    conversation_tools_module.vector_db.embeddings.embed_query.return_value = [0.5]
+    chunk_search = MagicMock(
+        return_value=conversation_tools_module.ChatTranscriptSearch(
+            [{'conversation_id': raw['id'], 'chunk_index': 0}], True
+        )
+    )
+    conversation_tools_module.search_chat_transcript_chunks = chunk_search
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
+    config = _tool_config(enabled=True)
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {'query': 'invoice amount', 'include_transcript': False},
+        config=config,
+    )
+
+    assert raw['id'] in result
+    assert '47 dollars' not in result
+    assert 'conversation:' + raw['id'] + ':summary' in result
+    assert [item['kind'] for item in config['configurable']['evidence_references']] == ['conversation_summary']
+    assert chunk_search.call_args.kwargs['index_available'] is True
+    assert chunk_search.call_args.kwargs['query_vector'] == [0.5]
+
+
+def test_gate_on_summary_hit_discloses_unavailable_transcript_index_within_bound(conversation_tools_module) -> None:
+    raw = _conversation_fixture()
+    conversation_tools_module.parse_exact_conversation_reference.return_value = None
+    conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[raw['id']])
+    conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
+    conversation_tools_module.chat_transcript_coverage_note = lambda _searched: 'Transcript text was not searched.'
+    conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
+
+    result = _invoke_tool(
+        conversation_tools_module,
+        conversation_tools_module.search_conversations_tool,
+        {'query': 'invoice amount', 'include_transcript': False},
+        config=_tool_config(enabled=True),
+    )
+
+    assert result.startswith('Transcript text was not searched.')
+    assert raw['id'] in result
+    assert len(result) <= _jit_module().MAX_JIT_RESULT_CHARS
 
 
 def test_gate_on_rejects_fifth_summary_search_before_storage_access(conversation_tools_module) -> None:
@@ -559,7 +624,7 @@ def test_gate_on_transcript_requests_still_consume_shared_summary_search_budget(
     conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[])
     conversation_tools_module.keyword_search_conversation_ids = MagicMock(return_value=[])
     conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
-    conversation_tools_module.merge_conversation_search_ids.return_value = []
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(return_value=[])
     config = _tool_config(enabled=True)
 
     for _ in range(2):
@@ -659,7 +724,7 @@ def test_gate_off_owner_scoped_card_reference_remains_semantic_search(conversati
     raw = _conversation_fixture()
     conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
     conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
-    conversation_tools_module.merge_conversation_search_ids.return_value = [raw["id"]]
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(return_value=[raw["id"]])
     conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[])
     config = _tool_config(enabled=False)
 
@@ -724,9 +789,11 @@ def test_gate_off_preserves_legacy_search_tool_path(conversation_tools_module) -
     conversation_tools_module.parse_exact_conversation_reference.return_value = None
     conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
     conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
-    conversation_tools_module.merge_conversation_search_ids.return_value = [raw["id"]]
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(return_value=[raw["id"]])
     conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
-    legacy_conversation = types.SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": raw["id"]})
+    legacy_conversation = types.SimpleNamespace(
+        id=raw["id"], transcript_segments=[], model_dump=lambda: {"id": raw["id"]}
+    )
     conversation_tools_module.deserialize_conversation = MagicMock(return_value=legacy_conversation)
     conversation_tools_module.conversations_to_string = MagicMock(return_value="LEGACY_SEARCH_RESULT")
 
@@ -790,7 +857,7 @@ def test_gate_on_search_tool_uses_query_snippets_and_stable_evidence_refs(conver
     conversation_tools_module.parse_exact_conversation_reference.return_value = None
     conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
     conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
-    conversation_tools_module.merge_conversation_search_ids.return_value = [raw["id"]]
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(return_value=[raw["id"]])
     conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
     sys.modules["utils.retrieval.tools.conversation_jit"].build_transcript_match_snippets.return_value = [
         {"segment_id": "segment-2", "start_ms": 1000, "end_ms": 2000, "text": "Follow up with QA."}
@@ -815,7 +882,7 @@ def test_gate_on_search_honors_one_segment_bound(conversation_tools_module) -> N
     conversation_tools_module.parse_exact_conversation_reference.return_value = None
     conversation_tools_module.keyword_search_conversation_ids.return_value = [raw["id"]]
     conversation_tools_module.vector_db.query_vectors = MagicMock(return_value=[])
-    conversation_tools_module.merge_conversation_search_ids.return_value = [raw["id"]]
+    conversation_tools_module.merge_chat_conversation_ids = MagicMock(return_value=[raw["id"]])
     conversation_tools_module.conversations_db.get_conversations_by_id = MagicMock(return_value=[raw])
     snippet_builder = sys.modules["utils.retrieval.tools.conversation_jit"].build_transcript_match_snippets
     snippet_builder.return_value = [{"segment_id": "segment-1", "start_ms": 0, "end_ms": 1000, "text": "QA one"}]
@@ -845,33 +912,35 @@ def _call_keywords(tree: ast.AST, function_name: str, callee: str) -> dict[str, 
     raise AssertionError(f"call to {callee!r} not found in {function_name!r}")
 
 
-def _constant_bool(node: ast.AST | None) -> bool | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
-        return node.value
-    return None
+def _attribute_name(node: ast.AST | None) -> str | None:
+    return node.attr if isinstance(node, ast.Attribute) else None
 
 
-def test_force_process_still_defers_first_open_when_rollout_admits() -> None:
+def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
+    """Only triggers whose mode bypasses JIT may run derived work eagerly."""
+    from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+
     process_source = (BACKEND_DIR / "utils/conversations/process_conversation.py").read_text(encoding="utf-8")
     assert "if not bypass_jit_first_open and not is_reprocess and not discarded:" in process_source
     assert "if not force_process and not is_reprocess and not discarded:" not in process_source
 
     conversations = _module_tree(BACKEND_DIR / "routers/conversations.py")
     create_kwargs = _call_keywords(conversations, "process_in_progress_conversation", "process_conversation")
-    assert _constant_bool(create_kwargs.get("force_process")) is True
-    assert "bypass_jit_first_open" not in create_kwargs
+    assert _attribute_name(create_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
     reprocess_kwargs = _call_keywords(conversations, "reprocess_conversation", "process_conversation")
-    assert _constant_bool(reprocess_kwargs.get("force_process")) is True
-    assert _constant_bool(reprocess_kwargs.get("bypass_jit_first_open")) is True
+    assert _attribute_name(reprocess_kwargs.get("trigger")) == "USER_REPROCESS"
 
     finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")
-    assert _constant_bool(finalize_kwargs.get("force_process")) is True
-    assert "bypass_jit_first_open" not in finalize_kwargs
+    assert _attribute_name(finalize_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
-    worker = _module_tree(BACKEND_DIR / "routers/conversation_finalization.py")
-    worker_kwargs = _call_keywords(worker, "run_listen_finalization_job", "finalize_persisted_conversation")
-    assert "bypass_jit_first_open" not in worker_kwargs
+    client_finalize = PROCESSING_MODES[ProcessingTrigger.CLIENT_FINALIZE]
+    assert client_finalize.run_now and not client_finalize.bypass_jit_first_open
+    assert PROCESSING_MODES[ProcessingTrigger.USER_REPROCESS].bypass_jit_first_open
+
+    # Mode lives in one table: no call site may pass a mode flag directly.
+    for kwargs in (create_kwargs, reprocess_kwargs, finalize_kwargs):
+        assert not {"force_process", "is_reprocess", "bypass_jit_first_open"} & set(kwargs)
 
     finalizer_source = (BACKEND_DIR / "utils/conversations/finalizer.py").read_text(encoding="utf-8")
     assert "bypass_jit_first_open" not in finalizer_source

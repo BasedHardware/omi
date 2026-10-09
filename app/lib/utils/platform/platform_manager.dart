@@ -1,3 +1,4 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -26,6 +27,8 @@ class PlatformManager {
   static PlatformManager get instance => _instance;
 
   // Service instances
+  String get appNamespace => _packageInfo.packageName;
+
   AnalyticsManager get analytics => AnalyticsManager();
   IntercomManager get intercom => IntercomManager.instance;
   CrashlyticsManager get crashReporter => CrashlyticsManager.instance;
@@ -93,5 +96,5 @@ class PlatformManager {
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
   bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;
-  bool get isFCMSupported => Platform.isAndroid || Platform.isIOS;
+  bool get isFCMSupported => !PhysicalQualification.enabled && (Platform.isAndroid || Platform.isIOS);
 }

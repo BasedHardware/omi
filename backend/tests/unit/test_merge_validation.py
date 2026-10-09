@@ -44,6 +44,15 @@ def merge():
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
 
+    # merge_conversations now also imports the deletion-intent module at module
+    # scope; the pure validation surface never calls it, so a MagicMock client
+    # keeps the import graph hermetic.
+    tombstones_stub = ModuleType("database.conversation_tombstones")
+    tombstones_stub.db = MagicMock(name="tombstone-db")
+    tombstones_stub.COLLECTION = "deleted_conversations"
+    tombstones_stub.is_deleted = MagicMock(return_value=False)
+    tombstones_stub.record_deletion = MagicMock()
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
 
@@ -117,6 +126,7 @@ def merge():
         "database": database_pkg,
         "database._client": client_stub,
         "database.conversations": conversations_stub,
+        "database.conversation_tombstones": tombstones_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
@@ -496,10 +506,10 @@ class TestMergeTranscriptSegments:
         assert len(merged) == 2
         assert merged[0]["start"] == 0.0
         assert merged[0]["end"] == 5.0
-        # Cumulative offset = 5.0 (max end of c1); gap = 60-30 = 30s.
-        # c2's seg starts at 0.0 → offset 35.0.
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        # Wall-clock offset = c2.started_at - c1.started_at = 60s.
+        # c2's seg starts at 0.0 → offset 60.0.
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_inputs_post_normalisation_string_origin_does_not_crash(self, merge):
         # Simulates the exact path perform_merge_async takes: it now calls
@@ -522,8 +532,8 @@ class TestMergeTranscriptSegments:
         normalized = merge._normalize_conversation_timestamps(raw)
         merged = merge._merge_transcript_segments(normalized)
         assert len(merged) == 2
-        assert merged[1]["start"] == 35.0
-        assert merged[1]["end"] == 40.0
+        assert merged[1]["start"] == 60.0
+        assert merged[1]["end"] == 65.0
 
     def test_first_conv_with_no_segments_uses_finished_minus_started(self, merge):
         # When the first conversation has no segments, cumulative_offset is
@@ -593,3 +603,99 @@ class TestMergeTranscriptSegments:
         merge._merge_transcript_segments(raw)
         assert seg["start"] == 0.0
         assert seg["end"] == 5.0
+
+    def test_explicit_none_transcript_segments_does_not_crash(self, merge):
+        # A Firestore doc with a literal `transcript_segments: None` (not a
+        # missing key) previously crashed `[copy.deepcopy(s) for s in segments]`
+        # with `TypeError: 'NoneType' object is not iterable`, aborting the
+        # whole merge for the background task's outer except.
+        raw = [
+            {"started_at": None, "finished_at": None, "transcript_segments": None},
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": [_seg(0.0, 5.0, "second")],
+            },
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 1
+        assert merged[0]["text"] == "second"
+
+    def test_explicit_none_transcript_segments_as_second_conv(self, merge):
+        raw = [
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": [_seg(0.0, 5.0, "first")],
+            },
+            {"started_at": None, "finished_at": None, "transcript_segments": None},
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 1
+        assert merged[0]["text"] == "first"
+
+    def test_explicit_none_segment_end_does_not_crash_max(self, merge):
+        # A single unfinalised STT chunk can persist `end: None`. The key is
+        # present, so `.get("end", 0)` returned None (not the 0 default),
+        # and `max(...)` raised comparing None to a float in mixed buffers.
+        raw = [
+            {
+                "started_at": None,
+                "finished_at": None,
+                "transcript_segments": [
+                    _seg(0.0, 5.0, "a"),
+                    {"start": 5.0, "end": None, "text": "b", "speaker_id": 0},
+                ],
+            }
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 2
+
+    def test_explicit_none_segment_start_end_does_not_crash_offset_math(self, merge):
+        # start/end: None on a non-first conversation's segment previously
+        # raised `TypeError: unsupported operand type(s) for +: 'NoneType' and 'float'`
+        # when adding the cumulative offset.
+        raw = [
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": [_seg(0.0, 5.0, "first")],
+            },
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, 10, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 15, tzinfo=timezone.utc),
+                "transcript_segments": [{"start": None, "end": None, "text": "second", "speaker_id": 0}],
+            },
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 2
+        # offset = cumulative_offset(5) + gap(10-5=5) = 10; None coerces to 0.
+        assert merged[1]["start"] == 10.0
+        assert merged[1]["end"] == 10.0
+
+
+# ---------------------------------------------------------------------------
+# _resolve_merged_finished_at
+# ---------------------------------------------------------------------------
+
+
+class TestResolveMergedFinishedAt:
+    def test_returns_max_of_real_values(self, merge):
+        earlier = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
+        assert merge._resolve_merged_finished_at([{"finished_at": earlier}, {"finished_at": later}]) == later
+
+    def test_ignores_none_values_among_reals(self, merge):
+        later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
+        assert merge._resolve_merged_finished_at([{"finished_at": None}, {"finished_at": later}]) == later
+
+    def test_all_none_returns_none_not_sentinel(self, merge):
+        # Previously fell back to the `_UTC_MIN` (year 0001) sentinel and
+        # persisted it as the merged conversation's real finished_at.
+        result = merge._resolve_merged_finished_at([{"finished_at": None}, {"finished_at": None}])
+        assert result is None
+        assert result != merge._UTC_MIN
+
+    def test_missing_key_treated_like_none(self, merge):
+        later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
+        assert merge._resolve_merged_finished_at([{}, {"finished_at": later}]) == later

@@ -110,10 +110,13 @@ enum OmiBrandMarkAsset {
     return nil
   }
 
-  private static func knownResourceBundleRoots() -> [URL] {
-    let mainBundleURL = Bundle.main.bundleURL
+  static func knownResourceBundleRoots(in mainBundleURL: URL = Bundle.main.bundleURL) -> [URL] {
     return [
       // Signed app: Omi.app/Contents/Resources/<SwiftPM resources>.bundle
+      mainBundleURL
+        .appendingPathComponent("Contents/Resources")
+        .appendingPathComponent(resourceBundleName)
+        .appendingPathComponent("Contents/Resources"),
       mainBundleURL
         .appendingPathComponent("Contents/Resources")
         .appendingPathComponent(resourceBundleName),

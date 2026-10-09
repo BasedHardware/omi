@@ -19,7 +19,7 @@ offline genesis-ledger backfill.
 - `redaction.py` — `redact_text` / `redact_payload` secret scrubbing. Must not log raw secrets.
 - `source_routing.py` — passthrough `route_source` provenance (`SOURCE_ROUTER_VERSION`). Must not change effective source type yet.
 - `cli.py` — `memory-ingestion run` offline CLI. Must not start the FastAPI app.
-- `rollout.py` — graph/legacy write-read flags, genesis-ledger backfill helpers. Must not flip production `MEMORY_MODE`.
+- `rollout.py` — graph/legacy write-read flags, genesis-ledger backfill helpers. Must not flip production `MEMORY_ENABLED`.
 - `rollout_cli.py` — `memory-rollout` benchmark/parity CLI. Must not write Firestore.
 - `export_runner.py` — offline export-dataset replay into the pipeline. Must not be imported by request handlers.
 - `stages/__init__.py` — stages package marker.

@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
@@ -46,7 +48,7 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
-    server_page_size = 25 if include_transcript else 100
+    server_page_size = 200
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         if limit <= server_page_size:
@@ -111,7 +113,7 @@ def get_conversation(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.get(
-            f"/v1/dev/user/conversations/{conversation_id}",
+            f"/v1/dev/user/conversations/{path_segment(conversation_id)}",
             params={"include_transcript": include_transcript},
         )
     ctx.renderer.emit(result, title="conversation")
@@ -145,10 +147,24 @@ def create_conversation(
             )
         text = sys.stdin.read()
 
+    cleaned_text = text.strip()
+    if not cleaned_text:
+        raise UsageError(
+            message="Empty text",
+            detail="Conversation text cannot be empty or whitespace.",
+        )
+
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
+
     body: dict[str, object] = {
-        "text": text,
+        "text": cleaned_text,
         "text_source": text_source.value,
-        "language": language,
+        "language": cleaned_lang,
     }
     if text_source_spec is not None:
         body["text_source_spec"] = text_source_spec
@@ -159,7 +175,9 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    ctx.renderer.success(
+        f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold] (status={escape(str(result.get('status')))})"
+    )
     ctx.renderer.emit(result)
 
 
@@ -173,6 +191,12 @@ def from_segments(
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
     if segments_file.is_dir():
@@ -197,7 +221,7 @@ def from_segments(
             detail="Each segment needs at least 'text', 'start', 'end'.",
         )
 
-    body: dict[str, object] = {"transcript_segments": segments, "language": language}
+    body: dict[str, object] = {"transcript_segments": segments, "language": cleaned_lang}
     if source is not None:
         body["source"] = source
     if started_at is not None:
@@ -207,7 +231,7 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -221,14 +245,17 @@ def update_conversation(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        cleaned_title = title.strip()
+        if not cleaned_title:
+            raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        body["title"] = cleaned_title
     if discarded is not None:
         body["discarded"] = discarded
     if not body:
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
-    ctx.renderer.success(f"Updated conversation [bold]{conversation_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/conversations/{path_segment(conversation_id)}", json_body=body)
+    ctx.renderer.success(f"Updated conversation [bold]{escape(conversation_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -242,7 +269,7 @@ def delete_conversation(
     if not confirm:
         typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{path_segment(conversation_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Deleted conversation [bold]{escape(conversation_id)}[/bold].")

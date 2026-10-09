@@ -493,7 +493,7 @@ struct ChatPrompts {
     "action_items": "tasks (bidirectional sync with backend)",
     "transcription_sessions": "voice recordings / conversations",
     "transcription_segments": "transcript text with speaker/timing",
-    "proactive_extractions": "memories, advice, tasks extracted from screenshots",
+    "proactive_extractions": "memories and tasks extracted from screenshots",
     "focus_sessions": "focus tracking",
     "live_notes": "AI-generated notes during recording",
     "memories":
@@ -505,9 +505,6 @@ struct ChatPrompts {
     "staged_tasks": "AI-extracted task candidates pending user review",
     "task_chat_messages": "Claude Code agent ↔ user chat history, one thread per task (action item)",
     "observations": "per-screenshot AI observations used to detect tasks and activities",
-    "context_visits":
-      "durable recent-work visits; handlesJson contains URL/file addresses and is the preferred SQL source for work aggregates",
-    "context_buckets": "durable document/page/file work destinations rolled up across visits",
     "local_kg_nodes":
       "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
     "local_kg_edges": "knowledge graph edges — relationships between entities",
@@ -527,19 +524,6 @@ struct ChatPrompts {
         "Legacy flag for screenshots captured before battery mode switched to adaptive capture cadence",
       "deviceName": "Computer name that captured this screenshot (optional; absent when provenance is unknown)",
       "clientDeviceId": "Stable capture-device identifier used for canonical memory provenance",
-    ],
-    "context_visits": [
-      "handlesJson": "JSON array of durable URL/file handles for the visited work source",
-      "bucketID": "FK to context_buckets",
-      "startedAt": "When this work visit started",
-      "endedAt": "When this work visit ended",
-      "outcome": "active | completed | discarded",
-    ],
-    "context_buckets": [
-      "subjectKind": "Kind of durable work destination",
-      "subjectID": "Stable destination identity, commonly derived from a URL or file",
-      "lastVisitedAt": "Most recent completed visit",
-      "visitCount": "Number of visits rolled into this destination",
     ],
     "action_items": [
       "description": "The task text shown to the user",
@@ -615,6 +599,7 @@ struct ChatPrompts {
       "actionItemsJson": "JSON array of tasks extracted by backend",
       "eventsJson": "JSON array of calendar events detected",
       "sectionsJson": "JSON array of headed summary sections with transcript evidence ids",
+      "captureGroupJson": "JSON event membership: other devices' recordings of this same conversation",
       "geolocationJson": "Location data if available",
       "photosJson": "Referenced photo metadata",
       "appsResultsJson": "App integrations results",

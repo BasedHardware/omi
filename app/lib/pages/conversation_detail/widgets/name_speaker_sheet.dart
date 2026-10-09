@@ -3,24 +3,187 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/widgets/person_chip.dart';
+import 'package:omi/ui/ui.dart';
+
+/// Number of people (excluding the synthetic "You" row) above which the
+/// person picker shows a search field.
+const int _kPersonSearchThreshold = 10;
+
+/// Number of person chips rendered before the grid is capped and completed by
+/// a "Show all" expander (only when not searching).
+const int _kPersonGridCap = 24;
+
+/// Case- and diacritic-insensitive fold of Latin accented letters, used to
+/// match people by name regardless of accents or capitalization.
+const Map<String, String> _diacriticFolds = {
+  'à': 'a',
+  'á': 'a',
+  'â': 'a',
+  'ã': 'a',
+  'ä': 'a',
+  'å': 'a',
+  'ā': 'a',
+  'ă': 'a',
+  'ą': 'a',
+  'æ': 'ae',
+  'ç': 'c',
+  'ć': 'c',
+  'ĉ': 'c',
+  'ċ': 'c',
+  'č': 'c',
+  'ď': 'd',
+  'đ': 'd',
+  'ð': 'd',
+  'è': 'e',
+  'é': 'e',
+  'ê': 'e',
+  'ë': 'e',
+  'ē': 'e',
+  'ĕ': 'e',
+  'ė': 'e',
+  'ę': 'e',
+  'ě': 'e',
+  'ĝ': 'g',
+  'ğ': 'g',
+  'ġ': 'g',
+  'ģ': 'g',
+  'ǵ': 'g',
+  'ĥ': 'h',
+  'ħ': 'h',
+  'ì': 'i',
+  'í': 'i',
+  'î': 'i',
+  'ï': 'i',
+  'ĩ': 'i',
+  'ī': 'i',
+  'ĭ': 'i',
+  'į': 'i',
+  'ı': 'i',
+  'ĵ': 'j',
+  'ķ': 'k',
+  'ĺ': 'l',
+  'ļ': 'l',
+  'ľ': 'l',
+  'ŀ': 'l',
+  'ł': 'l',
+  'ñ': 'n',
+  'ń': 'n',
+  'ņ': 'n',
+  'ň': 'n',
+  'ò': 'o',
+  'ó': 'o',
+  'ô': 'o',
+  'õ': 'o',
+  'ö': 'o',
+  'ø': 'o',
+  'ō': 'o',
+  'ŏ': 'o',
+  'ő': 'o',
+  'œ': 'oe',
+  'ŕ': 'r',
+  'ŗ': 'r',
+  'ř': 'r',
+  'ś': 's',
+  'ŝ': 's',
+  'ş': 's',
+  'š': 's',
+  'ß': 'ss',
+  'ţ': 't',
+  'ť': 't',
+  'ŧ': 't',
+  'ù': 'u',
+  'ú': 'u',
+  'û': 'u',
+  'ü': 'u',
+  'ũ': 'u',
+  'ū': 'u',
+  'ŭ': 'u',
+  'ů': 'u',
+  'ű': 'u',
+  'ų': 'u',
+  'ý': 'y',
+  'ÿ': 'y',
+  'ŷ': 'y',
+  'ź': 'z',
+  'ż': 'z',
+  'ž': 'z',
+};
+
+String _normalizeForSearch(String value) {
+  var normalized = value.toLowerCase();
+  for (final entry in _diacriticFolds.entries) {
+    normalized = normalized.replaceAll(entry.key, entry.value);
+  }
+  return normalized;
+}
+
+/// Opens the sheet that names the speaker of [segmentId] (a person, a new person, or "You"),
+/// titled with the conversation's dense speaker number.
+Future<void> showNameSpeakerSheet(
+  BuildContext context, {
+  required int speakerId,
+  required String segmentId,
+  required List<TranscriptSegment> segments,
+  required Future<bool> Function(
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  ) onSpeakerAssigned,
+  SpeakerLabelSuggestionEvent? suggestion,
+  bool defaultApplyToSpeaker = false,
+  Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected,
+  bool unresolvedSpeakers = false,
+}) {
+  return showOmiSheet<void>(
+    context: context,
+    title: unresolvedSpeakers
+        ? context.l10n.nameSpeakerTitle
+        : context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
+    builder: (_) => NameSpeakerBottomSheet(
+      speakerId: speakerId,
+      segmentId: segmentId,
+      segments: segments,
+      suggestion: suggestion,
+      defaultApplyToSpeaker: defaultApplyToSpeaker,
+      onSpeakerAssigned: onSpeakerAssigned,
+      onSpeakerRejected: onSpeakerRejected,
+      feedbackContext: context,
+    ),
+  );
+}
 
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
   final Future<bool> Function(
-          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
-      onSpeakerAssigned;
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  ) onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
   final bool defaultApplyToSpeaker;
+
+  /// Says the current label is wrong without naming who it is: "Not Me", "Not <name>",
+  /// "Not a Person". Null hides those answers (the live transcript).
+  final Future<bool> Function(SpeakerRejection kind)? onSpeakerRejected;
+
+  /// The page that opened the sheet: its toasts land there once the sheet closes, so they keep the
+  /// page's clearance above a pinned bottom action ([OmiFeedbackClearance]).
+  final BuildContext? feedbackContext;
 
   const NameSpeakerBottomSheet({
     super.key,
@@ -30,6 +193,8 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.segments,
     this.suggestion,
     this.defaultApplyToSpeaker = false,
+    this.feedbackContext,
+    this.onSpeakerRejected,
   });
 
   @override
@@ -38,6 +203,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
 
 class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String selectedPerson = '';
   String selectedPersonName = '';
   List<String> _selectedSegmentIds = [];
@@ -49,6 +215,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   String? speakerTextSample;
   bool _isCreatingNewPerson = false;
   String? _duplicateNameError;
+  String _personSearchQuery = '';
+  bool _showAllPeople = false;
+
+  // A pinned near match reaches this sheet only when choosing alternatives;
+  // accepting it uses the inline Yes action. Never prefill or offer it here.
+  String? get _rejectedPersonId =>
+      widget.suggestion?.personId.isEmpty == true ? widget.suggestion?.suggestedPersonId : null;
 
   void setLoading(bool value) {
     if (loading == value) return;
@@ -81,6 +254,61 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     });
   }
 
+  Map<String, int> _personFrequencies() {
+    final personFrequencies = <String, int>{};
+    for (final segment in widget.segments) {
+      if (segment.personId != null) {
+        personFrequencies.update(segment.personId!, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    return personFrequencies;
+  }
+
+  /// Picker order: current segment's person, AI suggestion, "You", then
+  /// most-recently-used, in-conversation frequency, and finally alphabetical.
+  /// Missing recency entries tie and fall through to frequency.
+  static int _comparePeopleForPicker(
+    Person a,
+    Person b, {
+    required String? currentPersonId,
+    required String? suggestionId,
+    required Map<String, int> lastUsedMs,
+    required Map<String, int> frequencies,
+  }) {
+    final aIsCurrent = a.id == currentPersonId;
+    final bIsCurrent = b.id == currentPersonId;
+    if (aIsCurrent != bIsCurrent) return aIsCurrent ? -1 : 1;
+
+    final aIsSuggestion = a.id == suggestionId;
+    final bIsSuggestion = b.id == suggestionId;
+    if (aIsSuggestion != bIsSuggestion) return aIsSuggestion ? -1 : 1;
+
+    final aIsUser = a.id == 'user';
+    final bIsUser = b.id == 'user';
+    if (aIsUser != bIsUser) return aIsUser ? -1 : 1;
+
+    final lastUsedA = lastUsedMs[a.id] ?? 0;
+    final lastUsedB = lastUsedMs[b.id] ?? 0;
+    if (lastUsedA != lastUsedB) return lastUsedB.compareTo(lastUsedA);
+
+    final freqA = frequencies[a.id] ?? 0;
+    final freqB = frequencies[b.id] ?? 0;
+    if (freqA != freqB) {
+      return freqB.compareTo(freqA);
+    }
+    return a.name.compareTo(b.name);
+  }
+
+  /// Best-effort recency tracking for the picker sort; never blocks or fails
+  /// the speaker save.
+  void _recordSpeakerLabelUsage(String personId) {
+    try {
+      final lastUsed = Map<String, int>.of(SharedPreferencesUtil().speakerLabelLastUsedMs);
+      lastUsed[personId] = DateTime.now().millisecondsSinceEpoch;
+      SharedPreferencesUtil().speakerLabelLastUsedMs = lastUsed;
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -103,6 +331,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         speakerTextSample = sample.isNotEmpty ? '"$sample"' : null;
       });
 
+      if (_rejectedPersonId != null) return;
+
       // New person suggestion
       final suggestion = widget.suggestion;
       if (suggestion != null && suggestion.personName.isNotEmpty && suggestion.personId.isEmpty) {
@@ -119,32 +349,19 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         setSelectedPerson('user');
         setSelectedPersonName(userName);
       } else if (people.isNotEmpty) {
-        final personFrequencies = <String, int>{};
-        for (final segment in widget.segments) {
-          if (segment.personId != null) {
-            personFrequencies.update(segment.personId!, (count) => count + 1, ifAbsent: () => 1);
-          }
-        }
+        final personFrequencies = _personFrequencies();
         final peopleList = List.from(people);
         final currentPersonId = currentSegment?.personId;
-        peopleList.sort((a, b) {
-          final suggestionId = widget.suggestion?.personId;
-
-          final aIsCurrent = a.id == currentPersonId;
-          final bIsCurrent = b.id == currentPersonId;
-          if (aIsCurrent != bIsCurrent) return aIsCurrent ? -1 : 1;
-
-          final aIsSuggestion = a.id == suggestionId;
-          final bIsSuggestion = b.id == suggestionId;
-          if (aIsSuggestion != bIsSuggestion) return aIsSuggestion ? -1 : 1;
-
-          final freqA = personFrequencies[a.id] ?? 0;
-          final freqB = personFrequencies[b.id] ?? 0;
-          if (freqA != freqB) {
-            return freqB.compareTo(freqA);
-          }
-          return a.name.compareTo(b.name);
-        });
+        peopleList.sort(
+          (a, b) => _comparePeopleForPicker(
+            a,
+            b,
+            currentPersonId: currentPersonId,
+            suggestionId: widget.suggestion?.personId,
+            lastUsedMs: SharedPreferencesUtil().speakerLabelLastUsedMs,
+            frequencies: personFrequencies,
+          ),
+        );
         setSelectedPerson(peopleList[0].id);
         setSelectedPersonName(peopleList[0].name);
       }
@@ -154,6 +371,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   @override
   void dispose() {
     _controller.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -163,40 +381,38 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final people = peopleProvider.people;
     final userName = SharedPreferencesUtil().givenName;
 
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              loading
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white))),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(),
-                        const SizedBox(height: 16),
-                        if (_isCreatingNewPerson)
-                          _buildNewPersonInput(people, userName)
-                        else
-                          _buildPersonSelector(people, userName),
-                        const SizedBox(height: 16),
-                        _buildUntaggedSegments(),
-                        const SizedBox(height: 8),
-                        if (_saveFailed)
-                          Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
-                        _buildSaveButton(),
-                        const SizedBox(height: 28),
-                      ],
-                    ),
-            ],
-          ),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            loading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: OmiSpinner()),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 16),
+                      if (_isCreatingNewPerson)
+                        _buildNewPersonInput(people, userName)
+                      else
+                        _buildPersonSelector(people, userName),
+                      if (widget.onSpeakerRejected != null && !_isCreatingNewPerson) _buildRejections(people),
+                      const SizedBox(height: 16),
+                      _buildUntaggedSegments(),
+                      const SizedBox(height: 8),
+                      if (_saveFailed)
+                        Text(context.l10n.somethingWentWrong, style: TextStyle(color: OmiColors.textSecondary)),
+                      _buildSaveButton(),
+                      const SizedBox(height: OmiSpacing.md),
+                    ],
+                  ),
+          ],
         ),
       ),
     );
@@ -204,33 +420,51 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Widget _buildHeader() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Text(
-                context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(widget.speakerId, widget.segments)),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
         if (speakerTextSample != null && speakerTextSample!.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             speakerTextSample!,
-            style: TextStyle(color: Colors.grey.shade400, fontStyle: FontStyle.italic),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
         ],
       ],
     );
+  }
+
+  void _validateNewPersonName(String value, List<Person> people, String userName) {
+    final trimmedValue = value.trim();
+    final isDuplicate = people.any((p) => p.name.toLowerCase() == trimmedValue.toLowerCase());
+    final isOwnName = trimmedValue.toLowerCase() == userName.toLowerCase();
+
+    selectedPerson = ''; // When typing, deselect any chosen person.
+    if (isDuplicate) {
+      _duplicateNameError = context.l10n.personNameAlreadyExists;
+      setAllowSave(false);
+    } else if (trimmedValue.isEmpty) {
+      _duplicateNameError = null;
+      setAllowSave(false);
+    } else if (isOwnName) {
+      _duplicateNameError = context.l10n.selectYouFromList;
+      setAllowSave(false);
+    } else {
+      _duplicateNameError = null;
+      setAllowSave(true);
+    }
+  }
+
+  /// Switches to the new-person input with [name] prefilled, running the same
+  /// duplicate/own-name validation as typing it by hand.
+  void _startCreatePersonWithName(String name, List<Person> people, String userName) {
+    final trimmed = name.trim();
+    setState(() {
+      _isCreatingNewPerson = true;
+      _controller.text = trimmed;
+      _validateNewPersonName(trimmed, people, userName);
+    });
   }
 
   Widget _buildNewPersonInput(List<Person> people, String userName) {
@@ -240,34 +474,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         TextField(
           controller: _controller,
           autofocus: true,
-          onChanged: (value) {
-            final trimmedValue = value.trim();
-            final isDuplicate = people.any((p) => p.name.toLowerCase() == trimmedValue.toLowerCase());
-            final isOwnName = trimmedValue.toLowerCase() == userName.toLowerCase();
-
-            setState(() {
-              selectedPerson = ''; // When typing, deselect any chosen person.
-              if (isDuplicate) {
-                _duplicateNameError = context.l10n.personNameAlreadyExists;
-                setAllowSave(false);
-              } else if (trimmedValue.isEmpty) {
-                _duplicateNameError = null;
-                setAllowSave(false);
-              } else if (isOwnName) {
-                _duplicateNameError = context.l10n.selectYouFromList;
-                setAllowSave(false);
-              } else {
-                _duplicateNameError = null;
-                setAllowSave(true);
-              }
-            });
-          },
+          onChanged: (value) => setState(() => _validateNewPersonName(value, people, userName)),
           decoration: InputDecoration(
             hintText: context.l10n.enterPersonsName,
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
             hintStyle: const TextStyle(color: Colors.grey),
             errorText: _duplicateNameError,
           ),
@@ -281,54 +494,85 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               setAllowSave(selectedPerson.isNotEmpty);
             });
           },
-          child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
+          child: Text(context.l10n.cancel, style: TextStyle(color: OmiColors.textPrimary)),
         ),
       ],
     );
   }
 
+  Widget _buildPersonSearchField() {
+    return TextField(
+      controller: _searchController,
+      onChanged: (value) => setState(() => _personSearchQuery = value),
+      decoration: InputDecoration(
+        hintText: context.l10n.searchPeople,
+        filled: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        fillColor: Colors.grey[900],
+        border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+        hintStyle: const TextStyle(color: Colors.grey),
+        prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
+        suffixIcon: _personSearchQuery.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _personSearchQuery = '');
+                },
+              ),
+      ),
+    );
+  }
+
   Widget _buildPersonSelector(List<Person> ppl, String userName) {
-    final personFrequencies = <String, int>{};
-    for (final segment in widget.segments) {
-      if (segment.personId != null) {
-        personFrequencies.update(segment.personId!, (count) => count + 1, ifAbsent: () => 1);
-      }
-    }
-
+    final personFrequencies = _personFrequencies();
     final currentSegment = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
-    final currentPersonId = currentSegment?.personId;
-
-    final List<Person> cachedPeople = List.from(ppl);
-    cachedPeople.sort((a, b) {
-      final suggestionId = widget.suggestion?.personId;
-
-      final aIsCurrent = a.id == currentPersonId;
-      final bIsCurrent = b.id == currentPersonId;
-      if (aIsCurrent != bIsCurrent) return aIsCurrent ? -1 : 1;
-
-      final aIsSuggestion = a.id == suggestionId;
-      final bIsSuggestion = b.id == suggestionId;
-      if (aIsSuggestion != bIsSuggestion) return aIsSuggestion ? -1 : 1;
-
-      final freqA = personFrequencies[a.id] ?? 0;
-      final freqB = personFrequencies[b.id] ?? 0;
-      if (freqA != freqB) {
-        return freqB.compareTo(freqA);
-      }
-      return a.name.compareTo(b.name);
-    });
 
     final List<Person> people = [
-      Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()),
+      // The owner is "You" in the app (contract §9), never "<name> (You)".
+      Person(id: 'user', name: context.l10n.you, colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()),
     ];
-    people.addAll(cachedPeople);
+    people.addAll(ppl.where((person) => person.id != _rejectedPersonId));
+    people.sort(
+      (a, b) => _comparePeopleForPicker(
+        a,
+        b,
+        currentPersonId: currentSegment?.personId,
+        suggestionId: widget.suggestion?.personId,
+        lastUsedMs: SharedPreferencesUtil().speakerLabelLastUsedMs,
+        frequencies: personFrequencies,
+      ),
+    );
 
+    final query = _personSearchQuery.trim();
+    final isSearching = query.isNotEmpty;
+    List<Person> visiblePeople = people;
+    var noPersonMatches = false;
+    if (isSearching) {
+      final normalizedQuery = _normalizeForSearch(query);
+      // "You" and the "+ Add Person" chip stay visible regardless of the filter.
+      visiblePeople =
+          people.where((p) => p.id == 'user' || _normalizeForSearch(p.name).contains(normalizedQuery)).toList();
+      noPersonMatches = visiblePeople.length == 1;
+    } else if (!_showAllPeople && ppl.length > _kPersonGridCap) {
+      // "You" stays pinned; only the first ~24 people (post-sort) render until
+      // the grid is expanded.
+      visiblePeople = [
+        ...people.where((p) => p.id == 'user'),
+        ...people.where((p) => p.id != 'user').take(_kPersonGridCap),
+      ];
+    }
+    final bool isCapped = !isSearching && !_showAllPeople && ppl.length > _kPersonGridCap;
+
+    // The contract's chip (§3): tappable on the chip surface, the chosen one accent-filled.
     final List<Widget> chips = [
-      PersonChip(
-        personName: context.l10n.addPerson,
-        isSelected: _isCreatingNewPerson,
-        isAddButton: true,
-        onSelected: (_) {
+      OmiFilterChip(
+        key: const Key('tag_speaker_add_person'),
+        label: context.l10n.addPerson,
+        icon: Icons.add,
+        selected: _isCreatingNewPerson,
+        onSelected: () {
           setState(() {
             _isCreatingNewPerson = true;
             selectedPerson = '';
@@ -338,19 +582,115 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       ),
     ];
     chips.addAll(
-      people.map(
-        (person) => PersonChip(
-          personName: person.name,
-          isSelected: selectedPerson == person.id,
-          onSelected: (bool selected) {
+      visiblePeople.map(
+        (person) => OmiFilterChip(
+          key: Key('tag_speaker_person_${person.id}'),
+          label: person.name,
+          selected: selectedPerson == person.id,
+          onSelected: () {
             setSelectedPerson(person.id);
             setSelectedPersonName(person.id == 'user' ? userName : person.name);
           },
         ),
       ),
     );
+    if (isCapped) {
+      chips.add(
+        OmiFilterChip(
+          key: const Key('tag_speaker_show_all'),
+          label: context.l10n.showAllPeople(ppl.length),
+          selected: false,
+          onSelected: () {
+            setState(() => _showAllPeople = true);
+          },
+        ),
+      );
+    }
 
-    return Wrap(spacing: 8.0, runSpacing: 8.0, children: chips);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (ppl.length > _kPersonSearchThreshold) _buildPersonSearchField(),
+        if (noPersonMatches)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _startCreatePersonWithName(query, ppl, userName),
+                icon: Icon(Icons.person_add_alt, size: 18, color: OmiColors.textSecondary),
+                label: Text(
+                  context.l10n.addQueryAsNewPerson(query),
+                  style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8.0, children: chips),
+      ],
+    );
+  }
+
+  Future<void> _reject(SpeakerRejection kind) async {
+    final reject = widget.onSpeakerRejected;
+    if (reject == null || loading) return;
+    final l10n = context.l10n;
+    setLoading(true);
+    var saved = false;
+    try {
+      saved = await reject(kind);
+    } catch (_) {
+      saved = false;
+    }
+    setLoading(false);
+    if (!mounted) return;
+    if (!saved) {
+      setState(() => _saveFailed = true);
+      return;
+    }
+    final host = widget.feedbackContext;
+    OmiFeedback.confirm(
+      host != null && host.mounted ? host : context,
+      kind == SpeakerRejection.notAPerson ? l10n.speakerTagPromptNotAPersonToast : l10n.speakerTagPromptRejectedToast,
+    );
+    Navigator.pop(context);
+  }
+
+  /// The answers that only say the label is wrong. "Not Me" / "Not <name>" appear when this line
+  /// carries that label; "Not a Person" is always there (a TV, a voice assistant).
+  Widget _buildRejections(List<Person> people) {
+    final l10n = context.l10n;
+    final current = widget.segments.firstWhereOrNull((s) => s.id == widget.segmentId);
+    final person = people.firstWhereOrNull((p) => p.id == current?.personId);
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
+      child: Wrap(
+        spacing: OmiSpacing.xs,
+        children: [
+          if (current?.isUser == true)
+            OmiButton.secondary(
+              key: const Key('name_speaker_not_me'),
+              label: l10n.speakerTagPromptNotMeAction,
+              size: OmiButtonSize.compact,
+              onPressed: () => _reject(SpeakerRejection.notMe),
+            ),
+          if (person != null)
+            OmiButton.secondary(
+              key: const Key('name_speaker_not_person'),
+              label: l10n.speakerLabelText('notPerson', person.name),
+              size: OmiButtonSize.compact,
+              onPressed: () => _reject(SpeakerRejection.notPerson),
+            ),
+          OmiButton.secondary(
+            key: const Key('name_speaker_not_a_person'),
+            label: l10n.speakerTagPromptNotAPerson,
+            size: OmiButtonSize.compact,
+            onPressed: () => _reject(SpeakerRejection.notAPerson),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildUntaggedSegments() {
@@ -365,7 +705,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
                 : context.l10n.tagSpeakerIncludingLaterSpeech,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
+            style: OmiType.footnote,
           ),
           value: _applyToSpeaker,
           onChanged: (value) {
@@ -383,21 +723,20 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           activeColor: Theme.of(context).colorScheme.secondary,
-          checkColor: Colors.white,
+          checkColor: Theme.of(context).colorScheme.onSecondary,
           contentPadding: EdgeInsets.zero,
           secondary: InkWell(
             onTap: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UserPeoplePage()));
+              routeToPage(context, const UserPeoplePage());
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
                 context.l10n.managePeople,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+                style: OmiType.footnote.copyWith(
+                  color: OmiColors.textSecondary,
                   decoration: TextDecoration.underline,
-                  decorationColor: Colors.white70,
+                  decorationColor: OmiColors.textSecondary,
                 ),
               ),
             ),
@@ -415,14 +754,12 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        segment.text,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
-                      ),
+                      Text(segment.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: OmiType.caption),
                       const SizedBox(height: 4),
-                      Text(segment.getTimestampString(), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                      Text(
+                        OmiDuration.offset(segment.start),
+                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                      ),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),
@@ -439,7 +776,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   controlAffinity: ListTileControlAffinity.leading,
                   dense: true,
                   activeColor: Theme.of(context).colorScheme.secondary,
-                  checkColor: Colors.white,
+                  checkColor: Theme.of(context).colorScheme.onSecondary,
                 );
               },
             ),
@@ -449,51 +786,51 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        onPressed: !allowSave || loading
-            ? null
-            : () async {
-                setLoading(true);
-                String personIdToAssign = selectedPerson;
-                String personNameToAssign = selectedPersonName;
+    return OmiButton(
+      label: context.l10n.save,
+      expand: true,
+      isLoading: loading,
+      onPressed: !allowSave || loading
+          ? null
+          : () async {
+              setLoading(true);
+              String personIdToAssign = selectedPerson;
+              String personNameToAssign = selectedPersonName;
 
-                if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
-                  personNameToAssign =
-                      _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
-                  personIdToAssign = ''; // Indicates a new person
-                }
+              if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
+                personNameToAssign =
+                    _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
+                personIdToAssign = ''; // Indicates a new person
+              }
 
-                bool saved = false;
-                try {
-                  saved = await widget.onSpeakerAssigned(
-                    widget.speakerId,
-                    personIdToAssign,
-                    personNameToAssign,
-                    List<String>.of(_selectedSegmentIds),
-                    _applyToSpeaker,
-                  );
-                } catch (_) {
-                  saved = false;
-                }
+              bool saved = false;
+              try {
+                saved = await widget.onSpeakerAssigned(
+                  widget.speakerId,
+                  personIdToAssign,
+                  personNameToAssign,
+                  List<String>.of(_selectedSegmentIds),
+                  _applyToSpeaker,
+                );
+              } catch (_) {
+                saved = false;
+              }
 
-                setLoading(false);
-                if (mounted) {
-                  if (saved) {
-                    Navigator.pop(context);
-                  } else {
-                    setState(() => _saveFailed = true);
-                  }
+              // Fire-and-forget recency tracking; new persons have no known id
+              // yet and are recorded on their next assignment from this sheet.
+              if (saved && personIdToAssign.isNotEmpty) {
+                _recordSpeakerLabelUsage(personIdToAssign);
+              }
+
+              setLoading(false);
+              if (mounted) {
+                if (saved) {
+                  Navigator.pop(context);
+                } else {
+                  setState(() => _saveFailed = true);
                 }
-              },
-        child: Center(child: Text(context.l10n.save)),
-      ),
+              }
+            },
     );
   }
 }

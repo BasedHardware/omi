@@ -178,8 +178,8 @@ struct NotchSystemControlsView: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Hide notch")
-    .accessibilityHint("Hides Omi until you press Push-to-Talk or turn the floating bar back on in Settings")
-    .help("Hide the notch. Push-to-Talk or the Settings switch brings it back.")
+    .accessibilityHint("Hides the notch. Bring it back from the Omi menu bar icon, Push-to-Talk, or Settings")
+    .help("Hide the notch — bring it back from the menu bar (Show Floating Bar)")
   }
 
   // MARK: - Actions

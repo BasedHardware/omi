@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/rename_device_widget.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/services/devices/stored_device_name.dart';
+import 'package:omi/ui/ui.dart';
 
 const _deviceId = 'AA:BB:CC:DD:EE:FF';
 
@@ -20,7 +22,11 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<List<bool?>> openDialog(WidgetTester tester, {Future<bool> Function(String name)? saveToDevice}) async {
+  Future<List<bool?>> openDialog(
+    WidgetTester tester, {
+    Future<bool> Function(String name)? saveToDevice,
+    VoidCallback? onSaved,
+  }) async {
     final results = <bool?>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -37,10 +43,12 @@ void main() {
               child: ElevatedButton(
                 onPressed: () async {
                   results.add(
-                    await showDialog<bool>(
-                      context: context,
-                      builder: (_) =>
-                          RenameDeviceWidget(deviceId: _deviceId, advertisedName: 'Omi', saveToDevice: saveToDevice),
+                    await showRenameDeviceSheet(
+                      context,
+                      deviceId: _deviceId,
+                      advertisedName: 'Omi',
+                      saveToDevice: saveToDevice,
+                      onSaved: onSaved,
                     ),
                   );
                 },
@@ -92,7 +100,7 @@ void main() {
     await tester.tap(find.byKey(const Key('rename_device_save')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(OmiSpinner), findsNothing);
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
     final context = tester.element(find.byKey(const Key('rename_device_field')));
     expect(find.text(AppLocalizations.of(context).anErrorOccurredTryAgain), findsOneWidget);
@@ -209,6 +217,22 @@ void main() {
 
     expect(written, ['']);
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
+  });
+
+  testWidgets('reports a stored name to the page, and not a failed one', (tester) async {
+    var saved = 0;
+    var accept = false;
+    await openDialog(tester, saveToDevice: (name) async => accept, onSaved: () => saved++);
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+    expect(saved, 0);
+
+    accept = true;
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+    expect(saved, 1);
   });
 
   testWidgets('says the name lives on the Omi when the device stores it', (tester) async {

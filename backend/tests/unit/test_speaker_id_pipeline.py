@@ -140,6 +140,7 @@ for _real_import in (
 _install_module("database._client", MagicMock())
 _conversations_mod = ModuleType("database.conversations")
 _conversations_mod.get_conversation = MagicMock(return_value=None)
+_conversations_mod.decode_manual_speaker_assignments = MagicMock()
 _install_module("database.conversations", _conversations_mod)
 
 _users_mod = ModuleType("database.users")
@@ -540,7 +541,6 @@ class TestDetectSpeakerFromText:
         (None, "I am American.", "American"),
         (None, "I'm Thai food kind of person.", "Thai"),
         (None, "I'm South Asian.", "South"),
-        (None, "I'm Googling it now.", "Googling"),
         (None, "I'm Amazon shopping.", "Amazon"),
         (None, "I'm Always late.", "Always"),
         ("zh", "我是因为这个", "因为这个"),
@@ -573,6 +573,11 @@ class TestDetectSpeakerFromText:
         assert detection is not None, f"Failed to detect name in {text!r}"
         assert detection.name == expected_name
         assert detection.explicit is True, f"{text!r} is an explicit self-introduction"
+
+    @pytest.mark.parametrize("text", ["I'm Googling it now.", "My name is Googling", "My name is Because"])
+    def test_observed_junk_names_are_rejected(self, text):
+        assert detect_speaker_introduction(text) is None
+        assert detect_speaker_from_text(text) is None
 
     def test_name_only_wrapper_is_unchanged_by_the_split(self):
         """Callers that only resolve an existing person keep the loose behaviour."""

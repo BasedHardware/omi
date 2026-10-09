@@ -112,3 +112,27 @@ def test_malformed_conversation_skipped_not_500():
             folder_id='f1', limit=100, offset=0, include_discarded=False, uid='u1'
         )
     assert [c.id for c in result] == ['c1', 'c2']
+
+
+def test_update_folder_router_strips_explicit_null_non_nullable_fields():
+    existing = {
+        'id': 'f1',
+        'name': 'Work',
+        'description': 'Old desc',
+        'color': '#3B82F6',
+        'icon': '💼',
+        'order': 1,
+    }
+    req = folders_mod.UpdateFolderRequest(
+        name='Updated Work',
+        description=None,
+        color=None,
+        icon=None,
+        order=None,
+    )
+    with patch.object(folders_mod.folders_db, 'get_folder', return_value=existing), patch.object(
+        folders_mod.folders_db, 'update_folder'
+    ) as mock_update:
+        folders_mod.update_folder(folder_id='f1', request=req, uid='u1')
+
+    mock_update.assert_called_once_with('u1', 'f1', {'name': 'Updated Work', 'description': None})

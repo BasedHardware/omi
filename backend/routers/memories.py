@@ -60,6 +60,17 @@ router = APIRouter()
 _auth_module = cast(Any, auth)
 
 
+def _sanitize_memories_error(exc: Exception, fallback: str) -> str:
+    """Sanitize query parameter and temporal view error details while preserving debug logging."""
+    logger.warning("Memories query operation failed: %s: %s", type(exc).__name__, exc)
+    msg = str(exc).strip()
+    if msg.startswith("unsupported memory read view:"):
+        return "unsupported memory read view"
+    if msg == "device_scope must be one of: all, current, explicit":
+        return msg
+    return fallback
+
+
 class MemoryMutationResponse(BaseModel):
     status: str
 
@@ -317,7 +328,8 @@ def _resolve_get_memories_device_scope(
             x_device_id_hash=x_device_id_hash,
         )
     except DeviceScopeValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = _sanitize_memories_error(exc, "device_scope must be one of: all, current, explicit")
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
@@ -463,6 +475,8 @@ async def create_memory(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -561,6 +575,8 @@ async def create_memories_batch(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -672,7 +688,8 @@ def get_memories(
         try:
             temporal_view = normalize_temporal_read_view(view)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            detail = _sanitize_memories_error(exc, "unsupported memory read view")
+            raise HTTPException(status_code=422, detail=detail) from exc
         if not belief_model_enabled():
             temporal_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
@@ -698,6 +715,8 @@ def get_memories(
     # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
     budget = list_read_budget_for_request(request, route='memories')
 
+    # X-Omi-Memory-* capability headers exist for pre-capability desktop clients;
+    # removal requires minimum supported desktop version 0.12.386+12386.
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',

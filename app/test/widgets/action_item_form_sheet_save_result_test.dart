@@ -69,8 +69,8 @@ void main() {
 
     await _editDescription(tester, provider);
 
-    expect(find.text('Action item updated'), findsNothing);
-    expect(find.text('Failed to update action item'), findsOneWidget);
+    expect(find.text('Task updated'), findsNothing);
+    expect(find.text('Failed to update task'), findsOneWidget);
   });
 
   testWidgets('an accepted edit is reported as saved', (tester) async {
@@ -83,7 +83,7 @@ void main() {
 
     await _editDescription(tester, provider);
 
-    expect(find.text('Action item updated'), findsOneWidget);
-    expect(find.text('Failed to update action item'), findsNothing);
+    expect(find.text('Task updated'), findsOneWidget);
+    expect(find.text('Failed to update task'), findsNothing);
   });
 }

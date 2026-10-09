@@ -129,7 +129,6 @@ def install_finalizer_leaves() -> None:
     processing.trigger_conversation_apps = _offline_noop
     processing.assign_conversation_to_folder = _offline_folder_assignment
     processing.save_structured_vector = _offline_noop
-    processing.save_transcript_chunk_vectors = _offline_noop
     processing._save_action_items = _offline_noop
     processing.update_goal_progress = _offline_noop
     processing.conversation_created_webhook = _offline_noop_async

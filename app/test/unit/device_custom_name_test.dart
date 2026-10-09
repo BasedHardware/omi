@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/utils/device.dart';
 
 BtDevice _device({String id = 'AA:BB:CC:DD:EE:FF', String name = 'Omi'}) =>

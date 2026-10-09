@@ -4,30 +4,64 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/services/devices/stored_device_name.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Opens the rename sheet for [deviceId]. Resolves `true` when a name was saved or reset.
+Future<bool?> showRenameDeviceSheet(
+  BuildContext context, {
+  required String deviceId,
+  required String advertisedName,
+  Future<bool> Function(String name)? saveToDevice,
+  VoidCallback? onSaved,
+}) {
+  return showOmiEditSheet<bool>(
+    context: context,
+    builder: (_) => RenameDeviceWidget(
+      deviceId: deviceId,
+      advertisedName: advertisedName,
+      saveToDevice: saveToDevice,
+      onSaved: onSaved,
+    ),
+  );
+}
 
 class RenameDeviceWidget extends StatefulWidget {
   final String deviceId;
   final String advertisedName;
   final Future<bool> Function(String name)? saveToDevice;
 
-  const RenameDeviceWidget({super.key, required this.deviceId, required this.advertisedName, this.saveToDevice});
+  /// Called once the name is stored, even when the sheet was dismissed while the save was in flight.
+  final VoidCallback? onSaved;
+
+  const RenameDeviceWidget({
+    super.key,
+    required this.deviceId,
+    required this.advertisedName,
+    this.saveToDevice,
+    this.onSaved,
+  });
 
   @override
   State<RenameDeviceWidget> createState() => _RenameDeviceWidgetState();
 }
 
 class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
-  late TextEditingController nameController;
+  late final TextEditingController nameController;
+  late final String _originalName;
   bool isSaving = false;
   bool saveFailed = false;
 
+  bool get _isDirty => nameController.text.trim() != _originalName;
+
   @override
   void initState() {
-    nameController = TextEditingController(text: SharedPreferencesUtil().getDeviceCustomName(widget.deviceId) ?? '');
     super.initState();
+    _originalName = SharedPreferencesUtil().getDeviceCustomName(widget.deviceId) ?? '';
+    nameController = TextEditingController(text: _originalName);
   }
 
   @override
@@ -41,159 +75,124 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
   Future<void> _reset() => _store('');
 
   Future<void> _store(String name) async {
+    if (isSaving) return;
+    final deviceId = widget.deviceId;
+    final saveToDevice = widget.saveToDevice;
+    final onSaved = widget.onSaved;
     setState(() {
       isSaving = true;
       saveFailed = false;
     });
     try {
-      final saveToDevice = widget.saveToDevice;
       if (saveToDevice != null && !await saveToDevice(name.trim())) {
-        if (mounted) {
-          setState(() {
-            isSaving = false;
-            saveFailed = true;
-          });
-        }
+        _showFailure();
         return;
       }
-      await SharedPreferencesUtil().setDeviceCustomName(widget.deviceId, name);
+      await SharedPreferencesUtil().setDeviceCustomName(deviceId, name);
     } catch (e) {
       Logger.debug('Error saving device name: $e');
-      if (mounted) {
-        setState(() {
-          isSaving = false;
-          saveFailed = true;
-        });
-      }
+      _showFailure();
       return;
     }
+    onSaved?.call();
     if (mounted) {
       Navigator.of(context).pop(true);
     }
   }
 
+  void _showFailure() {
+    if (!mounted) return;
+    setState(() {
+      isSaving = false;
+      saveFailed = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final hasCustomName = SharedPreferencesUtil().getDeviceCustomName(widget.deviceId) != null;
-    return PopScope(
-      canPop: !isSaving,
-      child: Dialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.deviceName,
-                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+    return OmiEditSheet(
+      title: l10n.deviceName,
+      isDirty: _isDirty,
+      enabled: !isSaving,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.saveToDevice != null ? l10n.deviceNameStoredOnDevice : l10n.deviceNameStoredOnPhone,
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            TextField(
+              key: const Key('rename_device_field'),
+              controller: nameController,
+              enabled: !isSaving,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(32),
+                _Utf8ByteLimitFormatter(maxStoredDeviceNameBytes),
+              ],
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _save(),
+              style: OmiType.body,
+              cursorColor: OmiColors.accent,
+              decoration: InputDecoration(
+                hintText: widget.advertisedName,
+                hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+                filled: true,
+                fillColor: OmiColors.surface2,
+                contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+                border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
               ),
-              const SizedBox(height: 8),
-              Text(
-                widget.saveToDevice != null
-                    ? context.l10n.deviceNameStoredOnDevice
-                    : context.l10n.deviceNameStoredOnPhone,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-                child: TextField(
-                  key: const Key('rename_device_field'),
-                  controller: nameController,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(32),
-                    _Utf8ByteLimitFormatter(maxStoredDeviceNameBytes),
-                  ],
-                  onSubmitted: (_) => isSaving ? null : _save(),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: widget.advertisedName,
-                    hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.white24, width: 1),
-                    ),
-                  ),
-                ),
-              ),
-              if (saveFailed) ...[
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.anErrorOccurredTryAgain,
+            ),
+            const SizedBox(height: OmiSpacing.lg),
+            if (saveFailed) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  l10n.anErrorOccurredTryAgain,
                   key: const Key('rename_device_error'),
-                  style: TextStyle(color: Colors.red.shade300, fontSize: 14),
+                  style: OmiType.footnote.copyWith(color: OmiColors.danger),
+                  textAlign: TextAlign.center,
                 ),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: isSaving ? null : () => Navigator.of(context).pop(false),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2E),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
-                          child: Text(
-                            context.l10n.cancel,
-                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GestureDetector(
-                      key: const Key('rename_device_save'),
-                      onTap: isSaving ? null : _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                        child: Center(
-                          child: isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                                )
-                              : Text(
-                                  context.l10n.save,
-                                  style:
-                                      const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
-              if (hasCustomName) ...[
-                const SizedBox(height: 12),
-                Center(
-                  child: GestureDetector(
-                    key: const Key('rename_device_reset'),
-                    onTap: isSaving ? null : _reset,
-                    child: Text(
-                      context.l10n.resetToDefault,
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 14, decoration: TextDecoration.underline),
-                    ),
+              const SizedBox(height: OmiSpacing.xs),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: OmiButton.secondary(
+                    label: l10n.cancel,
+                    expand: true,
+                    onPressed: isSaving ? null : () => Navigator.of(context).pop(false),
+                  ),
+                ),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: OmiButton(
+                    key: const Key('rename_device_save'),
+                    label: l10n.save,
+                    expand: true,
+                    isLoading: isSaving,
+                    onPressed: _save,
                   ),
                 ),
               ],
+            ),
+            if (hasCustomName) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              OmiButton.tertiary(
+                key: const Key('rename_device_reset'),
+                label: l10n.resetToDefault,
+                expand: true,
+                onPressed: isSaving ? null : _reset,
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

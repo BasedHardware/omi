@@ -20,7 +20,14 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 
 @pytest.fixture(autouse=True)
 def _reuse_parsed_repo_manifest(monkeypatch):
-    monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
+    # runpy's returned mapping is distinct from the function's globals.
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: _MANIFEST)
+    # Full-state renderer tests need deploy-time values for every declared job.
+    for env_config in _MANIFEST['environments'].values():
+        for job in (env_config.get('cloud_run', {}).get('jobs') or {}).values():
+            for raw_entry in (job.get('env') or {}).values():
+                if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                    monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
@@ -164,7 +171,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
     assert 'MEMORY_MODE=' not in memory_env
-    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED' not in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
     rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
@@ -184,6 +191,53 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
+def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
+
+    assert _MODULE['main']() == 0
+    output = capsys.readouterr().out
+    assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
+    assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
+    assert 'RAPID_API_HOST=twitter-api.example' in output
+    assert 'X_OAUTH_CLIENT_SECRET=X_OAUTH_CLIENT_SECRET:latest' in output
+    assert 'RAPID_API_KEY=RAPID_API_KEY:latest' in output
+    assert '--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com' in output
+    assert 'notifications_job_env_vars<<' not in output
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_x_connector_sync_job_pins_its_task_timeout(env):
+    """The job must pin a task timeout rather than inherit Cloud Run's 600s default.
+
+    Every other Cloud Run job in this manifest pins one. An unpinned job deploys at the
+    platform default, and #12530 is what that costs: the notifications job was SIGKILLed
+    mid-batch at 600s, users past the kill point were never reached on any run, and the
+    pipeline looked healthy throughout. X sync walks a registry at ~1.5s per user plus
+    fetch and extraction, so it has the same shape of exposure.
+
+    Pinned equal to memory-maintenance-job, the job this one was cloned from.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    assert jobs['x-connector-sync-job']['flags']['--task-timeout'] == '3600s'
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_cloud_run_job_pins_a_task_timeout(env):
+    """No job may rely on the platform default.
+
+    Asserting only the new job would let the next one repeat the omission — this PR's own
+    job was added without a timeout precisely because nothing required one.
+    """
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    unpinned = sorted(name for name, spec in jobs.items() if not (spec.get('flags') or {}).get('--task-timeout'))
+    assert unpinned == [], f'Cloud Run jobs without an explicit --task-timeout: {unpinned}'
+
+
 @pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
@@ -201,6 +255,7 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
@@ -223,13 +278,25 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
     assert 'memory_maintenance_job.py' in dockerfile
 
 
+def _without_named_env(node, name: str):
+    if isinstance(node, dict):
+        return {key: _without_named_env(value, name) for key, value in node.items() if key != name}
+    if isinstance(node, list):
+        return [_without_named_env(item, name) for item in node]
+    return node
+
+
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     dev = deepcopy(_MANIFEST['environments']['dev'])
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists.
+    # first-user or capture admission lists. EXP-003 is the one approved
+    # allowlist-only vendor shadow for this UID.
     dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
-    serialized = json.dumps(dev, sort_keys=True)
+    serialized = json.dumps(
+        _without_named_env(dev, 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST'),
+        sort_keys=True,
+    )
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
@@ -253,24 +320,45 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+        'RAPID_API_HOST',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
     assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert notifications_env['OMI_CUSTOMER_DATA_PROJECT']['value'] == 'based-hardware'
     assert set(notifications_job['secrets']) == {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
+
+    x_sync_job = cloud_run['jobs']['x-connector-sync-job']
+    x_sync_env = x_sync_job['env']
+    assert x_sync_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert x_sync_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert x_sync_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert set(x_sync_job['secrets']) >= {
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+        'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'X_OAUTH_CLIENT_SECRET',
+        'RAPID_API_KEY',
+    }
+    assert x_sync_job['flags']['--service-account'] == (
+        'dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com'
+    )
     assert notifications_job['flags']['--memory'] == '2Gi'
     assert notifications_job['flags']['--task-timeout'] == '3600s'
 
 
-def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
-    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
+def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
+    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_x_connector_sync_job.yml').read_text(encoding='utf-8')
 
     assert 'Verify LLM Gateway serving data plane' in workflow
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
@@ -296,6 +384,9 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
@@ -338,6 +429,9 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.160.108')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
 
     assert _MODULE['main']() == 0
@@ -398,7 +492,11 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
     ) in text
-    assert "id-token: 'write'" not in text
+    # Prod deploys through GitHub WIF (credential-hygiene WS-C), which needs the
+    # OIDC token; development keeps its JSON lane.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert "if: github.event.inputs.environment == 'prod'" in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
@@ -491,31 +589,38 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     ):
         assert flag in integration_flags, flag
         assert flag not in backend_flags, flag
-        assert flag not in sync_flags, flag
+        # backend-sync owns its own scale-out cap (see test_sync_two_lane.py);
+        # its value may legitimately equal integration's, so only the other
+        # integration-specific flags must stay off it.
+        if not flag.startswith('--max-instances='):
+            assert flag not in sync_flags, flag
 
 
-VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
 
 
 @pytest.mark.parametrize(
-    ('env', 'project'),
+    ('env', 'project', 'gemini_secret'),
     [
-        ('dev', 'based-hardware-dev'),
-        ('prod', 'based-hardware'),
+        ('dev', 'based-hardware-dev', 'GEMINI_API_KEY'),
+        ('prod', 'based-hardware', 'DESKTOP_GEMINI_API_KEY'),
     ],
 )
-def test_desktop_backend_compose_pins_vertex_pt(env, project):
+def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
     desktop = _MANIFEST['environments'][env]['desktop_backend']
     rendered = _MODULE['_render_env_vars'](desktop['env'])
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
     assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
-    assert _MODULE['_render_secrets'](desktop['secrets']) == (
-        'METRICS_SECRET=METRICS_SECRET:latest\nPOSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
+    expected_secrets = (
+        f'GEMINI_API_KEY={gemini_secret}:latest\n'
+        'METRICS_SECRET=METRICS_SECRET:latest\n'
+        'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
     )
+    assert _MODULE['_render_secrets'](desktop['secrets']) == expected_secrets
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
-    assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
+    assert VERTEX_PT_CONTRACT in docs.read_text(encoding='utf-8')
 
 
 def test_state_output_carries_cloud_run_jobs(tmp_path, monkeypatch):
@@ -704,3 +809,86 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
+
+
+def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
+    prod = _MANIFEST['environments']['prod']
+    gke = [prod['llm_gateway'], prod['gke']['backend-listen'], prod['gke']['pusher']]
+    run = list(prod['cloud_run']['services'].values())
+    for host in gke + run + [prod['desktop_backend']]:
+        assert host['env']['MENTOR_PIPELINE']['value'] == 'cohort'
+        assert not any(k.startswith('COMMITMENT_FOLLOWUP_TASKS_') for k in host['env'])
+    for host in gke:
+        assert host['env']['PROACTIVITY_REDIS_PORT']['value'] == '13151'
+    for host in gke:
+        assert host['env']['PROACTIVITY_REDIS_HOST']['config_map'] == {
+            'name': 'prod-omi-backend-config',
+            'key': 'REDIS_DB_HOST',
+        }
+        assert host['env']['PROACTIVITY_REDIS_PASSWORD']['secret'] == {
+            'name': 'prod-omi-backend-secrets',
+            'key': 'REDIS_DB_PASSWORD',
+        }
+    for host in run + [prod['desktop_backend']]:
+        for block in ('env', 'secrets'):
+            assert not any(key.startswith('PROACTIVITY_REDIS_') for key in host[block])
+    for host in run:
+        assert 'POSTHOG_PROJECT_API_KEY' not in host['secrets']
+        assert 'POSTHOG_API_KEY' not in host['secrets']
+    # Desktop's existing normal Redis mounts remain owned by its workflow,
+    # rather than introducing extra refs in the manifest's rendered subset.
+    desktop = prod['desktop_backend']
+    for key in ('HOST', 'PORT', 'PASSWORD'):
+        assert f'REDIS_DB_{key}' not in desktop['env']
+        assert f'REDIS_DB_{key}' not in desktop['secrets']
+    # Gateway reservation bindings live in chart-only optional runtime references.
+    chart = yaml.safe_load((_REPO_ROOT / 'backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml').read_text())
+    env = {row['name']: row for row in chart['env']}
+    for key in ('HOST', 'PORT'):
+        assert env[f'REDIS_DB_{key}']['valueFrom']['configMapKeyRef'] == {
+            'name': 'prod-omi-reservation-runtime-config',
+            'key': f'REDIS_DB_{key}',
+            'optional': True,
+        }
+    assert env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'] == {
+        'name': 'prod-omi-backend-secrets',
+        'key': 'VERTEX_RESERVATION_REDIS_PASSWORD',
+        'optional': True,
+    }
+
+
+def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
+    # Main's declared mounts at cd3326b3a58d. Preserve the resource, env alias,
+    # and version together: a new alias can also introduce a startup dependency.
+    common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
+    baseline = {
+        'backend': common
+        | {
+            'METRICS_SECRET',
+            'LIFECYCLE_EMAIL_SIGNING_SECRET',
+            'MEMORY_V3_CURSOR_SECRET',
+            'DESKTOP_PREVIEW_PUBLISH_KEY',
+            'BETA_PROMOTION_TOKEN',
+            'MCP_OAUTH_CLIENTS_JSON',
+            'SCREEN_FRAME_SIGNING_SECRET',
+        },
+        'backend-sync': common | {'GOOGLE_MAPS_API_KEY'},
+        'backend-sync-backfill': common,
+        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+    }
+    prod = _MANIFEST['environments']['prod']
+    for service, names in baseline.items():
+        refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
+        assert {
+            (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+            for entry in refs
+        } == {(name, name, 'latest') for name in names}, service
+    desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
+    assert {
+        (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+        for entry in desktop
+    } == {
+        ('GEMINI_API_KEY', 'DESKTOP_GEMINI_API_KEY', 'latest'),
+        ('METRICS_SECRET', 'METRICS_SECRET', 'latest'),
+        ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest'),
+    }

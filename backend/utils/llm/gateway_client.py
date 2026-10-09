@@ -207,6 +207,17 @@ def should_route_features_through_gateway() -> bool:
     return True
 
 
+def should_route_company_paid_features_through_gateway() -> bool:
+    """Company-paid generation is gateway-only; the rollout flag is no longer a fallback.
+
+    Keep ``should_route_features_through_gateway`` for compatibility surfaces
+    that still have an explicit migration state. Core ``get_llm`` callers use
+    this invariant so an unset flag or gateway outage can never send paid
+    requests directly to a provider.
+    """
+    return True
+
+
 def get_chat_agent_route() -> str:
     """Return the effective agentic-chat route: ``direct`` or ``gateway``.
 
@@ -784,3 +795,47 @@ def _gateway_feature_for_current_request(default: str | None) -> str | None:
     if context is not None and context.feature:
         return context.feature
     return default
+
+
+async def run_proactivity_gateway(
+    *, uid: str, item_id: str, producer: str, call_id: str, step: str, request: dict[str, Any]
+) -> dict[str, Any]:
+    """One authenticated v2 call. No retries or direct-provider fallback."""
+    headers = llm_gateway_headers(feature=f'proactivity_v2_{producer}')
+    headers.update(
+        {
+            'X-Omi-User-Uid': uid,
+            'X-Omi-Request-Id': call_id,
+            'X-Omi-Proactivity-Item': item_id,
+            LLM_GATEWAY_USAGE_FEATURE_HEADER: f'proactivity_v2_{producer}',
+            'X-Omi-Proactivity-Producer': producer,
+            'X-Omi-Proactivity-Call': call_id,
+            'X-Omi-Proactivity-Step': step,
+        }
+    )
+    payload = dict(request)
+    payload['model'] = (
+        'omi:auto:jev-decisions' if step in {'prefilter', 'dedupe', 'usefulness'} else 'omi:auto:proactive-notification'
+    )
+    path = '/v1/systemone' if step in {'prefilter', 'dedupe', 'usefulness'} else '/v1/chat/completions'
+    async with get_llm_gateway_semaphore():
+        response = await get_llm_gateway_client().post(
+            get_llm_gateway_base_url() + path,
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+    if response.is_error:
+        try:
+            error = response.json().get('error', {})
+        except (ValueError, AttributeError):
+            error = {}
+        if error.get('param') == 'proactivity_admission':
+            from config.proactivity_v2 import ProactivityDenied
+
+            raise ProactivityDenied('gateway_admission_denied')
+    response.raise_for_status()
+    result = response.json()
+    if not isinstance(result, dict):
+        raise ValueError('invalid proactivity gateway response')
+    return result

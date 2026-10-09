@@ -20,6 +20,9 @@ class Surface(str, Enum):
     OPENAI_CHAT_COMPLETIONS = 'openai.chat_completions'
     ANTHROPIC_MESSAGES = 'anthropic.messages'
     OPENAI_EMBEDDINGS = 'openai.embeddings'
+    # OpenRouter's decision-model endpoint (POST /api/v1/systemone): typed
+    # answers with probabilities, no generated text (TypeSafe Jev, #14835).
+    OPENROUTER_SYSTEMONE = 'openrouter.systemone'
 
 
 class StructuredOutputMode(str, Enum):
@@ -52,6 +55,7 @@ class RouteServingClass(str, Enum):
 class FailureClass(str, Enum):
     TIMEOUT_BEFORE_OUTPUT = 'timeout_before_output'
     PROVIDER_429_OMI_PAID = 'provider_429_omi_paid'
+    RESERVED_CAPACITY_UNAVAILABLE = 'reserved_capacity_unavailable'
     PROVIDER_5XX_OMI_PAID = 'provider_5xx_omi_paid'
     PROVIDER_INVALID_REQUEST = 'provider_invalid_request'
     BYOK_AUTH = 'byok_auth'
@@ -214,7 +218,6 @@ class FallbackPolicy(StrictBaseModel):
 class OutputBudgetPolicy(StrictBaseModel):
     """An opt-in per-route output cap, never a global provider default."""
 
-    experiment: str = Field(min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_-]*$')
     max_completion_tokens: int = Field(ge=1, le=8192)
 
 

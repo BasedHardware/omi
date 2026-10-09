@@ -157,6 +157,18 @@ def compose_manifest(
     }
 
 
+class RuntimeEnvDumper(yaml.SafeDumper):
+    """Keep small literal rollout entries readable without expanding the manifest."""
+
+
+def _represent_mapping(dumper, mapping):
+    compact = set(mapping) == {'value', 'category'} and mapping['category'] == 'rollout'
+    return dumper.represent_mapping('tag:yaml.org,2002:map', mapping, flow_style=compact)
+
+
+RuntimeEnvDumper.add_representer(dict, _represent_mapping)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Compose backend/deploy/runtime_env.yaml from base + overlays.')
     parser.add_argument('--base', type=Path, default=DEFAULT_BASE)
@@ -166,8 +178,9 @@ def main() -> int:
     args = parser.parse_args()
 
     manifest = compose_manifest(base_path=args.base, runtime_env_dir=args.runtime_env_dir)
-    rendered = GENERATED_HEADER + yaml.safe_dump(
+    rendered = GENERATED_HEADER + yaml.dump(
         manifest,
+        Dumper=RuntimeEnvDumper,
         sort_keys=False,
         default_flow_style=False,
         allow_unicode=True,

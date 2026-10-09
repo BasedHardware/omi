@@ -161,7 +161,7 @@ jobs:
             To update your device in the Omi app:
             1. Open the Omi app.
             2. Go to **Settings** > **Device Settings**.
-            3. Select **Update Latest Version**.
+            3. Select **Product Update**.
         run: |
           OUT="$RUNNER_TEMP/cv1-body.md"
           OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh

@@ -57,14 +57,14 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Supports SELECT, INSERT, UPDATE, DELETE.",
       "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
-      "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
+      "Use get_work_context for recent-work destinations; use the current schema for structured record queries.",
       "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
       "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
       "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
+      "Use get_work_context for recent-work destinations; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
     ]
     ),
     Capability(
@@ -831,18 +831,6 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "record_interject_feedback",
-      title: "Record Interject Feedback",
-      latency: .fastLocal,
-      surfaces: Set([.realtimeHub]),
-      summary: "Silently record how the user's utterance relates to the proactive card.",
-      bullets: [
-      "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
-      "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
-      "Never speak the verb, a heads-up, or the tool result."
-    ]
-    ),
-    Capability(
       toolName: "point_click",
       title: "Point Click",
       latency: .fastLocal,
@@ -882,6 +870,95 @@ enum GeneratedToolCapabilities {
       "Use only after search_screen_history returns the screenshot_id; never invent an id.",
       "This is one-frame inspection, not a continuous vision lane. Local API only."
     ]
+    ),
+    Capability(
+      toolName: "search_contacts",
+      title: "Search Contacts",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Resolve a person's name to their phone numbers and email addresses from local Contacts.",
+      bullets: [
+      "Call before send_message when the user names a person instead of giving a handle.",
+      "Ask the user to choose when several contacts or handles match.",
+      "Call this before send_message whenever the recipient is named rather than given as a raw phone number or email.",
+      "If several contacts match, ask the user which one instead of guessing.",
+      "If a contact has multiple handles, prefer the mobile number for messaging and say which one you chose."
+    ]
+    ),
+    Capability(
+      toolName: "list_message_chats",
+      title: "List Message Chats",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "List recent iMessage/SMS conversations from the local Messages database.",
+      bullets: [
+      "Use to locate the conversation the user means before reading or replying.",
+      "Requires Full Disk Access; returns an empty result with a permission hint without it.",
+      "Use this to find the chat the user means before reading history or sending.",
+      "Chat identifiers from this tool are stable; pass chat_id to read_message_history."
+    ]
+    ),
+    Capability(
+      toolName: "read_message_history",
+      title: "Read Message History",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Read recent messages from one iMessage/SMS conversation.",
+      bullets: [
+      "Identify the thread by chat_id from list_message_chats, or by handle.",
+      "Read the thread before drafting a reply so it matches the real conversation.",
+      "Identify the conversation by chat_id from list_message_chats, or by handle for a direct thread.",
+      "Read the thread before drafting a reply so the reply matches the actual conversation.",
+      "Quote message text only when the user asked for it; summarize otherwise."
+    ]
+    ),
+    Capability(
+      toolName: "list_mail_messages",
+      title: "List Mail Messages",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "List recent Apple Mail headers from the local envelope index.",
+      bullets: [
+      "Returns subject, sender, date, and read state — never message bodies.",
+      "Say the body is unavailable rather than inferring what a message said.",
+      "Requires Full Disk Access; returns a permission hint without it.",
+      "Use this to answer what is waiting in the user's inbox, who wrote, and what about.",
+      "Bodies are not available through this tool. Say so rather than guessing what a message said.",
+      "Summarize senders and subjects; quote a subject only when the user asked for it."
+    ]
+    ),
+    Capability(
+      toolName: "send_message",
+      title: "Send Message",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Send an iMessage or SMS through Messages.app after an explicit approval.",
+      bullets: [
+      "Always requires an approval dispatch showing the resolved recipient and exact text.",
+      "Resolve named recipients with search_contacts first.",
+      "Leave service unset unless the user explicitly asked for SMS or iMessage.",
+      "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
+      "Put the exact text you intend to send in the text field — the approval card shows the user this string verbatim.",
+      "Never send to a handle the user did not name or confirm.",
+      "Leave service unset unless the user explicitly asked for SMS or iMessage; auto lets Messages.app choose.",
+      "After a successful send, report the recipient and that it was sent — do not re-send on an ambiguous result."
+    ]
+    ),
+    Capability(
+      toolName: "run_applescript",
+      title: "Run AppleScript",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Run an AppleScript snippet against local macOS apps after an explicit approval.",
+      bullets: [
+      "Always requires an approval dispatch showing the exact script.",
+      "Prefer a dedicated tool when one exists — send_message rather than scripting Messages.app.",
+      "Requires Automation permission for every app the script targets.",
+      "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",
+      "Keep the script to the single action you described to the user; the approval card shows the script verbatim.",
+      "Read-only scripting (querying window titles, reading a selection) still requires approval because it drives other apps.",
+      "Do not use this to bypass a denied approval or to script a permission dialog."
+    ]
     )
   ]
 
@@ -894,6 +971,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_conversation_evidence","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversation_evidence","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_conversation_evidence","read_tool_output","report_screen_observation","request_permission","screenshot","search_conversation_evidence","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

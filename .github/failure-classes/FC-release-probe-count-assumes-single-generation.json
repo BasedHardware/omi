@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-probe-count-assumes-single-generation",
+  "violated_contract": "A release probe must judge a completed conversation against the audio that can belong to that conversation. Repeated fixture sends can have late STT segments assigned to a rollover generation, so requiring the original conversation to contain every sent word can reject a healthy finalization. A CI failure must expose its bounded stage and counters while keeping transcript and credentials private.",
+  "canonical_prevention": "Require terminal readback and the complete fixture phrase in the original conversation, bound its word count between one pass and the maximum eight sends with recognition tolerance, and report only the fixed failure stage and scalar counts. Keep the two-pass alignment scenario's exact expected count, because that scenario has a separate no-rollover contract. Regression tests cover the rollover share, duplicated text, redacted status line, and old/new receipt verification.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_pusher_semantic_probe.py",
+    "backend/tests/unit/test_verify_pusher_promotion_evidence.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/pusher_semantic_probe.py",
+    "backend/scripts/verify_pusher_promotion_evidence.py",
+    "backend/tests/unit/test_pusher_semantic_probe.py",
+    "backend/tests/unit/test_verify_pusher_promotion_evidence.py"
+  ],
+  "status": "open"
+}

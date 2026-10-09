@@ -1,4 +1,5 @@
 import logging
+import re
 from threading import Lock
 from typing import Any
 
@@ -7,6 +8,7 @@ from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
+from database.firestore_transaction_retry import FirestoreAborted, FirestoreContentionExhausted
 from database.google_credentials import (
     customer_data_service_account,
     customer_entitlement_service_account,
@@ -18,6 +20,10 @@ __all__ = [
     "db",
     "delete_collection_recursive",
     "document_id_from_seed",
+    "FIRESTORE_DOCUMENT_KINDS",
+    "firestore_document_kind",
+    "firestore_error_document_path",
+    "firestore_failure_reason",
     "get_customer_firestore_client",
     "get_data_plane_firestore_client",
     "get_firestore_client",
@@ -86,10 +92,13 @@ _install_query_stream_retry_compat()
 
 
 def _install_document_read_probe() -> None:
-    """Count every Firestore document read by collection pattern and hit/miss.
+    """Count every Firestore read on the SDK classes, for every client in-process.
 
-    Same lazy-import discipline as the query retry shim above: the probe wraps
-    SDK classes that do not exist under the unit-test import stubs.
+    The patch is on the classes, not on one instance, so a later ``firestore.Client()``
+    or ``AsyncClient()`` in this process is covered. A process that never imports
+    this module does not install it. Same lazy-import discipline as the query retry
+    shim above: the probe wraps SDK classes that do not exist under the unit-test
+    import stubs.
     """
     try:
         from database.firestore_document_probe import install_document_read_probe
@@ -135,6 +144,14 @@ def _firestore_database_id() -> str | None:
     raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
 
 
+def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
+    """Client kwargs for a pinned project; ``None`` credentials mean the runtime identity (ADC)."""
+    if credentials is None:
+        prepare_google_credentials()
+        return {"project": project}
+    return {"credentials": credentials, "project": project}
+
+
 def _build_firestore_client() -> Any:
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
@@ -157,7 +174,7 @@ def _build_firestore_client() -> Any:
         database = _firestore_database_id()
         if database and project_id != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
-        customer_kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             customer_kwargs["database"] = database
         return firestore.Client(**customer_kwargs)
@@ -194,7 +211,7 @@ def _build_customer_firestore_client() -> Any:
         database = _firestore_database_id()
         if database and project_id != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
-        kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)
@@ -260,7 +277,7 @@ def _build_data_plane_firestore_client() -> Any:
             )
         if database and sa_project != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
-        kwargs: dict[str, Any] = {"credentials": credentials, "project": data_plane_project}
+        kwargs: dict[str, Any] = _client_kwargs(credentials, data_plane_project)
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)
@@ -301,6 +318,74 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     rather than loop.
     """
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+# The SDK's ``_Transactional`` raises a bare ValueError once its own attempts are spent.
+_SDK_COMMIT_EXHAUSTED_PREFIX = "failed to commit transaction"
+
+
+def firestore_failure_reason(error: BaseException) -> str:
+    """Bounded, loggable token for why a Firestore call failed; never the message itself.
+
+    Firestore error text names the rejected document by path, which carries the
+    uid, so callers log this token (and ``firestore_document_kind``) instead.
+    ``document_size_limit`` is permanent; ``expired_transaction`` and
+    ``contention`` are transient and succeed on a later attempt.
+    """
+    if is_document_size_limit_error(error):
+        return 'document_size_limit'
+    if is_expired_transaction_error(error):
+        return 'expired_transaction'
+    if isinstance(error, (FirestoreAborted, FirestoreContentionExhausted)) or (
+        type(error) is ValueError and str(error).lower().startswith(_SDK_COMMIT_EXHAUSTED_PREFIX)
+    ):
+        return 'contention'
+    return 'other'
+
+
+# Firestore names the rejected document as ``.../documents/<collection>/<id>/...``.
+_ERROR_DOCUMENT_PATH = re.compile(r"/documents/([^'\"\s]+)")
+# Every token a persistence log may carry for the rejected document.
+FIRESTORE_DOCUMENT_KINDS = frozenset({'conversation', 'sync_day_index', 'sync_recent', 'donor', 'other', 'none'})
+
+
+def firestore_error_document_path(error: BaseException) -> tuple[str, ...] | None:
+    """The relative document path a Firestore ``InvalidArgument`` names, or ``None``.
+
+    For in-process decisions only. The segments contain uids and document ids,
+    so callers must never log them; log ``firestore_document_kind`` instead.
+    """
+    if not isinstance(error, InvalidArgument):
+        return None
+    match = _ERROR_DOCUMENT_PATH.search(str(error))
+    if not match:
+        return None
+    # The message quotes the path, so the match ends at the closing quote.
+    segments = tuple(match.group(1).split('/'))
+    if len(segments) < 2 or len(segments) % 2 or not all(segments):
+        return None
+    return segments
+
+
+def firestore_document_kind(error: BaseException) -> str:
+    """Bounded token for the document a Firestore ``InvalidArgument`` names.
+
+    Derived from the collection segments only (plus the fixed ``recent`` index
+    name), never from ids: ``conversation``, ``sync_day_index``, ``sync_recent``,
+    ``other`` for any other document, and ``none`` when the error is not an
+    ``InvalidArgument`` or names no document. ``donor`` is a refinement only the
+    sync assignment boundary can make, because it alone knows which
+    conversation was the write's canonical.
+    """
+    segments = firestore_error_document_path(error)
+    if segments is None:
+        return 'none'
+    collections = segments[0::2]
+    if collections == ('users', 'conversations'):
+        return 'conversation'
+    if collections == ('users', 'sync_assignment'):
+        return 'sync_recent' if segments[-1] == 'recent' else 'sync_day_index'
+    return 'other'
 
 
 def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:

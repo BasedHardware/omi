@@ -44,14 +44,20 @@ with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(main)
 
 
-def user_with(lists):
-    return {"access_token": "token", "team_name": "Acme", "selected_list": "l1", "available_lists": lists}
+def user_with(lists, team_name="Acme", timezone="UTC"):
+    return {
+        "access_token": "token",
+        "team_name": team_name,
+        "selected_list": "l1",
+        "available_lists": lists,
+        "timezone": timezone,
+    }
 
 
 class SettingsPageTests(unittest.TestCase):
-    def render(self, lists):
-        with patch.object(main.SimpleUserStorage, "get_user", return_value=user_with(lists)):
-            return asyncio.run(main.root(uid="u1")).content
+    def render(self, lists, uid="u1", team_name="Acme", timezone="UTC"):
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user_with(lists, team_name=team_name, timezone=timezone)):
+            return asyncio.run(main.root(uid=uid)).content
 
     def test_folder_lists_are_labelled_by_folder(self):
         page = self.render([
@@ -81,6 +87,46 @@ class SettingsPageTests(unittest.TestCase):
         )
         self.assertNotIn("<script>Bugs</script>", page)
         self.assertNotIn("<b>Sprint</b>", page)
+
+    def test_team_name_and_timezone_are_escaped_on_settings_page(self):
+        page = self.render(
+            lists=[],
+            team_name='<script>alert("team")</script>',
+            timezone='<b>UTC+1</b>',
+        )
+        self.assertIn('&lt;script&gt;alert(&quot;team&quot;)&lt;/script&gt;', page)
+        self.assertNotIn('<script>alert("team")</script>', page)
+        self.assertIn('&lt;b&gt;UTC+1&lt;/b&gt;', page)
+        self.assertNotIn('<span><b>UTC+1</b></span>', page)
+
+    def test_uid_serialized_safely_in_script_and_unauthenticated_page(self):
+        # Unauthenticated: uid is properly URL-encoded and attribute-escaped in connect link
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+            unauth_page = asyncio.run(main.root(uid='user"123<script>')).content
+            self.assertIn('href="/auth?uid=user%22123%3Cscript%3E"', unauth_page)
+            self.assertNotIn('href="/auth?uid=user"123<script>"', unauth_page)
+
+        # Authenticated: uid is safely serialized as JSON and encoded via encodeURIComponent
+        auth_page = self.render([], uid='user"123<script>')
+        self.assertIn('const CURRENT_UID = "user\\"123<script>";', auth_page)
+        self.assertIn('const ENCODED_UID = encodeURIComponent(CURRENT_UID);', auth_page)
+        self.assertIn("fetch('/update-list?uid=' + ENCODED_UID", auth_page)
+        self.assertIn("fetch('/refresh-lists?uid=' + ENCODED_UID", auth_page)
+        self.assertIn("fetch('/update-timezone?uid=' + ENCODED_UID", auth_page)
+        self.assertIn("fetch('/logout?uid=' + ENCODED_UID", auth_page)
+
+    def test_authenticated_page_escapes_script_element_terminator_in_uid(self):
+        malicious_uid = "user</script><script>alert('xss')</script>"
+        auth_page = self.render([], uid=malicious_uid)
+
+        self.assertIn('const CURRENT_UID = "user<\\/script><script>alert(\'xss\')<\\/script>";', auth_page)
+        self.assertNotIn('const CURRENT_UID = "user</script>', auth_page)
+        self.assertNotIn('</script><script>alert', auth_page)
+
+    def test_dev_interface_uid_escaped(self):
+        test_page = asyncio.run(main.test_interface(uid='user" onfocus="alert(1)', dev="true")).content
+        self.assertIn('value="user&quot; onfocus=&quot;alert(1)"', test_page)
+        self.assertNotIn('value="user" onfocus="alert(1)"', test_page)
 
 
 if __name__ == "__main__":

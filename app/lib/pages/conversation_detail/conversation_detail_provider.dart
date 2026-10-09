@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:clock/clock.dart';
@@ -10,7 +12,9 @@ import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/conversations.dart' as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -18,69 +22,431 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
     {bool? isUser, String? personId, int? speakerId});
-typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
+typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
+    {String? appId, bool requireSpeakerReceipt});
+typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
+
+/// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
+/// a tab with nothing to show yet uses this to say "loading" or "couldn't load" instead of blank.
+enum ConversationDetailLoad { idle, loading, failed }
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
-  ConversationDetailProvider({SpeakerAssignmentCall? assignSpeaker, ConversationReprocessCall? reprocess})
-      : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _reprocess = reprocess ?? reProcessConversationServer;
+  static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
+  static const Duration _speakerSummaryQuietPeriod = Duration(seconds: 4);
+  ConversationDetailProvider({
+    SpeakerAssignmentCall? assignSpeaker,
+    ConversationReprocessCall? reprocess,
+    ConversationDetailFetchCall? fetchConversation,
+    SpeakerRejectionCall? rejectSpeaker,
+  })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+        _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
+        _reprocess = reprocess ?? reProcessConversationServer,
+        _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
+  final ConversationDetailFetchCall _fetchConversation;
+  final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
-  bool _savingSpeaker = false;
+  final Map<String, int> _speakerEditGenerationByConversation = {};
+  int _pendingSpeakerSaves = 0;
+  final Map<String, int> _pendingSpeakerSavesByConversation = {};
+  String? _speakerRefreshId;
+  Timer? _speakerSummaryRefreshTimer;
+  final Set<String> _automaticSpeakerSummaryRefreshIds = {};
+  final Set<String> _endedSpeakerLabelingSessionIds = {};
+  bool get _savingSpeaker => _pendingSpeakerSaves > 0;
+  Future<void> _speakerSaveTail = Future.value();
+
+  @visibleForTesting
+  Set<String> get trackedSpeakerConversationIds => {
+        ..._speakerEditGenerationByConversation.keys,
+        ..._pendingSpeakerSavesByConversation.keys,
+        ..._automaticSpeakerSummaryRefreshIds,
+        ..._endedSpeakerLabelingSessionIds,
+      };
+
+  bool _speakerConversationDeleted(String conversationId) =>
+      conversationProvider?.memoriesToDelete.containsKey(conversationId) == true ||
+      (_cachedConversation?.id == conversationId && _cachedConversation?.deleted == true);
+
+  void _dropSpeakerRefreshState(String conversationId) {
+    _automaticSpeakerSummaryRefreshIds.remove(conversationId);
+    _endedSpeakerLabelingSessionIds.remove(conversationId);
+    if (_speakerSummaryConversationId == conversationId) _speakerSummaryConversationId = null;
+    _pruneSpeakerSessionState(conversationId);
+  }
+
+  void _pruneSpeakerSessionState(String conversationId) {
+    if ((_pendingSpeakerSavesByConversation[conversationId] ?? 0) != 0) return;
+    _speakerEditGenerationByConversation.remove(conversationId);
+    _endedSpeakerLabelingSessionIds.remove(conversationId);
+  }
 
   bool get offerSpeakerSummaryRefresh =>
       _speakerSummaryConversationId != null && _speakerSummaryConversationId == conversationOrNull?.id;
 
-  Future<bool> assignSpeaker(List<String> segmentIds, String personId,
-      {int? speakerId, String? expectedConversationId}) async {
-    final target = conversation;
-    if (_savingSpeaker ||
+  Future<bool> assignSpeaker(
+    List<String> segmentIds,
+    String personId, {
+    int? speakerId,
+    String? expectedConversationId,
+  }) =>
+      startSpeakerAssignment(
+        segmentIds,
+        personId,
+        speakerId: speakerId,
+        expectedConversationId: expectedConversationId,
+      ) ??
+      Future.value(false);
+
+  /// Applies the visible edit before returning. The future reports persistence for feedback.
+  Future<bool>? startSpeakerAssignment(
+    List<String> segmentIds,
+    String personId, {
+    int? speakerId,
+    String? expectedConversationId,
+    Future<String?> Function()? createPerson,
+    void Function(String)? onReconciled,
+    VoidCallback? onFailed,
+  }) {
+    final target = conversationOrNull;
+    if (target == null ||
         loadingReprocessConversation ||
         segmentIds.isEmpty ||
-        (expectedConversationId != null && target.id != expectedConversationId)) return false;
+        (expectedConversationId != null && target.id != expectedConversationId)) {
+      return null;
+    }
     final selected = target.transcriptSegments
         .where((s) => speakerId == null ? segmentIds.contains(s.id) : s.speakerId == speakerId)
         .toList();
-    if (selected.isEmpty) return false;
+    if (selected.isEmpty) return null;
+    // A new edit extends the labeling session even if its save is still in
+    // flight. Keep a previously acknowledged change pending if this one fails.
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
     final self = personId == 'user';
     final person = self ? null : personId;
+    final before = {
+      for (final segment in selected) segment: (segment.isUser, segment.personId, segment.speakerLabelSource),
+    };
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
-    _savingSpeaker = true;
+    final generation = ++_speakerEditGeneration;
+    _speakerEditGenerationByConversation[target.id] = generation;
+    _pendingSpeakerSaves++;
+    _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
+    for (final segment in selected) {
+      segment.isUser = self;
+      segment.personId = person;
+      segment.speakerLabelSource = 'manual';
+    }
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final previousSave = _speakerSaveTail;
+    final pending = _persistSpeakerAssignment(
+      target,
+      selected,
+      before,
+      generation,
+      changed,
+      segmentIds,
+      personId,
+      speakerId,
+      createPerson,
+      onReconciled,
+      onFailed,
+      previousSave,
+    );
+    _speakerSaveTail = pending.then((_) {});
+    _speakerSaveTail.ignore();
+    return pending;
+  }
+
+  Future<bool> _persistSpeakerAssignment(
+    ServerConversation target,
+    List<TranscriptSegment> selected,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
+    int generation,
+    bool changed,
+    List<String> segmentIds,
+    String personId,
+    int? speakerId,
+    Future<String?> Function()? createPerson,
+    void Function(String)? onReconciled,
+    VoidCallback? onFailed,
+    Future<void> previousSave,
+  ) async {
     try {
-      final bool saved;
-      try {
-        saved =
-            await _assignSpeaker(target.id, List.of(segmentIds), isUser: self, personId: person, speakerId: speakerId);
-      } catch (_) {
-        return false;
-      }
-      if (!saved) return false;
-      for (final segment in selected) {
-        segment.isUser = self;
-        segment.personId = person;
-      }
-      if (!_isDisposed) {
-        if (changed) {
-          _speakerEditGeneration++;
-          if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
-            _speakerSummaryConversationId = target.id;
+      await previousSave;
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      String resolvedId = personId;
+      if (createPerson != null) {
+        String? createdId;
+        try {
+          createdId = await createPerson();
+        } catch (_) {
+          createdId = null;
+        }
+        if (createdId == null || createdId.isEmpty) {
+          _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
+          return false;
+        }
+        resolvedId = createdId;
+        if (_speakerEditGenerationByConversation[target.id] == generation) {
+          for (final segment in selected) {
+            segment.personId = resolvedId;
+          }
+          if (!_isDisposed && identical(conversationOrNull, target)) {
+            onReconciled?.call(resolvedId);
+            notifyListeners();
           }
         }
-        conversationProvider?.updateConversation(target);
+      }
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      final self = resolvedId == 'user';
+      try {
+        final saved = await _assignSpeaker(
+          target.id,
+          List.of(segmentIds),
+          isUser: self,
+          personId: self ? null : resolvedId,
+          speakerId: speakerId,
+        );
+        if (!saved) {
+          _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
+          return false;
+        }
+      } catch (_) {
+        _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
+        return false;
+      }
+      // A sync bridge may have retired the ID while this detail page stayed
+      // open. Refresh after the queued edits drain so each edit still targets
+      // the same optimistic conversation, then adopt the survivor ID.
+      if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
+      if (_speakerConversationDeleted(target.id) || target.deleted) {
+        _dropSpeakerRefreshState(target.id);
+      } else if (changed &&
+          target.status == ConversationStatus.completed &&
+          target.structured.overview.trim().isNotEmpty) {
+        _automaticSpeakerSummaryRefreshIds.add(target.id);
+        if (!_isDisposed && identical(conversationOrNull, target)) _speakerSummaryConversationId = target.id;
+      }
+      if (!_isDisposed && identical(conversationOrNull, target)) {
         notifyListeners();
       }
       return true;
     } finally {
-      _savingSpeaker = false;
+      await _finishSpeakerSave(target);
     }
+  }
+
+  Future<void> _finishSpeakerSave(ServerConversation target) async {
+    _pendingSpeakerSaves--;
+    final remaining = _pendingSpeakerSavesByConversation[target.id]! - 1;
+    if (remaining == 0) {
+      _pendingSpeakerSavesByConversation.remove(target.id);
+    } else {
+      _pendingSpeakerSavesByConversation[target.id] = remaining;
+    }
+    if (_pendingSpeakerSaves == 0) {
+      final refreshId = _speakerRefreshId;
+      _speakerRefreshId = null;
+      if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+    }
+    if (remaining == 0) {
+      _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+      _pruneSpeakerSessionState(target.id);
+    }
+  }
+
+  void _scheduleAutomaticSpeakerSummaryRefresh(String conversationId) {
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
+    if (!_automaticSpeakerSummaryRefreshIds.contains(conversationId)) return;
+    if (_endedSpeakerLabelingSessionIds.contains(conversationId) || _isDisposed) {
+      _flushEndedSpeakerLabelingSession(conversationId);
+      return;
+    }
+    if (conversationId != conversationOrNull?.id || !offerSpeakerSummaryRefresh) return;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = Timer(_speakerSummaryQuietPeriod, () {
+      _speakerSummaryRefreshTimer = null;
+      if (_speakerConversationDeleted(conversationId)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
+      }
+      if (_isDisposed || _savingSpeaker || !offerSpeakerSummaryRefresh) return;
+      // A failed or unverified regeneration remains an explicit retry only.
+      _automaticSpeakerSummaryRefreshIds.remove(conversationId);
+      unawaited(reprocessConversation());
+    });
+  }
+
+  void _finishSpeakerLabelingSession() {
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    final conversationId = conversationOrNull?.id;
+    if (conversationId == null) return;
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
+    _endedSpeakerLabelingSessionIds.add(conversationId);
+    _flushEndedSpeakerLabelingSession(conversationId);
+    _pruneSpeakerSessionState(conversationId);
+  }
+
+  void _flushEndedSpeakerLabelingSession(String conversationId) {
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
+    if ((_pendingSpeakerSavesByConversation[conversationId] ?? 0) != 0 ||
+        !_automaticSpeakerSummaryRefreshIds.remove(conversationId)) {
+      return;
+    }
+    // Leaving the detail page before the quiet period should still make one
+    // best-effort request. The response belongs to the retired view, so it
+    // must never overwrite the next conversation's cached detail.
+    unawaited(_regenerateSpeakerSummaryAfterExit(conversationId));
+  }
+
+  Future<void> _regenerateSpeakerSummaryAfterExit(String conversationId) async {
+    try {
+      if (_speakerConversationDeleted(conversationId)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
+      }
+      // This also follows a safety-WAL donor's bridge redirect. Reprocess
+      // itself does not follow that redirect or accept a deleted conversation.
+      final current = await _fetchConversation(conversationId);
+      if (current == null ||
+          current.deleted ||
+          _speakerConversationDeleted(conversationId) ||
+          _speakerConversationDeleted(current.id)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
+      }
+      await _reprocess(current.id, requireSpeakerReceipt: true);
+    } catch (error) {
+      Logger.debug('Speaker summary refresh after detail exit failed: ${error.runtimeType}');
+    } finally {
+      _pruneSpeakerSessionState(conversationId);
+    }
+  }
+
+  /// Tells Omi the label on [segment]'s voice is wrong: every line of that voice carrying the same
+  /// label is cleared at once, and restored if the server did not accept the rejection.
+  Future<bool> rejectSpeakerLabel(TranscriptSegment segment, SpeakerRejection kind) async {
+    final target = conversationOrNull;
+    if (target == null || loadingReprocessConversation) return false;
+    final rejectedPerson = segment.personId;
+    final wasUser = segment.isUser;
+    final selected = target.transcriptSegments
+        .where((s) => s.speakerId == segment.speakerId && s.isUser == wasUser && s.personId == rejectedPerson)
+        .toList();
+    if (selected.isEmpty) return false;
+    final before = {for (final s in selected) s: (s.isUser, s.personId, s.speakerLabelSource)};
+    final generation = ++_speakerEditGeneration;
+    _speakerEditGenerationByConversation[target.id] = generation;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    _pendingSpeakerSaves++;
+    _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
+    for (final s in selected) {
+      s.isUser = false;
+      s.personId = null;
+      s.speakerLabelSource = null;
+    }
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final pending = _persistSpeakerRejection(
+      target,
+      selected,
+      before,
+      generation,
+      segment.speakerId,
+      kind,
+      rejectedPerson,
+      _speakerSaveTail,
+    );
+    _speakerSaveTail = pending.then((_) {});
+    _speakerSaveTail.ignore();
+    return pending;
+  }
+
+  Future<bool> _persistSpeakerRejection(
+    ServerConversation target,
+    List<TranscriptSegment> selected,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
+    int generation,
+    int speakerId,
+    SpeakerRejection kind,
+    String? rejectedPerson,
+    Future<void> previousSave,
+  ) async {
+    try {
+      await previousSave;
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      final result = await _rejectSpeaker(
+        target.id,
+        speakerId,
+        kind,
+        personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
+        segmentIds: [for (final s in selected) s.id],
+      );
+      if (result case ApiSuccess<ServerConversation>(:final data)) {
+        if (!_isDisposed &&
+            _speakerEditGenerationByConversation[target.id] == generation &&
+            identical(conversationOrNull, target)) {
+          if (data.id == target.id) {
+            conversationProvider?.updateConversation(data);
+          } else {
+            conversationProvider?.replaceBridgedConversation(target.id, data);
+            selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+          }
+          setCachedConversation(data);
+        }
+        return true;
+      }
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } catch (_) {
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } finally {
+      await _finishSpeakerSave(target);
+    }
+  }
+
+  void _rollbackSpeakerAssignment(
+    ServerConversation target,
+    List<TranscriptSegment> selected,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
+    int generation,
+    VoidCallback? onFailed,
+  ) {
+    if (_isDisposed || generation != _speakerEditGeneration || !identical(conversationOrNull, target)) return;
+    for (final segment in selected) {
+      final original = before[segment]!;
+      segment.isUser = original.$1;
+      segment.personId = original.$2;
+      segment.speakerLabelSource = original.$3;
+    }
+    _speakerEditGeneration++;
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    onFailed?.call();
   }
 
   AppProvider? appProvider;
@@ -94,6 +460,28 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool isLoading = false;
   bool loadingReprocessConversation = false;
   String reprocessConversationId = '';
+
+  /// The last [refreshConversation] that the page asked to track ([trackLoad]).
+  ConversationDetailLoad detailLoad = ConversationDetailLoad.idle;
+
+  /// Whether the open conversation is being reprocessed right now.
+  bool get isReprocessingOpenConversation =>
+      loadingReprocessConversation &&
+      reprocessConversationId.isNotEmpty &&
+      reprocessConversationId == conversationOrNull?.id;
+
+  /// The last reprocess that failed — which conversation, and with which app — so its error and
+  /// "Try Again" apply to that conversation only, even if the reader has opened another since.
+  String? lastFailedReprocessConversationId;
+  String? lastFailedReprocessAppId;
+
+  /// The conversation the last successful reprocess replaced.
+  String? reprocessedConversationId;
+
+  /// Bumped by every detail read, by opening another conversation and by a reprocess landing. A
+  /// read applies only while it is still the latest, so a slow earlier response (an older poll, the
+  /// previous conversation's fetch) can never replace newer data or another conversation's state.
+  int _refreshGeneration = 0;
   App? selectedAppForReprocessing;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -206,6 +594,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final success = await updateConversationSegmentText(conversation.id, segment.id, newText.trim());
     if (!success && !_isDisposed) {
       conversation.transcriptSegments[segmentIndex].text = oldText;
+      notifyError('SEGMENT_EDIT_FAILED');
       notifyListeners();
     }
   }
@@ -215,6 +604,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (trimmed.isEmpty) return;
 
     if (appId == null) {
+      final ownerUid = SharedPreferencesUtil().uid;
       final editedConversation = conversation;
       final editedStructured = editedConversation.structured;
       final oldOverview = editedStructured.overview;
@@ -229,6 +619,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
 
       final success = await persistSummaryEdit(editedConversation.id, null, trimmed);
+      if (success && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
+        SiriIntegration.current.queueUpsertConversations([editedConversation], expectedUid: ownerUid);
+      }
       if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
         // A refresh or a newer edit may have replaced this state while the
         // request was pending. Roll back only the exact optimistic snapshot
@@ -238,6 +631,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
             editedStructured.sections.isEmpty) {
           editedStructured.overview = oldOverview;
           editedStructured.sections = oldSections;
+          notifyError('SUMMARY_EDIT_FAILED');
           notifyListeners();
         }
       }
@@ -262,6 +656,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           identical(editedConversation.appResults[index], editedResult) &&
           editedResult.content == trimmed) {
         editedResult.content = oldContent;
+        notifyError('SUMMARY_EDIT_FAILED');
         notifyListeners();
       }
     }
@@ -353,6 +748,49 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  /// Saves an edited title. Resolves null when nothing changed (blank or identical text keeps the
+  /// current title), true when the server accepted it, false when it did not (the old title is
+  /// restored).
+  Future<bool?> saveTitle(String text) async {
+    final target = conversationOrNull;
+    if (target == null) return null;
+    final title = text.trim();
+    final previous = target.structured.title;
+    final ownerUid = SharedPreferencesUtil().uid;
+    if (title.isEmpty || title == previous.trim()) {
+      if (titleController != null && titleController!.text != previous) titleController!.text = previous;
+      return null;
+    }
+    target.structured.title = title;
+    notifyListeners();
+    final saved = await persistTitleEdit(target.id, title);
+    if (saved && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
+      SiriIntegration.current.queueUpsertConversations([target], expectedUid: ownerUid);
+    }
+    if (!saved && !_isDisposed) {
+      target.structured.title = previous;
+      if (_cachedConversationId == target.id && titleController != null) titleController!.text = previous;
+      notifyListeners();
+    }
+    return saved;
+  }
+
+  @visibleForTesting
+  Future<bool> persistTitleEdit(String conversationId, String title) => updateConversationTitle(conversationId, title);
+
+  /// Folds an edit made in the shared task editor back into this conversation's task list.
+  void applyTaskEdit(ActionItem item, {String? description, bool? completed, bool deleted = false}) {
+    final items = conversationOrNull?.structured.actionItems;
+    if (items == null || !items.contains(item)) return;
+    if (deleted) {
+      item.deleted = true;
+    } else {
+      if (description != null && description.trim().isNotEmpty) item.description = description;
+      if (completed != null) item.completed = completed;
+    }
+    notifyListeners();
+  }
+
   List<ActionItem> deletedActionItems = [];
 
   void deleteActionItem(int i) {
@@ -388,13 +826,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     showUnassignedFloatingButton = true;
 
     titleController!.text = conversation.structured.title;
-    titleFocusNode!.addListener(() {
-      print('titleFocusNode focus changed');
-      if (!titleFocusNode!.hasFocus) {
-        conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
-      }
-    });
+    // The title saves when editing ends (Done or leaving the field); the title field calls
+    // [saveTitle] and reports the outcome.
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
@@ -413,18 +846,27 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future<bool> reprocessConversation({String? appId}) async {
     if (loadingReprocessConversation || _savingSpeaker) return false;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
     final target = conversation;
+    _automaticSpeakerSummaryRefreshIds.remove(target.id);
     final generation = _speakerEditGeneration;
+    final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
+    lastFailedReprocessConversationId = null;
+    lastFailedReprocessAppId = null;
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
+    notifyInfo('REPROCESS_STARTED');
     try {
-      var updatedConversation = await _reprocess(target.id, appId: appId);
+      var updatedConversation = await _reprocess(target.id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt);
       if (_isDisposed) return false;
       PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
+        lastFailedReprocessConversationId = target.id;
+        lastFailedReprocessAppId = appId;
         notifyError('REPROCESS_FAILED');
         notifyListeners();
         return false;
@@ -434,8 +876,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       conversationProvider?.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
-      // Update the cached conversation to ensure we have the latest data
-      if (conversationOrNull?.id == target.id) _cachedConversation = updatedConversation;
+      // Update the cached conversation to ensure we have the latest data. Reads already in
+      // flight predate this result; drop them.
+      if (conversationOrNull?.id == target.id) {
+        _cachedConversation = updatedConversation;
+        _refreshGeneration++;
+      }
       if (generation == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
         _speakerSummaryConversationId = null;
       }
@@ -450,6 +896,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           if (_isDisposed) return false;
         }
       }
+      reprocessedConversationId = target.id;
       notifyInfo('REPROCESS_SUCCESS');
       notifyListeners();
       return true;
@@ -464,6 +911,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
         },
       );
+      lastFailedReprocessConversationId = target.id;
+      lastFailedReprocessAppId = appId;
       notifyError('REPROCESS_FAILED');
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -633,23 +1082,60 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void setCachedConversation(ServerConversation conversation) {
+    if (_cachedConversation?.id != conversation.id) {
+      _finishSpeakerLabelingSession();
+    }
+    if (_cachedConversationId != conversation.id) {
+      detailLoad = ConversationDetailLoad.idle;
+      _refreshGeneration++;
+    }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
+    _endedSpeakerLabelingSessionIds.remove(conversation.id);
     notifyListeners();
   }
 
-  Future<void> refreshConversation() async {
+  /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
+  /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
+  /// silent and never overwrite a tracked failure with "loading".
+  Future<void> refreshConversation({bool trackLoad = false}) async {
+    final openedId = conversationOrNull?.id;
+    if (openedId == null) return;
+    final generation = ++_refreshGeneration;
+    if (trackLoad) {
+      detailLoad = ConversationDetailLoad.loading;
+      notifyListeners();
+    }
+    ServerConversation? updatedConversation;
     try {
-      final updatedConversation = await getConversationById(conversation.id);
-      if (_isDisposed) return;
-      if (updatedConversation != null) {
-        _cachedConversation = updatedConversation;
-        conversationProvider?.updateConversation(updatedConversation);
-        notifyListeners();
-      }
+      updatedConversation = await _fetchConversation(openedId);
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
     }
+    // A newer read, another conversation or a reprocess result superseded this one: it owns the
+    // page now, including [detailLoad].
+    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return;
+    if (updatedConversation != null) {
+      if (updatedConversation.id != openedId) {
+        if (!_syncConversationId.hasMatch(openedId)) return;
+        _cachedConversationId = updatedConversation.id;
+        selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
+        if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
+        if (_automaticSpeakerSummaryRefreshIds.remove(openedId)) {
+          _automaticSpeakerSummaryRefreshIds.add(updatedConversation.id);
+        }
+        conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
+      } else {
+        conversationProvider?.updateConversation(updatedConversation);
+      }
+      _cachedConversation = updatedConversation;
+    }
+    if (detailLoad == ConversationDetailLoad.loading) {
+      detailLoad = updatedConversation != null ? ConversationDetailLoad.idle : ConversationDetailLoad.failed;
+    } else if (updatedConversation != null && detailLoad == ConversationDetailLoad.failed) {
+      detailLoad = ConversationDetailLoad.idle;
+    }
+    notifyListeners();
   }
 
   void updateFolderIdLocally(String? newFolderId) {
@@ -709,6 +1195,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         starred: _cachedConversation!.starred,
         folderId: _cachedConversation!.folderId,
         visibility: _cachedConversation!.visibility,
+        captureGroup: _cachedConversation!.captureGroup,
+        speakerResolution: _cachedConversation!.speakerResolution,
+        captureCoverage: _cachedConversation!.captureCoverage,
       );
       _cachedConversation = updatedConversation;
       conversationProvider?.updateConversation(updatedConversation);
@@ -797,6 +1286,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   @override
   void dispose() {
+    _finishSpeakerLabelingSession();
     _isDisposed = true;
     super.dispose();
   }

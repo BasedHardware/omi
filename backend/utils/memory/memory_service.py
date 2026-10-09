@@ -8,7 +8,21 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable, Collection, Dict, Iterator, List, Literal, NoReturn, Optional, Set, Tuple, cast
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+)
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -18,7 +32,7 @@ import database.memories as memories_db
 import database.vector_db as vector_db
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
-from database.memory_apply_store import privacy_deletion_receipt_id
+from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
 from database.legal_holds import destructive_operation_gate
 from database.review_queue import purge_stale_review_conflicts_for_memories
@@ -43,8 +57,9 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
-from utils.log_sanitizer import sanitize_validation_error
+from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
+from utils.other.portability_read import check_portability_read
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
@@ -931,6 +946,7 @@ class HistoricalMemoryAdapter:
     ) -> List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]]:
         slots: List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]] = []
         for raw, scan_cursor in zip(payloads, cursors):
+            check_portability_read()
             if drop_updated_at_present and raw.get('updated_at') is not None:
                 # Owned by the updated_at stream — advance created cursor only.
                 slots.append((None, scan_cursor))
@@ -1114,10 +1130,11 @@ class HistoricalMemoryAdapter:
         """Stream every historical live row through stable dual-keyset scans."""
         page_size = max(1, min(int(page_size or 500), self.MAX_PAGE_SIZE))
 
-        def records(kind: str) -> Iterator[HistoricalMemoryRecord]:
+        def records(kind: str) -> Generator[HistoricalMemoryRecord, None, None]:
             cursor: Optional[Tuple[datetime, str]] = None
             exhausted = False
             while not exhausted:
+                check_portability_read()
                 reader = self.read_updated_scan_page if kind == "updated" else self.read_created_scan_page
                 slots, exhausted = reader(
                     uid,
@@ -1129,27 +1146,32 @@ class HistoricalMemoryAdapter:
                 if not slots and not exhausted:
                     raise HTTPException(status_code=503, detail="Historical memory scan made no progress")
                 for record, cursor in slots:
+                    check_portability_read()
                     if record is None:
                         continue
                     yield record
 
         updated = records("updated")
         created = records("created")
-        updated_record = next(updated, None)
-        created_record = next(created, None)
-        while updated_record is not None or created_record is not None:
-            take_updated = created_record is None or (
-                updated_record is not None
-                and self._timestamp(updated_record.memory) >= self._timestamp(created_record.memory)
-            )
-            if take_updated:
-                assert updated_record is not None
-                yield updated_record
-                updated_record = next(updated, None)
-            else:
-                assert created_record is not None
-                yield created_record
-                created_record = next(created, None)
+        try:
+            updated_record = next(updated, None)
+            created_record = next(created, None)
+            while updated_record is not None or created_record is not None:
+                take_updated = created_record is None or (
+                    updated_record is not None
+                    and self._timestamp(updated_record.memory) >= self._timestamp(created_record.memory)
+                )
+                if take_updated:
+                    assert updated_record is not None
+                    yield updated_record
+                    updated_record = next(updated, None)
+                else:
+                    assert created_record is not None
+                    yield created_record
+                    created_record = next(created, None)
+        finally:
+            updated.close()
+            created.close()
 
     def all_live(self, uid: str, *, page_size: int = 500) -> List[HistoricalMemoryRecord]:
         """Enumerate historical live rows in bounded pages for explicit export only."""
@@ -1648,6 +1670,12 @@ class _CanonicalCursorStream:
         self._peek_keyset = None
         self._peek_scan = None
         self._advance_raw_slot()
+
+
+def _evidence_identity_conflict_http() -> HTTPException:
+    # The caller reused a source identity for a different source. That is a
+    # client-visible conflict, not a server fault (#17296).
+    return HTTPException(status_code=409, detail="Memory source conflicts with an existing memory source")
 
 
 class MemoryService:
@@ -3509,38 +3537,48 @@ class MemoryService:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
         canonical_ids: set[str] = set()
-        while True:
-            try:
-                item = next(canonical_items)
-            except StopIteration:
-                break
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
-            canonical_ids.add(item.memory_id)
-            if item.source_state in {SourceState.tombstoned, SourceState.purged}:
-                continue
-            if item.tier == MemoryTier.archive and not archive_explicit:
-                continue
-            row = memory_item_to_memorydb(item)
-            if item.status == MemoryItemStatus.active:
-                if not include_ledger_history and ledger_row_is_rejected(item):
+        historical_items: Optional[Iterator[HistoricalMemoryRecord]] = None
+        try:
+            while True:
+                check_portability_read()
+                try:
+                    item = next(canonical_items)
+                except StopIteration:
+                    break
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+                canonical_ids.add(item.memory_id)
+                if item.source_state in {SourceState.tombstoned, SourceState.purged}:
                     continue
-                yield row
-                continue
-            if include_ledger_history and self._is_portability_ledger_history(item, row):
-                yield row
+                if item.tier == MemoryTier.archive and not archive_explicit:
+                    continue
+                row = memory_item_to_memorydb(item)
+                if item.status == MemoryItemStatus.active:
+                    if not include_ledger_history and ledger_row_is_rejected(item):
+                        continue
+                    yield row
+                    continue
+                if include_ledger_history and self._is_portability_ledger_history(item, row):
+                    yield row
 
-        pending_historical: List[HistoricalMemoryRecord] = []
-        for record in self.history.iter_all_live(uid, page_size=page_size):
-            if record.memory.id in canonical_ids:
-                continue
-            pending_historical.append(record)
-            if len(pending_historical) < page_size:
-                continue
-            yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
-            pending_historical = []
-        if pending_historical:
-            yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
+            pending_historical: List[HistoricalMemoryRecord] = []
+            historical_items = self.history.iter_all_live(uid, page_size=page_size)
+            for record in historical_items:
+                check_portability_read()
+                if record.memory.id in canonical_ids:
+                    continue
+                pending_historical.append(record)
+                if len(pending_historical) < page_size:
+                    continue
+                yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
+                pending_historical = []
+            if pending_historical:
+                yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
+        finally:
+            for source in (canonical_items, historical_items):
+                close = getattr(source, 'close', None)
+                if callable(close):
+                    close()
 
     def _export_unsuppressed_historical(
         self,
@@ -4002,7 +4040,15 @@ class MemoryService:
         except HTTPException:
             raise
         except CanonicalBatchMutationLimitError as exc:
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
+            logger.error(
+                "Canonical memory batch delete exceeded the transaction limit: %s",
+                sanitize(str(exc)),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=413,
+                detail="Memory batch exceeds the supported size limit",
+            ) from exc
         except CanonicalMemoryNotFoundError as exc:
             # A concurrent canonical change can invalidate the prevalidation;
             # expose the same released not-found contract without per-ID fallback.
@@ -4217,16 +4263,19 @@ class MemoryService:
         direct_user_authority: object | None = None,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
-        if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
-            assert direct_user_authority is not None
-            result = self._write_direct_user_fact(
-                uid,
-                memory_db,
-                consumer=consumer,
-                authority=direct_user_authority,
-            )
-        else:
-            result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        try:
+            if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
+                assert direct_user_authority is not None
+                result = self._write_direct_user_fact(
+                    uid,
+                    memory_db,
+                    consumer=consumer,
+                    authority=direct_user_authority,
+                )
+            else:
+                result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        except EvidenceIdentityConflict as exc:
+            raise _evidence_identity_conflict_http() from exc
         self._invalidate_prompt_cache(uid)
         return result
 
@@ -4254,22 +4303,28 @@ class MemoryService:
                     )
                 for memory in memory_dbs:
                     self._validate_direct_user_fact(memory, consumer=consumer)
-                results = [
-                    self._write_direct_user_fact(
-                        uid,
-                        memory,
-                        consumer=consumer,
-                        authority=direct_user_authority,
-                    )
-                    for memory in memory_dbs
-                ]
+                try:
+                    results = [
+                        self._write_direct_user_fact(
+                            uid,
+                            memory,
+                            consumer=consumer,
+                            authority=direct_user_authority,
+                        )
+                        for memory in memory_dbs
+                    ]
+                except EvidenceIdentityConflict as exc:
+                    raise _evidence_identity_conflict_http() from exc
                 self._invalidate_prompt_cache(uid)
                 return results
         payloads = [
             required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
             for memory in memory_dbs
         ]
-        ids = self._canonical.write_batch(uid, payloads)
+        try:
+            ids = self._canonical.write_batch(uid, payloads)
+        except EvidenceIdentityConflict as exc:
+            raise _evidence_identity_conflict_http() from exc
         results: List[MemoryDB] = []
         for memory_id in ids:
             item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
@@ -4312,13 +4367,8 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         del memory_system, consumer, operation, upsert_vector
-        self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        try:
-            updated = self._canonical.update_content(uid, memory_id, content)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail="Memory not found") from exc
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
-        self._invalidate_prompt_cache(uid)
-        return updated
+        # Route through ``update_content`` so ledger-schema memories are
+        # corrected through the ledger path rather than a blind canonical
+        # content overwrite; it performs the same readiness/materialization and
+        # historical cleanup internally.
+        return self.update_content(uid, memory_id, content)

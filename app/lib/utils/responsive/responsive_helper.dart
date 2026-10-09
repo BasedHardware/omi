@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Premium responsive utility class with sophisticated dark theme
-/// Inspired by modern productivity apps with purple accent system
+/// Legacy responsive helper and colour palette. Its palette conflicts with the app's tokens and its
+/// accents break INV-UI-1; new code uses `OmiColors` and the other tokens in
+/// `lib/ui/omi_tokens.dart`, and files migrate off this class when touched. Its scaling helpers are
+/// tuned for a desktop-width layout and shrink phone text; do not use them on mobile screens.
 class ResponsiveHelper {
   final BuildContext context;
   late final Size _screenSize;

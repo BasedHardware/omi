@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
@@ -57,35 +58,27 @@ class GoalLinkBlock extends StatelessWidget {
   }
 
   void _showGoalSheet(BuildContext context, Goal goal) {
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      title: goal.title,
       builder: (sheetContext) {
-        final colorScheme = Theme.of(sheetContext).colorScheme;
         final unit = goal.unit?.trim();
         final progress = '${_format(goal.currentValue)} / ${_format(goal.targetValue)}'
             '${unit == null || unit.isEmpty ? '' : ' $unit'}';
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ChatBlockEyebrow(icon: Icons.flag_outlined, label: sheetContext.l10n.chatBlockGoal),
-                const SizedBox(height: 8),
-                Text(goal.title, style: Theme.of(sheetContext).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(
-                  progress,
-                  key: Key('chat-block-goalLink-${block.id}-progress'),
-                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ChatBlockEyebrow(icon: Icons.flag_outlined, label: sheetContext.l10n.chatBlockGoal),
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                progress,
+                key: Key('chat-block-goalLink-${block.id}-progress'),
+                style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+              ),
+            ],
           ),
         );
       },

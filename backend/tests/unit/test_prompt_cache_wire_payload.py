@@ -3,13 +3,14 @@
 import pytest
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
+from utils.llm.model_config import LUNA_MODEL
 
 
 @pytest.fixture(scope='module')
 def explicit_cache_llm():
     options = {'mode': 'explicit', 'ttl': '30m'}
     cache_key = 'omi-transcript-structure-v1'
-    return ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(
+    return ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(
         extra_body={'prompt_cache_options': options},
         prompt_cache_key=cache_key,
     )
@@ -47,7 +48,7 @@ def test_langchain_request_payload_preserves_explicit_cache_wire_fields(explicit
 
 
 def test_langchain_request_payload_preserves_flex_service_tier() -> None:
-    flex_llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(service_tier='flex')
+    flex_llm = ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(service_tier='flex')
 
     payload = flex_llm.bound._get_request_payload(
         [SystemMessage(content='Scheduled memory promotion.')],
@@ -62,7 +63,7 @@ def test_langchain_request_payload_keeps_explicit_options_without_breakpoint_for
     # prompt_cache_options, but no prompt_cache_breakpoint (and typically no
     # routing key), so the provider never writes a billable cache entry.
     options = {'mode': 'explicit', 'ttl': '30m'}
-    llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(
+    llm = ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(
         extra_body={'prompt_cache_options': options},
     )
     message = _message_without_breakpoint()
@@ -79,19 +80,18 @@ def test_get_llm_forwards_explicit_cache_options_and_production_cache_key(monkey
 
     Guards utils.llm.clients.get_llm: it must keep forwarding
     prompt_cache_options/prompt_cache_key via .bind so the production
-    TRANSCRIPT_STRUCTURE_CACHE_KEY lands on the wire payload.
+    CONVERSATION_NOTES_CACHE_KEY lands on the wire payload.
     """
     from utils.llm import clients
-    from utils.llm.conversation_processing import TRANSCRIPT_STRUCTURE_CACHE_KEY
+    from utils.llm.conversation_processing import CONVERSATION_NOTES_CACHE_KEY
 
     monkeypatch.setenv('OPENAI_API_KEY', 'test')
     monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
     monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **_kwargs: _kwargs['legacy_model'])
 
     llm = clients.get_llm(
         'conv_structure',
-        cache_key=TRANSCRIPT_STRUCTURE_CACHE_KEY,
+        cache_key=CONVERSATION_NOTES_CACHE_KEY,
         prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
     )
 
@@ -99,7 +99,7 @@ def test_get_llm_forwards_explicit_cache_options_and_production_cache_key(monkey
     payload = bound._get_request_payload([_message_with_breakpoint()], **llm.kwargs)
 
     assert payload['extra_body'] == {'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'}}
-    assert payload['prompt_cache_key'] == TRANSCRIPT_STRUCTURE_CACHE_KEY
+    assert payload['prompt_cache_key'] == CONVERSATION_NOTES_CACHE_KEY
 
 
 def test_get_llm_sends_explicit_options_without_cache_key_for_unique_prompts(monkeypatch) -> None:
@@ -113,7 +113,6 @@ def test_get_llm_sends_explicit_options_without_cache_key_for_unique_prompts(mon
     monkeypatch.setenv('OPENAI_API_KEY', 'test')
     monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
     monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **_kwargs: _kwargs['legacy_model'])
 
     llm = clients.get_llm(
         'conv_structure',
@@ -142,7 +141,7 @@ def test_bind_explicit_cache_after_structured_output_keeps_extra_body() -> None:
     class _Gate(BaseModel):
         is_relevant: bool = False
 
-    llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test')
+    llm = ChatOpenAI(model=LUNA_MODEL, api_key='test')
     structured = llm.with_structured_output(_Gate)
     bound = bind_explicit_cache(structured, cache_key='omi-mentor-gate-v1-test')
     assert bound.kwargs['extra_body'] == {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}

@@ -485,6 +485,20 @@ async def websocket_endpoint(websocket: WebSocket, uid: str, language: str = 'en
         # ... other logic for speaker identification, error handling, etc. 
 ```
 
+## Daily summary settings
+
+`GET /v1/users/daily-summary-settings` returns whether summaries are enabled and
+their delivery hour in the user's local timezone. Use
+`PATCH /v1/users/daily-summary-settings` to change `enabled` or `hour` (0–23).
+Hour `0` means midnight; it is not an unset value.
+
+Timezone updates (`PUT /v1/users/time-zone`) and push-token registration populate
+missing schedule fields with the existing defaults: enabled and 22:00. They
+preserve explicit settings, including an opt-out or midnight, even when another
+client changes them concurrently. The backend computes missing defaults and
+persists them in one transaction. Desktop-only timezone seeding similarly fills
+an absent zone without replacing a client-reported one.
+
 ## Related Documentation
 
 For more detailed information on specific subsystems:

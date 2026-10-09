@@ -12,12 +12,15 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/siri_integration.dart';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -27,7 +30,11 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
     return AuthUserSnapshot(
-        uid: user.uid, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous);
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    );
   }
 
   @override
@@ -88,7 +95,9 @@ class AuthService {
         _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+        _telemetryContextProvider = _productionTelemetryContext,
+        _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
+        _siriPreparationTimeout = const Duration(seconds: 2);
 
   @visibleForTesting
   AuthService.forTesting({
@@ -97,11 +106,15 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
+    Future<void> Function()? prepareSiriSignOut,
+    Duration siriPreparationTimeout = const Duration(seconds: 2),
   })  : _tokenGateway = tokenGateway,
         _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
+        _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
+        _siriPreparationTimeout = siriPreparationTimeout;
 
   /// Replaces the production Firebase token gateway on the **singleton** for
   /// the local hermetic journey lane (SCA-488).
@@ -149,8 +162,23 @@ class AuthService {
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
+  final Future<void> Function() _prepareSiriSignOut;
+  final Duration _siriPreparationTimeout;
+
+  Future<void> _prepareSiriBestEffort() async {
+    try {
+      await _prepareSiriSignOut().timeout(_siriPreparationTimeout);
+    } catch (error) {
+      // The auth boundary must complete even when the optional native bridge
+      // is unavailable. A successfully persisted marker remains for launch
+      // maintenance; the auth-state callback still attempts the wipe.
+      Logger.debug('Siri sign-out preparation deferred: ${error.runtimeType}');
+    }
+  }
+
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
+  final StreamController<int> _sessionGenerationController = StreamController<int>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
   Future<void>? _expireSessionInFlight;
   bool _sessionExpired = false;
@@ -158,6 +186,25 @@ class AuthService {
   String? _refreshUserUid;
 
   Stream<AuthSessionExpiredEvent> get sessionExpiredEvents => _sessionExpiredController.stream;
+
+  Stream<int> get sessionGenerationEvents => _sessionGenerationController.stream;
+
+  AuthSessionSnapshot? captureSessionSnapshot({String? expectedUid}) {
+    handleAuthUserChanged(_tokenGateway.currentUser?.uid);
+    final user = _tokenGateway.currentUser;
+    if (_sessionExpired || user == null || user.isAnonymous) return null;
+    if (expectedUid != null && user.uid != expectedUid) return null;
+    return AuthSessionSnapshot(ownerUid: user.uid, generation: _sessionGeneration);
+  }
+
+  bool isSessionSnapshotCurrent(AuthSessionSnapshot snapshot) {
+    final user = _tokenGateway.currentUser;
+    return !_sessionExpired &&
+        user != null &&
+        !user.isAnonymous &&
+        user.uid == snapshot.ownerUid &&
+        _sessionGeneration == snapshot.generation;
+  }
 
   static void _recordProductionTelemetry(String eventName, Map<String, dynamic> properties) {
     PlatformManager.instance.analytics.track(eventName, properties: properties);
@@ -227,8 +274,7 @@ class AuthService {
     try {
       // Sign out the current user first
       Logger.debug('Signing out current user...');
-      handleAuthUserChanged(null);
-      await FirebaseAuth.instance.signOut();
+      await signOutForAccountSwitch();
       Logger.debug('User signed out successfully.');
 
       final rawNonce = generateNonce();
@@ -293,14 +339,26 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await ProactivityRuntime.outbox.bindOwner(null);
+    await _prepareSiriBestEffort();
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
+    await _tokenGateway.signOut();
+  }
+
+  /// Credential collision and provider switching preserve their existing
+  /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
+  Future<void> signOutForAccountSwitch() async {
+    await ProactivityRuntime.outbox.bindOwner(null);
+    await _prepareSiriBestEffort();
+    handleAuthUserChanged(null);
     await _tokenGateway.signOut();
   }
 
   void _invalidateRefreshes() {
     _sessionGeneration++;
     _refreshInFlight = null;
+    _sessionGenerationController.add(_sessionGeneration);
   }
 
   void handleAuthUserChanged(String? uid) {
@@ -377,26 +435,28 @@ class AuthService {
     if (_localDevRecoveryInFlight) return;
     _localDevRecoveryInFlight = true;
 
-    unawaited(Future<void>.delayed(Duration.zero, () async {
-      try {
-        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
-        final credential = await signInWithLocalDevToken();
-        final user = credential?.user;
-        if (user == null) return;
-        // Unforced: sign-in just populated a fresh token, so read the cached one
-        // rather than re-entering the forced-refresh path that just failed.
-        final token = await user.getIdToken();
-        if (token == null || token.isEmpty) return;
-        SharedPreferencesUtil().authToken = token;
-        _sessionExpired = false;
-        markAuthenticatedUser(user.uid);
-        Logger.debug('local-dev: session re-minted; the next request will use it');
-      } catch (e) {
-        Logger.debug('local-dev: re-mint failed: $e');
-      } finally {
-        _localDevRecoveryInFlight = false;
-      }
-    }));
+    unawaited(
+      Future<void>.delayed(Duration.zero, () async {
+        try {
+          Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+          final credential = await signInWithLocalDevToken();
+          final user = credential?.user;
+          if (user == null) return;
+          // Unforced: sign-in just populated a fresh token, so read the cached one
+          // rather than re-entering the forced-refresh path that just failed.
+          final token = await user.getIdToken();
+          if (token == null || token.isEmpty) return;
+          SharedPreferencesUtil().authToken = token;
+          _sessionExpired = false;
+          markAuthenticatedUser(user.uid);
+          Logger.debug('local-dev: session re-minted; the next request will use it');
+        } catch (e) {
+          Logger.debug('local-dev: re-mint failed: $e');
+        } finally {
+          _localDevRecoveryInFlight = false;
+        }
+      }),
+    );
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -540,6 +600,7 @@ class AuthService {
   }
 
   Future<void> _runSessionExpiration() async {
+    await _prepareSiriBestEffort();
     try {
       await _tokenGateway.signOut();
     } catch (e) {
@@ -704,6 +765,11 @@ class AuthService {
       Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {'uid': uid},
+    ).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw StateError(
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      ),
     );
 
     if (response.statusCode == 404) {
@@ -720,6 +786,19 @@ class AuthService {
     final customToken = decoded['custom_token'] as String?;
     if (customToken == null || customToken.isEmpty) {
       throw Exception('Local development sign-in returned no custom token');
+    }
+
+    // Check reachability before the side-effecting Firebase sign-in. Timing out
+    // signInWithCustomToken would not cancel it: a late success could create a
+    // session after the UI has already reported failure.
+    try {
+      await http
+          .get(Uri(scheme: 'http', host: Env.firebaseAuthEmulatorHost, port: Env.firebaseAuthEmulatorPort))
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw StateError(
+        'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      );
     }
 
     final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
@@ -836,18 +915,28 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
+      OnboardingSyncRuntime.wake();
+      final session = captureSessionSnapshot();
+      if (session == null) return;
+      final pendingSourceAtStart = OnboardingSyncRuntime.hasPendingAcquisitionSource;
+      final localSourceAtStart = SharedPreferencesUtil().foundOmiSource;
       final state = await getUserOnboardingState();
-      if (state != null) {
+      if (state != null && isSessionSnapshotCurrent(session)) {
         if (state['completed'] == true) {
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
-        if (acquisitionSource.isNotEmpty) {
+        // A GET started before an upload acknowledgement can carry the older
+        // survey answer even after the outbox has cleared. Do not restore it.
+        if (acquisitionSource.isNotEmpty &&
+            !pendingSourceAtStart &&
+            !OnboardingSyncRuntime.hasPendingAcquisitionSource &&
+            SharedPreferencesUtil().foundOmiSource == localSourceAtStart) {
           SharedPreferencesUtil().foundOmiSource = acquisitionSource;
         }
         // Restore language from server if not already set locally
         final serverLanguage = await getUserPrimaryLanguage();
-        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+        if (serverLanguage != null && serverLanguage.isNotEmpty && isSessionSnapshotCurrent(session)) {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
@@ -1059,8 +1148,7 @@ class AuthService {
     final existingCred = e.credential;
 
     // Sign out current anonymous user
-    handleAuthUserChanged(null);
-    await FirebaseAuth.instance.signOut();
+    await signOutForAccountSwitch();
 
     // Sign in with existing account
     final result = await FirebaseAuth.instance.signInWithCredential(existingCred!);

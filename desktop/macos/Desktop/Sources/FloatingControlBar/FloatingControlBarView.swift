@@ -188,7 +188,7 @@ struct FloatingControlBarView: View {
         ? .top : .center
     )
     .background(Color.clear)
-    .omiAnimation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+    .omiAnimation(FloatingBarMotion.notice, value: state.currentNotification?.id)
     // Placed on the always-mounted root (not inside unifiedFloatingSurface) so
     // the pill→island morph still fires when transitioning out of the idle pill.
     .onChange(of: activeLifecycleKey) { _, _ in
@@ -575,18 +575,10 @@ struct FloatingControlBarView: View {
 
   /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
   /// normal notification card.
-  private enum JITFeedbackPresentation {
-    case planned(JITTriggerFeedbackContext)
-    case ambient(JITAmbientFeedbackContext)
-  }
 
   @ViewBuilder
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
-    if let feedbackContext = notification.jitFeedbackContext {
-      jitFeedbackCard(notification, presentation: .planned(feedbackContext))
-    } else if let ambientFeedbackContext = notification.jitAmbientFeedbackContext {
-      jitFeedbackCard(notification, presentation: .ambient(ambientFeedbackContext))
-    } else if notification.assistantId == "reach_error" {
+    if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
     } else if notification.assistantId == NotchMoment.receiptAssistantId {
       notchReceiptCard(notification)
@@ -620,149 +612,6 @@ struct FloatingControlBarView: View {
   /// Concrete, explicit-only controls for a planned trigger. Each action is
   /// submitted through the delivery actor; dismissing or ignoring the card
   /// never calls this path.
-  private func jitFeedbackCard(
-    _ notification: FloatingBarNotification,
-    presentation: JITFeedbackPresentation
-  ) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      Button {
-        FloatingControlBarManager.shared.openNotificationAsChat(notification)
-      } label: {
-        HStack(alignment: .top, spacing: OmiSpacing.md) {
-          Image(systemName: "bell.badge.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-            .frame(width: 44, height: 44)
-            .background(Color.white.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-
-          VStack(alignment: .leading, spacing: 3) {
-            Text(notification.title)
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(.white)
-              .lineLimit(1)
-            Text(notification.message)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(0.78))
-              .lineLimit(3)
-              .multilineTextAlignment(.leading)
-            if InterjectFeature.isEnabled {
-              Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
-                .scaledFont(size: OmiType.micro, weight: .medium)
-                .foregroundColor(.white.opacity(0.45))
-                .lineLimit(1)
-            }
-          }
-          Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-
-      HStack(spacing: OmiSpacing.xs) {
-        jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
-          submitJITFeedback(.useful, notification: notification, presentation: presentation)
-        }
-        jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
-          submitJITFeedback(.falsePositive, notification: notification, presentation: presentation)
-        }
-        if case .planned = presentation {
-          jitFeedbackButton("Snooze", systemImage: "zzz") {
-            submitJITFeedback(
-              .snooze, notification: notification, presentation: presentation,
-              snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
-          }
-          jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
-            submitJITFeedback(.disable, notification: notification, presentation: presentation)
-          }
-          jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
-            submitJITFeedback(.missedOrLate, notification: notification, presentation: presentation)
-          }
-        }
-      }
-    }
-    .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.md + 2)
-    .overlay(alignment: .topTrailing) {
-      Button {
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(.white.opacity(0.62))
-          .frame(width: 18, height: 18)
-          .background(Color.white.opacity(0.08))
-          .clipShape(Circle())
-      }
-      .buttonStyle(.plain)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .accessibilityLabel("Dismiss notification")
-    }
-  }
-
-  private func jitFeedbackButton(
-    _ title: String,
-    systemImage: String,
-    action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      Label(title, systemImage: systemImage)
-        .scaledFont(size: OmiType.micro, weight: .semibold)
-        .foregroundColor(.white.opacity(0.9))
-        .padding(.horizontal, OmiSpacing.xs)
-        .padding(.vertical, OmiSpacing.xxs)
-        .background(Color.white.opacity(0.12))
-        .clipShape(Capsule())
-    }
-    .buttonStyle(.plain)
-  }
-
-  private func submitJITFeedback(
-    _ action: JITTriggerFeedbackAction,
-    notification: FloatingBarNotification,
-    presentation: JITFeedbackPresentation,
-    snoozedUntil: Date? = nil
-  ) {
-    let ownerID: String
-    switch presentation {
-    case .planned(let context): ownerID = context.ownerID
-    case .ambient(let context): ownerID = context.ownerID
-    }
-    guard
-      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: ownerID
-      )
-    else { return }
-    let accountGeneration = AccountCutoverControlManager.shared.control.accountGeneration
-    let notificationID = notification.id
-    Task {
-      switch presentation {
-      case .planned(let context):
-        await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
-          identity: notification.feedbackIdentity,
-          verb: action.interjectVerb)
-        await JITTriggerFeedbackActionRouter.record(
-          action,
-          context: context,
-          snoozedUntil: snoozedUntil,
-          authorizationSnapshot: authorizationSnapshot)
-      case .ambient(let context):
-        await JITAmbientFeedbackActionRouter.record(
-          action,
-          context: context,
-          authorizationSnapshot: authorizationSnapshot,
-          currentAccountGeneration: accountGeneration,
-          presentationCurrent: {
-            FloatingControlBarManager.shared.isCurrentNotification(notificationID)
-          })
-      }
-      await MainActor.run {
-        guard FloatingControlBarManager.shared.isCurrentNotification(notificationID) else { return }
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      }
-    }
-  }
 
   /// Live proactive suggestion. Monochrome and quiet by design — this card interrupts
   /// unprompted, so it earns attention with the sentence, not with chrome.
@@ -805,12 +654,6 @@ struct FloatingControlBarView: View {
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
 
-          if InterjectFeature.isEnabled {
-            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
-              .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(.white.opacity(0.45))
-              .lineLimit(1)
-          }
         }
 
         Spacer(minLength: OmiSpacing.xs)
@@ -825,22 +668,7 @@ struct FloatingControlBarView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .overlay(alignment: .topTrailing) {
-      Button {
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(.white.opacity(0.62))
-          .frame(width: 18, height: 18)
-          .background(Color.white.opacity(0.08))
-          .clipShape(Circle())
-      }
-      .buttonStyle(.plain)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .accessibilityLabel("Dismiss suggestion")
-    }
+    .notchDismissOverlay(accessibilityLabel: "Dismiss suggestion")
   }
 
   /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
@@ -872,7 +700,7 @@ struct FloatingControlBarView: View {
         Button {
           FloatingControlBarManager.shared.dismissCurrentNotification()
         } label: {
-          Text("Later").scaledFont(size: 12).foregroundColor(.white.opacity(0.5))
+          Text("Not Now").scaledFont(size: 12).foregroundColor(.white.opacity(0.5))
         }
         .buttonStyle(.plain)
       }
@@ -884,7 +712,7 @@ struct FloatingControlBarView: View {
   }
 
   /// Hard reach failure (retries exhausted). Persists until the user picks
-  /// Retry (re-runs the query, restarting backoff) or Skip (back to idle).
+  /// Try Again (re-runs the query, restarting backoff) or Dismiss (back to idle).
   private func reachErrorCard(_ notification: FloatingBarNotification) -> some View {
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
       Image(systemName: "exclamationmark.triangle.fill")
@@ -909,7 +737,7 @@ struct FloatingControlBarView: View {
       Button {
         FloatingControlBarManager.shared.retryReachError()
       } label: {
-        Text("Retry")
+        Text("Try Again")
           .scaledFont(size: 12, weight: .semibold)
           .foregroundColor(.white)
           .padding(.horizontal, OmiSpacing.sm)
@@ -922,7 +750,7 @@ struct FloatingControlBarView: View {
       Button {
         FloatingControlBarManager.shared.dismissReachError()
       } label: {
-        Text("Skip")
+        Text("Dismiss")
           .scaledFont(size: 12, weight: .semibold)
           .foregroundColor(.white.opacity(0.6))
           .padding(.horizontal, OmiSpacing.xs)
@@ -1100,15 +928,16 @@ struct FloatingControlBarView: View {
     // render an accepted spawn receipt one update before the manager does.
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.sm) {
-        Button(action: mainConversationBackAction) {
-          Image(systemName: "chevron.left")
+        Button(action: mainConversationBackAction) {  // xmark when it closes, chevron when it goes back
+          Image(systemName: agentPills.pills.isEmpty ? "xmark" : "chevron.left")
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(.white.opacity(0.82))
             .frame(width: 36, height: 32)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(agentPills.pills.isEmpty ? "Close Omi Chat" : "Back to subagents")
+        .help(agentPills.pills.isEmpty ? "Close Omi Chat (Esc)" : "Back to subagents")
+        .accessibilityLabel(agentPills.pills.isEmpty ? "Close Omi Chat" : "Back to subagents")
 
         Text("Omi Chat")
           .scaledFont(size: OmiType.body, weight: .bold)
@@ -1118,7 +947,7 @@ struct FloatingControlBarView: View {
         Spacer(minLength: 0)
 
         if state.hasVisibleConversation {
-          escToClearHint
+          clearConversationButton
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -1133,18 +962,17 @@ struct FloatingControlBarView: View {
     return agentPills.pills.first { $0.id == id }
   }
 
-  private var escToClearHint: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Text("esc")
-        .scaledFont(size: OmiType.caption)
+  private var clearConversationButton: some View {
+    Button(action: onClearVisibleConversation) {
+      Text("Clear")
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(.secondary)
-        .frame(width: 30, height: 16)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(4)
-      Text("to clear")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(.secondary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .frame(height: 20)
+        .background(Capsule().fill(NotchGlass.ink(.w1)))
     }
+    .buttonStyle(.plain)
+    .help("Clear this conversation")
   }
 
   /// The hover surface's Hide control. Closes the hover rows first so the island retracts as
@@ -1191,7 +1019,7 @@ struct FloatingControlBarView: View {
       notchLogoHovering = false
       return
     }
-    OmiMotion.withGated(.spring(response: 0.18, dampingFraction: 0.74)) {
+    OmiMotion.withGated(FloatingBarMotion.logoHover) {
       notchLogoHovering = hovering
     }
     setAgentSwitcherHovering(hovering)
@@ -1297,7 +1125,7 @@ struct FloatingControlBarView: View {
   }
 
   private func handleBarHover(_ hovering: Bool) {
-    FloatingControlBarManager.shared.interjectBarHoverChanged(hovering)
+    FloatingControlBarManager.shared.notificationBarHoverChanged(hovering)
     if state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
       let showsHoverChrome = hovering && !state.isVoicePresentationActive
@@ -1393,17 +1221,17 @@ struct FloatingControlBarView: View {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         FloatingBarNotificationCardLead(
           copy: copy,
-          messageLineLimit: interjectInsightTeaserLimit(notification),
-          footer: InterjectFeature.isEnabled
-            ? InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens)
-            : nil
+          messageLineLimit: 3,
+          footer: nil
         )
         Spacer(minLength: 0)
 
         // Reserve space so text never runs under the overlaid action buttons.
         // Wider for actionable (task) notifications that also show Execute.
         Color.clear
-          .frame(width: notification.assistantId == "task" ? 96 : 40, height: 20)
+          .frame(
+            width: notification.kind == .proactivityV2 ? 112 : (notification.assistantId == "task" ? 96 : 40),
+            height: 20)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md + 2)
@@ -1411,8 +1239,13 @@ struct FloatingControlBarView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .onAppear { FloatingControlBarManager.shared.notificationDidRender(notification) }
+    .onChange(of: notification.id) { _, _ in FloatingControlBarManager.shared.notificationDidRender(notification) }
     .overlay(alignment: .topTrailing) {
       HStack(spacing: OmiSpacing.xs) {
+        if notification.kind == .proactivityV2 {
+          ProactivityCardFeedback(onInteraction: notification.onInteraction).id(notification.id)
+        }
         // Execute is only meaningful for actionable notifications (tasks).
         // Focus / Insight (tips) / other passive notifications are
         // informational — spawning an agent there made no sense.
@@ -1450,17 +1283,7 @@ struct FloatingControlBarView: View {
           .help("Spawn an agent to handle this")
         }
 
-        Button {
-          FloatingControlBarManager.shared.dismissCurrentNotification()
-        } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(.white.opacity(0.62))
-            .frame(width: 18, height: 18)
-            .background(Color.white.opacity(0.08))
-            .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
+        NotchDismissButton(action: { FloatingControlBarManager.shared.dismissCurrentNotification() })
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
@@ -1662,7 +1485,7 @@ struct FloatingControlBarView: View {
               .frame(width: 11, height: 11)
               .padding(OmiSpacing.hairline)
           }
-          .omiAnimation(.easeInOut(duration: 0.15), value: isOn.wrappedValue)
+          .omiAnimation(.easeInOut(duration: FloatingBarMotion.hoverFade), value: isOn.wrappedValue)
       }
     }
     .buttonStyle(.plain)
@@ -1703,13 +1526,6 @@ struct FloatingControlBarView: View {
         .scaledFont(size: 12, weight: .semibold)
         .foregroundColor(.white)
 
-      if let title = state.interjectReplyingToTitle, InterjectFeature.isEnabled {
-        Text(InterjectReplyHint.listeningChip(title: title))
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(.white.opacity(0.72))
-          .lineLimit(1)
-      }
-
       // Locked mode is a mode the user has to be able to see at a glance: a bare glyph
       // read as decoration, and gating it on an empty hint hid it for most of the turn.
       // Restores the pre-2b416572c0 badge, always shown while locked.
@@ -1723,15 +1539,6 @@ struct FloatingControlBarView: View {
           .cornerRadius(4)
       }
     }
-  }
-
-  private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
-    FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
-      kindIsInsight: InterjectFeature.isEnabled && notification.kind == .insight,
-      isHovering: isHovering,
-      interjectBarHovering: state.interjectBarHovering,
-      interjectPTTHoldActive: state.interjectReplyingToTitle != nil
-    )
   }
 
   private var floatingChatProvider: ChatProvider? {
@@ -3028,22 +2835,7 @@ private struct MeetingSummaryShareCard: View {
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md + 2)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .overlay(alignment: .topTrailing) {
-      Button {
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(.white.opacity(0.62))
-          .frame(width: 18, height: 18)
-          .background(Color.white.opacity(0.08))
-          .clipShape(Circle())
-      }
-      .buttonStyle(.plain)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .accessibilityLabel("Dismiss meeting summary notification")
-    }
+    .notchDismissOverlay(accessibilityLabel: "Dismiss meeting summary")
     .onReceive(NotificationCenter.default.publisher(for: .meetingSummaryShareBeginAddressing)) { _ in
       beginAddressing()
     }
@@ -3219,7 +3011,7 @@ private struct MeetingSummaryShareCard: View {
   private func finish(confirmation: String) {
     phase = .done(confirmation)
     Task { @MainActor in
-      try? await Task.sleep(nanoseconds: 1_400_000_000)
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       FloatingControlBarManager.shared.dismissCurrentNotification()
     }
   }

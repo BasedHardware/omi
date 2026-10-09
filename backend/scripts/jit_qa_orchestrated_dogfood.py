@@ -123,8 +123,8 @@ def _subprocess_env(source: dict[str, str]) -> dict[str, str]:
             "PROVIDER_MODE": "offline",
             # The production canonical intake fence defaults to off.  These
             # writes are confined to a demo-* emulator project, so explicitly
-            # select the real read/write contract for the proof.
-            "MEMORY_MODE": "read",
+            # select the canonical intake contract for the proof.
+            "MEMORY_ENABLED": "on",
             "ENCRYPTION_SECRET": "omi_jit_orchestrated_dogfood_key_32_bytes",  # pragma: allowlist secret
             "GOOGLE_AUTH_DISABLE_GCE_CHECK": "true",
             "GCE_METADATA_HOST": "127.0.0.1:9",

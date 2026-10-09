@@ -8,7 +8,13 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 enum PowerCycleSubState { waitingForOff, deviceOff, waitingForReconnect, reconnected }
 
 class DeviceOnboardingProvider extends ChangeNotifier {
-  static const int totalSteps = 4;
+  static const int transcriptionStep = 0;
+  static const int askQuestionStep = 1;
+  static const int voiceReplyStep = 2;
+  static const int powerCycleStep = 3;
+  static const int doublePressStep = 4;
+  static const int allSetStep = 5;
+  static const int totalSteps = 6;
   static const int _wordThreshold = 5;
 
   int currentStep = 0;
@@ -24,6 +30,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool questionSent = false;
   String? aiResponse;
 
+  // Step 2: Voice reply preference. Null until the step is visited so a user
+  // who skips the tutorial before this point keeps their existing preference.
+  int? selectedVoiceResponseMode;
+
   // Step 2: Power cycle
   PowerCycleSubState powerCycleState = PowerCycleSubState.waitingForOff;
 
@@ -36,19 +46,20 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool _disposed = false;
 
   void startOnboarding() {
-    currentStep = 0;
+    currentStep = transcriptionStep;
     isOnboardingActive = true;
-    _resetStepState();
+    _resetOnboardingState();
     notifyListeners();
   }
 
-  void _resetStepState() {
+  void _resetOnboardingState() {
     demoSegments = [];
     wordCount = 0;
     transcriptionComplete = false;
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
@@ -60,9 +71,27 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void advanceStep() {
     if (currentStep < totalSteps - 1) {
       currentStep++;
-      _resetStepState();
       notifyListeners();
     }
+  }
+
+  void goToStep(int step) {
+    if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    currentStep = step;
+    notifyListeners();
+  }
+
+  /// Returns true only when the tutorial establishes its initial selection.
+  bool initializeVoiceResponseMode({required bool firstRun, required int currentPreference}) {
+    if (selectedVoiceResponseMode != null) return false;
+    selectedVoiceResponseMode = firstRun ? 0 : currentPreference;
+    return true;
+  }
+
+  void selectVoiceResponseMode(int mode) {
+    if (selectedVoiceResponseMode == mode) return;
+    selectedVoiceResponseMode = mode;
+    notifyListeners();
   }
 
   void completeOnboarding() {
@@ -75,7 +104,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   // --- Step 0: Transcription ---
 
   void onTranscriptSegments(List<TranscriptSegment> segments) {
-    if (currentStep != 0 || transcriptionComplete) return;
+    if (currentStep != transcriptionStep || transcriptionComplete) return;
 
     demoSegments = segments;
     int count = 0;
@@ -94,13 +123,13 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void onButtonEvent(int buttonState) {
     switch (currentStep) {
-      case 1:
+      case askQuestionStep:
         _handleStep1Button(buttonState);
         break;
-      case 2:
+      case powerCycleStep:
         // Button events not used for power cycle — we detect disconnect/reconnect instead
         break;
-      case 3:
+      case doublePressStep:
         _handleStep3Button(buttonState);
         break;
     }
@@ -121,7 +150,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void onVoiceResponseReceived(String response) {
-    if (currentStep != 1) return;
+    if (currentStep != askQuestionStep) return;
     aiResponse = response;
     notifyListeners();
   }
@@ -129,7 +158,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   // --- Step 2: Power cycle ---
 
   void onDeviceDisconnected() {
-    if (currentStep != 2) return;
+    if (currentStep != powerCycleStep) return;
     if (powerCycleState == PowerCycleSubState.waitingForOff) {
       powerCycleState = PowerCycleSubState.deviceOff;
       notifyListeners();
@@ -146,7 +175,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void onDeviceReconnected() {
-    if (currentStep != 2) return;
+    if (currentStep != powerCycleStep) return;
     if (powerCycleState == PowerCycleSubState.waitingForReconnect || powerCycleState == PowerCycleSubState.deviceOff) {
       powerCycleState = PowerCycleSubState.reconnected;
       notifyListeners();

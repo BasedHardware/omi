@@ -1157,6 +1157,8 @@ def search_transcript_chunks(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     query_vector: Optional[List[float]] = None,
+    *,
+    timeout_seconds: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
@@ -1171,12 +1173,16 @@ def search_transcript_chunks(
     if created_at is not None:
         filter_data['created_at'] = created_at
     vector = query_vector if query_vector is not None else embeddings.embed_query(query)
+    query_kwargs: Dict[str, Any] = {}
+    if timeout_seconds is not None:
+        query_kwargs['_request_timeout'] = timeout_seconds
     xc = index.query(
         vector=vector,
         top_k=limit,
         include_metadata=True,
         filter=filter_data,
         namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
+        **query_kwargs,
     )
     results: List[Dict[str, Any]] = []
     matches: List[Any] = xc.get('matches', [])

@@ -973,8 +973,8 @@ final class ScreenCaptureService: Sendable {
   /// screencapture CLI instead. Do NOT reach for this from a timer or a loop on
   /// macOS 14+; that is exactly the per-frame authorization sampling that made the
   /// consent dialog re-fire (see docs/screencapture-consent-reprompt.md). Use
-  /// `captureWindowCGImage`, which goes through the persistent stream engine and also
-  /// preserves the `.permissionDeclined` classification this `Data?` return erases.
+  /// `captureWindowCGImage`, which preserves the `.permissionDeclined` classification
+  /// this `Data?` return erases.
   func captureActiveWindowAsync() async -> Data? {
     let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
     guard let windowID else {
@@ -1143,24 +1143,6 @@ final class ScreenCaptureService: Sendable {
       domain: nsError.domain, code: nsError.code, description: nsError.localizedDescription)
   }
 
-  /// Release the persistent capture stream (if the flag is on and one is running).
-  /// Called from the monitoring pause paths — sleep, lock, stop — so the OS
-  /// screen-recording indicator never outlives actual capture. The next capture
-  /// request rebuilds the stream lazily.
-  ///
-  /// Deliberately NOT gated on `ScreenCaptureStreamFeature.isEnabled`: the flag can be
-  /// re-resolved (or flipped off) between the start that created the stream and the
-  /// stop that should release it, and a missed teardown leaves the OS screen-recording
-  /// indicator lit. `suspend` is a no-op when no stream is running, so the unconditional
-  /// call is free.
-  static func suspendPersistentCaptureStream(reason: String) {
-    if #available(macOS 14.0, *) {
-      Task {
-        await WindowCaptureStreamEngine.shared.suspend(reason: reason)
-      }
-    }
-  }
-
   /// Capture the active window and return the raw CGImage (no JPEG encoding).
   /// Use this on macOS 14+ to avoid redundant encode/decode round-trips.
   @available(macOS 14.0, *)
@@ -1188,23 +1170,7 @@ final class ScreenCaptureService: Sendable {
         return .windowGone
       }
 
-      // Persistent-stream engine: one long-lived SCStream, one TCC authorization,
-      // instead of a fresh capture session (and a fresh authorization) per frame.
-      // See WindowCaptureStreamEngine for why this is the consent-re-prompt fix.
-      if ScreenCaptureStreamFeature.isEnabled {
-        switch await WindowCaptureStreamEngine.shared.captureFrame(
-          window: window, requestedMaxSize: maxSize)
-        {
-        case .success(let image):
-          return .success(image)
-        case .permissionDeclined:
-          return .permissionDeclined
-        case .failed:
-          return .failed
-        }
-      }
-
-      // Legacy one-shot path (flag off): a fresh filter + screenshot session per frame.
+      // One-shot path: a fresh filter + screenshot session per frame.
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
         guard let config = captureConfiguration(for: window, maxSize: maxSize) else {
           return nil

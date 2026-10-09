@@ -1,0 +1,186 @@
+import json
+import os
+
+import pytest
+from fastapi import HTTPException
+
+os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
+os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key-not-real")
+
+from routers import apps
+from models.app import App
+
+
+def _run_update(monkeypatch, payload, stored=None):
+    if stored is None:
+        stored = {
+            'id': 'app-1',
+            'uid': 'owner',
+            'name': 'Original Name',
+            'category': 'productivity',
+            'author': 'Original Author',
+            'description': 'Original Description',
+            'image': 'https://example.com/logo.png',
+            'capabilities': ['chat'],
+            'approved': False,
+            'private': True,
+            'source_code_url': 'https://github.com/original/repo',
+        }
+    written = {}
+    monkeypatch.setattr(apps, 'get_available_app_by_id', lambda app_id, uid: dict(stored))
+    monkeypatch.setattr(apps, 'update_app_in_db', lambda data: written.update(data))
+    monkeypatch.setattr(apps, 'upsert_app_payment_link', lambda *a, **k: None)
+    monkeypatch.setattr(apps, 'delete_app_cache_by_id', lambda *a, **k: None)
+    monkeypatch.setattr(apps, 'invalidate_approved_apps_cache', lambda *a, **k: None)
+
+    payload_with_id = {'id': 'app-1', **payload}
+    apps.update_app('app-1', app_data=json.dumps(payload_with_id), file=None, uid='owner')
+    return written
+
+
+def test_patch_drops_explicit_null_on_required_fields(monkeypatch):
+    """Explicit null on required non-nullable fields must be dropped so stored values are not overwritten."""
+    payload = {
+        'name': None,
+        'category': None,
+        'author': None,
+        'description': None,
+        'image': None,
+        'capabilities': None,
+    }
+    written = _run_update(monkeypatch, payload)
+
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        assert field not in written, f"Expected {field} to be dropped from update payload, but was present"
+
+
+def test_patch_preserves_explicit_null_on_optional_fields(monkeypatch):
+    """Explicit null on optional fields must pass through to allow clearing stored values."""
+    payload = {
+        'source_code_url': None,
+        'email': None,
+        'memory_prompt': None,
+    }
+    written = _run_update(monkeypatch, payload)
+
+    assert 'source_code_url' in written
+    assert written['source_code_url'] is None
+    assert 'email' in written
+    assert written['email'] is None
+    assert 'memory_prompt' in written
+    assert written['memory_prompt'] is None
+
+
+def test_patch_updates_real_values_for_required_fields(monkeypatch):
+    """Real non-null values for required fields must update normally."""
+    payload = {
+        'name': 'Updated Name',
+        'category': 'utilities',
+        'description': 'Updated Description',
+    }
+    written = _run_update(monkeypatch, payload)
+
+    assert written.get('name') == 'Updated Name'
+    assert written.get('category') == 'utilities'
+    assert written.get('description') == 'Updated Description'
+
+
+def test_patch_mixed_null_required_and_null_optional(monkeypatch):
+    """Mixed payloads drop nulls for required fields while keeping updates and optional nulls."""
+    payload = {
+        'name': None,
+        'description': 'Updated Description',
+        'source_code_url': None,
+    }
+    written = _run_update(monkeypatch, payload)
+
+    assert 'name' not in written
+    assert written.get('description') == 'Updated Description'
+    assert 'source_code_url' in written
+    assert written['source_code_url'] is None
+
+
+def test_patch_does_not_poison_stored_app_model(monkeypatch):
+    """End-to-end check: applying the PATCH update to stored document must produce a valid App."""
+    stored = {
+        'id': 'app-1',
+        'uid': 'owner',
+        'name': 'Original Name',
+        'category': 'productivity',
+        'author': 'Original Author',
+        'description': 'Original Description',
+        'image': 'https://example.com/logo.png',
+        'capabilities': ['chat'],
+        'approved': False,
+        'private': True,
+    }
+    # Client sends nulls on some required fields
+    payload = {
+        'category': None,
+        'author': None,
+        'description': None,
+    }
+    written = _run_update(monkeypatch, payload, stored=stored)
+
+    # Simulate Firestore document update
+    merged = dict(stored)
+    merged.update(written)
+
+    # App model must validate without raising ValidationError
+    app = App(**merged)
+    assert app.name == 'Original Name'
+    assert app.category == 'productivity'
+    assert app.author == 'Original Author'
+    assert app.description == 'Original Description'
+
+
+def test_patch_explicit_null_external_integration_clears_stored_value(monkeypatch):
+    """Explicit null on external_integration must clear the stored integration instead of returning 500."""
+    stored = {
+        'id': 'app-1',
+        'uid': 'owner',
+        'name': 'Original Name',
+        'category': 'productivity',
+        'author': 'Original Author',
+        'description': 'Original Description',
+        'image': 'https://example.com/logo.png',
+        'capabilities': ['external_integration'],
+        'approved': False,
+        'private': True,
+        'external_integration': {
+            'triggers_on': 'memory_creation',
+            'webhook_url': 'https://example.com/webhook',
+            'app_home_url': 'https://example.com',
+        },
+    }
+    written = _run_update(monkeypatch, {'external_integration': None}, stored=stored)
+
+    assert 'external_integration' in written
+    assert written['external_integration'] is None
+
+
+def test_patch_non_object_external_integration_is_rejected_with_422(monkeypatch):
+    """A non-object external_integration must fail validation with 422, not crash the helpers."""
+    with pytest.raises(HTTPException) as exc_info:
+        _run_update(monkeypatch, {'external_integration': 'not-an-object'})
+
+    assert exc_info.value.status_code == 422
+
+
+def test_patch_external_integration_object_still_backfills_home_url(monkeypatch):
+    """A dict external_integration still runs the app_home_url backfill and instructions-url flag."""
+    payload = {
+        'external_integration': {
+            'triggers_on': 'memory_creation',
+            'webhook_url': 'https://example.com/webhook',
+            'auth_steps': [{'name': 'Connect', 'url': 'https://example.com/auth'}],
+            'setup_instructions_file_path': ' https://example.com/setup ',
+        },
+    }
+    written = _run_update(monkeypatch, payload)
+
+    integration = written['external_integration']
+    assert integration['app_home_url'] == 'https://example.com/auth'
+    assert integration['setup_instructions_file_path'] == 'https://example.com/setup'
+    assert integration['is_instructions_url'] is True

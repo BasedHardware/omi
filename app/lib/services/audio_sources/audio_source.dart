@@ -7,8 +7,28 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 class WalFrame {
   final List<int> payload;
   final FrameSyncKey syncKey;
+  final String? captureRoot;
+  final int? sourceFramePosition;
+  final int? sourceClockEpoch;
 
-  WalFrame({required this.payload, required this.syncKey});
+  final int? connectionEpoch;
+  final int? livePacketCounter;
+  final int? liveFragmentIndex;
+  final int? liveOrdinal;
+  final int? liveRingId;
+
+  WalFrame({
+    required this.payload,
+    required this.syncKey,
+    this.captureRoot,
+    this.sourceFramePosition,
+    this.sourceClockEpoch,
+    this.connectionEpoch,
+    this.livePacketCounter,
+    this.liveFragmentIndex,
+    this.liveOrdinal,
+    this.liveRingId,
+  });
 }
 
 /// Key for matching WAL frames during sync.

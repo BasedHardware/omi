@@ -113,6 +113,7 @@ import {
   rewindSampleStep,
   buildRewindSampledSql
 } from './rewindSampleSql'
+import { SCREEN_SYNTH_FRAMES_SQL, type ScreenSynthFrameRow } from './screenSynthSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -1559,6 +1560,13 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
         get(),
         `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`
       ).all(from, to) as RewindFrame[]
+  )
+}
+
+export function listScreenSynthFrames(from: number, to: number): ScreenSynthFrameRow[] {
+  return timed(
+    'listScreenSynthFrames',
+    () => cachedStmt(get(), SCREEN_SYNTH_FRAMES_SQL).all(from, to) as ScreenSynthFrameRow[]
   )
 }
 

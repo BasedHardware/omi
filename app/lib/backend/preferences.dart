@@ -18,6 +18,9 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/startup/boot_recovery.dart';
+import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
@@ -61,6 +64,7 @@ class SharedPreferencesUtil {
   static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
 
   static Future<void> _secureQueue = Future<void>.value();
+  static final Set<String> _quarantinePending = <String>{};
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -68,11 +72,24 @@ class SharedPreferencesUtil {
 
   SharedPreferencesUtil._internal();
 
-  String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
+  String get deviceIdHash => getString('deviceIdHash');
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
+
+  static const String appearanceModeKey = 'appearanceMode';
+  static const String appearanceDefaultMigrationKey = 'appearanceDefaultMigration';
+
+  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
+
+  Future<void> setAppearanceMode(String mode) async {
+    final prefs = _preferences ?? await SharedPreferences.getInstance();
+    await prefs.setString(appearanceModeKey, mode);
+  }
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    final hadStoredAppearance = _preferences!.containsKey(appearanceModeKey);
+    if (!PhysicalQualification.enabled) await _quarantineBootSettings();
+    await _migrateAppearanceDefault(hadStoredAppearance: hadStoredAppearance);
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -94,9 +111,92 @@ class SharedPreferencesUtil {
     _authTokenCache = await _readSecureAuthToken() ?? '';
     // Codex P2: a failed secure write leaves the legacy prefs token; still use it.
     if (_authTokenCache.isEmpty) {
-      _authTokenCache = _preferences?.getString('authToken') ?? '';
+      _authTokenCache = _instance.getString('authToken');
     }
     await _syncNativeAuthToken(_authTokenCache);
+  }
+
+  /// Pin the default once, before this launch creates other preferences. Existing
+  /// installs without a choice keep System; fresh installs keep Light even after
+  /// onboarding. A quarantined appearance value retains the Light error fallback.
+  static Future<void> _migrateAppearanceDefault({required bool hadStoredAppearance}) async {
+    final prefs = _preferences!;
+    if (prefs.containsKey(appearanceModeKey)) return;
+
+    final lastVersion = prefs.get('lastKnownAppVersion');
+    final bootSchema = prefs.get(BootRecovery.schemaKey);
+    final existingInstall = prefs.get('onboardingCompleted') == true ||
+        (lastVersion is String && lastVersion.trim().isNotEmpty) ||
+        (bootSchema is int && bootSchema > 0);
+    final savedDefault = prefs.get(appearanceDefaultMigrationKey);
+    final String mode;
+    if (hadStoredAppearance) {
+      mode = 'light';
+    } else if (savedDefault is String && (savedDefault == 'light' || savedDefault == 'system')) {
+      mode = savedDefault;
+    } else {
+      mode = existingInstall ? 'system' : 'light';
+    }
+
+    // Save the decision before attempting the appearance write. Later startup
+    // stages stamp boot/version/onboarding history, which must not change this
+    // decision if the appearance write fails and the next process retries it.
+    // Attempt each write independently: either durable value is sufficient.
+    // If both fail, the cached choice still works this boot, but no decision can
+    // survive a process restart without a successful storage write.
+    for (final key in [if (savedDefault != mode) appearanceDefaultMigrationKey, appearanceModeKey]) {
+      try {
+        if (!await prefs.setString(key, mode)) {
+          Logger.debug('Appearance default migration could not persist $key');
+        }
+      } catch (e, stack) {
+        Logger.debug('Appearance default migration failed for $key: $e');
+        Logger.debug('Stack: $stack');
+      }
+    }
+  }
+
+  static Future<void> _quarantineBootSettings() async {
+    final prefs = _preferences!;
+    final expected = <String, bool Function(Object)>{
+      'authToken': (value) => value is String,
+      _authTokenMigratedPrefsKey: (value) => value is bool,
+      'deviceIdHash': (value) => value is String,
+      appearanceModeKey: (value) => value is String,
+      'onboardingCompleted': (value) => value is bool,
+      'uid': (value) => value is String,
+      'fullName': (value) => value is String,
+      'batchModeEnabled': (value) => value is bool,
+      'flash_page_pending_uploads': (value) => value is List<String>,
+      'limitless_wal_migration_v1': (value) => value is bool,
+    };
+    for (final entry in expected.entries) {
+      final value = prefs.get(entry.key);
+      if (value != null && !entry.value(value)) {
+        await _quarantine(entry.key, value, reason: 'invalid_schema');
+      }
+    }
+  }
+
+  static Future<void> _quarantine(String key, Object value, {required String reason}) async {
+    final prefs = _preferences;
+    if (prefs == null || !_quarantinePending.add(key)) return;
+    try {
+      final archive = '$key.corrupt-${DateTime.now().microsecondsSinceEpoch}';
+      bool saved = false;
+      if (value is String) saved = await prefs.setString(archive, value);
+      if (value is bool) saved = await prefs.setBool(archive, value);
+      if (value is int) saved = await prefs.setInt(archive, value);
+      if (value is double) saved = await prefs.setDouble(archive, value);
+      if (value is List<String>) saved = await prefs.setStringList(archive, value);
+      if (value is List && value is! List<String>) saved = await prefs.setString(archive, jsonEncode(value));
+      if (saved) await prefs.remove(key);
+      await BootJournal.instance.record('quarantine:$key', saved ? reason : 'copy_failed');
+    } catch (_) {
+      await BootJournal.instance.record('quarantine:$key', 'copy_failed');
+    } finally {
+      _quarantinePending.remove(key);
+    }
   }
 
   /// Loads the canonical capture policy and performs the one-time migration
@@ -115,6 +215,10 @@ class SharedPreferencesUtil {
     final parsed = raw is String ? CapturePolicy.tryParse(raw) : null;
     final hasCanonical = prefs.containsKey(capturePolicyKey);
     final hasLegacy = prefs.containsKey(_legacyDeviceMutedKey) || prefs.containsKey(_legacyBatchMutedKey);
+
+    if (!PhysicalQualification.enabled && hasCanonical && parsed == null && raw != null) {
+      await _quarantine(capturePolicyKey, raw, reason: 'invalid_schema');
+    }
 
     if (parsed != null) {
       _capturePolicyCache = parsed;
@@ -210,10 +314,7 @@ class SharedPreferencesUtil {
   }
 
   static Future<void> _applyNativeCapturePolicy(CapturePolicy policy) async {
-    await _invokeCapturePolicyBridge('setMuted', <String, Object>{
-      'muted': policy.muted,
-      'revision': policy.revision,
-    });
+    await _invokeCapturePolicyBridge('setMuted', <String, Object>{'muted': policy.muted, 'revision': policy.revision});
   }
 
   static Future<Object?> _invokeCapturePolicyBridge(String method, Map<String, Object> arguments) async {
@@ -252,10 +353,9 @@ class SharedPreferencesUtil {
     // Observe errors immediately even if an older durable write holds the queue.
     // Defer reporting until this intent has also attempted its durable deny.
     final nativeMute = muted
-        ? _applyNativeCapturePolicy(requested).then<(Object, StackTrace)?>(
-            (_) => null,
-            onError: (Object error, StackTrace stack) => (error, stack),
-          )
+        ? _applyNativeCapturePolicy(
+            requested,
+          ).then<(Object, StackTrace)?>((_) => null, onError: (Object error, StackTrace stack) => (error, stack))
         : Future<(Object, StackTrace)?>.value();
 
     final operation = _capturePolicyQueue.then((_) async {
@@ -321,7 +421,7 @@ class SharedPreferencesUtil {
   static Future<void> migrateAuthTokenFromPrefs() async {
     final prefs = _preferences;
     if (prefs == null || (_secureStorage == null && _testSecureFallback == null)) return;
-    if (prefs.getBool(_authTokenMigratedPrefsKey) == true) {
+    if (prefs.get(_authTokenMigratedPrefsKey) == true) {
       // Scrub any prefs residue written after migration (e.g. stale native/cache paths).
       if (prefs.containsKey('authToken')) {
         await prefs.remove('authToken');
@@ -329,7 +429,8 @@ class SharedPreferencesUtil {
       return;
     }
 
-    final legacyToken = prefs.getString('authToken');
+    final rawToken = prefs.get('authToken');
+    final legacyToken = rawToken is String ? rawToken : null;
     try {
       final existingSecure = await _readSecureAuthToken();
       if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
@@ -465,17 +566,24 @@ class SharedPreferencesUtil {
     try {
       final decoded = jsonDecode(device);
       if (decoded is Map<String, dynamic>) {
-        return BtDevice.fromJson(decoded);
+        final parsed = BtDevice.fromJson(decoded);
+        if (parsed.id.isNotEmpty) return parsed;
       }
-      Logger.debug('Stored device is not a JSON object: ${decoded.runtimeType}');
+      Logger.debug(
+        PhysicalQualification.enabled
+            ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
+            : 'Stored device is not a JSON object',
+      );
     } catch (e) {
-      Logger.debug('Error decoding stored device: $e');
+      Logger.debug(PhysicalQualification.enabled ? 'Error decoding stored device: $e' : 'Error decoding stored device');
     }
+    if (!PhysicalQualification.enabled) unawaited(_quarantine('btDevice', device, reason: 'invalid_schema'));
     return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
   }
 
   List<BtDevice> get btDevices {
     final devices = <BtDevice>[];
+    var invalid = false;
     for (final encodedDevice in getStringList('btDevices')) {
       try {
         final decoded = jsonDecode(encodedDevice);
@@ -483,11 +591,20 @@ class SharedPreferencesUtil {
           final device = BtDevice.fromJson(decoded);
           if (device.id.isNotEmpty && !devices.any((savedDevice) => savedDevice.id == device.id)) {
             devices.add(device);
+          } else if (device.id.isEmpty) {
+            invalid = true;
           }
+        } else {
+          invalid = true;
         }
       } catch (e) {
-        Logger.debug('Error decoding saved device: $e');
+        Logger.debug(PhysicalQualification.enabled ? 'Error decoding saved device: $e' : 'Error decoding saved device');
+        invalid = true;
       }
+    }
+    if (invalid && !PhysicalQualification.enabled) {
+      unawaited(_quarantine('btDevices', getStringList('btDevices'), reason: 'invalid_schema'));
+      devices.clear();
     }
 
     final legacyDevice = btDevice;
@@ -517,71 +634,11 @@ class SharedPreferencesUtil {
 
   set deviceName(String value) => saveString('deviceName', value);
 
+  String get customBackendUrl => getString('customBackendUrl');
+
+  set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
   String get deviceName => getString('deviceName');
-
-  set deviceCustomNames(Map<String, String> value) => saveString('deviceCustomNames', jsonEncode(value));
-
-  Map<String, String> get deviceCustomNames {
-    final encoded = getString('deviceCustomNames');
-    if (encoded.isEmpty) return {};
-    try {
-      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
-      return decoded.map((key, value) => MapEntry(key, value.toString()));
-    } catch (e) {
-      Logger.debug('Error decoding device custom names: $e');
-      return {};
-    }
-  }
-
-  String? getDeviceCustomName(String deviceId) {
-    if (deviceId.isEmpty) return null;
-    final name = deviceCustomNames[deviceId]?.trim() ?? '';
-    return name.isEmpty ? null : name;
-  }
-
-  Future<void> setDeviceCustomName(String deviceId, String name) async {
-    if (deviceId.isEmpty) return;
-    final names = deviceCustomNames;
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) {
-      names.remove(deviceId);
-    } else {
-      names[deviceId] = trimmed;
-    }
-    await saveString('deviceCustomNames', jsonEncode(names));
-  }
-
-  Future<void> clearDeviceCustomName(String deviceId) async {
-    await setDeviceCustomName(deviceId, '');
-    await clearDeviceNameSynced(deviceId);
-  }
-
-  Future<void> adoptStoredDeviceName(String deviceId, String? storedName) async {
-    if (storedName == null) return;
-    await setDeviceCustomName(deviceId, storedName);
-    await markDeviceNameSynced(deviceId);
-  }
-
-  bool shouldPushLocalDeviceName(String deviceId, String storedName) =>
-      storedName.isEmpty && getDeviceCustomName(deviceId) != null && !hasSyncedDeviceName(deviceId);
-
-  List<String> get deviceNameSyncedIds => List<String>.from(getStringList('deviceNameSyncedIds'));
-
-  bool hasSyncedDeviceName(String deviceId) => deviceNameSyncedIds.contains(deviceId);
-
-  Future<void> markDeviceNameSynced(String deviceId) async {
-    if (deviceId.isEmpty) return;
-    final ids = deviceNameSyncedIds;
-    if (ids.contains(deviceId)) return;
-    ids.add(deviceId);
-    await saveStringList('deviceNameSyncedIds', ids);
-  }
-
-  Future<void> clearDeviceNameSynced(String deviceId) async {
-    final ids = deviceNameSyncedIds;
-    if (!ids.remove(deviceId)) return;
-    await saveStringList('deviceNameSyncedIds', ids);
-  }
 
   bool get deviceIsV2 => getBool('deviceIsV2');
 
@@ -654,6 +711,12 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
+  /// sttConfigId of the on-device config the paywall's "switch to free" saved, or ''.
+  /// Lets a later paid plan release exactly that pin and never a user's own Custom STT.
+  String get paywallOnDeviceSttConfigId => getString('paywallOnDeviceSttConfigId');
+
+  set paywallOnDeviceSttConfigId(String value) => saveString('paywallOnDeviceSttConfigId', value);
+
   // Whether offline recordings auto-sync to Omi when the device connects.
   // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
   bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
@@ -708,37 +771,9 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled');
-
   set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
-
-  set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
-
-  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
-
-  // Goal tracker widget on homepage - default is true (experimental feature)
-  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
-
-  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
-
-  // Daily score widget on homepage - default is true
-  set showDailyScoreEnabled(bool value) => saveBool('showDailyScoreEnabled', value);
-
-  bool get showDailyScoreEnabled => getBool('showDailyScoreEnabled', defaultValue: true);
-
-  // Tasks widget on homepage - default is true
-  set showTasksEnabled(bool value) => saveBool('showTasksEnabled', value);
-
-  bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
-
-  // Phone call floating button on home screen - default is true
-  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
-
-  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
 
   // Voice response playback mode for hardware-button replies.
   //   0 = off (never speak)
@@ -750,6 +785,18 @@ class SharedPreferencesUtil {
 
   int get voiceResponseMode => getInt('voiceResponseMode', defaultValue: 1);
 
+  set readChatRepliesAloud(bool value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveBool(_userScopedKey('readChatRepliesAloud', ownerUid), value);
+  }
+
+  bool get readChatRepliesAloud {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return false;
+    return getBool(_userScopedKey('readChatRepliesAloud', ownerUid));
+  }
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 
@@ -759,6 +806,9 @@ class SharedPreferencesUtil {
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
+
+  bool get showCaptureLiveActivity => getBool('showCaptureLiveActivity', defaultValue: true);
+  Future<bool> setShowCaptureLiveActivity(bool value) => saveBool('showCaptureLiveActivity', value);
 
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
@@ -817,10 +867,6 @@ class SharedPreferencesUtil {
 
   bool get daySummaryToggled => getBool('daySummaryToggled');
 
-  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation', defaultValue: true);
-
-  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
-
   bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation', defaultValue: true);
 
   set showSubmitAppConfirmation(bool value) => saveBool('showSubmitAppConfirmation', value);
@@ -844,11 +890,12 @@ class SharedPreferencesUtil {
   set conversationSilenceDuration(int value) => saveInt('conversationSilenceDuration', value);
 
   String get transcriptionModel => getString('transcriptionModel3', defaultValue: 'soniox');
-
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
-  bool get onboardingCompleted => getBool('onboardingCompleted');
+  bool get firstSummaryRatingPending => getBool('firstSummaryRatingPending'); // set at onboarding end
+  set firstSummaryRatingPending(bool value) => saveBool('firstSummaryRatingPending', value);
 
+  bool get onboardingCompleted => getBool('onboardingCompleted');
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
   bool get permissionsCompleted => getBool('permissionsCompleted');
@@ -890,6 +937,52 @@ class SharedPreferencesUtil {
   set permissionStoreRecordingsEnabled(bool value) => saveBool('permissionStoreRecordingsEnabled', value);
 
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
+
+  /// Auto-remove synced phone-local recording copies after [autoRemoveSyncedCopiesDays].
+  /// Default ON for new users (no stored value): cloud storage keeps the data, the
+  /// local file is only a safety copy. Existing installs are pinned OFF once by
+  /// [migrateAutoRemoveSyncedCopiesDefault] so upgrading users keep today's
+  /// keep-everything behaviour until they opt in.
+  bool get autoRemoveSyncedCopies => getBool('autoRemoveSyncedCopies', defaultValue: true);
+
+  set autoRemoveSyncedCopies(bool value) => saveBool('autoRemoveSyncedCopies', value);
+
+  /// One-time split of the auto-remove default, decided on the FIRST launch
+  /// that runs this build. `onboardingCompleted == true` can only mean "an
+  /// existing install upgraded" on that first launch — on any later launch it
+  /// equally describes a fresh install that onboarded since, which must keep
+  /// the getter's ON default. So:
+  /// - already onboarded → existing user: pin OFF once (key first, marker
+  ///   second, so a crash mid-migration re-runs instead of half-applying);
+  /// - not yet onboarded → mark the install immediately so later launches
+  ///   never mistake it for an upgrade; the ON default governs it until the
+  ///   user toggles.
+  Future<void> migrateAutoRemoveSyncedCopiesDefault() async {
+    const markerKey = 'autoRemoveSyncedCopiesDefaultMigrated';
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (prefs.getBool(markerKey) ?? false) return;
+    if (!(prefs.getBool('onboardingCompleted') ?? false)) {
+      await prefs.setBool(markerKey, true);
+      return;
+    }
+    final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
+    final pinned = await prefs.setBool(
+      'autoRemoveSyncedCopies',
+      alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false,
+    );
+    // Only commit the marker after the pin write succeeded, so a failed write
+    // retries on the next launch instead of leaving an existing install on the
+    // ON default with the migration reported complete.
+    if (pinned) {
+      await prefs.setBool(markerKey, true);
+    }
+  }
+
+  /// Retention window, in days, for synced phone-local copies.
+  int get autoRemoveSyncedCopiesDays => getInt('autoRemoveSyncedCopiesDays', defaultValue: 30);
+
+  set autoRemoveSyncedCopiesDays(int value) => saveInt('autoRemoveSyncedCopiesDays', value);
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
@@ -1042,11 +1135,17 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  List<ServerMessage> get cachedMessages {
+    // Older caches discarded journal provenance, so automatic cards cannot be
+    // distinguished from rich replies. Rehydrate those from canonical history.
+    if (getInt('cachedMessagesSchema') != 1) return [];
+    return _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  }
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+    saveInt('cachedMessagesSchema', 1);
   }
 
   /// Last owner-scoped memory projection used for offline/restart rendering.
@@ -1076,9 +1175,10 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(_userScopedKey('pendingMemories', ownerUid), (json) => Memory.fromJson(json))
-        .where((memory) => memory.uid == ownerUid)
-        .toList();
+    return _decodeCachedList(
+      _userScopedKey('pendingMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {
@@ -1129,6 +1229,10 @@ class SharedPreferencesUtil {
     saveStringList('cachedPeople', people);
   }
 
+  bool get cachedPeopleStatsTruncated => _preferences?.get('cachedPeopleStatsTruncated') == true;
+
+  set cachedPeopleStatsTruncated(bool value) => saveBool('cachedPeopleStatsTruncated', value);
+
   addCachedPerson(Person person) {
     final List<Person> people = cachedPeople;
     people.add(person);
@@ -1152,6 +1256,24 @@ class SharedPreferencesUtil {
       people.add(person);
       cachedPeople = people;
     }
+  }
+
+  // Speaker label recency — person id -> epoch millis of the last speaker
+  // assignment made from the tag-speaker sheet. Used to surface recently
+  // tagged people first. Format: { "personId": 1712345678000 }
+  Map<String, int> get speakerLabelLastUsedMs {
+    final encoded = getString('speaker_label_last_used_ms');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as num).toInt()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  set speakerLabelLastUsedMs(Map<String, int> value) {
+    saveString('speaker_label_last_used_ms', jsonEncode(value));
   }
 
   ServerConversation? get modifiedConversationDetails {
@@ -1225,6 +1347,7 @@ class SharedPreferencesUtil {
     cachedConversations = <ServerConversation>[];
     cachedMessages = <ServerMessage>[];
     cachedPeople = <Person>[];
+    cachedPeopleStatsTruncated = false;
     appsList = <App>[];
     modifiedConversationDetails = null;
     cachedSingleLanguageMode = false;
@@ -1332,16 +1455,29 @@ class SharedPreferencesUtil {
 
   //--------------------------- Setters & Getters -----------------------------//
 
-  String getString(String key, {String defaultValue = ''}) => _preferences?.getString(key) ?? defaultValue;
+  T _readOrDefault<T>(String key, T fallback) {
+    final value = _preferences?.get(key);
+    if (value == null) return fallback;
+    if (value is T) return value as T;
+    if (!PhysicalQualification.enabled) unawaited(_quarantine(key, value, reason: 'type_mismatch'));
+    return fallback;
+  }
 
-  int getInt(String key, {int defaultValue = 0}) => _preferences?.getInt(key) ?? defaultValue;
+  String getString(String key, {String defaultValue = ''}) =>
+      PhysicalQualification.enabled ? _preferences?.getString(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  bool getBool(String key, {bool defaultValue = false}) => _preferences?.getBool(key) ?? defaultValue;
+  int getInt(String key, {int defaultValue = 0}) =>
+      PhysicalQualification.enabled ? _preferences?.getInt(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  double getDouble(String key, {double defaultValue = 0.0}) => _preferences?.getDouble(key) ?? defaultValue;
+  bool getBool(String key, {bool defaultValue = false}) =>
+      PhysicalQualification.enabled ? _preferences?.getBool(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  List<String> getStringList(String key, {List<String> defaultValue = const []}) =>
-      _preferences?.getStringList(key) ?? defaultValue;
+  double getDouble(String key, {double defaultValue = 0.0}) =>
+      PhysicalQualification.enabled ? _preferences?.getDouble(key) ?? defaultValue : _readOrDefault(key, defaultValue);
+
+  List<String> getStringList(String key, {List<String> defaultValue = const []}) => PhysicalQualification.enabled
+      ? _preferences?.getStringList(key) ?? defaultValue
+      : _readOrDefault(key, defaultValue);
 
   Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
 

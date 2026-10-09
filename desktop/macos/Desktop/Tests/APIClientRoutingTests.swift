@@ -462,7 +462,14 @@ final class APIClientRoutingTests: XCTestCase {
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
       ),
-      "https://api.omiapi.com/v1/mcp/sse"
+      "https://api.omiapi.com/v1/mcp"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omi.me/v1/mcp"
     )
     XCTAssertEqual(
       MemoryExportDestination.mcpAuthorizeURL(
@@ -647,6 +654,46 @@ final class APIClientRoutingTests: XCTestCase {
       XCTAssertTrue(error.localizedDescription.contains("reason: provider_quota_exceeded"))
       XCTAssertTrue(error.localizedDescription.contains("code: insufficient_quota"))
     }
+  }
+
+  func testAssignConversationSpeakerRoutesToPython() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data(
+        """
+        {
+          "id": "c1",
+          "created_at": "2026-10-01T12:00:00Z",
+          "structured": {},
+          "transcript_segments": [
+            {
+              "id": "seg-real",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 428,
+              "is_user": false,
+              "person_id": "person 9/x",
+              "start": 0.0,
+              "end": 1.0,
+              "text": "hi"
+            }
+          ]
+        }
+        """.utf8))
+    let client = await makeTestClient()
+    let updated = try await client.assignConversationSpeaker(
+      conversationId: "c1", speakerId: 2, personId: "person 9/x")
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c1/assign-speaker/2", method: "PATCH",
+      label: "assignConversationSpeaker")
+    let queryItems = URLComponents(url: requests[0].url, resolvingAgainstBaseURL: false)?.queryItems
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "assign_type" })?.value, "person_id")
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "value" })?.value, "person 9/x")
+    XCTAssertEqual(
+      updated.transcriptSegments.first?.speakerId, 428,
+      "the structured speaker_id is authoritative — a misleading SPEAKER_00 label must not select speaker 0")
+    XCTAssertEqual(updated.transcriptSegments.first?.id, "seg-real")
   }
 
   // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
@@ -862,6 +909,43 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getDailySummarySettings")
   }
 
+  func testUpdateDailySummaryDepthSendsAccountPreferenceAndAcceptsStatusResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok","depth":"deep"}"#.utf8))
+    let client = await makeTestClient()
+
+    try await client.updateDailySummarySettings(depth: .deep)
+
+    let request = try XCTUnwrap(URLCapture.capturedRequests.first)
+    XCTAssertEqual(request.method, "PATCH")
+    XCTAssertTrue(request.url.path.contains("v1/users/daily-summary-settings"))
+    let body = try XCTUnwrap(request.body)
+    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(payload["depth"] as? String, "deep")
+  }
+
+  func testUpdateDailySummaryDepthRejectsUnconfirmedOldBackendResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data(#"{"status":"ok"}"#.utf8))
+    let client = await makeTestClient()
+
+    do {
+      try await client.updateDailySummarySettings(depth: .normal)
+      XCTFail("An older backend must not appear to save an ignored depth")
+    } catch DailySummaryDepthSaveError.notConfirmed {
+      // The picker can revert to its last saved value and tell the user.
+    }
+  }
+
+  func testDailySummarySettingsDefaultsMissingOrUnknownDepthToBrief() throws {
+    let legacy = try JSONDecoder().decode(
+      DailySummarySettings.self, from: Data(#"{"enabled":true,"hour":22}"#.utf8))
+    let unknown = try JSONDecoder().decode(
+      DailySummarySettings.self,
+      from: Data(#"{"enabled":true,"hour":22,"depth":"future-option"}"#.utf8))
+
+    XCTAssertEqual(legacy.depth, .brief)
+    XCTAssertEqual(unknown.depth, .brief)
+  }
+
   // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --
 
   func testGetUserSubscriptionRoutesToPython() async {
@@ -1016,25 +1100,7 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(ids, ["task-1"])
   }
 
-  // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
-
-  func testGetChatSessionsRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getChatSessions() as [ChatSession]
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "GET",
-      label: "getChatSessions")
-  }
-
-  func testCreateChatSessionRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.createChatSession(title: "test") as ChatSession
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "POST",
-      label: "createChatSession")
-  }
+  // -- Chat sessions (DELETE → Python, migrated from Rust) --
 
   func testDeleteChatSessionRoutesToPython() async {
     let client = await makeTestClient()
@@ -1136,24 +1202,6 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   // -- Chat AI endpoints (migrated from Rust to Python) --
-
-  func testGetInitialMessageRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getInitialMessage(sessionId: "s1")
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/initial-message", method: "POST",
-      label: "getInitialMessage")
-  }
-
-  func testGenerateSessionTitleRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/generate-title", method: "POST",
-      label: "generateSessionTitle")
-  }
 
   func testGetChatMessageCountRoutesToPython() async {
     let client = await makeTestClient()

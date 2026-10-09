@@ -36,10 +36,27 @@ import time
 import uuid
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+AUTH_MODE = os.environ.get("FINOPS_AUTH", "local")  # 'local' (laptop cron) | 'cloudrun'
+if AUTH_MODE == "cloudrun":
+    import cloudrun as gcpauth  # noqa: E402
+else:
+    import gcpauth  # noqa: E402
+
 RUN_ROOT = pathlib.Path(
     os.environ.get("FINOPS_RUN_ROOT", os.environ.get("SCRATCH_ROOT", "/Volumes/scratch") + "/finops-runs")
 )
 SETTLEMENT_LAG_DAYS = 2
+
+
+def pull_log_tail(log: pathlib.Path, n: int = 80) -> str:
+    """Last lines of a pull log. Child stderr is redirected here, so Cloud Logging
+    never sees a provider failure unless we copy this tail onto our own stderr."""
+    try:
+        lines = log.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-n:])
 
 
 def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) -> bool:
@@ -52,6 +69,8 @@ def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) ->
     ok = p.returncode == 0
     sys.stderr.write("[%s] %s in %.0fs\n" % (label, "ok" if ok else "FAILED rc=%d" % p.returncode, time.time() - t0))
     if not ok and required:
+        tail = pull_log_tail(log)
+        sys.stderr.write("FINOPS PULL FAILED %s rc=%d; last pull.log lines follow\n%s\n" % (label, p.returncode, tail))
         raise SystemExit("required pull %s failed; see %s" % (label, log))
     return ok
 

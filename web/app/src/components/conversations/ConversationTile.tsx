@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { conversationSignals } from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 
 interface ConversationTileProps {
   conversation: Conversation;
@@ -53,7 +53,7 @@ export const ConversationTile = memo(function ConversationTile({
     const newStarred = !isStarred;
     setIsStarred(newStarred);
     onStarToggle?.(conversation.id, newStarred);
-    MixpanelManager.track('Conversation Starred', {
+    PostHogManager.track('Conversation Starred', {
       conversation_id: conversation.id,
       starred: newStarred,
     });
@@ -63,7 +63,7 @@ export const ConversationTile = memo(function ConversationTile({
     if (isSelectionMode && onSelect) {
       onSelect(conversation.id);
     } else {
-      MixpanelManager.track('Conversation Viewed', {
+      PostHogManager.track('Conversation Viewed', {
         conversation_id: conversation.id,
       });
       onClick?.();

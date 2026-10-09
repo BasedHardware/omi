@@ -32,7 +32,7 @@ import type {
   RewindFrame
 } from '../../shared/types'
 import type { TaskSearchResult } from '../assistants/tasks/toolBackends'
-import { executeReadOnlySql } from '../assistants/insight/sql'
+import { executeReadOnlySql } from '../assistants/core/readOnlySql'
 import type { BackendJsonResult, BackendToolRequest } from './backendTools'
 import {
   queryJitHistoryPage,

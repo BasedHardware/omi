@@ -35,6 +35,8 @@ final class RewindArtifactGauntletTests: XCTestCase {
     XCTAssertEqual(result.readbackColors, ["red", "green"])
     XCTAssertTrue(result.databaseReopened)
     XCTAssertTrue(result.rowsSurvivedReopen)
+    XCTAssertTrue(result.actionItemsReadableAfterReopen)
+    XCTAssertTrue(result.taskChatReadableAfterReopen)
     XCTAssertEqual(result.cleanupRemovedRows, 2)
     XCTAssertTrue(result.artifactFileRemoved)
   }

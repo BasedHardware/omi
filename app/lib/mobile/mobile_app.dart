@@ -9,7 +9,9 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MobileApp extends StatefulWidget {
@@ -22,12 +24,19 @@ class MobileApp extends StatefulWidget {
 class _MobileAppState extends State<MobileApp> {
   int _lastPresentedSessionExpiration = 0;
 
-  void _presentSessionExpiration(int generation) {
+  void _presentSessionExpiration(int generation, AuthSessionExpirationReason? reason) {
     if (generation <= _lastPresentedSessionExpiration) return;
     _lastPresentedSessionExpiration = generation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      AppSnackbar.showSnackbarError(context.l10n.sessionExpiredSignInAgain);
+      final l10n = context.l10n;
+      // A deleted account is not an expired token: signing in again with the
+      // same account hits the same fence until the wipe finishes.
+      AppSnackbar.showSnackbarError(
+        reason == AuthSessionExpirationReason.accountDeleted
+            ? l10n.accountDeletionInProgressSignInAgain
+            : l10n.sessionExpiredSignInAgain,
+      );
     });
   }
 
@@ -36,7 +45,7 @@ class _MobileAppState extends State<MobileApp> {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.requiresReauthentication) {
-          _presentSessionExpiration(authProvider.sessionExpirationGeneration);
+          _presentSessionExpiration(authProvider.sessionExpirationGeneration, authProvider.sessionExpirationReason);
           return const OnboardingWrapper(forceAuthPage: true);
         }
         if (authProvider.isSignedIn()) {
@@ -101,10 +110,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
   @override
   Widget build(BuildContext context) {
     if (_permissionsGranted == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
+      return Scaffold(backgroundColor: OmiColors.surface0, body: const Center(child: OmiSpinner()));
     }
     if (_permissionsGranted!) {
       return const HomePageWrapper();

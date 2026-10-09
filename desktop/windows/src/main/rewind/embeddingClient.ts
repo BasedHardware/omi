@@ -10,6 +10,12 @@
 // is relayed in over IPC (see `embeddingService.configureRewindEmbedSession`).
 import { net } from 'electron'
 import { EMBED_DIM, EMBED_MODEL, l2Normalize } from './embedVector'
+import { GeminiLane } from '../../shared/geminiAttribution'
+import {
+  geminiClientPlatform,
+  geminiProxyFetch,
+  type GeminiProxyAction
+} from '../../shared/geminiProxy'
 
 /** Gemini task types. Asymmetric on purpose: a stored passage and a search query
  *  are embedded into the same space but with different intent, which measurably
@@ -49,10 +55,9 @@ function toVector(values: number[] | undefined): Float32Array | null {
  */
 async function post(
   session: EmbedSession,
-  method: string,
+  method: GeminiProxyAction,
   body: unknown
 ): Promise<Record<string, unknown>> {
-  const url = `${session.desktopApiBase}/v1/proxy/gemini/models/${EMBED_MODEL}:${method}`
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const ctrl = new AbortController()
@@ -60,11 +65,16 @@ async function post(
     try {
       // Electron's net.fetch uses Chromium's network stack (proxy/TLS aware) —
       // the path the rest of the app's main-process HTTP already takes.
-      const res = await net.fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify(body),
-        signal: ctrl.signal
+      const res = await geminiProxyFetch(net.fetch, {
+        baseURL: session.desktopApiBase,
+        model: EMBED_MODEL,
+        action: method,
+        token: session.token,
+        lane: GeminiLane.embedding,
+        workload: 'maintenance',
+        platform: geminiClientPlatform(process.platform),
+        signal: ctrl.signal,
+        body: JSON.stringify(body)
       })
       if (res.ok) return (await res.json()) as Record<string, unknown>
       if (res.status === 429 || res.status === 503) {

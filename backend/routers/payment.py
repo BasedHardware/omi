@@ -70,6 +70,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
+    """User-safe detail for a Stripe error HTTP response.
+
+    Stripe's `user_message` is written to be shown to end users; anything else on
+    the exception (internal error text, account/customer/subscription IDs) is
+    diagnostic detail that belongs in server logs (via `sanitize()`), not the
+    response body.
+    """
+    user_message = getattr(e, 'user_message', None)
+    return user_message if user_message else fallback
+
+
 class CreateCheckoutRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
@@ -883,9 +895,14 @@ def cancel_subscription_endpoint(
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        logger.error(f"Stripe error canceling subscription: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=500,
+            detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
+        )
     except Exception as e:
         logger.error(f"Error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
@@ -915,19 +932,21 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
 
+            current_period_end = None
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                await run_blocking(
+                subscription = await run_blocking(
                     stripe_executor,
                     stripe_utils.modify_subscription,
                     subscription_id,
                     metadata={"uid": uid, "app_id": app_id},
                 )
+                current_period_end = subscription.get('current_period_end') if subscription else None
                 # Store the customer ID for app subscription so that it is easy to cancel the subscription
                 customer_id = session.get("customer")
                 if customer_id:
                     await run_blocking(db_executor, set_user_app_sub_customer_id, app_id, uid, customer_id)
-            await run_blocking(db_executor, paid_app, app_id, uid)
+            await run_blocking(db_executor, paid_app, app_id, uid, current_period_end)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
         elif client_reference_id or session.get('metadata', {}).get('sub_type'):
@@ -1056,6 +1075,33 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             if new_subscription:
+                # Resolve the prior entitlement before reconciliation. The
+                # lifecycle projection is emitted only after the authoritative
+                # subscription write below succeeds; otherwise a stale Stripe
+                # deletion could be counted as churn while another paid sub is
+                # retained.
+                billing_owner_confirmed = False
+                previous_paid_id = None
+                try:
+                    owner = await run_blocking(db_executor, users_db.get_user_profile, uid)
+                    if owner:
+                        previous_subscription = await run_blocking(
+                            db_executor, users_db.get_existing_user_subscription, uid
+                        )
+                        billing_owner_confirmed = True
+                        if (
+                            previous_subscription
+                            and previous_subscription.stripe_subscription_id
+                            and previous_subscription.status == SubscriptionStatus.active
+                            and is_paid_plan(previous_subscription.plan)
+                        ):
+                            previous_paid_id = previous_subscription.stripe_subscription_id
+                except Exception:
+                    logger.warning(
+                        'Stripe billing product telemetry owner lookup skipped for event=%s',
+                        event.get('type'),
+                        exc_info=True,
+                    )
                 # Guard against a stale/old subscription's cancellation clobbering an
                 # active plan. If this event downgrades the user to a non-paid plan
                 # (e.g. an old sub got canceled) but they still have a *different*
@@ -1101,6 +1147,27 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                     )
+                    # Emit only after stale-subscription reconciliation and the
+                    # durable entitlement update. Adoption of an existing
+                    # replacement subscription is reconciliation, not a start
+                    # or churn attributable to this incoming Stripe event.
+                    if billing_owner_confirmed and not adopted_active_paid:
+                        from utils.observability.subscription_events import emit_billing_product_event
+
+                        emit_billing_product_event(
+                            uid=uid,
+                            stripe_event_id=str(event.get('id') or ''),
+                            stripe_event_created=event.get('created'),
+                            stripe_event_type=event['type'],
+                            subscription_obj=subscription_obj,
+                            previous_paid_subscription_id=previous_paid_id,
+                            resulting_paid_subscription_id=(
+                                new_subscription.stripe_subscription_id
+                                if new_subscription.status == SubscriptionStatus.active
+                                and is_paid_plan(new_subscription.plan)
+                                else None
+                            ),
+                        )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
@@ -1205,7 +1272,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
                 if app_id and uid:
-                    await run_blocking(db_executor, paid_app, app_id, uid)
+                    await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
             except Exception as e:
                 logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
@@ -1265,7 +1332,11 @@ def create_connect_account_endpoint(
 
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error creating connect account for {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not create Stripe account. Please try again."),
+        )
 
 
 @router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
@@ -1284,7 +1355,11 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error checking onboarding status for {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not check onboarding status. Please try again."),
+        )
 
 
 @router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
@@ -1292,26 +1367,31 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
     """
     Generate a fresh account link if the previous one expired
     """
+    user_account_id = get_stripe_connect_account_id(uid)
+    if not user_account_id or user_account_id != account_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     try:
         account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error refreshing account link for {account_id}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not refresh account link. Please try again."),
+        )
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
 def stripe_return(account_id: str):
     """
-    Handle the return flow from Stripe Connect account creation
+    Handle the return flow from Stripe Connect account creation.
+    Account onboarding status is updated via webhook and queried by authenticated
+    clients at /v1/stripe/onboarded. This landing page provides user feedback without
+    leaking account onboarding status to unauthenticated callers.
     """
-    onboarding_complete = is_onboarding_complete(account_id)
-    title = "Stripe Account Setup Complete" if onboarding_complete else "Stripe Account Setup Incomplete"
-    message_class = "" if onboarding_complete else "error"
-    message = (
-        "Your Stripe account has been successfully set up with Omi AI. You can now start receiving payments."
-        if onboarding_complete
-        else "The account setup process was not completed. Please try again in a few minutes. If the issue persists, contact support."
-    )
+    title = "Stripe Account Setup"
+    message = "Your setup session has ended. You can now close this window and return to the app to verify your account status."
 
     html_content = f"""
     <!DOCTYPE html>
@@ -1352,14 +1432,11 @@ def stripe_return(account_id: str):
                 text-align: center;
                 margin-top: 20px;
             }}
-            .error {{
-                color: #d32f2f;
-            }}
         </style>
     </head>
     <body>
         <h1 class="heading">{title}</h1>
-        <p class="message {message_class}">{message}</p>
+        <p class="message">{message}</p>
         <p class="close-instruction">You can now close this window and return to the app</p>
     </body>
     </html>
@@ -1556,9 +1633,14 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             "cancel_at_period_end": updated_sub_dict.get('cancel_at_period_end'),
             "current_period_end": updated_sub_dict.get('current_period_end'),
         }
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling app subscription: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error canceling app subscription: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
+        )
     except Exception as e:
         logger.error(f"Error canceling app subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")

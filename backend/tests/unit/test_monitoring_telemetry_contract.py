@@ -160,7 +160,7 @@ def test_stackdriver_exporter_ingests_firestore_read_count(path):
 # panel that reads as no traffic. Use one_of() and pin the exact string.
 CLOUD_RUN_EXPORTER_FILTER = (
     'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
-    'resource.labels.namespace=one_of("backend","desktop-backend")'
+    'resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill")'
 )
 
 
@@ -179,10 +179,13 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
     values = yaml.safe_load(path.read_text(encoding='utf-8'))
     metrics = values['stackdriver']['metrics']
     assert values['stackdriver']['projectIds'] == [project_id]
-    assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_']
-    assert metrics['interval'] == '2m'
+    assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_', 'custom.googleapis.com/omi_sync_phase_']
+    assert metrics['interval'] == '10m'
     assert metrics['offset'] == '1m'
-    assert metrics['filters'] == [CLOUD_RUN_EXPORTER_FILTER]
+    assert metrics['filters'] == [
+        CLOUD_RUN_EXPORTER_FILTER,
+        'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")',
+    ]
     assert values['serviceAccount'] == {
         'create': False,
         'name': service_account,

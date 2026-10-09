@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -52,7 +53,11 @@ def test_money_made_json_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_reviews_json_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-1", "uid-a", {"rating": 5, "text": "great"})
+    # set_app_review_cache is a Lua script (see test_app_review_cache_race_live.py
+    # for its atomicity under concurrent writers) bound to the real Redis client at
+    # import time, so it can't run against this monkeypatched fake -- seed the store
+    # directly to exercise the read side instead.
+    fake_redis._store["plugins:app-1:reviews"] = json.dumps({"uid-a": {"rating": 5, "text": "great"}})
     assert redis_db.get_specific_user_review("app-1", "uid-a") == {"rating": 5, "text": "great"}
     assert redis_db.get_app_reviews("app-1") == {"uid-a": {"rating": 5, "text": "great"}}
 
@@ -99,8 +104,8 @@ def test_geolocation_legacy_literal_round_trip(fake_redis: _FakeRedis) -> None:
 
 
 def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
-    redis_db.set_app_review_cache("app-a", "uid-1", {"rating": 3})
-    redis_db.set_app_review_cache("app-b", "uid-2", {"rating": 5})
+    fake_redis._store["plugins:app-a:reviews"] = json.dumps({"uid-1": {"rating": 3}})
+    fake_redis._store["plugins:app-b:reviews"] = json.dumps({"uid-2": {"rating": 5}})
     reviews = redis_db.get_apps_reviews(["app-a", "app-b", "app-missing"])
     assert reviews == {
         "app-a": {"uid-1": {"rating": 3}},

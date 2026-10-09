@@ -25,6 +25,7 @@ class FakeStreamingSTTSocket:
         self._dead = False
         self._death_reason = None
         self._emitted = False
+        self._finished = False
 
     @property
     def is_connection_dead(self) -> bool:
@@ -67,7 +68,9 @@ class FakeStreamingSTTSocket:
         self.finish()
 
     def finish(self) -> None:
-        self.finish_calls += 1
+        if not self._finished:
+            self._finished = True
+            self.finish_calls += 1
 
 
 def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover_selection=(None, None, None)):
@@ -84,17 +87,30 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
+    from utils.stt import live_session
+    from config.stt_provider_policy import provider_for_service
+    from utils.stt import streaming as st
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
     from utils.stt.streaming import STTService
+
+    # This seam prescribes Parakeet -> the selected replacement. Production
+    # circuits retained from another test must not change its initial vendor.
+    for provider in ('parakeet', 'modulate', 'soniox', 'deepgram'):
+        monkeypatch.setattr(
+            st, f'_{provider}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+        )
 
     sockets = []
 
     async def fake_process_audio_parakeet(callback, *args, **kwargs):
         socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
+        socket.provider = 'parakeet'
         sockets.append(socket)
         return socket
 
     async def fake_process_audio_modulate(callback, *args, **kwargs):
         socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
+        socket.provider = 'modulate'
         sockets.append(socket)
         return socket
 
@@ -102,19 +118,32 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
     # the fake is reached regardless of which one the runtime selects.
     monkeypatch.setattr(listen_receiver, "process_audio_parakeet", fake_process_audio_parakeet)
     monkeypatch.setattr(listen_receiver, "process_audio_modulate", fake_process_audio_modulate)
+    # Managed live STT uses streaming's provider entry point after the configured
+    # order graduated. Keep the same fake socket at that boundary too.
+    monkeypatch.setattr(st, "process_audio_parakeet", fake_process_audio_parakeet)
+    if failover_selection[0] == STTService.modulate:
+        monkeypatch.setenv('MODULATE_API_KEY', 'fake-modulate-key')
+        monkeypatch.setattr(live_session, 'connect_modulate', fake_process_audio_modulate)
+        monkeypatch.setattr(st, "stt_service_models", ["parakeet", "modulate-velma-2"])
+    else:
+        monkeypatch.setattr(st, "stt_service_models", ["parakeet"])
+    monkeypatch.setattr(st, "parakeet_is_configured_fallback", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         listen_runtime,
         "get_stt_service_for_language",
         lambda *_args, **_kwargs: (STTService.parakeet, "en", "parakeet"),
     )
+
     # The receiver's own namespace drives mid-session failover reselection; left
     # unpatched it reads the real provider chain and reaches for un-faked
     # network clients.
-    monkeypatch.setattr(
-        listen_receiver,
-        "get_stt_service_for_language",
-        lambda *_args, **_kwargs: failover_selection,
-    )
+    def select_replacement(*_args, **kwargs):
+        service = failover_selection[0]
+        if service is not None and provider_for_service(service) in kwargs.get('exclude', ()):
+            return None, None, None
+        return failover_selection
+
+    monkeypatch.setattr(listen_receiver, "get_stt_service_for_language", select_replacement)
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)
     return sockets

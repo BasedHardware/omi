@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from database.dream_dirty import after_write
 
 try:
     from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
@@ -32,6 +33,7 @@ from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
 from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -156,11 +158,6 @@ def get_memory_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-# *********************************
-# ******* ENCRYPTION HELPERS ******
-# *********************************
-
-
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
@@ -174,17 +171,21 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
+    in_portability_export = current_portability_read() is not None
     if 'content' in data and isinstance(data['content'], str):
+        raw_content = data['content']
         try:
-            data['content'] = encryption.decrypt(data['content'], uid)
+            data['content'] = encryption.decrypt(raw_content, uid)
         except Exception:
             pass
+        data['content'] = verified_encrypted_read(raw_content, data['content'])
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
-            decrypted = encryption.decrypt(data['evidence'], uid)
+            decrypted = verified_encrypted_read(data['evidence'], encryption.decrypt(data['evidence'], uid))
             data['evidence'] = json.loads(decrypted)
         except Exception:
-            pass
+            if in_portability_export:
+                raise
     return data
 
 
@@ -554,6 +555,35 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
     return 0
 
 
+def count_default_visible_memories(uid: str, *, firestore_client: Any = None) -> int:
+    """Cheap approximation of how many memories the default ``/v3/memories`` list shows.
+
+    Uses at most two single-field ``count()`` aggregations and no new index:
+
+    * Canonical store first: ``memory_items`` with ``status == 'active'``. This
+      drops superseded, hidden, and tombstoned items like the default list, but
+      still counts Archive-tier items (hidden unless ``include_archive``) and does
+      not apply short-term expiry or device-scope filtering, which only run in
+      Python after the read.
+    * An account with no active canonical item falls back to the whole legacy
+      ``memories`` collection. User-rejected or invalidated legacy rows cannot be
+      excluded server-side (see ``_memory_passes_list_visibility``), so they are
+      counted.
+
+    The two stores are never summed: dual-store ids would be double-counted
+    (see ``count_memories_created``).
+    """
+    database = _get_db(firestore_client)
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_active = canonical_collection.where(filter=FieldFilter('status', '==', 'active')).count().get()
+    canonical_count = int(canonical_active[0][0].value or 0)
+    if canonical_count:
+        return canonical_count
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_count = legacy_collection.count().get()
+    return int(legacy_count[0][0].value or 0)
+
+
 _HISTORICAL_SCAN_PAGE_MAX = 500
 HistoricalScanCursor = tuple[datetime, str]
 
@@ -698,6 +728,7 @@ def get_non_filtered_memories(
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -725,6 +756,7 @@ def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = Non
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     if not data:
         return
@@ -916,6 +948,7 @@ def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_
     memory_ref.update({'visibility': value})
 
 
+@after_write('memories')
 def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:
@@ -1478,6 +1511,7 @@ def migrate_memories_level_batch(
     doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
     doc_snapshots = database.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Memory {doc_snapshot.id} not found, skipping.")
@@ -1501,8 +1535,14 @@ def migrate_memories_level_batch(
         # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 @_destination_account_write_gated

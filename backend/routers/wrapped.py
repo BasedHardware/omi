@@ -41,8 +41,10 @@ def _run_wrapped_generation(uid: str, year: int):
     try:
         generate_wrapped_2025(uid, year)
     except Exception as e:
-        logger.error(f"Error in wrapped generation for user {uid}: {e}")
-        wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
+        logger.error(f"Error in wrapped generation for user {uid}: {type(e).__name__}")
+        wrapped_db.update_wrapped_status(
+            uid, year, WrappedStatus.ERROR, error="Failed to generate Wrapped. Please try again later."
+        )
 
 
 @router.get('/v1/wrapped/{year}', response_model=WrappedStatusResponse, tags=['wrapped'])
@@ -68,11 +70,19 @@ def get_wrapped_status(year: int, uid: str = Depends(auth.get_current_user_uid))
             year=year,
         )
 
+    raw_error = wrapped.get('error')
+    error = None
+    if raw_error:
+        if raw_error == "Failed to generate Wrapped. Please try again later.":
+            error = raw_error
+        else:
+            error = "Failed to generate Wrapped. Please try again later."
+
     return WrappedStatusResponse(
         status=wrapped.get('status', WrappedStatus.NOT_GENERATED),
         year=year,
         result=wrapped.get('result'),
-        error=wrapped.get('error'),
+        error=error,
         progress=wrapped.get('progress'),
     )
 

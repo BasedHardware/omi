@@ -1,5 +1,7 @@
 # Mac→Windows Parity Audit — Proactive Assistants: Focus & Insight
 
+> Historical audit: Insight was retired on 2026-10-03. Focus remains supported; the Insight inventory below describes the removed implementation. See `backend/docs/proactivity-v2-retirement.md`.
+
 > **Audit date: 2026-08-22 (rewrite).** Verified against the CURRENT repo, not against
 > the 2026-08-20 audit's citations. Windows baseline actually checked this pass:
 > `src/main/assistants/core/{coordinator,contextDetection,distributionGate,privacy,session,notify}.ts`,
