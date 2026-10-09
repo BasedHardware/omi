@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -15,9 +16,17 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
 
+/// Sends an owner's reply to a review; [replyToAppReview] is the owner.
+typedef ReviewReplySender = Future<bool> Function(String appId, String reply, String reviewerUid);
+
 class ReviewsListPage extends StatefulWidget {
   final App app;
   const ReviewsListPage({super.key, required this.app});
+
+  /// Debug-only: replaces the HTTP owner of replies so tests stay hermetic. Release and profile
+  /// builds always use [replyToAppReview].
+  @visibleForTesting
+  static ReviewReplySender? debugReplySenderForTest;
 
   @override
   State<ReviewsListPage> createState() => _ReviewsListPageState();
@@ -60,7 +69,15 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       if (controller.text.trim().isEmpty) return;
       isSubmitting.value = true;
       try {
-        await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
+        final sent = await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
+            widget.app.id, controller.text.trim(), review.uid);
+        // replyToAppReview answers false instead of throwing; keep the dialog and its text open.
+        if (!sent) {
+          if (mounted) {
+            OmiFeedback.error(context, context.l10n.failedToSendReply(context.l10n.somethingWentWrongTryAgain));
+          }
+          return;
+        }
         if (mounted) {
           context.read<AppProvider>().updateLocalAppReviewResponse(
                 widget.app.id,
