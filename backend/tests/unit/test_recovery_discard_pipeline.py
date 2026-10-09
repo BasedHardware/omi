@@ -143,6 +143,7 @@ async def _run_and_verify(pipeline):
         firestore_client=pipeline.store,
         conversation_reader=conversations_db.get_conversation_raw_snapshot,
         counters=counters,
+        now=NOW,
     )
     assert remaining == []
     return json.loads(response.body), counters
@@ -329,3 +330,90 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
     for path, data in pipeline.writes:
         if path == CONVERSATION_PATH:
             assert 'speaker_resolution' not in data
+
+
+@pytest.mark.parametrize('level', ['enhanced', 'standard'])
+def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level):
+    # A model round-trip can normalize legacy fields without changing speech.
+    # Recovery must enrich the row without replacing its durable capture.
+    text = 'The synthetic release meeting agreed to ship the tested repair tomorrow.'
+    transcript = [{'text': text, 'start': 0, 'end': 30, 'legacy_capture_metadata': list(range(100))}]
+    speaker_metadata = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
+    blob = _seed(pipeline, level=level, transcript=transcript, speaker_resolution=speaker_metadata)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    row['audio_files'].append({'id': 'later-audio'})
+    stored_audio = deepcopy(row['audio_files'])
+    payload = {
+        'id': CID,
+        'status': 'completed',
+        'structured': {'title': 'Synthetic meeting', 'overview': 'A tested repair will ship tomorrow.'},
+        'transcript_segments': [{'text': text, 'start': 0, 'end': 30}],
+        'audio_files': [{'id': 'audio-1'}],
+        'speaker_resolution': {'status': 'resolved', 'participant_speaker_ids': [99]},
+        'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'keep'},
+    }
+    assert lifecycle.persist_processed_conversation(UID, payload)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert row['transcript_segments'] == blob
+    assert row['audio_files'] == stored_audio
+    assert row['speaker_resolution'] == speaker_metadata
+    assert row['data_protection_level'] == level
+    assert row['structured']['overview']
+    pipeline.store.rows[JOB_PATH]['status'] = 'completed'
+    counters = {'verified': 0, 'refused': 0, 'errors': 0, 'skipped': 0}
+    remaining = selfheal._verify_pending_attempts(
+        [{'uid': UID, 'conversation_id': CID, 'job_id': JOB}],
+        firestore_client=pipeline.store,
+        conversation_reader=conversations_db.get_conversation_raw_snapshot,
+        counters=counters,
+        now=NOW,
+    )
+    assert remaining == [] and counters['verified'] == 1 and counters['refused'] == 0
+
+
+@pytest.mark.parametrize(
+    'trigger,has_audio,expected_calls',
+    [
+        ('server_recovery', True, 0),
+        ('server_recovery', False, 0),
+        ('capture_end', True, 1),
+    ],
+)
+def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trigger, has_audio, expected_calls):
+    from models.conversation import Conversation
+    from utils.conversations.processing_trigger import ProcessingTrigger
+    from utils.conversations.relevance import RelevanceDecision
+
+    _seed(pipeline, private_cloud_sync_enabled=True, folder_id='existing-folder')
+    if not has_audio:
+        pipeline.store.rows[CONVERSATION_PATH]['audio_files'] = []
+    conversation = Conversation(**conversations_db.get_conversation(UID, CID))
+    trigger = ProcessingTrigger(trigger)
+
+    def keep(*args, **kwargs):
+        kwargs['relevance_observer'](RelevanceDecision('keep', 'rule', 'synthetic_keep', trigger))
+        return Structured(title='Synthetic meeting', overview='Synthetic meeting notes'), False
+
+    monkeypatch.setattr(pc, '_get_structured', keep)
+    monkeypatch.setattr(
+        pc, 'resolve_authorized_first_open_plan', lambda **kwargs: SimpleNamespace(defer_derived_work=False)
+    )
+    monkeypatch.setattr(pc, 'trigger_conversation_apps', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pc, '_extract_memories', lambda *args: None)
+    monkeypatch.setattr(pc, 'submit_with_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(pc.conversations_db, 'update_conversation', lambda *args: None)
+    factory = MagicMock(return_value=[])
+    monkeypatch.setattr(pc.conversations_db, 'create_audio_files_from_chunks', factory)
+    effects = []
+    result = pc.process_conversation(
+        UID,
+        'en',
+        conversation,
+        trigger=trigger,
+        recovery_transcript_decoded=True,
+        defer_derived_effects=True,
+        derived_effects_observer=effects.append,
+    )
+    assert result.status.value == 'completed'
+    effects[0]()
+    assert factory.call_count == expected_calls

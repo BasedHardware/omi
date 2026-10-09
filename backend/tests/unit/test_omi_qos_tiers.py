@@ -30,6 +30,7 @@ _CLIENTS_EXPORTS = (
     '_STRUCTURED_OUTPUT_FEATURES',
     '_active_profile',
     '_active_profile_name',
+    '_byok_fallback_model',
     '_byok_profile',
     '_byok_profile_name',
     '_effective_byok_provider',
@@ -405,7 +406,7 @@ class TestModelQosProfiles:
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
         byok = MODEL_QOS_PROFILES['byok']
-        assert byok['followup'] == ('gemini-2.5-flash-lite', 'gemini')
+        assert byok['followup'] == ('gemini-3.5-flash-lite', 'gemini')
         assert byok['wrapped_analysis'] == ('gemini-3-flash-preview', 'openrouter')
 
     def test_max_profile_model_variants(self):
@@ -1063,7 +1064,7 @@ class TestRuntimeProviderRouting:
         result = get_llm('followup')
 
         assert result is user_client
-        assert byok_factory.call_args.args[:3] == ('gemini-2.5-flash-lite', 'gemini', 'user-gemini-key')
+        assert byok_factory.call_args.args[:3] == ('gemini-3.5-flash-lite', 'gemini', 'user-gemini-key')
         gateway.assert_not_called()
 
     def test_openglass_routes_to_openai(self):
@@ -1198,11 +1199,13 @@ class TestBYOKProfile:
         expected = {
             LUNA_MODEL,
             'gpt-5-nano',
-            'gemini-2.5-flash-lite',
+            'gemini-3.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected
+        assert _byok_fallback_model('gemini') == 'gemini-3.5-flash-lite'
+        assert _byok_fallback_model('openrouter') == 'gemini-2.5-flash-lite'
 
     def test_byok_has_same_features_as_premium(self):
         """BYOK profile must cover the same feature set as premium."""
@@ -1297,7 +1300,7 @@ class TestStructuredOutputFeatureTracking:
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
             if feature in {'translation', 'trends', 'screen_frame_judge'}:
-                assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
+                assert profile[feature] == ('gemini-3.5-flash-lite', 'gemini')
                 continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
 

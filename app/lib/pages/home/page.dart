@@ -165,6 +165,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     identityEpoch: () => AnalyticsManager.identityEpoch,
     enabled: () => AnalyticsManager.identityKnown && AnalyticsManager.trackingEnabled,
     emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
+    // PackageInfo build number, cached before UI start. Same source as the
+    // app_build super-property, readable before AnalyticsManager finishes init.
+    currentBuild: () => PlatformManager.instance.appBuild,
   );
 
   CaptureProvider? _captureProvider;
@@ -422,7 +425,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    unawaited(_backgroundResourceTelemetry.recoverInterrupted());
+    unawaited(
+      _backgroundResourceTelemetry.recoverInterrupted(
+        launchContext: classifyBackgroundInterruptLaunch(
+          processAlreadyObserved: BackgroundInterruptProcessLaunch.peek(),
+        ),
+      ),
+    );
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
@@ -716,7 +725,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   Widget build(BuildContext context) {
-    return MyUpgradeAlert(
+    final content = MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
       child: Consumer<ConnectivityProvider>(
@@ -855,6 +864,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         ),
       ),
     );
+    // The widget tree constructed without throwing: Home built successfully.
+    // Marking here (not in initState, not in a post-frame callback) means a
+    // build exception skips the mark — Flutter catches rebuild errors and
+    // post-frame callbacks still fire after them, so neither of those proves
+    // success. A later Home then truthfully classifies as cold_start.
+    BackgroundInterruptProcessLaunch.mark();
+    return content;
   }
 
   /// Chat opens as a sheet that rises over Home (see chat_route.dart); the mic opens it listening.

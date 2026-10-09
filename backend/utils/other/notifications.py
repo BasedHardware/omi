@@ -417,6 +417,25 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     now = datetime.now(pytz.utc)
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, summary_budget.job_cursor_key())
     resumed_at = summary_budget.cursor_cohort_utc(cursor)
+    cursor_key = summary_budget.job_cursor_key()
+    # The Redis TTL is supposed to be the staleness bound (daily_summary_budget.py),
+    # but every tick that resumes this cohort rewrites the checkpoint and renews
+    # that TTL, so a recipient who can never succeed (e.g. a permanently invalid
+    # FCM token) keeps the checkpoint alive forever. That pins every execution on
+    # the same stale cohort and the *current* cohort below is never reached, so
+    # every other recipient's recap silently stops too. Age the cohort out by
+    # the same bound independent of the TTL renewal.
+    if resumed_at is not None and now - resumed_at > timedelta(seconds=summary_budget.JOB_CURSOR_TTL_SECONDS):
+        logger.error(
+            'daily_summary_cursor_abandoned_stale cohort_utc=%s age_seconds=%s hour=%s uid=%s',
+            resumed_at.isoformat(),
+            (now - resumed_at).total_seconds(),
+            summary_budget.cursor_hour(cursor),
+            summary_budget.cursor_uid(cursor),
+        )
+        await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
+        resumed_at = None
+        cursor = None
     # A local hour can roll over at :15/:30/:45 within the same UTC hour.
     if resumed_at is not None and resumed_at.replace(
         minute=(resumed_at.minute // 15) * 15, second=0, microsecond=0
