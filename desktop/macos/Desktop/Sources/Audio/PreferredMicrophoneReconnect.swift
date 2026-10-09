@@ -4,21 +4,35 @@ import Foundation
 /// Pure policy for re-pinning ambient capture when a persisted preferred mic
 /// reappears after fallback (#10921 item 1).
 enum PreferredMicrophoneReconnectPolicy {
-  /// Restart capture when the preferred UID resolves to a live device that is
-  /// not the one currently open (typical: open fell back to system default
-  /// while glasses were offline; glasses reconnect).
+  /// Minimum spacing between in-place preferred-mic swaps. `kAudioHardwarePropertyDevices`
+  /// fires for every device-list change, so a flapping device must not swap capture
+  /// per event (SCA-526).
+  static let swapCooldown: TimeInterval = 15
+
+  /// Reapply the preferred device when its UID resolves to a live device that is
+  /// not the one currently open (typical: open fell back to system default while
+  /// glasses were offline; glasses reconnect).
   ///
   /// Requires `isCaptureLive` so a device-list flap during HAL startup cannot
-  /// restart while `activeDeviceID` is already assigned but `stopCapture()` is
+  /// swap while `activeDeviceID` is already assigned but `stopCapture()` is
   /// still a no-op (`isCapturing == false`).
+  ///
+  /// `healedCaptureDeviceID`: the route a silent-mic fallback healed onto this
+  /// session. Re-pinning onto it is a no-op, and `AppState` pins the healed
+  /// route for the whole session anyway — but skipping here keeps the monitor
+  /// from even attempting a monitor↔watchdog ping-pong.
   static func shouldReapplyPreferredMicrophone(
     preferredUID: String,
     resolvedPreferredDeviceID: AudioDeviceID?,
     activeCaptureDeviceID: AudioDeviceID?,
-    isCaptureLive: Bool
+    isCaptureLive: Bool,
+    healedCaptureDeviceID: AudioDeviceID? = nil,
+    secondsSinceLastSwap: TimeInterval = .infinity
   ) -> Bool {
     guard isCaptureLive else { return false }
     guard !preferredUID.isEmpty, let resolved = resolvedPreferredDeviceID else { return false }
+    guard resolved != healedCaptureDeviceID else { return false }
+    guard secondsSinceLastSwap >= swapCooldown else { return false }
     guard let active = activeCaptureDeviceID, active != kAudioObjectUnknown else {
       // Capture not open yet — startMicCaptureIfNeeded will resolve preferred.
       return false
@@ -100,26 +114,29 @@ final class PreferredMicrophoneReconnectMonitor {
 
     let resolved = await AudioCaptureService.resolvePreferredMicrophone()
     // Snapshot live capture only — `activeDeviceID` is assigned mid-HAL start
-    // before `capturing` flips true; restarting then races the original start.
+    // before `capturing` flips true; swapping then races the original start.
     let capture = appState.audioCaptureService
     guard
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: preferredUID,
         resolvedPreferredDeviceID: resolved?.id,
         activeCaptureDeviceID: capture?.activeDeviceID,
-        isCaptureLive: capture?.capturing == true
+        isCaptureLive: capture?.capturing == true,
+        healedCaptureDeviceID: appState.silentMicHealedDeviceID,
+        secondsSinceLastSwap: appState.lastPreferredMicSwapAt.map {
+          Date().timeIntervalSince($0)
+        } ?? .infinity
       )
     else { return }
 
     restartInFlight = true
     defer { restartInFlight = false }
 
-    log(
-      "Transcription: preferred microphone reconnected — restarting capture onto \(resolved?.name ?? preferredUID)"
-    )
-    if await appState.prepareTranscriptionRestartAfterSettingsChange() {
-      appState.startTranscription(userInitiated: false)
-    }
+    guard let resolved else { return }
+    // In-place swap — the session, conversation, and attempt survive. A full
+    // stop/start restart here emitted a Stopped/Started pair per device event
+    // and split recordings on a flapping headset (SCA-526).
+    await appState.reapplyPreferredMicrophone(deviceID: resolved.id, deviceName: resolved.name)
   }
 
   nonisolated private static var devicesPropertyAddress: AudioObjectPropertyAddress {

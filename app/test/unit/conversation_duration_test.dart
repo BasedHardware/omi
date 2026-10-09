@@ -54,6 +54,21 @@ void main() {
       expect(conv.getDurationInSeconds(), 27);
     });
 
+    test('uses transcript speech span when segments have a non-zero session start offset (#18520)', () {
+      // In a 40-minute streaming session, a 2-minute conversation took place between
+      // offset 2299s (38m 19s) and 2431s (40m 31s).
+      // The conversation duration must be 132s (2m 12s), NOT 2431s (40m 31s).
+      final conv = _conversation(
+        segments: [
+          _segment(start: 2299.0, end: 2350.0),
+          _segment(start: 2360.0, end: 2431.0),
+        ],
+        startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0),
+        finishedAt: DateTime.utc(2026, 1, 1, 12, 45, 0),
+      );
+      expect(conv.getDurationInSeconds(), 132);
+    });
+
     test('falls back to finishedAt - startedAt when there are no segments', () {
       final conv = _conversation(
         startedAt: DateTime.utc(2026, 1, 1, 12, 0, 0),

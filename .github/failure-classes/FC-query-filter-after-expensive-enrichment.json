@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-query-filter-after-expensive-enrichment",
+  "violated_contract": "A request-specific predicate must be applied before independent per-record enrichment. Filtering only after batch lookups and rich model construction makes every selective request pay work proportional to the whole candidate set instead of the records it can return.",
+  "canonical_prevention": "Normalize the request predicate once and apply it to the cheapest safe source projection before batch enrichment or rich model construction. Exercise the production endpoint with multiple source records and assert that only matching record IDs cross each enrichment boundary, while malformed source fields remain fail-safe.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_apps_search_reads_cached_public_set.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

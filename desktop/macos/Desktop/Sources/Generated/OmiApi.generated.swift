@@ -890,6 +890,7 @@ public enum OmiAPI {
 
 
   public struct AudioFile: Codable {
+    public let chunkSpans: [ChunkSpan]?
     public let chunkTimestamps: [Double]
     public let conversationId: String
     public let duration: Double
@@ -899,6 +900,7 @@ public enum OmiAPI {
     public let uid: String
 
     private enum CodingKeys: String, CodingKey {
+      case chunkSpans = "chunk_spans"
       case chunkTimestamps = "chunk_timestamps"
       case conversationId = "conversation_id"
       case duration
@@ -910,6 +912,7 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      chunkSpans = try c.decodeIfPresent([ChunkSpan].self, forKey: .chunkSpans)
       chunkTimestamps = try c.decode([Double].self, forKey: .chunkTimestamps)
       conversationId = try c.decode(String.self, forKey: .conversationId)
       duration = try c.decode(Double.self, forKey: .duration)
@@ -919,7 +922,8 @@ public enum OmiAPI {
       uid = try c.decode(String.self, forKey: .uid)
     }
 
-    public init(chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, provider: String? = nil, startedAt: String? = nil, uid: String) {
+    public init(chunkSpans: [ChunkSpan]? = nil, chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, provider: String? = nil, startedAt: String? = nil, uid: String) {
+      self.chunkSpans = chunkSpans
       self.chunkTimestamps = chunkTimestamps
       self.conversationId = conversationId
       self.duration = duration
@@ -927,6 +931,20 @@ public enum OmiAPI {
       self.provider = provider
       self.startedAt = startedAt
       self.uid = uid
+    }
+  }
+
+
+  public struct AudioTimelineProvenance: Codable {
+    public let version: Int
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      version = try c.decode(Int.self, forKey: .version)
+    }
+
+    public init(version: Int) {
+      self.version = version
     }
   }
 
@@ -969,6 +987,24 @@ public enum OmiAPI {
       self.htmlLink = htmlLink
       self.startTime = startTime
       self.title = title
+    }
+  }
+
+
+  public struct CandidateAcceptanceRequest: Codable, Sendable {
+    public let summaryItem: SummaryTaskReference?
+
+    private enum CodingKeys: String, CodingKey {
+      case summaryItem = "summary_item"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      summaryItem = try c.decodeIfPresent(SummaryTaskReference.self, forKey: .summaryItem)
+    }
+
+    public init(summaryItem: SummaryTaskReference? = nil) {
+      self.summaryItem = summaryItem
     }
   }
 
@@ -1231,6 +1267,66 @@ public enum OmiAPI {
   }
 
 
+  public struct CaptureGroup: Codable {
+    public let id: String
+    public let members: [CaptureGroupMember]?
+    public let primaryId: String
+    public let revision: Int?
+
+    private enum CodingKeys: String, CodingKey {
+      case id
+      case members
+      case primaryId = "primary_id"
+      case revision
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      id = try c.decode(String.self, forKey: .id)
+      members = try c.decodeIfPresent([CaptureGroupMember].self, forKey: .members)
+      primaryId = try c.decode(String.self, forKey: .primaryId)
+      revision = try c.decodeIfPresent(Int.self, forKey: .revision)
+    }
+
+    public init(id: String, members: [CaptureGroupMember]? = nil, primaryId: String, revision: Int? = nil) {
+      self.id = id
+      self.members = members
+      self.primaryId = primaryId
+      self.revision = revision
+    }
+  }
+
+
+  public struct CaptureGroupMember: Codable {
+    public let finishedAt: String?
+    public let id: String
+    public let source: String?
+    public let startedAt: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case finishedAt = "finished_at"
+      case id
+      case source
+      case startedAt = "started_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      finishedAt = try c.decodeIfPresent(String.self, forKey: .finishedAt)
+      id = try c.decode(String.self, forKey: .id)
+      source = try c.decodeIfPresent(String.self, forKey: .source)
+      startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+    }
+
+    public init(finishedAt: String? = nil, id: String, source: String? = nil, startedAt: String? = nil) {
+      self.finishedAt = finishedAt
+      self.id = id
+      self.source = source
+      self.startedAt = startedAt
+    }
+  }
+
+
   public enum CategoryEnum: String, Codable, CaseIterable {
     case personal
     case education
@@ -1270,6 +1366,23 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = CategoryEnum(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct ChunkSpan: Codable {
+    public let end: Double
+    public let start: Double
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      end = try c.decode(Double.self, forKey: .end)
+      start = try c.decode(Double.self, forKey: .start)
+    }
+
+    public init(end: Double, start: Double) {
+      self.end = end
+      self.start = start
     }
   }
 
@@ -1401,8 +1514,11 @@ public enum OmiAPI {
     public let appId: String?
     public let appsResults: [AppResult]?
     public let audioFiles: [AudioFile]?
+    public let audioTimeline: AudioTimelineProvenance?
     public let calendarEvent: CalendarEventLink?
     public let callId: String?
+    public let captureCoverage: String?
+    public let captureGroup: CaptureGroup?
     public let clientDeviceId: String?
     public let clientPlatform: String?
     public let clientProcessing: ClientProcessing?
@@ -1431,11 +1547,13 @@ public enum OmiAPI {
     public let processingState: ConversationProcessingState?
     public let screenshotSharingEnabled: Bool?
     public let source: ConversationSource?
+    public let speakerResolution: ConversationSpeakers?
     public let starred: Bool?
     public let startedAt: String?
     public let status: ConversationStatus?
     public let structured: Structured
     public let suggestedSummarizationApps: [String]?
+    public let summaryRetryable: Bool?
     public let syncContentRevision: Int?
     public let syncRelevance: String?
     public let transcriptSegments: [TranscriptSegment]?
@@ -1448,8 +1566,11 @@ public enum OmiAPI {
       case appId = "app_id"
       case appsResults = "apps_results"
       case audioFiles = "audio_files"
+      case audioTimeline = "audio_timeline"
       case calendarEvent = "calendar_event"
       case callId = "call_id"
+      case captureCoverage = "capture_coverage"
+      case captureGroup = "capture_group"
       case clientDeviceId = "client_device_id"
       case clientPlatform = "client_platform"
       case clientProcessing = "client_processing"
@@ -1478,11 +1599,13 @@ public enum OmiAPI {
       case processingState = "processing_state"
       case screenshotSharingEnabled = "screenshot_sharing_enabled"
       case source
+      case speakerResolution = "speaker_resolution"
       case starred
       case startedAt = "started_at"
       case status
       case structured
       case suggestedSummarizationApps = "suggested_summarization_apps"
+      case summaryRetryable = "summary_retryable"
       case syncContentRevision = "sync_content_revision"
       case syncRelevance = "sync_relevance"
       case transcriptSegments = "transcript_segments"
@@ -1497,8 +1620,11 @@ public enum OmiAPI {
       appId = try c.decodeIfPresent(String.self, forKey: .appId)
       appsResults = try c.decodeIfPresent([AppResult].self, forKey: .appsResults)
       audioFiles = try c.decodeIfPresent([AudioFile].self, forKey: .audioFiles)
+      audioTimeline = try c.decodeIfPresent(AudioTimelineProvenance.self, forKey: .audioTimeline)
       calendarEvent = try c.decodeIfPresent(CalendarEventLink.self, forKey: .calendarEvent)
       callId = try c.decodeIfPresent(String.self, forKey: .callId)
+      captureCoverage = try c.decodeIfPresent(String.self, forKey: .captureCoverage)
+      captureGroup = try c.decodeIfPresent(CaptureGroup.self, forKey: .captureGroup)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
       clientPlatform = try c.decodeIfPresent(String.self, forKey: .clientPlatform)
       clientProcessing = try c.decodeIfPresent(ClientProcessing.self, forKey: .clientProcessing)
@@ -1527,11 +1653,13 @@ public enum OmiAPI {
       processingState = try c.decodeIfPresent(ConversationProcessingState.self, forKey: .processingState)
       screenshotSharingEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenshotSharingEnabled)
       source = try c.decodeIfPresent(ConversationSource.self, forKey: .source)
+      speakerResolution = try c.decodeIfPresent(ConversationSpeakers.self, forKey: .speakerResolution)
       starred = try c.decodeIfPresent(Bool.self, forKey: .starred)
       startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
       status = try c.decodeIfPresent(ConversationStatus.self, forKey: .status)
       structured = try c.decode(Structured.self, forKey: .structured)
       suggestedSummarizationApps = try c.decodeIfPresent([String].self, forKey: .suggestedSummarizationApps)
+      summaryRetryable = try c.decodeIfPresent(Bool.self, forKey: .summaryRetryable)
       syncContentRevision = try c.decodeIfPresent(Int.self, forKey: .syncContentRevision)
       syncRelevance = try c.decodeIfPresent(String.self, forKey: .syncRelevance)
       transcriptSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments)
@@ -1541,12 +1669,15 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
+      self.audioTimeline = audioTimeline
       self.calendarEvent = calendarEvent
       self.callId = callId
+      self.captureCoverage = captureCoverage
+      self.captureGroup = captureGroup
       self.clientDeviceId = clientDeviceId
       self.clientPlatform = clientPlatform
       self.clientProcessing = clientProcessing
@@ -1575,11 +1706,13 @@ public enum OmiAPI {
       self.processingState = processingState
       self.screenshotSharingEnabled = screenshotSharingEnabled
       self.source = source
+      self.speakerResolution = speakerResolution
       self.starred = starred
       self.startedAt = startedAt
       self.status = status
       self.structured = structured
       self.suggestedSummarizationApps = suggestedSummarizationApps
+      self.summaryRetryable = summaryRetryable
       self.syncContentRevision = syncContentRevision
       self.syncRelevance = syncRelevance
       self.transcriptSegments = transcriptSegments
@@ -1743,6 +1876,32 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = ConversationSource(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct ConversationSpeakers: Codable {
+    public let participantSpeakerIds: [Int]?
+    public let status: String
+    public let version: Int?
+
+    private enum CodingKeys: String, CodingKey {
+      case participantSpeakerIds = "participant_speaker_ids"
+      case status
+      case version
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      participantSpeakerIds = try c.decodeIfPresent([Int].self, forKey: .participantSpeakerIds)
+      status = try c.decode(String.self, forKey: .status)
+      version = try c.decodeIfPresent(Int.self, forKey: .version)
+    }
+
+    public init(participantSpeakerIds: [Int]? = nil, status: String, version: Int? = nil) {
+      self.participantSpeakerIds = participantSpeakerIds
+      self.status = status
+      self.version = version
     }
   }
 
@@ -3063,6 +3222,23 @@ public enum OmiAPI {
   }
 
 
+  public struct Insight: Codable {
+    public let kind: String
+    public let text: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      kind = try c.decode(String.self, forKey: .kind)
+      text = try c.decode(String.self, forKey: .text)
+    }
+
+    public init(kind: String, text: String) {
+      self.kind = kind
+      self.text = text
+    }
+  }
+
+
   public struct InterventionCreate: Codable {
     public let dedupeKey: String
     public let evidenceRefs: [EvidenceRef]?
@@ -3662,6 +3838,78 @@ public enum OmiAPI {
   }
 
 
+  public struct NoteClaim: Codable {
+    public let evidenceIds: [String]
+    public let evidenceSources: [NoteEvidenceRef]?
+    public let provenance: String
+    public let target: String
+    public let text: String
+
+    private enum CodingKeys: String, CodingKey {
+      case evidenceIds = "evidence_ids"
+      case evidenceSources = "evidence_sources"
+      case provenance
+      case target
+      case text
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      evidenceIds = try c.decode([String].self, forKey: .evidenceIds)
+      evidenceSources = try c.decodeIfPresent([NoteEvidenceRef].self, forKey: .evidenceSources)
+      provenance = try c.decode(String.self, forKey: .provenance)
+      target = try c.decode(String.self, forKey: .target)
+      text = try c.decode(String.self, forKey: .text)
+    }
+
+    public init(evidenceIds: [String], evidenceSources: [NoteEvidenceRef]? = nil, provenance: String, target: String, text: String) {
+      self.evidenceIds = evidenceIds
+      self.evidenceSources = evidenceSources
+      self.provenance = provenance
+      self.target = target
+      self.text = text
+    }
+  }
+
+
+  public struct NoteEvidenceRef: Codable {
+    public let actor: String?
+    public let diarizationKey: String?
+    public let id: String
+    public let sourceKind: String
+    public let sourceRef: String?
+    public let time: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case actor
+      case diarizationKey = "diarization_key"
+      case id
+      case sourceKind = "source_kind"
+      case sourceRef = "source_ref"
+      case time
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      actor = try c.decodeIfPresent(String.self, forKey: .actor)
+      diarizationKey = try c.decodeIfPresent(String.self, forKey: .diarizationKey)
+      id = try c.decode(String.self, forKey: .id)
+      sourceKind = try c.decode(String.self, forKey: .sourceKind)
+      sourceRef = try c.decodeIfPresent(String.self, forKey: .sourceRef)
+      time = try c.decodeIfPresent(String.self, forKey: .time)
+    }
+
+    public init(actor: String? = nil, diarizationKey: String? = nil, id: String, sourceKind: String, sourceRef: String? = nil, time: String? = nil) {
+      self.actor = actor
+      self.diarizationKey = diarizationKey
+      self.id = id
+      self.sourceKind = sourceKind
+      self.sourceRef = sourceRef
+      self.time = time
+    }
+  }
+
+
   public struct OpenLoopDescriptor: Codable {
     public let blockingOnId: String?
     public let kind: OpenLoopKind
@@ -3859,6 +4107,44 @@ public enum OmiAPI {
   }
 
 
+  public struct Participant: Codable {
+    public let email: String?
+    public let isAiAgent: Bool?
+    public let name: String?
+    public let organization: String?
+    public let role: String?
+    public let source: String
+
+    private enum CodingKeys: String, CodingKey {
+      case email
+      case isAiAgent = "is_ai_agent"
+      case name
+      case organization
+      case role
+      case source
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      email = try c.decodeIfPresent(String.self, forKey: .email)
+      isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
+      name = try c.decodeIfPresent(String.self, forKey: .name)
+      organization = try c.decodeIfPresent(String.self, forKey: .organization)
+      role = try c.decodeIfPresent(String.self, forKey: .role)
+      source = try c.decode(String.self, forKey: .source)
+    }
+
+    public init(email: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+      self.email = email
+      self.isAiAgent = isAiAgent
+      self.name = name
+      self.organization = organization
+      self.role = role
+      self.source = source
+    }
+  }
+
+
   public struct PluginResult: Codable {
     public let content: String
     public let pluginId: String?
@@ -3877,6 +4163,171 @@ public enum OmiAPI {
     public init(content: String, pluginId: String? = nil) {
       self.content = content
       self.pluginId = pluginId
+    }
+  }
+
+
+  public struct ProactivityFeedItem: Codable {
+    public let acted: Bool
+    public let body: String
+    public let createdAt: String
+    public let dismissed: Bool
+    public let feedback: String
+    public let id: String
+    public let producer: String
+    public let target: ProactivityTarget
+    public let title: String
+
+    private enum CodingKeys: String, CodingKey {
+      case acted
+      case body
+      case createdAt = "created_at"
+      case dismissed
+      case feedback
+      case id
+      case producer
+      case target
+      case title
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      acted = try c.decode(Bool.self, forKey: .acted)
+      body = try c.decode(String.self, forKey: .body)
+      createdAt = try c.decode(String.self, forKey: .createdAt)
+      dismissed = try c.decode(Bool.self, forKey: .dismissed)
+      feedback = try c.decode(String.self, forKey: .feedback)
+      id = try c.decode(String.self, forKey: .id)
+      producer = try c.decode(String.self, forKey: .producer)
+      target = try c.decode(ProactivityTarget.self, forKey: .target)
+      title = try c.decode(String.self, forKey: .title)
+    }
+
+    public init(acted: Bool, body: String, createdAt: String, dismissed: Bool, feedback: String, id: String, producer: String, target: ProactivityTarget, title: String) {
+      self.acted = acted
+      self.body = body
+      self.createdAt = createdAt
+      self.dismissed = dismissed
+      self.feedback = feedback
+      self.id = id
+      self.producer = producer
+      self.target = target
+      self.title = title
+    }
+  }
+
+
+  public struct ProactivityFeedResponse: Codable {
+    public let enabled: Bool
+    public let hasMore: Bool
+    public let items: [ProactivityFeedItem]
+    public let nextCursor: String
+    public let schemaVersion: Int?
+    public let serverTime: String
+
+    private enum CodingKeys: String, CodingKey {
+      case enabled
+      case hasMore = "has_more"
+      case items
+      case nextCursor = "next_cursor"
+      case schemaVersion = "schema_version"
+      case serverTime = "server_time"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      enabled = try c.decode(Bool.self, forKey: .enabled)
+      hasMore = try c.decode(Bool.self, forKey: .hasMore)
+      items = try c.decode([ProactivityFeedItem].self, forKey: .items)
+      nextCursor = try c.decode(String.self, forKey: .nextCursor)
+      schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
+      serverTime = try c.decode(String.self, forKey: .serverTime)
+    }
+
+    public init(enabled: Bool, hasMore: Bool, items: [ProactivityFeedItem], nextCursor: String, schemaVersion: Int? = nil, serverTime: String) {
+      self.enabled = enabled
+      self.hasMore = hasMore
+      self.items = items
+      self.nextCursor = nextCursor
+      self.schemaVersion = schemaVersion
+      self.serverTime = serverTime
+    }
+  }
+
+
+  public struct ProactivityOutcomeRequest: Codable {
+    public let action: String
+    public let channel: String
+    public let eventId: String
+    public let surface: String
+
+    private enum CodingKeys: String, CodingKey {
+      case action
+      case channel
+      case eventId = "event_id"
+      case surface
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      action = try c.decode(String.self, forKey: .action)
+      channel = try c.decode(String.self, forKey: .channel)
+      eventId = try c.decode(String.self, forKey: .eventId)
+      surface = try c.decode(String.self, forKey: .surface)
+    }
+
+    public init(action: String, channel: String, eventId: String, surface: String) {
+      self.action = action
+      self.channel = channel
+      self.eventId = eventId
+      self.surface = surface
+    }
+  }
+
+
+  public struct ProactivityOutcomeResponse: Codable {
+    public let acted24h: Bool
+    public let itemId: String
+    public let negative: Bool
+    public let recorded: Bool
+
+    private enum CodingKeys: String, CodingKey {
+      case acted24h = "acted_24h"
+      case itemId = "item_id"
+      case negative
+      case recorded
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      acted24h = try c.decode(Bool.self, forKey: .acted24h)
+      itemId = try c.decode(String.self, forKey: .itemId)
+      negative = try c.decode(Bool.self, forKey: .negative)
+      recorded = try c.decode(Bool.self, forKey: .recorded)
+    }
+
+    public init(acted24h: Bool, itemId: String, negative: Bool, recorded: Bool) {
+      self.acted24h = acted24h
+      self.itemId = itemId
+      self.negative = negative
+      self.recorded = recorded
+    }
+  }
+
+
+  public struct ProactivityTarget: Codable {
+    public let id: String
+    public let kind: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      id = try c.decode(String.self, forKey: .id)
+      kind = try c.decode(String.self, forKey: .kind)
+    }
+
+    public init(id: String, kind: String) {
+      self.id = id
+      self.kind = kind
     }
   }
 
@@ -4202,14 +4653,72 @@ public enum OmiAPI {
   }
 
 
+  public struct ScreenTaskGateRequest: Codable {
+    public let appName: String?
+    public let ocrText: String
+    public let relatedTasks: [String]?
+    public let userContext: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case appName = "app_name"
+      case ocrText = "ocr_text"
+      case relatedTasks = "related_tasks"
+      case userContext = "user_context"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      appName = try c.decodeIfPresent(String.self, forKey: .appName)
+      ocrText = try c.decode(String.self, forKey: .ocrText)
+      relatedTasks = try c.decodeIfPresent([String].self, forKey: .relatedTasks)
+      userContext = try c.decodeIfPresent(String.self, forKey: .userContext)
+    }
+
+    public init(appName: String? = nil, ocrText: String, relatedTasks: [String]? = nil, userContext: String? = nil) {
+      self.appName = appName
+      self.ocrText = ocrText
+      self.relatedTasks = relatedTasks
+      self.userContext = userContext
+    }
+  }
+
+
+  public struct ScreenTaskGateResponse: Codable {
+    public let auditSample: Bool
+    public let gateOutcome: String
+    public let shouldExtract: Bool
+
+    private enum CodingKeys: String, CodingKey {
+      case auditSample = "audit_sample"
+      case gateOutcome = "gate_outcome"
+      case shouldExtract = "should_extract"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      auditSample = try c.decode(Bool.self, forKey: .auditSample)
+      gateOutcome = try c.decode(String.self, forKey: .gateOutcome)
+      shouldExtract = try c.decode(Bool.self, forKey: .shouldExtract)
+    }
+
+    public init(auditSample: Bool, gateOutcome: String, shouldExtract: Bool) {
+      self.auditSample = auditSample
+      self.gateOutcome = gateOutcome
+      self.shouldExtract = shouldExtract
+    }
+  }
+
+
   public struct Section: Codable {
     public let bodyMarkdown: String
     public let heading: String
+    public let kind: String?
     public let sourceSegmentIds: [String]?
 
     private enum CodingKeys: String, CodingKey {
       case bodyMarkdown = "body_markdown"
       case heading
+      case kind
       case sourceSegmentIds = "source_segment_ids"
     }
 
@@ -4217,12 +4726,14 @@ public enum OmiAPI {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       bodyMarkdown = try c.decode(String.self, forKey: .bodyMarkdown)
       heading = try c.decode(String.self, forKey: .heading)
+      kind = try c.decodeIfPresent(String.self, forKey: .kind)
       sourceSegmentIds = try c.decodeIfPresent([String].self, forKey: .sourceSegmentIds)
     }
 
-    public init(bodyMarkdown: String, heading: String, sourceSegmentIds: [String]? = nil) {
+    public init(bodyMarkdown: String, heading: String, kind: String? = nil, sourceSegmentIds: [String]? = nil) {
       self.bodyMarkdown = bodyMarkdown
       self.heading = heading
+      self.kind = kind
       self.sourceSegmentIds = sourceSegmentIds
     }
   }
@@ -4293,7 +4804,11 @@ public enum OmiAPI {
     public let category: CategoryEnum?
     public let emoji: String?
     public let events: [Event]?
+    public let insights: [Insight]?
+    public let meetingType: String?
+    public let noteClaims: [NoteClaim]?
     public let overview: String?
+    public let participants: [Participant]?
     public let sections: [Section]?
     public let title: String?
 
@@ -4302,7 +4817,11 @@ public enum OmiAPI {
       case category
       case emoji
       case events
+      case insights
+      case meetingType = "meeting_type"
+      case noteClaims = "note_claims"
       case overview
+      case participants
       case sections
       case title
     }
@@ -4313,17 +4832,25 @@ public enum OmiAPI {
       category = try c.decodeIfPresent(CategoryEnum.self, forKey: .category)
       emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
       events = try c.decodeIfPresent([Event].self, forKey: .events)
+      insights = try c.decodeIfPresent([Insight].self, forKey: .insights)
+      meetingType = try c.decodeIfPresent(String.self, forKey: .meetingType)
+      noteClaims = try c.decodeIfPresent([NoteClaim].self, forKey: .noteClaims)
       overview = try c.decodeIfPresent(String.self, forKey: .overview)
+      participants = try c.decodeIfPresent([Participant].self, forKey: .participants)
       sections = try c.decodeIfPresent([Section].self, forKey: .sections)
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, overview: String? = nil, sections: [Section]? = nil, title: String? = nil) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, sections: [Section]? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
       self.events = events
+      self.insights = insights
+      self.meetingType = meetingType
+      self.noteClaims = noteClaims
       self.overview = overview
+      self.participants = participants
       self.sections = sections
       self.title = title
     }
@@ -4340,6 +4867,32 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = SubjectAttribution(rawValue: raw) ?? ._unknown
+    }
+  }
+
+
+  public struct SummaryTaskReference: Codable, Sendable {
+    public let actionItemIndex: Int
+    public let conversationId: String
+    public let expectedDescription: String
+
+    private enum CodingKeys: String, CodingKey {
+      case actionItemIndex = "action_item_index"
+      case conversationId = "conversation_id"
+      case expectedDescription = "expected_description"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      actionItemIndex = try c.decode(Int.self, forKey: .actionItemIndex)
+      conversationId = try c.decode(String.self, forKey: .conversationId)
+      expectedDescription = try c.decode(String.self, forKey: .expectedDescription)
+    }
+
+    public init(actionItemIndex: Int, conversationId: String, expectedDescription: String) {
+      self.actionItemIndex = actionItemIndex
+      self.conversationId = conversationId
+      self.expectedDescription = expectedDescription
     }
   }
 
@@ -4839,25 +5392,21 @@ public enum OmiAPI {
 
   public struct TaskWorkflowControl: Codable {
     public let accountGeneration: Int?
-    public let chatFirstUi: Bool?
     public let workflowMode: TaskWorkflowMode?
 
     private enum CodingKeys: String, CodingKey {
       case accountGeneration = "account_generation"
-      case chatFirstUi = "chat_first_ui"
       case workflowMode = "workflow_mode"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
-      chatFirstUi = try c.decodeIfPresent(Bool.self, forKey: .chatFirstUi)
       workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
     }
 
-    public init(accountGeneration: Int? = nil, chatFirstUi: Bool? = nil, workflowMode: TaskWorkflowMode? = nil) {
+    public init(accountGeneration: Int? = nil, workflowMode: TaskWorkflowMode? = nil) {
       self.accountGeneration = accountGeneration
-      self.chatFirstUi = chatFirstUi
       self.workflowMode = workflowMode
     }
   }
@@ -4884,6 +5433,7 @@ public enum OmiAPI {
     public let personId: String?
     public let speaker: String?
     public let speakerId: Int?
+    public let speakerLabelSource: String?
     public let speechProfileProcessed: Bool?
     public let start: Double
     public let sttProvider: String?
@@ -4897,6 +5447,7 @@ public enum OmiAPI {
       case personId = "person_id"
       case speaker
       case speakerId = "speaker_id"
+      case speakerLabelSource = "speaker_label_source"
       case speechProfileProcessed = "speech_profile_processed"
       case start
       case sttProvider = "stt_provider"
@@ -4912,6 +5463,7 @@ public enum OmiAPI {
       personId = try c.decodeIfPresent(String.self, forKey: .personId)
       speaker = try c.decodeIfPresent(String.self, forKey: .speaker)
       speakerId = try c.decodeIfPresent(Int.self, forKey: .speakerId)
+      speakerLabelSource = try c.decodeIfPresent(String.self, forKey: .speakerLabelSource)
       speechProfileProcessed = try c.decodeIfPresent(Bool.self, forKey: .speechProfileProcessed)
       start = try c.decode(Double.self, forKey: .start)
       sttProvider = try c.decodeIfPresent(String.self, forKey: .sttProvider)
@@ -4919,13 +5471,14 @@ public enum OmiAPI {
       translations = try c.decodeIfPresent([Translation].self, forKey: .translations)
     }
 
-    public init(end: Double, id: String? = nil, isUser: Bool, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
+    public init(end: Double, id: String? = nil, isUser: Bool, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speakerLabelSource: String? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
       self.end = end
       self.id = id
       self.isUser = isUser
       self.personId = personId
       self.speaker = speaker
       self.speakerId = speakerId
+      self.speakerLabelSource = speakerLabelSource
       self.speechProfileProcessed = speechProfileProcessed
       self.start = start
       self.sttProvider = sttProvider
@@ -5445,6 +5998,47 @@ public enum OmiAPI {
   public enum OmiApiError: Error {
     case invalidURL
     case httpError(status: Int, data: Data)
+  }
+
+  public static func searchProductMemoryMemorySearchGet(client: OmiApiClient, query: String? = nil, limit: Int? = nil, offset: Int? = nil, view: String? = nil, asOf: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/memory/search"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let query {
+      queryItems.append(URLQueryItem(name: "query", value: String(query)))
+    }
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let offset {
+      queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let view {
+      queryItems.append(URLQueryItem(name: "view", value: String(view)))
+    }
+    if let asOf {
+      queryItems.append(URLQueryItem(name: "as_of", value: String(asOf)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
   public static func getAccountCutoverControlV1AccountCutoverControlGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppBuild: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
@@ -7599,6 +8193,34 @@ public enum OmiAPI {
     return try JSONDecoder().decode(TaskWorkflowControl.self, from: data)
   }
 
+  public static func prepareConversationTaskCandidateV1CandidatesFromConversationPost(client: OmiApiClient, xAccountGeneration: Int, idempotencyKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: SummaryTaskReference) async throws -> CandidateRecord {
+    let _path = "/v1/candidates/from-conversation"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    req.setValue(String(xAccountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(CandidateRecord.self, from: data)
+  }
+
   public static func drainCandidateIntegrationsV1CandidatesIntegrationsDrainPost(client: OmiApiClient, limit: Int? = nil, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [String: Int] {
     let _path = "/v1/candidates/integrations/drain"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -7679,7 +8301,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(CandidateRecord.self, from: data)
   }
 
-  public static func acceptCandidateV1CandidatesCandidateIdAcceptPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateResolutionReceipt {
+  public static func acceptCandidateV1CandidatesCandidateIdAcceptPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CandidateAcceptanceRequest? = nil) async throws -> CandidateResolutionReceipt {
     let _path = "/v1/candidates/\(candidateId)/accept"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -7696,6 +8318,8 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -8066,7 +8690,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getConversationByIdV1ConversationsConversationIdGet(client: OmiApiClient, conversationId: String, source: String? = nil, includeDiscarded: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+  public static func getConversationByIdV1ConversationsConversationIdGet(client: OmiApiClient, conversationId: String, source: String? = nil, includeDiscarded: Bool? = nil, includeTranslations: Bool? = nil, translationCursor: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
     let _path = "/v1/conversations/\(conversationId)"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -8077,6 +8701,12 @@ public enum OmiAPI {
     }
     if let includeDiscarded {
       queryItems.append(URLQueryItem(name: "include_discarded", value: String(includeDiscarded)))
+    }
+    if let includeTranslations {
+      queryItems.append(URLQueryItem(name: "include_translations", value: String(includeTranslations)))
+    }
+    if let translationCursor {
+      queryItems.append(URLQueryItem(name: "translation_cursor", value: String(translationCursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8275,7 +8905,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func setAssigneeConversationSegmentV1ConversationsConversationIdAssignSpeakerSpeakerIdPatch(client: OmiApiClient, conversationId: String, speakerId: Int, assignType: String, value: String? = nil, useForSpeechTraining: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+  public static func setAssigneeConversationSegmentV1ConversationsConversationIdAssignSpeakerSpeakerIdPatch(client: OmiApiClient, conversationId: String, speakerId: Int, assignType: String, value: String? = nil, useForSpeechTraining: Bool? = nil, start: Double? = nil, end: Double? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> Conversation {
     let _path = "/v1/conversations/\(conversationId)/assign-speaker/\(speakerId)"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -8287,6 +8917,12 @@ public enum OmiAPI {
     }
     if let useForSpeechTraining {
       queryItems.append(URLQueryItem(name: "use_for_speech_training", value: String(useForSpeechTraining)))
+    }
+    if let start {
+      queryItems.append(URLQueryItem(name: "start", value: String(start)))
+    }
+    if let end {
+      queryItems.append(URLQueryItem(name: "end", value: String(end)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8300,6 +8936,8 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -8380,6 +9018,54 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(CalendarEventLink.self, from: data)
+  }
+
+  public static func separateConversationFromCaptureGroupV1ConversationsConversationIdCaptureGroupSeparatePost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/capture-group/separate"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getConversationEntitiesV1ConversationsConversationIdEntitiesGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/entities"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
   public static func setConversationEventsStateV1ConversationsConversationIdEventsPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
@@ -8885,6 +9571,32 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func rejectSpeakerLabelV1ConversationsConversationIdSpeakersSpeakerIdRejectPost(client: OmiApiClient, conversationId: String, speakerId: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> Conversation {
+    let _path = "/v1/conversations/\(conversationId)/speakers/\(speakerId)/reject"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(Conversation.self, from: data)
   }
 
   public static func setConversationStarredV1ConversationsConversationIdStarredPatch(client: OmiApiClient, conversationId: String, starred: Bool, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -9837,6 +10549,83 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getEntitiesV1EntitiesGet(client: OmiApiClient, type: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/entities"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "type", value: String(type)))
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func correctEntityV1EntitiesEntityIdCorrectionsPost(client: OmiApiClient, entityId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> Void {
+    let _path = "/v1/entities/\(entityId)/corrections"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func getEntityPageV1EntitiesEntityIdPageGet(client: OmiApiClient, entityId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/entities/\(entityId)/page"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -10983,6 +11772,41 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func importTranscriptFilesV1ImportTranscriptsPost(client: OmiApiClient, language: String? = nil, tz: String? = nil, origin: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/import/transcripts"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let language {
+      queryItems.append(URLQueryItem(name: "language", value: String(language)))
+    }
+    if let tz {
+      queryItems.append(URLQueryItem(name: "tz", value: String(tz)))
+    }
+    if let origin {
+      queryItems.append(URLQueryItem(name: "origin", value: String(origin)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func syncAppleHealthDataV1IntegrationsAppleHealthSyncPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/apple-health/sync"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -11186,7 +12010,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func reserveJitProactivityV1JitProactivityReservationsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func reserveJitProactivityV1JitProactivityReservationsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: [String: OmiAnyCodable]) async throws -> [String: OmiAnyCodable] {
     let _path = "/v1/jit/proactivity/reservations"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11209,7 +12033,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode([String: OmiAnyCodable].self, from: data)
   }
 
   public static func getJitRolloutDecisionV1JitRolloutDecisionGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -11236,7 +12060,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func postJitTriggerFeedbackV1JitTriggerFeedbackPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func postJitTriggerFeedbackV1JitTriggerFeedbackPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: [String: OmiAnyCodable]) async throws -> [String: OmiAnyCodable] {
     let _path = "/v1/jit/trigger-feedback"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11259,7 +12083,7 @@ public enum OmiAPI {
     guard (200..<300).contains(http.statusCode) else {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
-    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+    return try JSONDecoder().decode([String: OmiAnyCodable].self, from: data)
   }
 
   public static func getJitTriggerSnapshotV1JitTriggerSnapshotGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -11416,7 +12240,74 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getActionItemsV1McpActionItemsGet(client: OmiApiClient, completed: Bool? = nil, dueStartDate: String? = nil, dueEndDate: String? = nil, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func mcpSseGetV1McpGet(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func mcpStreamableHttpV1McpPost(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil, accept: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    if let accept { req.setValue(String(accept), forHTTPHeaderField: "Accept") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func mcpDeleteSessionV1McpDelete(client: OmiApiClient, mcpSessionId: String? = nil, authorization: String? = nil) async throws -> Void {
+    let _path = "/v1/mcp"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let mcpSessionId { req.setValue(String(mcpSessionId), forHTTPHeaderField: "Mcp-Session-Id") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "Authorization") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func getActionItemsV1McpActionItemsGet(client: OmiApiClient, completed: Bool? = nil, dueStartDate: String? = nil, dueEndDate: String? = nil, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, updatedSince: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/action-items"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11436,6 +12327,12 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11568,7 +12465,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getChatMessagesV1McpChatGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func getChatMessagesV1McpChatGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/chat"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11579,6 +12476,9 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11596,7 +12496,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func getConversationsV1McpConversationsGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, categories: String? = nil, limit: Int? = nil, offset: Int? = nil) async throws -> [OmiAnyCodable] {
+  public static func getConversationsV1McpConversationsGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, categories: String? = nil, limit: Int? = nil, offset: Int? = nil, cursor: String? = nil, updatedSince: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/conversations"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11616,6 +12516,12 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11685,7 +12591,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getDailySummariesV1McpDailySummariesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, startDate: String? = nil, endDate: String? = nil) async throws -> [[String: OmiAnyCodable]] {
+  public static func getDailySummariesV1McpDailySummariesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, startDate: String? = nil, endDate: String? = nil, cursor: String? = nil) async throws -> [[String: OmiAnyCodable]] {
     let _path = "/v1/mcp/daily-summaries"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11702,6 +12608,9 @@ public enum OmiAPI {
     }
     if let endDate {
       queryItems.append(URLQueryItem(name: "end_date", value: String(endDate)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11806,7 +12715,7 @@ public enum OmiAPI {
     return
   }
 
-  public static func getMemoriesV1McpMemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, categories: String? = nil, sort: String? = nil, reviewed: Bool? = nil, manuallyAdded: Bool? = nil, updatedAfter: String? = nil, includeActivity: Bool? = nil, includeSensitive: Bool? = nil) async throws -> [OmiAnyCodable] {
+  public static func getMemoriesV1McpMemoriesGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, categories: String? = nil, sort: String? = nil, reviewed: Bool? = nil, manuallyAdded: Bool? = nil, updatedAfter: String? = nil, updatedSince: String? = nil, includeActivity: Bool? = nil, includeSensitive: Bool? = nil, cursor: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/memories"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -11833,11 +12742,17 @@ public enum OmiAPI {
     if let updatedAfter {
       queryItems.append(URLQueryItem(name: "updated_after", value: String(updatedAfter)))
     }
+    if let updatedSince {
+      queryItems.append(URLQueryItem(name: "updated_since", value: String(updatedSince)))
+    }
     if let includeActivity {
       queryItems.append(URLQueryItem(name: "include_activity", value: String(includeActivity)))
     }
     if let includeSensitive {
       queryItems.append(URLQueryItem(name: "include_sensitive", value: String(includeSensitive)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12006,6 +12921,48 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
+  public static func dismissPersonV1McpPeoplePersonIdDismissPost(client: OmiApiClient, personId: String) async throws -> OmiAnyCodable {
+    let _path = "/v1/mcp/people/\(personId)/dismiss"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func renamePersonV1McpPeoplePersonIdNamePatch(client: OmiApiClient, personId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/mcp/people/\(personId)/name"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getUserProfileV1McpProfileGet(client: OmiApiClient) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/profile"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -12026,7 +12983,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getScreenActivityV1McpScreenActivityGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, app: String? = nil, summary: Bool? = nil, limit: Int? = nil) async throws -> OmiAnyCodable {
+  public static func getScreenActivityV1McpScreenActivityGet(client: OmiApiClient, startDate: String? = nil, endDate: String? = nil, app: String? = nil, summary: Bool? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/screen-activity"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -12046,6 +13003,9 @@ public enum OmiAPI {
     }
     if let limit {
       queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12166,6 +13126,59 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func uploadDeviceDiagnosticsV1MobileDeviceDiagnosticsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/mobile/device-diagnostics"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func submitMobileFeedbackV1MobileFeedbackPost(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, xAppBuild: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/mobile/feedback"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let xAppBuild { req.setValue(String(xAppBuild), forHTTPHeaderField: "X-App-Build") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
@@ -12570,6 +13583,191 @@ public enum OmiAPI {
     return
   }
 
+  public static func getProactivityFeed(client: OmiApiClient, limit: Int? = nil, cursor: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ProactivityFeedResponse {
+    let _path = "/v1/proactivity/feed"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ProactivityFeedResponse.self, from: data)
+  }
+
+  public static func recordProactivityOutcome(client: OmiApiClient, itemId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ProactivityOutcomeRequest) async throws -> ProactivityOutcomeResponse {
+    let _path = "/v1/proactivity/items/\(itemId)/outcomes"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ProactivityOutcomeResponse.self, from: data)
+  }
+
+  public static func getReviewChangesV1ReviewChangesGet(client: OmiApiClient, cursor: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/review/changes"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let cursor {
+      queryItems.append(URLQueryItem(name: "cursor", value: String(cursor)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func redoReviewChangeV1ReviewChangesChangeIdRedoPost(client: OmiApiClient, changeId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/review/changes/\(changeId)/redo"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func undoReviewChangeV1ReviewChangesChangeIdUndoPost(client: OmiApiClient, changeId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/review/changes/\(changeId)/undo"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getReviewItemsV1ReviewItemsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/review/items"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func answerReviewItemV1ReviewItemsItemIdAnswerPost(client: OmiApiClient, itemId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/review/items/\(itemId)/answer"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func listScreenActivityV1ScreenActivityGet(client: OmiApiClient, date: String? = nil, appFilter: String? = nil, limit: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/screen-activity"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -12718,6 +13916,257 @@ public enum OmiAPI {
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func screenTaskAdmissionV1ScreenTaskAdmissionGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/screen-task/admission"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func screenTaskGateV1ScreenTaskGatePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ScreenTaskGateRequest) async throws -> ScreenTaskGateResponse {
+    let _path = "/v1/screen-task/gate"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ScreenTaskGateResponse.self, from: data)
+  }
+
+  public static func getSearchOverviewV1SearchOverviewGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/search/overview"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getSpeakerTagPromptsV1SpeakerTagPromptsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/speaker-tag-prompts"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func answerSpeakerTagPromptV1SpeakerTagPromptsAnswerPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/speaker-tag-prompts/answer"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getSpeakerTagPromptClipV1SpeakerTagPromptsClipGet(client: OmiApiClient, conversationId: String, start: Double, end: Double, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/speaker-tag-prompts/clip"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "conversation_id", value: String(conversationId)))
+    queryItems.append(URLQueryItem(name: "start", value: String(start)))
+    queryItems.append(URLQueryItem(name: "end", value: String(end)))
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func dismissSpeakerTagPromptsV1SpeakerTagPromptsDismissPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
+    let _path = "/v1/speaker-tag-prompts/dismiss"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func getIgnoredVoicesV1SpeakerTagPromptsIgnoredVoicesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/speaker-tag-prompts/ignored-voices"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func restoreIgnoredVoiceV1SpeakerTagPromptsIgnoredVoicesConversationIdSpeakerIdDelete(client: OmiApiClient, conversationId: String, speakerId: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
+    let _path = "/v1/speaker-tag-prompts/ignored-voices/\(conversationId)/\(speakerId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
+  }
+
+  public static func markSpeakerTagPromptsShownV1SpeakerTagPromptsShownPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/speaker-tag-prompts/shown"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
     for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -13387,6 +14836,30 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OutcomeRecord.self, from: data)
   }
 
+  public static func listTtsVoicesV1TtsVoicesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/tts/voices"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getAiProfileV1UsersAiProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/ai-profile"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -13463,7 +14936,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func setChatMessageAnalyticsV1UsersAnalyticsChatMessagePost(client: OmiApiClient, messageId: String, value: Int, reason: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func setChatMessageAnalyticsV1UsersAnalyticsChatMessagePost(client: OmiApiClient, messageId: String, value: Int, reason: String? = nil, xAppVersion: String? = nil, xAppBuild: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/analytics/chat_message"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -13482,10 +14955,11 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let xAppBuild { req.setValue(String(xAppBuild), forHTTPHeaderField: "X-App-Build") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
-    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -13673,6 +15147,36 @@ public enum OmiAPI {
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func searchDailySummariesV1UsersDailySummariesSearchGet(client: OmiApiClient, query: String, limit: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/daily-summaries/search"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "query", value: String(query)))
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -14056,11 +15560,16 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func exportAllUserDataV1UsersExportGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func exportAllUserDataV1UsersExportGet(client: OmiApiClient, stream: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/export"
-    guard let components = URLComponents(string: client.baseURL + _path) else {
+    guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
+    var queryItems: [URLQueryItem] = []
+    if let stream {
+      queryItems.append(URLQueryItem(name: "stream", value: String(stream)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "GET"
@@ -14520,7 +16029,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getUserUsageStatsEndpointV1UsersMeUsageGet(client: OmiApiClient, period: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func getUserUsageStatsEndpointV1UsersMeUsageGet(client: OmiApiClient, period: String? = nil, timeZone: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/usage"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14528,6 +16037,9 @@ public enum OmiAPI {
     var queryItems: [URLQueryItem] = []
     if let period {
       queryItems.append(URLQueryItem(name: "period", value: String(period)))
+    }
+    if let timeZone {
+      queryItems.append(URLQueryItem(name: "time_zone", value: String(timeZone)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14828,7 +16340,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getAllPeopleV1UsersPeopleGet(client: OmiApiClient, includeSpeechSamples: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
+  public static func getAllPeopleV1UsersPeopleGet(client: OmiApiClient, includeSpeechSamples: Bool? = nil, includeStats: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/users/people"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14836,6 +16348,9 @@ public enum OmiAPI {
     var queryItems: [URLQueryItem] = []
     if let includeSpeechSamples {
       queryItems.append(URLQueryItem(name: "include_speech_samples", value: String(includeSpeechSamples)))
+    }
+    if let includeStats {
+      queryItems.append(URLQueryItem(name: "include_stats", value: String(includeStats)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14963,6 +16478,33 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func setPersonPinnedV1UsersPeoplePersonIdPinnedPatch(client: OmiApiClient, personId: String, value: Bool, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/people/\(personId)/pinned"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    queryItems.append(URLQueryItem(name: "value", value: String(value)))
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func deletePersonSpeechSampleEndpointV1UsersPeoplePersonIdSpeechSamplesSampleIndexDelete(client: OmiApiClient, personId: String, sampleIndex: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/people/\(personId)/speech-samples/\(sampleIndex)"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -14971,6 +16513,30 @@ public enum OmiAPI {
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getPersonVoiceMatchesV1UsersPeoplePersonIdVoiceMatchesGet(client: OmiApiClient, personId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/people/\(personId)/voice-matches"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
     for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -15087,6 +16653,32 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func recordChannelV1UsersReleaseChannelPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> Void {
+    let _path = "/v1/users/release-channel"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PUT"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return
   }
 
   public static func getChatMessageCountV1UsersStatsChatMessagesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -15288,6 +16880,106 @@ public enum OmiAPI {
 
   public static func updateTranscriptionPreferencesEndpointV1UsersTranscriptionPreferencesPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/transcription-preferences"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getUserVoiceV1UsersVoiceGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/voice"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func updateUserVoiceV1UsersVoicePatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/voice"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getVoiceProfileSettingsV1UsersVoiceProfileSettingsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/voice-profile-settings"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func updateVoiceProfileSettingsV1UsersVoiceProfileSettingsPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/voice-profile-settings"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
@@ -15835,6 +17527,144 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getChatSessionsV2ChatSessionsGet(client: OmiApiClient, appId: String? = nil, limit: Int? = nil, offset: Int? = nil, starred: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
+    let _path = "/v2/chat-sessions"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let appId {
+      queryItems.append(URLQueryItem(name: "app_id", value: String(appId)))
+    }
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let offset {
+      queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let starred {
+      queryItems.append(URLQueryItem(name: "starred", value: String(starred)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
+  }
+
+  public static func createChatSessionV2ChatSessionsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v2/chat-sessions"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getChatSessionV2ChatSessionsSessionIdGet(client: OmiApiClient, sessionId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v2/chat-sessions/\(sessionId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func updateChatSessionV2ChatSessionsSessionIdPatch(client: OmiApiClient, sessionId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v2/chat-sessions/\(sessionId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "PATCH"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func deleteChatSessionV2ChatSessionsSessionIdDelete(client: OmiApiClient, sessionId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v2/chat-sessions/\(sessionId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func materializePromptsV2ChatMaterializePromptsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/chat/materialize-prompts"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -16103,6 +17933,32 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func submitDeviceToolResultV2MessagesDeviceToolCallIdResultPost(client: OmiApiClient, callId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+    let _path = "/v2/messages/device-tool/\(callId)/result"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func shareChatMessagesV2MessagesSharePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/share"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -16149,7 +18005,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func rateMessageV2MessagesMessageIdRatingPatch(client: OmiApiClient, messageId: String, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func rateMessageV2MessagesMessageIdRatingPatch(client: OmiApiClient, messageId: String, xAppPlatform: String? = nil, xAppVersion: String? = nil, xAppBuild: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/\(messageId)/rating"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -16162,9 +18018,10 @@ public enum OmiAPI {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let xAppBuild { req.setValue(String(xAppBuild), forHTTPHeaderField: "X-App-Build") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
-    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
@@ -16225,7 +18082,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -16233,6 +18090,15 @@ public enum OmiAPI {
     var queryItems: [URLQueryItem] = []
     if let conversationId {
       queryItems.append(URLQueryItem(name: "conversation_id", value: String(conversationId)))
+    }
+    if let recordingSessionId {
+      queryItems.append(URLQueryItem(name: "recording_session_id", value: String(recordingSessionId)))
+    }
+    if let audioStartSeconds {
+      queryItems.append(URLQueryItem(name: "audio_start_seconds", value: String(audioStartSeconds)))
+    }
+    if let audioEndSeconds {
+      queryItems.append(URLQueryItem(name: "audio_end_seconds", value: String(audioEndSeconds)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -16978,5 +18844,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 442 Swift client methods generated.
+  // Total: 490 Swift client methods generated.
 }

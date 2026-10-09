@@ -8,6 +8,8 @@ description: "Connect to Omi devices over Bluetooth, decode Opus audio, and tran
 
 A pip-installable Python SDK for connecting to Omi wearable devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram.
 
+Deepgram transcription requires `websockets` 14.0 or newer. The SDK's dependency declarations enforce this minimum for its authenticated WebSocket handshake.
+
 <CardGroup cols={3}>
   <Card title="Bluetooth Connection" icon="bluetooth">
     Connect to any Omi device
@@ -181,6 +183,17 @@ audio or enable automatic language detection. See Deepgram's
 
 ## Development
 
+### Stopping Deepgram transcription
+
+Cancel and await the task running the transcriber to stop it. The SDK stops
+sending PCM, sends Deepgram's `CloseStream`, and keeps receiving final transcripts
+until the server closes or the receive timeout expires. `drain_timeout` bounds
+both the terminal send and the receive wait (default: five seconds per phase).
+Callbacks can therefore run while cancellation is being awaited. Set
+`drain_timeout=0` on `create_transcriber("deepgram", ...)` to skip waiting for final
+results; the terminal send still has a five-second timeout. A server EOF or
+connection error follows the reconnect path; it does not send `CloseStream`.
+
 ### Local Development Setup
 
 ```bash
@@ -197,6 +210,10 @@ pip install -e .
 # Install dev dependencies
 pip install -e ".[dev]"
 ```
+
+Run the SDK's hardware-free regression suite with `bash test.sh`. It uses the
+repository's `uv` environment manager to test the minimum supported `websockets`
+version and is also selected by the shared local/CI check manifest.
 
 ---
 
@@ -216,7 +233,7 @@ pip install -e ".[dev]"
     Make sure your Omi device is powered on and nearby. Try running `omi-scan` to verify it's discoverable.
   </Accordion>
   <Accordion title="WebSocket issues" icon="plug">
-    The SDK uses `websockets>=11.0`. Try upgrading: `pip install --upgrade websockets`
+    The SDK requires `websockets>=14.0`. Try upgrading: `pip install --upgrade "websockets>=14.0"`
   </Accordion>
 </AccordionGroup>
 

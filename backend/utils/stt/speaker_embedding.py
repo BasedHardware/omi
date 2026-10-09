@@ -11,6 +11,7 @@ from scipy.spatial.distance import cdist
 
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -122,13 +123,17 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
+def extract_embedding_from_bytes(
+    audio_data: bytes, filename: str = "audio.wav", *, client: httpx.Client | None = None, timeout: float = 300.0
+) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
     Args:
         audio_data: Raw audio bytes (wav format)
         filename: Filename to use in the request
+        client: Reused connection pool for callers embedding many clips in a row
+        timeout: Per-request timeout in seconds
 
     Returns:
         numpy array of shape (1, D) where D is embedding dimension
@@ -143,7 +148,8 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
+    post = client.post if client is not None else httpx.post
+    response = post(f"{api_url}/v2/embedding", files=files, timeout=timeout)
     response.raise_for_status()
 
     result = response.json()
@@ -178,7 +184,7 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
         response = await client.post(f"{api_url}/v2/embedding", files=files)
         response.raise_for_status()
     except Exception as e:
-        logger.error(f"async_extract_embedding failed for {audio_path}: {e}")
+        logger.error('async_extract_embedding failed: %s', sanitize_provider_error(e))
         raise
 
     result = response.json()
@@ -206,7 +212,7 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
         response = await client.post(f"{api_url}/v2/embedding", files=files)
         response.raise_for_status()
     except Exception as e:
-        logger.error(f"async_extract_embedding_from_bytes failed: {e}")
+        logger.error('async_extract_embedding_from_bytes failed: %s', sanitize_provider_error(e))
         raise
 
     result = response.json()

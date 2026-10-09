@@ -8,25 +8,36 @@ handler in routers/sync.py.
 """
 
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
 import types
 import unittest
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
 
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
+
+
+@pytest.fixture(autouse=True)
+def legacy_production_keys(monkeypatch):
+    # This suite asserts the existing production Redis key contract.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
 
 
 async def _passthrough_async_resolve_geolocation(geolocation):
@@ -449,6 +460,7 @@ class TestFencedJobMutations:
             'completed_at': 200.0,
             'error': 'upstream unavailable',
             'reason_code': 'upstream_error',
+            'failure_stage': 'prod',
             'retry_after': 30,
             'updated_at': 200.0,
         }
@@ -565,6 +577,111 @@ class TestLegacyJobMutations:
         assert late_retry is None
         assert redis_client.get(f'{sync_jobs.JOB_KEY_PREFIX}{job_id}') == terminal_json
         assert sync_jobs.get_sync_job(job_id)['status'] == 'partial_failure'
+
+
+# ---------------------------------------------------------------------------
+# Finalization diagnostics
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizationDiagnostics:
+    def test_diagnostic_kwargs_are_bounded_and_never_stored(self, caplog):
+        """Logging-only kwargs collapse to closed tokens and never reach the job doc."""
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = 'job-diag'
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 0,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            finalized = sync_jobs.finalize_sync_job(
+                job_id,
+                {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+                attempt_ref='uid-leaked-abc123',
+                failure_phase='/tmp/private/audio.wav',
+                failure_class='user-uid-abc123 detail',
+                failure_subtype='uid-leaked-abc123',
+            )
+
+        assert finalized is not None
+        record = next(r for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
+        message = record.getMessage()
+        assert 'job_ref=none' in message
+        assert 'attempt_ref=none' in message
+        assert 'failure_phase=unknown' in message
+        assert 'failure_class=OtherException' in message
+        assert 'failure_subtype=other' in message
+        for leaked in ('uid-leaked-abc123', '/tmp/private/audio.wav', 'user-uid-abc123'):
+            assert leaked not in message
+        stored = sync_jobs.get_sync_job(job_id)
+        for diagnostic in ('attempt_ref', 'failure_phase', 'failure_class', 'failure_subtype'):
+            assert diagnostic not in stored['result']
+
+    def test_diagnostic_kwargs_survive_closed_tokens_and_non_str(self, caplog):
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = str(uuid.uuid4())
+        attempt_ref = uuid.uuid4().hex
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 1,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            sync_jobs.finalize_sync_job(
+                job_id,
+                {
+                    'failed_segments': 1,
+                    'total_segments': 2,
+                    'errors': ['stt_timeout'],
+                    'outcome': 'upstream_error',
+                },
+                attempt_ref=attempt_ref,
+                failure_phase='provider_call',
+                failure_class='TimeoutError',
+                failure_subtype='provenance_mismatch',
+            )
+            sync_jobs._log_sync_job_finalized(
+                finalized={'lane': 'fresh'},
+                result={'outcome': 'success', 'provider': 'deepgram', 'model': 'nova-3'},
+                status='completed',
+                total=0,
+                failed=0,
+                job_id=job_id,
+                attempt_ref=42,
+                failure_phase=object(),
+                failure_class=object(),
+                failure_subtype=object(),
+            )
+
+        records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
+        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
+        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert 'failure_phase=provider_call' in records[0]
+        assert 'failure_class=TimeoutError' in records[0]
+        assert 'failure_subtype=provenance_mismatch' in records[0]
+        assert 'failure_phase=unknown' in records[1]
+        assert 'failure_class=OtherException' in records[1]
+        assert 'failure_subtype=other' in records[1]
+        assert 'attempt_ref=none' in records[1]
 
 
 # ---------------------------------------------------------------------------
@@ -736,7 +853,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
         payload = _valid_sync_task_payload(lane='backfill')
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -757,7 +874,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -766,6 +883,23 @@ class TestVerifyCloudTasksOidc:
             'job-1',
             payload,
             audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        )
+
+    def test_sequenced_task_uses_epoch_specific_name_on_existing_backfill_queue(self):
+        cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(lane='backfill')
+        payload['sequencer_epoch'] = 7
+        env = {
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload)
+        assert enqueue.call_args.args[:3] == (
+            'sync-backfill',
+            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'job-1-s7',
         )
 
     def test_fresh_lane_uses_main_queue_when_backfill_routing_enabled(self):
@@ -779,7 +913,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -799,7 +933,7 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_QUEUE': '',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': '',
         }
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
@@ -812,10 +946,33 @@ class TestVerifyCloudTasksOidc:
     def test_enqueue_rejects_payload_schema_drift_before_cloud_tasks(self):
         cloud_tasks = _load_cloud_tasks()
         payload = _valid_sync_task_payload(unexpected_field='must-not-be-admitted')
-        with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+        with patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             with pytest.raises(ValueError, match='durable worker schema'):
                 cloud_tasks.enqueue_sync_job(payload)
         enqueue.assert_not_called()
+
+    @pytest.mark.parametrize('sequenced', [False, True])
+    def test_enqueue_admits_capture_evidence_claims(self, sequenced):
+        # Regression: routers/sync.py adds capture_evidence_claims whenever S1
+        # claims parse; the exact-key check raised ValueError and wedged the
+        # uid's sequencer for every claims-bearing upload.
+        cloud_tasks = _load_cloud_tasks()
+        extra = {'sequencer_epoch': 3} if sequenced else {}
+        payload = _valid_sync_task_payload(capture_evidence_claims={'a.bin': {'version': 1}}, **extra)
+        env = {'SYNC_TASKS_QUEUE': 'sync-jobs', 'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/run'}
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload)
+        enqueue.assert_called_once()
+        assert enqueue.call_args.args[3]['capture_evidence_claims'] == {'a.bin': {'version': 1}}
+
+    def test_payload_key_validator_rejects_missing_core_key_even_with_optional(self):
+        cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(capture_evidence_claims={})
+        del payload['lane']
+        assert not cloud_tasks.sync_job_payload_keys_valid(payload)
+        assert not cloud_tasks.sync_job_payload_keys_valid(
+            {**_valid_sync_task_payload(), 'sequencer_epoch': 1}, allow_sequenced=False
+        )
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
         cloud_tasks = _load_cloud_tasks()
@@ -828,7 +985,7 @@ class TestVerifyCloudTasksOidc:
         }
         job_hash = hashlib.sha256(b'job-1').hexdigest()[:32]
         task_id = f'account-delete-{job_hash}-abc123'
-        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue, patch.object(
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue, patch.object(
             cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
         ):
             cloud_tasks.enqueue_account_deletion_wipe('job-1')
@@ -986,7 +1143,8 @@ def _load_sync_router_for_fast_path():
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
     from utils import manual_speaker_assignments as actual_manual_assignments
-    from utils.sync import lanes as actual_sync_lanes
+    from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
+    from utils import capture_evidence as actual_capture_evidence
 
     saved_modules = {}
     prior_utils_sync = sys.modules.get('utils.sync')
@@ -997,10 +1155,12 @@ def _load_sync_router_for_fast_path():
         'database',
         'database.redis_db',
         'database._client',
+        'database.auth',
         'database.conversations',
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.sync_backfill_sequencer',
         'database.firestore_read_metrics',
         'firebase_admin',
         'google',
@@ -1052,11 +1212,15 @@ def _load_sync_router_for_fast_path():
         'utils.sync.files',
         'utils.sync.playback',
         'utils.sync.backfill',
+        'utils.sync.uid_sequencer',
+        'utils.sync.backfill_cutover',
         'utils.sync.content_id',
-        'utils.sync.capture_manifest',
         'utils.speaker_assignment',
+        'utils.speaker_permissions',
         'utils.speaker_identification',
+        'utils.speaker_learning_jobs',
         'utils.stt.speaker_embedding',
+        'utils.stt.owner_profile',
         'python_multipart',
         'python_multipart.multipart',
     ]
@@ -1078,9 +1242,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
-    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
-    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
-    # since a MagicMock parent does not resolve submodules by itself.
+    # These tests exercise Cloud Tasks dispatch, not voiceprint acquisition.
+    # Register the new shared dependency under the existing non-package stubs.
+    sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+    sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
+    # Register pipeline submodules explicitly: MagicMock parents cannot resolve them.
     sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
@@ -1136,6 +1302,7 @@ def _load_sync_router_for_fast_path():
     sync_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'sync')]
     sys.modules['utils.sync'] = sync_pkg
     sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
+    sys.modules['utils.sync.rate_limit'].retry_after_until_next_utc_day = actual_rl.retry_after_until_next_utc_day
     sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
     sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
@@ -1160,6 +1327,9 @@ def _load_sync_router_for_fast_path():
     sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
     sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
     sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
+    sys.modules['database.sync_backfill_sequencer'].enabled = MagicMock(return_value=False)
+    sys.modules['database'].sync_backfill_sequencer = sys.modules['database.sync_backfill_sequencer']
+    sys.modules['utils.sync'].uid_sequencer = sys.modules['utils.sync.uid_sequencer']
     sys.modules['utils.sync.backfill'].reserve_backfill_speech = MagicMock(
         return_value=MagicMock(allowed=True, reason=None, retry_after=None)
     )
@@ -1195,7 +1365,16 @@ def _load_sync_router_for_fast_path():
     fallback_mod.record_fallback = _track_record_fallback
     transcription_mod = types.ModuleType('utils.observability.transcription')
     transcription_mod.record_sync_transcription_outcome = MagicMock()
+    transcription_mod.record_sync_intake_outcome = MagicMock()
+    journeys_mod = types.ModuleType('utils.observability.journeys')
+    journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
+    journeys_mod.record_journey_accepted = MagicMock()
+    shape_mod = types.ModuleType('utils.conversation_shape')
+    shape_mod.observe_completed_conversation_shape = MagicMock()
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
+    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
+    saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
@@ -1203,8 +1382,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
+    sys.modules['utils.observability.journeys'] = journeys_mod
+    sys.modules['utils.conversation_shape'] = shape_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
+    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
@@ -1214,6 +1396,11 @@ def _load_sync_router_for_fast_path():
     # scope, and MagicMock parents for utils / utils.stt are not packages.
     sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
     sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+    # Keep the S1 evidence envelope builder real (pure, stdlib-only): the sync
+    # pipeline imports unknown_envelope at module scope, and a MagicMock parent
+    # for utils is not a package.
+    saved_modules['utils.capture_evidence'] = sys.modules.get('utils.capture_evidence')
+    sys.modules['utils.capture_evidence'] = actual_capture_evidence
     saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
     # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
     # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.
@@ -1238,6 +1425,15 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.uid_sequencer.enabled = MagicMock(return_value=False)
+    module.uid_sequencer.production_fence_mode = MagicMock(
+        side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
+    )
+    module.uid_sequencer.foreign_delivery = MagicMock(
+        side_effect=lambda payload: not module.uid_sequencer.production_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
+    )
 
     async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -1965,6 +2161,16 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     )
     request.json.return_value['lane'] = 'backfill'
     setattr(module, 'finalize_sync_job_superseded', AsyncMock())
+    # A backfill task without a sequencer epoch first reads its own job to decide
+    # whether the UID sequencer should adopt it. This test covers the legacy direct
+    # path, so pin that decision off explicitly: sequencer disabled, no owner and
+    # nothing pending. The job is still `queued` at that point, so that read gets
+    # its own entry ahead of the three the processor makes.
+    module.uid_sequencer.enabled = MagicMock(return_value=False)
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
+    processor_reads = list(module.get_sync_job.side_effect)
+    module.get_sync_job.side_effect = [processor_reads[0], *processor_reads]
 
     try:
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -2405,11 +2611,12 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
 
 @pytest.mark.asyncio
 async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
-    """Historical recovery keeps its independent pacing policy, even above the live ceiling."""
+    """Historical recovery bypasses fresh ceiling and retired Redis slot with the kill switch off."""
     from starlette.datastructures import UploadFile
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
+    module.try_acquire_backfill_slot = MagicMock(side_effect=ConnectionError('retired slot unavailable'))
     module.start_background_task = MagicMock()
     module.classify_sync_lane = MagicMock(
         return_value=types.SimpleNamespace(
@@ -2427,6 +2634,7 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
 
         assert response.status_code == 202
         module.is_daily_audio_ceiling_exceeded.assert_not_called()
+        module.try_acquire_backfill_slot.assert_not_called()
         mock_sync_jobs.create_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -2828,9 +3036,296 @@ async def test_backfill_enqueue_failure_never_falls_back_inline(monkeypatch):
         assert response.status_code == 202
         assert json.loads(response.body)['status'] == 'queued'
         assert module.enqueue_sync_job.call_count == 2
+        module.backfill_cutover.note_direct_admission.assert_called_once()
+        assert module.backfill_cutover.note_direct_admission.call_args.args == (
+            'test-uid',
+            module.enqueue_sync_job.call_args.args[0]['job_id'],
+        )
         module.start_background_task.assert_not_called()
         module._delete_staged_blobs_async.assert_not_awaited()
         assert not fallback_calls
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.try_acquire_backfill_slot = MagicMock(side_effect=AssertionError('old admission slot used'))
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='unbound_capture_time',
+            maximum_age_seconds=60,
+            oldest_capture_at=time.time() - 60,
+            automatic_recovery_allowed=True,
+        )
+    )
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='recent-offline.opus', file=BytesIO(b'\x00' * 10))], uid='test-uid'
+        )
+        assert response.status_code == 202
+        assert json.loads(response.body)['status'] == 'queued'
+        module.sync_backfill_sequencer.register_job.assert_called_once()
+        module.uid_sequencer.kick.assert_called_once_with('test-uid')
+        module.enqueue_sync_job.assert_not_called()
+        module.try_acquire_backfill_slot.assert_not_called()
+        assert module.create_sync_job.call_args.kwargs['dispatch_mode'] == 'sequenced'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_backfill_registration_error_never_acks_202_or_releases_ambiguous_claim():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.register_job = MagicMock(side_effect=ConnectionError('write acknowledgement lost'))
+    module.sync_backfill_sequencer.is_registered = MagicMock(side_effect=ConnectionError('read unavailable'))
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='unbound_capture_time',
+            maximum_age_seconds=60,
+            oldest_capture_at=time.time() - 60,
+            automatic_recovery_allowed=True,
+        )
+    )
+    try:
+        with pytest.raises(module.HTTPException) as error:
+            await module.sync_local_files_v2(
+                files=[UploadFile(filename='recent-offline.opus', file=BytesIO(b'\x00' * 10))], uid='test-uid'
+            )
+        assert error.value.status_code == 500
+        module.release_sync_content_claim.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_known_unregistered_backfill_cleans_up_and_returns_retryable_503():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.register_job = MagicMock(side_effect=ConnectionError('write rejected'))
+    module.sync_backfill_sequencer.is_registered = MagicMock(return_value=False)
+    module._delete_staged_blobs_async = AsyncMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='unbound_capture_time',
+            maximum_age_seconds=60,
+            oldest_capture_at=time.time() - 60,
+            automatic_recovery_allowed=True,
+        )
+    )
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='recent-offline.opus', file=BytesIO(b'\x00' * 10))], uid='test-uid'
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'sync_dispatch_unavailable'
+        module._delete_staged_blobs_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_awaited_once()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    payload = {
+        'uid': 'test-uid',
+        'job_id': 'job-1',
+        'lane': 'backfill',
+        'enqueued_at': 1000.0,
+        'recording_age_seconds': 60,
+    }
+    request = MagicMock()
+    request.json = AsyncMock(return_value=payload)
+    module.get_sync_job = MagicMock(return_value={'status': 'queued'})
+    module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
+    module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'done'}))
+    try:
+        migrated = await module.run_sync_job(request, task_retry_count=0)
+        assert migrated.status_code == 200
+        module.sync_backfill_sequencer.register_job.assert_called_once()
+        assert module.sync_backfill_sequencer.register_job.call_args.args[-1] == 940.0
+        module._run_sync_job_body.assert_not_awaited()
+        module.uid_sequencer.enabled.return_value = False
+        direct = await module.run_sync_job(request, task_retry_count=0)
+        assert direct.status_code == 200
+        module._run_sync_job_body.assert_awaited_once()
+        module.backfill_cutover.refresh_direct_run.assert_called_once_with('test-uid', 'job-1')
+        module.sync_backfill_sequencer.get_owner.return_value = {'active_job_id': 'older-sequenced-job'}
+        migrated_during_rollback = await module.run_sync_job(request, task_retry_count=0)
+        assert migrated_during_rollback.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 2
+        module._run_sync_job_body.assert_awaited_once()
+        module.sync_backfill_sequencer.get_owner.return_value = {}
+        module.sync_backfill_sequencer.has_pending.return_value = True
+        migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
+        assert migrated_from_pending.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 3
+        module._run_sync_job_body.assert_awaited_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill', 'sequencer_epoch': 3},
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'},
+    ],
+    ids=['sequenced', 'legacy-backfill'],
+)
+async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
+    module, saved_modules, mock_sync_jobs, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value=payload)
+    module.uid_sequencer.production_stage = MagicMock(return_value=False)
+    module.get_sync_ledger_fence_mode = MagicMock()
+    module._run_sync_job_body = AsyncMock()
+    module.get_sync_job = MagicMock()
+    module.try_acquire_job_run_lock = MagicMock()
+    module.sync_backfill_sequencer.reset_mock()
+    module.backfill_cutover.reset_mock()
+    mock_sync_jobs.reset_mock()
+    redis_client = sys.modules['database.redis_db'].r
+    redis_client.reset_mock()
+    try:
+        assert any(dep.dependency is module.sync_stage.require_http_stage for dep in module.router.dependencies)
+        route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
+        response = await route.endpoint(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert response.body == b'{"status":"foreign_stage"}'
+        module.get_sync_ledger_fence_mode.assert_not_called()
+        module.get_sync_job.assert_not_called()
+        module.try_acquire_job_run_lock.assert_not_called()
+        module._run_sync_job_body.assert_not_awaited()
+        assert module.sync_backfill_sequencer.mock_calls == []
+        assert module.backfill_cutover.mock_calls == []
+        assert mock_sync_jobs.mock_calls == []
+        assert redis_client.mock_calls == []  # No sync_backfill:uid_sequencer:* writes.
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
+    module.get_sync_job = MagicMock(return_value={'status': 'processing'})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={'active_job_id': 'sequenced-job'})
+    module.uid_sequencer.enabled.return_value = True
+    module.backfill_cutover.uid_hash = MagicMock(return_value='private-hash')
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'done'}))
+    try:
+        with caplog.at_level(logging.ERROR):
+            response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert (
+            'action=cutover_overlap outcome=direct_and_sequenced job_id=job-1 sequenced_job_id=sequenced-job uid_hash=private-hash'
+            in caplog.text
+        )
+        assert 'test-uid' not in caplog.text
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_duplicate():
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+    module.sync_backfill_sequencer.begin_job = MagicMock(side_effect=[True, True, False])
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'failed', 'attempt': 2})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    module._run_sync_job_body = AsyncMock(
+        side_effect=[
+            module.JSONResponse(status_code=500, content={'status': 'retry'}),
+            module.JSONResponse(status_code=200, content={'status': 'failed_final'}),
+        ]
+    )
+    try:
+        retry = await module.run_sync_job(request, task_retry_count=0)
+        assert retry.status_code == 500
+        module.sync_backfill_sequencer.finish_job.assert_not_called()
+        terminal = await module.run_sync_job(request, task_retry_count=0)
+        assert terminal.status_code == 200
+        assert module._run_sync_job_body.call_args.args[1] == 2
+        module.sync_backfill_sequencer.finish_job.assert_called_once_with('test-uid', 'job-1', 3, 'failed')
+        module.uid_sequencer.kick.assert_called_once_with('test-uid')
+        duplicate = await module.run_sync_job(request, task_retry_count=0)
+        assert duplicate.status_code == 200
+        assert module._run_sync_job_body.await_count == 2
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

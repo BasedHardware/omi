@@ -71,7 +71,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     func append(opusPackets: [Data], marker: String) {
         if opusPackets.isEmpty { return }
         let admission = CaptureAdmissionPolicy.load(from: defaults)
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = CheckedIntegerConversion.epochMs()
 
         // Muted: drop packets but keep the open file's gap timer fresh so unmute
         // resumes the same recording instead of opening a new file.

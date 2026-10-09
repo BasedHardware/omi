@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ import json
 import os
 import time
 import logging
+import math
 from typing import Any, Protocol, cast
 
 import google.auth
@@ -21,6 +23,7 @@ from llm_gateway.gateway.accounting import (
     cache_requested_for_anthropic_request,
     cache_write_ttl_for_anthropic_request,
     cache_requested_for_openai_request,
+    complete_openai_billable_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -50,7 +53,11 @@ from llm_gateway.gateway.vertex_wire import (  # noqa: F401 — re-exported wire
 )
 from llm_gateway.gateway.sse import SSEEventDecoder
 from utils.executors import critical_executor, run_blocking
+from utils.llm.vertex_reservation_state import ReservationState
+from utils.llm.vertex_reservation_probe import probe_reservation
+from config.vertex_reservations import State
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.vertex_reservation_response import ReservationResponseEvidence, completed_provisioned_traffic
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -64,6 +71,7 @@ PROVIDER_ERROR_DETAIL_BYTES = 1000
 EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
 GOOGLE_CLOUD_PROJECT_ENV_VAR = 'GOOGLE_CLOUD_PROJECT'
 GOOGLE_CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+VERTEX_EMBEDDING_CONCURRENCY = 8
 
 
 class ChatCompletionProvider(Protocol):
@@ -79,6 +87,17 @@ class ChatCompletionProvider(Protocol):
 
 class EmbeddingProvider(Protocol):
     async def create_embedding(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> 'ProviderResponse': ...
+
+
+class SystemOneProvider(Protocol):
+    async def create_systemone(
         self,
         request: Mapping[str, Any],
         *,
@@ -137,7 +156,12 @@ class OpenAICompatibleChatCompletionProvider:
                     # body is never surfaced unless LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
                     # is explicitly enabled.
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 body = await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 parsed = _parse_limited_json_response(body)
         except httpx.TimeoutException as exc:
@@ -179,7 +203,12 @@ class OpenAICompatibleChatCompletionProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 async for chunk in response.aiter_bytes():
                     if chunk:
                         yield chunk
@@ -216,7 +245,12 @@ class OpenAICompatibleChatCompletionProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
@@ -240,6 +274,79 @@ class OpenAICompatibleChatCompletionProvider:
                     uncached_input_tokens=prompt_tokens,
                     total_tokens=total_tokens,
                 )
+            ),
+        )
+
+    async def create_systemone(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> ProviderResponse:
+        """POST a decision-model request to ``<base_url>/systemone`` (OpenRouter).
+
+        The answer body is typed (``answers.<name>.noul`` / ``choice`` /
+        ``score``); only its shape is checked here. Callers interpret it.
+        """
+        api_key = _resolve_provider_api_key(
+            credentials=credentials,
+            provider_ref=provider_ref,
+            api_key_env=self._api_key_env,
+        )
+        payload = {
+            'model': provider_ref.model,
+            'state': request['state'],
+            'questions': request['questions'],
+        }
+        try:
+            async with self._http_client.stream(
+                'POST',
+                f'{self._base_url}/systemone',
+                json=payload,
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json',
+                    **self._default_headers,
+                },
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                parsed = _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+        answers = parsed.get('answers')
+        if not isinstance(answers, Mapping) or not answers:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        raw_usage = parsed.get('usage')
+        usage_raw = raw_usage if isinstance(raw_usage, Mapping) else {}
+        raw_input = usage_raw.get('input_tokens', usage_raw.get('prompt_tokens'))
+        input_tokens = _nonnegative_int_or_zero(raw_input)
+        output_tokens = _nonnegative_int_or_zero(usage_raw.get('output_tokens', usage_raw.get('completion_tokens')))
+        return ProviderResponse(
+            response=parsed,
+            accounting=ProviderResponseMetadata(
+                billable_usage_complete=complete_openai_billable_usage(usage_raw),
+                usage=(
+                    ProviderUsage(
+                        prompt_tokens=input_tokens,
+                        uncached_input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        total_tokens=input_tokens + output_tokens,
+                    )
+                    if isinstance(raw_input, int) and not isinstance(raw_input, bool) and raw_input >= 0
+                    else None
+                ),
             ),
         )
 
@@ -327,17 +434,16 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._overflow_enabled_env = overflow_enabled_env
         self._probe_ttl_seconds = probe_ttl_seconds
         self._now = now
-        # PT probe TTL is monotonic; ADC expiry is wall-clock. Do not share
+        # Reachability TTL is monotonic; ADC expiry is wall-clock. Do not share
         # the PT clock with the token supplier or tokens never refresh
         # (`monotonic() < expiry.timestamp()` stays true forever).
         token_supplier = VertexAccessTokenSupplier()
         self._access_token_supplier = access_token_supplier or token_supplier.get_access_token
-        # PT promotion latch and learned reachability, moved from the desktop
-        # proxy: positive observations latch for the process, negative ones
-        # expire on the probe TTL, and nothing is probed at startup — traffic
-        # teaches both tables (see backend/docs/vertex-pt-flash.md).
-        self._pt_target_ready = False
-        self._pt_target_probed_at: float | None = None
+        # Capacity evidence is shared; each concurrent request gets its own snapshot.
+        self._reservation_state_context: ContextVar[dict[str, State]] = ContextVar(
+            'gateway_vertex_reservations', default={}
+        )
+        self._reservations = ReservationState()
         self._model_unavailable_at: dict[str, float] = {}
 
     async def create_chat_completion(
@@ -349,12 +455,14 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ) -> ProviderResponse:
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         parsed = await self._generate_content(
             payload,
             anchor=provider_ref.model,
             credentials=credentials,
             timeout_ms=timeout_ms,
+            origin_model=origin_model,
         )
         accounting = vertex_usage_from_response(parsed)
         normalized = _vertex_to_openai_response(
@@ -374,56 +482,101 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         timeout_ms: int,
     ):
         self._reject_byok(credentials)
+        origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
+        # State I/O has its own bounded allowance; preserve the inference budget.
+        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(provider_ref.model)
-        decoder = SSEEventDecoder()
+        attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
         while attempts:
             model, capacity = attempts.pop(0)
             remaining_ms = int((deadline - self._now()) * 1000)
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
             try:
-                endpoint = self._endpoint(model, method='streamGenerateContent')
-                headers = _vertex_headers(await self._vertex_access_token(), capacity)
-                async with self._http_client.stream(
-                    'POST',
-                    endpoint,
-                    params={'alt': 'sse'},
-                    json=payload,
-                    headers=headers,
-                    timeout=remaining_ms / 1000.0,
-                ) as response:
-                    if response.status_code >= 400:
-                        error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                        self._observe_attempt(model, capacity, response.status_code, error_preview)
-                        recovery = self._recovery_attempts(model, response.status_code, error_preview)
-                        if recovery:
-                            attempts = recovery
-                            continue
-                        _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
-                    self._record_model_available(model)
-                    async for chunk in response.aiter_bytes():
-                        for event in decoder.feed(chunk):
-                            event_data = event.data.strip()
-                            if not event_data or event_data == '[DONE]':
-                                continue
-                            event_parsed = _parse_limited_json_response(event_data.encode('utf-8'))
-                            translated, _ = _vertex_to_openai_stream_chunk(
-                                event_parsed,
-                                requested_model=provider_ref.model,
-                                usage=vertex_usage_from_response(event_parsed).usage,
-                            )
-                            if translated is not None:
-                                yield translated
-                    yield _openai_sse_done()
-                    return
-            except ProviderFailure:
+                async for chunk in self._stream_content_once(
+                    payload,
+                    model=model,
+                    capacity=capacity,
+                    requested_model=provider_ref.model,
+                    timeout_ms=remaining_ms,
+                ):
+                    yield chunk
+                yield _openai_sse_done()
+                return
+            except _VertexHttpError as error:
+                self._observe_attempt(model, capacity, error.status_code, error.preview)
+                recovery = self._recovery_attempts(
+                    model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
+                )
+                if recovery:
+                    attempts = recovery
+                    continue
+                _raise_for_status(
+                    error.status_code,
+                    error.preview,
+                    credential_mode=credentials.mode,
+                    retry_after_header=error.retry_after_header,
+                )
+            except Exception as exc:
+                if isinstance(exc, httpx.TimeoutException):
+                    raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+                if isinstance(exc, httpx.HTTPError):
+                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
                 raise
-            except httpx.TimeoutException as exc:
-                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
-            except httpx.HTTPError as exc:
-                raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def _stream_content_once(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        model: str,
+        capacity: str,
+        requested_model: str,
+        timeout_ms: int,
+    ):
+        observation_deadline = self._now() + max(timeout_ms, 0) / 1000
+        self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
+        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
+        headers = _vertex_headers(await self._vertex_access_token(), capacity)
+        decoder = SSEEventDecoder()
+        evidence = ReservationResponseEvidence()
+        async with self._http_client.stream(
+            'POST',
+            endpoint,
+            params={'alt': 'sse'},
+            json=ptr.model_payload(payload, model),
+            headers=headers,
+            timeout=timeout_ms / 1000.0,
+        ) as response:
+            if response.status_code >= 400:
+                preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                raise _VertexHttpError(response.status_code, preview, response.headers.get('retry-after'))
+            self._record_model_available(model)
+            async for chunk in response.aiter_bytes():
+                evidence.feed(chunk)
+                for event in decoder.feed(chunk):
+                    data = event.data.strip()
+                    if not data or data == '[DONE]':
+                        continue
+                    parsed = _parse_limited_json_response(data.encode('utf-8'))
+                    translated, _ = _vertex_to_openai_stream_chunk(
+                        parsed,
+                        requested_model=requested_model,
+                        usage=vertex_usage_from_response(parsed).usage,
+                    )
+                    if translated is not None:
+                        yield translated
+        traffic_type = evidence.traffic_type()
+        self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
+        await self._reservations.record(
+            model,
+            capacity,
+            response.status_code,
+            traffic_type,
+            timeout_seconds=max(0, (observation_deadline - self._now()) / 4),
+        )
 
     async def create_embedding(
         self,
@@ -436,37 +589,125 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._reject_byok(credentials)
         endpoint = self._endpoint(provider_ref.model, method='predict')
         payload = _vertex_embedding_predict_request(request)
-        parsed: Mapping[str, Any] | None = None
+        instances = payload['instances']
+        if len(instances) == 1:
+            # A single predict keeps the existing per-request wire timeout.
+            # Only batches need to share a shrinking budget across requests.
+            headers = _vertex_headers(await self._vertex_access_token(), ptr.REQUEST_TYPE_SHARED)
+            vector = await self._create_embedding_instance(
+                endpoint,
+                instances[0],
+                headers=headers,
+                credentials=credentials,
+                model=provider_ref.model,
+                timeout_ms=timeout_ms,
+            )
+            return ProviderResponse(
+                response={
+                    'object': 'list',
+                    'data': [{'object': 'embedding', 'embedding': vector, 'index': 0}],
+                    'model': provider_ref.model,
+                },
+                accounting=ProviderResponseMetadata(usage=None),
+            )
+        deadline = self._now() + max(timeout_ms, 0) / 1000.0
+        vectors: list[list[float] | None] = [None] * len(instances)
+        pending = iter(enumerate(instances))
+
+        async def worker(headers: dict[str, str]) -> None:
+            for index, instance in pending:
+                remaining_ms = int((deadline - self._now()) * 1000)
+                if remaining_ms <= 0:
+                    raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+                vectors[index] = await self._create_embedding_instance(
+                    endpoint,
+                    instance,
+                    headers=headers,
+                    credentials=credentials,
+                    model=provider_ref.model,
+                    timeout_ms=remaining_ms,
+                )
+
+        # gemini-embedding-001 accepts ONE text per :predict, unlike AI Studio
+        # batchEmbedContents. Fixed workers bound fan-out (including queued
+        # items) without allocating a task for every input. One deadline also
+        # covers ADC, pool wait and response reads; httpx timeouts are per IO.
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/text-embeddings-api
         try:
-            headers = _vertex_headers(await self._vertex_access_token(), self._capacity_for(provider_ref.model))
+            async with asyncio.timeout(max(timeout_ms, 0) / 1000.0):
+                headers = _vertex_headers(await self._vertex_access_token(), ptr.REQUEST_TYPE_SHARED)
+                try:
+                    async with asyncio.TaskGroup() as group:
+                        for _ in range(min(VERTEX_EMBEDDING_CONCURRENCY, len(instances))):
+                            group.create_task(worker(headers))
+                except* ProviderFailure as failures:
+                    # TaskGroup cancels and drains siblings before exposing the
+                    # first typed error; never return a partially embedded batch.
+                    raise failures.exceptions[0] from None
+        except TimeoutError as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+
+        data = [{'object': 'embedding', 'embedding': vector, 'index': i} for i, vector in enumerate(vectors)]
+        # Vertex reports billable characters rather than tokens. Keep usage
+        # NOT_REPORTED rather than fabricating aggregate token counts.
+        return ProviderResponse(
+            response={'object': 'list', 'data': data, 'model': provider_ref.model},
+            accounting=ProviderResponseMetadata(usage=None),
+        )
+
+    async def _create_embedding_instance(
+        self,
+        endpoint: str,
+        instance: Mapping[str, Any],
+        *,
+        headers: dict[str, str],
+        credentials: CredentialContext,
+        model: str,
+        timeout_ms: int,
+    ) -> list[float]:
+        upstream_status: int | None = None
+        try:
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                json=payload,
+                json={'instances': [instance]},
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
+                upstream_status = response.status_code
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    _raise_for_status(
+                        response.status_code,
+                        error_preview,
+                        credential_mode=credentials.mode,
+                        retry_after_header=response.headers.get('retry-after'),
+                    )
                 parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
-        except ProviderFailure:
+                normalized = _vertex_predict_to_openai_embeddings(parsed, model=model)
+                _validate_embeddings_response_shape(normalized)
+                data = normalized['data']
+                if (
+                    len(data) != 1
+                    or not data[0]['embedding']
+                    or not all(math.isfinite(v) for v in data[0]['embedding'])
+                ):
+                    raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+                return data[0]['embedding']
+        except ProviderFailure as exc:
+            exc.upstream_http_status = upstream_status
             raise
         except httpx.TimeoutException as exc:
-            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT, upstream_http_status=upstream_status) from exc
         except httpx.HTTPError as exc:
-            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
-
-        normalized = _vertex_predict_to_openai_embeddings(parsed or {}, model=provider_ref.model)
-        _validate_embeddings_response_shape(normalized)
-        # Vertex :predict reports billable characters, not tokens; the ledger
-        # row records the request while usage stays NOT_REPORTED rather than
-        # fabricating token counts.
-        return ProviderResponse(response=normalized, accounting=ProviderResponseMetadata(usage=None))
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID, upstream_http_status=upstream_status) from exc
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID, upstream_http_status=upstream_status) from exc
 
     async def aclose(self) -> None:
+        await self._reservations.aclose()
         if self._owns_http_client:
             await self._http_client.aclose()
 
@@ -477,10 +718,13 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         anchor: str,
         credentials: CredentialContext,
         timeout_ms: int,
+        origin_model: str = '',
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
+        # State I/O has its own bounded allowance; preserve the inference budget.
+        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        attempts = self._attempt_plan(anchor)
+        attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
         parsed: Mapping[str, Any] | None = None
         while attempts:
@@ -499,16 +743,28 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             except _VertexHttpError as error:
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
-                recovery = self._recovery_attempts(model, error.status_code, error.preview)
+                recovery = self._recovery_attempts(
+                    model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
+                )
                 if recovery:
                     attempts = recovery
                     continue
-                _raise_for_status(error.status_code, error.preview, credential_mode=credentials.mode)
+                _raise_for_status(
+                    error.status_code,
+                    error.preview,
+                    credential_mode=credentials.mode,
+                    retry_after_header=error.retry_after_header,
+                )
             self._record_model_available(model)
             assert parsed is not None
             return parsed
         assert last_error is not None
-        _raise_for_status(last_error.status_code, last_error.preview, credential_mode=credentials.mode)
+        _raise_for_status(
+            last_error.status_code,
+            last_error.preview,
+            credential_mode=credentials.mode,
+            retry_after_header=last_error.retry_after_header,
+        )
         raise AssertionError('unreachable: _raise_for_status always raises')
 
     async def _generate_content_once(
@@ -520,22 +776,40 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         credentials: CredentialContext,
         timeout_ms: int,
     ) -> Mapping[str, Any]:
-        endpoint = self._endpoint(model, method='generateContent')
+        observation_deadline = self._now() + max(timeout_ms, 0) / 1000
+        self._reservations.note_request(model, capacity, self._reservation_states.get(model, State.UNKNOWN))
+        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                json=payload,
+                json=ptr.model_payload(payload, model),
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    raise _VertexHttpError(response.status_code, error_preview)
-                return _parse_limited_json_response(
+                    raise _VertexHttpError(
+                        response.status_code,
+                        error_preview,
+                        response.headers.get('retry-after'),
+                    )
+                parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
+            traffic_type = completed_provisioned_traffic(parsed)
+            self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
+            await self._reservations.record(
+                model,
+                capacity,
+                response.status_code,
+                traffic_type,
+                timeout_seconds=max(0, (observation_deadline - self._now()) / 4),
+            )
+            return parsed
         except _VertexHttpError:
             raise
         except ProviderFailure:
@@ -544,6 +818,12 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
         except httpx.HTTPError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def _refresh_reservations(self, budget_seconds: float):
+        async def probe(model: str, location: str) -> str:
+            return await probe_reservation(self._http_client, self._vertex_access_token, model, location)
+
+        self._reservation_states = await self._reservations.refresh(probe, timeout_seconds=min(1.6, budget_seconds))
 
     async def _vertex_access_token(self) -> str:
         try:
@@ -607,6 +887,7 @@ class AnthropicMessagesProvider:
                     response.status_code,
                     response.content[:PROVIDER_ERROR_DETAIL_BYTES],
                     credential_mode=credentials.mode,
+                    retry_after_header=response.headers.get('retry-after'),
                 )
             parsed = response.json()
         except httpx.TimeoutException as exc:
@@ -801,30 +1082,52 @@ def _default_fake_response(provider_ref: ProviderRef) -> dict[str, Any]:
     return fake_success_response(provider_ref)
 
 
+def parse_retry_after_seconds(value: str | None) -> float | None:
+    """Return a Retry-After delay when it is a non-negative integer number of seconds.
+
+    HTTP-date values and anything else are ignored so the executor falls back
+    to jittered exponential backoff.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text.isdigit():
+        return None
+    return float(int(text))
+
+
 def _raise_for_status(
     status_code: int,
     body: bytes = b'',
     *,
     credential_mode: CredentialMode = CredentialMode.OMI_PAID,
+    retry_after_header: str | None = None,
 ) -> None:
     byok = credential_mode == CredentialMode.BYOK
     if status_code in {401, 403}:
         raise ProviderFailure(
             FailureClass.BYOK_AUTH if byok else FailureClass.INVALID_CONFIG,
             safe_message=_provider_error_message(status_code, body),
+            upstream_http_status=status_code,
         )
     if status_code == 408:
         raise ProviderFailure(
-            FailureClass.TIMEOUT_BEFORE_OUTPUT, safe_message=_provider_error_message(status_code, body)
+            FailureClass.TIMEOUT_BEFORE_OUTPUT,
+            safe_message=_provider_error_message(status_code, body),
+            upstream_http_status=status_code,
         )
     if status_code == 429:
         raise ProviderFailure(
             FailureClass.BYOK_RATE_LIMIT if byok else FailureClass.PROVIDER_429_OMI_PAID,
             safe_message=_provider_error_message(status_code, body),
+            retry_after_seconds=parse_retry_after_seconds(retry_after_header),
+            upstream_http_status=status_code,
         )
     if status_code >= 500:
         raise ProviderFailure(
-            FailureClass.PROVIDER_5XX_OMI_PAID, safe_message=_provider_error_message(status_code, body)
+            FailureClass.PROVIDER_5XX_OMI_PAID,
+            safe_message=_provider_error_message(status_code, body),
+            upstream_http_status=status_code,
         )
     if status_code >= 400:
         provider_rejection = _provider_rejection(body)
@@ -837,6 +1140,7 @@ def _raise_for_status(
             failure_class,
             safe_message=_provider_error_message(status_code, body),
             provider_rejection=provider_rejection,
+            upstream_http_status=status_code,
         )
 
 

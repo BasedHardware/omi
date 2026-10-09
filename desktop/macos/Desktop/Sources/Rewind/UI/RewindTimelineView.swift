@@ -586,8 +586,7 @@ struct ScreenshotPreviewView: View {
         Spacer()
 
         Button {
-          NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(text, forType: .string)
+          OmiToastCenter.shared.copy(text, confirming: "Text copied")
         } label: {
           HStack(spacing: OmiSpacing.xxs) {
             Image(systemName: "doc.on.doc")

@@ -505,6 +505,13 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Loads what the app catalog (Settings → Integrations) draws. Keyed on [groupedApps], not [apps]:
+  /// start-up fills [apps] from the cache, but only a catalog fetch fills the groups.
+  Future<void> ensureCatalogLoaded() async {
+    if (groupedApps.isEmpty) await getApps();
+    if (popularApps.isEmpty) await getPopularApps();
+  }
+
   Future<void> getApps() {
     final inFlight = _appsLoad;
     if (inFlight != null) return inFlight;
@@ -737,7 +744,7 @@ class AppProvider extends BaseProvider {
 
   Future<void> refreshAppsAfterChange() async {
     try {
-      Logger.debug('Refreshing apps after installation/change...');
+      Logger.debug('Refreshing apps after installation/change…');
       // Fetch grouped apps and user's enabled app IDs in parallel
       final results = await Future.wait([
         retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
@@ -917,7 +924,11 @@ class AppProvider extends BaseProvider {
 
   /// Enable/disable [appId] server-side, keeping prefs, local app state, and
   /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  /// Apps whose disable waits on an Undo toast; enabling one again cancels the pending disable.
+  final Set<String> pendingDisables = {};
+
   Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
+    if (isEnabled) pendingDisables.remove(appId);
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;

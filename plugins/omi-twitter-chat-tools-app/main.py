@@ -11,7 +11,7 @@ import hashlib
 import base64
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -30,6 +30,9 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from twitter_link_auth import require_signed_link, sign_uid
+
+REQUEST_TIMEOUT = (5, 30)
 
 load_dotenv()
 
@@ -127,7 +130,8 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token
             },
-            auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET) if TWITTER_CLIENT_SECRET else None
+            auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET) if TWITTER_CLIENT_SECRET else None,
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -154,11 +158,11 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
+            response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
         elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
             return None
 
@@ -1051,6 +1055,7 @@ async def root(uid: str = Query(None)):
 
     # User is connected
     username = tokens.get("username", "Unknown")
+    disconnect_url = f"/disconnect?uid={quote(uid, safe='')}&sig={sign_uid(uid)}"
 
     return HTMLResponse(content=f"""
     <html>
@@ -1074,7 +1079,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Who mentioned me on Twitter?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="{disconnect_url}" class="btn btn-secondary btn-block">
                     Disconnect Twitter
                 </a>
 
@@ -1182,14 +1187,16 @@ async def twitter_callback(
             response = requests.post(
                 TWITTER_TOKEN_URL,
                 data=token_data,
-                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET)
+                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
+                timeout=REQUEST_TIMEOUT,
             )
         else:
             # Public client
             token_data["client_id"] = TWITTER_CLIENT_ID
             response = requests.post(
                 TWITTER_TOKEN_URL,
-                data=token_data
+                data=token_data,
+                timeout=REQUEST_TIMEOUT,
             )
 
         if response.status_code != 200:
@@ -1211,7 +1218,8 @@ async def twitter_callback(
         user_response = requests.get(
             f"{TWITTER_API_BASE}/users/me",
             headers=headers,
-            params={"user.fields": "username"}
+            params={"user.fields": "username"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         username = ""
@@ -1269,10 +1277,11 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
-    """Disconnect Twitter."""
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
+    """Disconnect Twitter. The uid must carry the settings-page HMAC."""
+    require_signed_link(uid, sig)
     delete_twitter_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.get("/health")

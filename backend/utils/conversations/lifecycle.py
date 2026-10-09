@@ -8,15 +8,18 @@ lifecycle fields directly.
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase
+
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
@@ -32,6 +35,7 @@ from utils.conversations.finalization_decision import (
     LifecyclePhase,
     decide_finalization,
 )
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -129,6 +133,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return created
 
 
+@sync_phase('firestore')
 def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
     """Admit a retained deterministic sync row and atomically append later chunks.
 
@@ -145,7 +150,10 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
-def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+@sync_phase('firestore')
+def persist_processed_conversation(
+    uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
+) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
     ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
@@ -162,7 +170,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         observe_completed_conversation_shape(uid, conversation_data)
 
     return conversations_db.persist_processing_result_with_lifecycle(
-        uid, conversation_data, on_first_completion=_observe_first_completion
+        uid, conversation_data, on_first_completion=_observe_first_completion, smart_merge_refresh=smart_merge_refresh
     )
 
 
@@ -262,6 +270,19 @@ def complete(uid: str, conversation_id: str) -> bool:
         ConversationStatus.merging,
         ConversationStatus.completed,
     )
+
+
+def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, quiet_for: timedelta) -> str:
+    """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
+
+    The only lifecycle edge from ``in_progress`` straight to ``completed``, and
+    only for this case: the finalization binding grows the document, so the
+    normal ``in_progress -> processing`` admission is rejected on every attempt
+    and the row would stay invisible while each reconnect retried it. Content is
+    kept as-is; the row becomes a visible conversation without a generated
+    summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
+    """
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
@@ -433,6 +454,22 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
+    """A relevance verdict reached after the fact; never overrides a restore."""
+    return conversations_db.discard_by_relevance(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
+
+
 def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
     return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
@@ -444,6 +481,7 @@ def open_recording_session(
     proposed_conversation_id: str,
     *,
     firestore_client: Any = None,
+    include_conversation_snapshot: bool = False,
 ) -> dict[str, Any]:
     """Open or resume a durable session through the single lifecycle owner.
 
@@ -456,6 +494,7 @@ def open_recording_session(
             recording_session_id,
             proposed_conversation_id,
             firestore_client=firestore_client,
+            include_conversation_snapshot=include_conversation_snapshot,
         )
     except Exception:
         if recording_session_mode() == 'enforce':
@@ -581,6 +620,33 @@ def record_recording_session_event(
     return None
 
 
+def renew_live_recording_session_lease(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Keep an actively audio-producing recording fenced from stale recovery."""
+    try:
+        return recording_sessions_db.renew_recording_session_lease(
+            uid,
+            recording_session_id,
+            conversation_id,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        if recording_session_mode() == 'enforce':
+            raise
+        logger.exception(
+            'recording session lease renewal failed uid=%s session=%s conversation=%s',
+            uid,
+            recording_session_id,
+            conversation_id,
+        )
+        return False
+
+
 def tombstone_recording_session(
     uid: str,
     recording_session_id: str,
@@ -695,13 +761,22 @@ def open_live_recording_session(
         recording_session_id,
         proposed_conversation_id,
         firestore_client=firestore_client,
+        include_conversation_snapshot=True,
     )
+    transactional_conversation_known = bool(binding.get('conversation_snapshot_known'))
+    transactional_conversation = binding.get('conversation_snapshot')
     if existing is None:
-        return dict(binding) | {'requires_rollover': False}
+        result = dict(binding) | {'requires_rollover': False}
+        if transactional_conversation_known:
+            result['conversation_snapshot'] = transactional_conversation
+            result['conversation_snapshot_known'] = True
+        return result
 
-    conversation = conversations_db.get_conversation(
-        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
-    )
+    conversation = transactional_conversation
+    if not transactional_conversation_known:
+        conversation = conversations_db.get_conversation(
+            uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+        )
     if conversation is not None:
         return dict(binding) | {
             'requires_rollover': False,
@@ -788,15 +863,18 @@ def request_finalization(
     conversation_id: str,
     *,
     has_byok_keys: bool,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+    if require_cloud_tasks and not (
+        is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
+    ):
         # A REST request has no pusher session to execute an inline handoff.
         # Reject before mutating the conversation instead of persisting work
         # that this deployment cannot recover or dispatch.
@@ -808,8 +886,9 @@ def request_finalization(
             conversation_id,
             requires_byok=has_byok_keys,
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
             firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:
@@ -823,7 +902,6 @@ def request_finalization(
         record_client_journey_accepted(
             'conversation_finalization',
             bounded_client_kind(client_kind),
-            app_build if isinstance(app_build, str) else 'unknown',
         )
         record_product_event(
             'conversation_finalized',

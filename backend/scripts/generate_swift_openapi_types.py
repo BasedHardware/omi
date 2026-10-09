@@ -35,6 +35,13 @@ def source_label_for_path(path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
 # as the desktop Codable migration progresses. Each entry pulls in transitive
 # $ref dependencies automatically.
 TARGET_SCHEMAS = (
+    'ProactivityTarget',
+    'ProactivityFeedItem',
+    'ProactivityFeedResponse',
+    'ProactivityOutcomeRequest',
+    'ProactivityOutcomeResponse',
+    'ScreenTaskGateRequest',
+    'ScreenTaskGateResponse',
     'Conversation',
     'Structured',
     'ActionItem',
@@ -72,6 +79,8 @@ TARGET_SCHEMAS = (
     'TaskCancelCandidate',
     'TaskSupersedeCandidate',
     'CandidateResolutionRequest',
+    'CandidateAcceptanceRequest',
+    'SummaryTaskReference',
     'TaskWorkflowControl',
     'TaskOriginWorkIntent',
     'GoalOriginWorkIntent',
@@ -315,7 +324,11 @@ def _render_struct(name: str, schema: dict[str, Any]) -> str:
         type_expr, optional = _swift_type(prop_schema, required=wire_name in required)
         fields.append((swift_name, wire_name, type_expr, optional))
 
-    lines = [f'public struct {name}: Codable {{']
+    # These immutable scalar request DTOs cross the summary UI / HTTP actor
+    # boundary. Emit checked Sendable conformance at the declaration, not an
+    # unchecked extension or a hand edit to generated code.
+    conformances = 'Codable, Sendable' if name in {'SummaryTaskReference', 'CandidateAcceptanceRequest'} else 'Codable'
+    lines = [f'public struct {name}: {conformances} {{']
     for swift_name, wire_name, type_expr, optional in fields:
         decl = f'  public let {swift_name}: {type_expr}' + ('?' if optional else '')
         lines.append(decl)

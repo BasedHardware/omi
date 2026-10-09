@@ -100,6 +100,7 @@ extension DesktopAutomationActionRegistry {
   func registerOpenAskOmiActions() {
     register(
       name: "open_ask_omi",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Open the chat-first main-window composer (typed Ask Omi) and return open/focus timing. "
         + "Does not call revealForUser, so quiet automation presentation stays quiet: the action "
@@ -126,6 +127,7 @@ extension DesktopAutomationActionRegistry {
   func registerCloseAskOmiActions() {
     register(
       name: "close_ask_omi",
+      effects: [.localState],
       summary:
         "Close the floating Ask Omi input panel if it is open; the chat-first main-window "
         + "composer is the resting Chat surface, so when it is presented the result reports "

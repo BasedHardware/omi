@@ -147,9 +147,18 @@
             ]
           },
           {
+            "group": "Goals and Answers",
+            "pages": [
+              "doc/developer/api/goals",
+              "doc/developer/api/ask",
+              "doc/developer/api/daily-summaries"
+            ]
+          },
+          {
             "group": "Authentication",
             "pages": [
               "doc/developer/api/keys",
+              "api-reference/endpoint/keys/current",
               "api-reference/endpoint/keys/list",
               "api-reference/endpoint/keys/create",
               "api-reference/endpoint/keys/revoke"
@@ -196,6 +205,7 @@
               "doc/hardware/OmiConsumer",
               "doc/hardware/DevKit2",
               "doc/hardware/DevKit1",
+              "doc/hardware/SpeakerMod",
               "doc/hardware/PaintingOMI"
             ]
           },
@@ -277,7 +287,7 @@
   "footer": {
     "socials": {
       "github": "https://github.com/BasedHardware/omi",
-      "discord": "https://discord.omi.me",
+      "discord": "https://discord.gg/TdRNp5U7cy",
       "x": "https://x.com/omedotme",
       "linkedin": "https://www.linkedin.com/company/omi-ai/",
       "instagram": "https://www.instagram.com/based_hardware/"

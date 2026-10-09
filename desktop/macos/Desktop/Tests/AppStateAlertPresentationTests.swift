@@ -36,7 +36,8 @@ final class AppStateAlertPresentationTests: XCTestCase {
       revealMainWindow: {
         revealCount += 1
         windowSource.window = window
-      })
+      },
+      isAppActive: { true })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
 
@@ -53,7 +54,8 @@ final class AppStateAlertPresentationTests: XCTestCase {
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
       appKitOperations: .init(beginSheetModal: recorder.present),
-      revealMainWindow: { revealCount += 1 })
+      revealMainWindow: { revealCount += 1 },
+      isAppActive: { true })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
 
@@ -76,7 +78,8 @@ final class AppStateAlertPresentationTests: XCTestCase {
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
       appKitOperations: .init(beginSheetModal: recorder.present),
-      revealMainWindow: { revealCount += 1 })
+      revealMainWindow: { revealCount += 1 },
+      isAppActive: { true })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
@@ -114,6 +117,38 @@ final class AppStateAlertPresentationTests: XCTestCase {
     XCTAssertNil(AppKitSheetAlertPresenter.presentableShellWindow(nil, isActive: true))
   }
 
+  func testBackgroundAlertWaitsForTheNextActivationInsteadOfSummoningOmi() {
+    // Capture the owner never asked for still alerts when it fails: the
+    // sleep-wake restart, the preferred-microphone reconnect and the silent-mic
+    // watchdog all arm it on their own. Revealing for those warnings put the
+    // Omi window in front of the app the owner was working in, with no setting
+    // that stopped it (Discord report, 2026-09-20).
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder()
+    var revealCount = 0
+    var isActive = false
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { isActive ? windowSource.window : nil },
+      appKitOperations: .init(beginSheetModal: recorder.present),
+      revealMainWindow: { revealCount += 1 },
+      isAppActive: { isActive })
+
+    presenter.present(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.")
+
+    XCTAssertEqual(revealCount, 0, "a background alert must not pull Omi over the owner's work")
+    XCTAssertTrue(recorder.presentations.isEmpty)
+
+    let window = NSWindow()
+    windowSource.window = window
+    isActive = true
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+
+    XCTAssertEqual(revealCount, 0, "the owner's own return presents the alert; no summon is needed")
+    XCTAssertEqual(
+      recorder.presentations,
+      [.init(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.", window: window)])
+  }
+
   func testAppKitPresenterDefersWhileTheShellAlreadyOwnsASheet() async {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
@@ -123,6 +158,7 @@ final class AppStateAlertPresentationTests: XCTestCase {
       shellWindowProvider: { windowSource.window },
       appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { windowSource.window = window },
+      isAppActive: { true },
       canHostSheet: { _ in hostCanAccept })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
@@ -153,6 +189,7 @@ final class AppStateAlertPresentationTests: XCTestCase {
       shellWindowProvider: { windowSource.window },
       appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { revealCount += 1 },
+      isAppActive: { true },
       canHostSheet: { $0.attachedSheet == nil })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")

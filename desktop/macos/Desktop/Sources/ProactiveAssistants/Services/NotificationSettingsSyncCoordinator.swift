@@ -181,7 +181,7 @@ final class NotificationSettingsSyncCoordinator {
         }
       }
       if driftNewlyDetected {
-        await ContextProactivityTelemetry.recordSettingsDrift(
+        await NotificationSettingsTelemetry.recordSettingsDrift(
           localEnabled: localEnabled,
           serverEnabled: server.enabled,
           localFrequency: localFrequency,
@@ -276,5 +276,27 @@ final class NotificationSettingsSyncCoordinator {
       await pushTail?.value
     }
     retryTask = nil
+  }
+}
+
+enum NotificationSettingsTelemetry {
+  static func recordSettingsDrift(
+    localEnabled: Bool,
+    serverEnabled: Bool,
+    localFrequency: Int,
+    serverFrequency: Int,
+    pendingSync: Bool
+  ) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "notification_settings_drift",
+        properties: [
+          "local_enabled": localEnabled,
+          "server_enabled": serverEnabled,
+          "local_frequency": min(max(localFrequency, 0), 5),
+          "server_frequency": min(max(serverFrequency, 0), 5),
+          "pending_sync": pendingSync,
+        ])
+    }
   }
 }

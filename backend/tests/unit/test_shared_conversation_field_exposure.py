@@ -8,6 +8,7 @@ tier, merge provenance, device ids, calendar attendee emails, speech samples —
 must not appear, including when a new arbitrary key lands on the stored document.
 """
 
+import json
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -86,6 +87,9 @@ def _conversation(**overrides) -> Conversation:
                     conversation_id='c1',
                     owner_name='Ada',
                     due_at=CREATED_AT,
+                    context='Prepare the follow-up',
+                    target_task_id='private-task-id',
+                    capture_confidence=0.9,
                 )
             ],
             events=[
@@ -97,7 +101,7 @@ def _conversation(**overrides) -> Conversation:
                     created=False,
                 )
             ],
-            sections=[Section(heading='Secret section', body_markdown='internal', source_segment_ids=['s1'])],
+            sections=[Section(heading='Decisions', body_markdown='Public decision', source_segment_ids=['s1'])],
         ),
         transcript_segments=[
             TranscriptSegment(
@@ -213,16 +217,82 @@ def test_people_projection_is_id_and_name_only():
 def test_structured_and_transcript_drop_internal_nested_fields():
     payload = _payload(_call_shared(_conversation()))
     structured = payload['structured']
-    assert set(structured) == {'title', 'overview', 'emoji', 'category', 'action_items', 'events'}
-    assert 'sections' not in structured
-    assert structured['action_items'] == [{'description': 'Send the deck', 'completed': False}]
+    assert set(structured) == {
+        'title',
+        'overview',
+        'emoji',
+        'category',
+        'sections',
+        'action_items',
+        'events',
+    }
+    assert 'meeting_type' not in structured
+    assert 'participants' not in structured
+    assert structured['sections'] == [{'heading': 'Decisions', 'body_markdown': 'Public decision', 'kind': 'main'}]
+    assert 'insights' not in structured
+    assert structured['action_items'] == [
+        {
+            'description': 'Send the deck',
+            'completed': False,
+            'owner_name': 'Ada',
+            'due_at': CREATED_AT.isoformat().replace('+00:00', 'Z'),
+            'context': 'Prepare the follow-up',
+        }
+    ]
     assert 'conversation_id' not in structured['action_items'][0]
-    assert 'owner_name' not in structured['action_items'][0]
+    assert 'target_task_id' not in structured['action_items'][0]
+    assert 'capture_confidence' not in structured['action_items'][0]
     segment = payload['transcript_segments'][1]
     assert set(segment) == {'id', 'text', 'speaker', 'speaker_id', 'is_user', 'person_id', 'start', 'end'}
     assert 'stt_provider' not in segment
     assert 'translations' not in segment
     assert 'speaker_identity_status' not in segment
+
+
+def test_rich_meeting_fields_share_without_emails_or_insights():
+    """Rich meeting notes add private fields; the share page gets names only."""
+    from models.structured import Insight, Participant
+
+    conversation = _conversation()
+    conversation.structured = Structured(
+        title='Fulcra sync',
+        overview='A public summary.',
+        emoji='📝',
+        meeting_type='one_on_one',
+        participants=[
+            Participant(name='Ash Kalb', email='ash@fulcra.com', organization='Fulcra', source='roster'),
+            Participant(name=None, email='plus-one@fulcra.com', source='roster'),
+            Participant(name='Boardy', is_ai_agent=True, source='roster'),
+        ],
+        insights=[Insight(text='Met last week about the same scope', kind='prior_meeting')],
+    )
+    payload = _payload(_call_shared(conversation))
+    structured = payload['structured']
+
+    assert structured['meeting_type'] == 'one_on_one'
+    assert 'insights' not in structured
+    assert structured['sections'] == []
+    # The nameless participant carries no public identity, so it drops; named
+    # ones surface without an email field at all.
+    assert structured['participants'] == [
+        {'name': 'Ash Kalb', 'organization': 'Fulcra', 'role': None, 'is_ai_agent': False, 'source': 'roster'},
+        {'name': 'Boardy', 'organization': None, 'role': None, 'is_ai_agent': True, 'source': 'roster'},
+    ]
+    serialized = json.dumps(payload)
+    assert 'ash@fulcra.com' not in serialized
+    assert 'plus-one@fulcra.com' not in serialized
+    assert 'Met last week' not in serialized
+
+
+def test_email_shaped_action_owner_is_not_public():
+    conversation = _conversation()
+    conversation.structured.action_items[0].owner_name = 'Ada <ada@example.com>'
+    payload = _payload(_call_shared(conversation))
+    item = payload['structured']['action_items'][0]
+    assert item['owner_name'] is None
+    assert item['description'] == 'Send the deck'
+    assert item['context'] == 'Prepare the follow-up'
+    assert 'ada@example.com' not in json.dumps(payload)
 
 
 def test_private_conversation_still_404s():

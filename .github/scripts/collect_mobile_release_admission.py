@@ -19,6 +19,7 @@ import urllib.parse
 import urllib.request
 
 from verify_mobile_release_admission import (
+    ANDROID_CHECK_NAME,
     EXPECTED_REPOSITORY,
     MOBILE_CHECK_NAME,
     MOBILE_WORKFLOW_NAME,
@@ -109,7 +110,7 @@ def _paginated_items(
     raise AdmissionCollectionError(f"{label} pagination exceeded the bounded page limit")
 
 
-def collect_from_github(get: JsonGetter, *, repository: str, source_sha: str) -> dict[str, Any]:
+def collect_from_github(get: JsonGetter, *, repository: str, source_sha: str, platform: str = "ios") -> dict[str, Any]:
     if repository != EXPECTED_REPOSITORY:
         raise AdmissionCollectionError(f"repository must be {EXPECTED_REPOSITORY}")
 
@@ -129,9 +130,7 @@ def collect_from_github(get: JsonGetter, *, repository: str, source_sha: str) ->
         f"/repos/{repository}/actions/runs?head_sha={urllib.parse.quote(source_sha)}"
         "&event=push&branch=main&per_page=100"
     )
-    release_runs = _paginated_items(
-        get, release_runs_path, key="workflow_runs", label="Release Eligibility runs"
-    )
+    release_runs = _paginated_items(get, release_runs_path, key="workflow_runs", label="Release Eligibility runs")
     release = _one(
         release_runs,
         label="Release Eligibility run",
@@ -152,49 +151,69 @@ def collect_from_github(get: JsonGetter, *, repository: str, source_sha: str) ->
         key="check_runs",
         label="commit check runs",
     )
-    aggregate = _one(
-        check_runs,
-        label="Mobile Release Eligibility check",
-        predicate=lambda check: check.get("name") == MOBILE_CHECK_NAME
-        and check.get("status") == "completed"
-        and check.get("conclusion") == "success"
-        and check.get("head_sha") == source_sha
-        and isinstance(check.get("details_url"), str)
-        and re.search(r"/actions/runs/[0-9]+(?:/|$)", check["details_url"]) is not None,
-    )
-    expected_prefix = f"https://github.com/{repository}/actions/runs/"
-    if not aggregate["details_url"].startswith(expected_prefix):
-        raise AdmissionCollectionError("mobile aggregate check URL is not the canonical repository URL")
-    run_id_match = re.search(r"/actions/runs/([0-9]+)/job/([0-9]+)(?:/|$)", aggregate["details_url"])
-    if run_id_match is None:
-        raise AdmissionCollectionError("mobile aggregate check is not linked to an Actions run")
-    mobile_run = get(f"/repos/{repository}/actions/runs/{run_id_match.group(1)}")
-    if not (
-        mobile_run.get("name") == MOBILE_WORKFLOW_NAME
-        and mobile_run.get("path") == MOBILE_WORKFLOW_PATH
-        and mobile_run.get("event") == "push"
-        and mobile_run.get("status") == "completed"
-        and mobile_run.get("conclusion") == "success"
-        and mobile_run.get("run_attempt") == 1
-        and mobile_run.get("head_branch") == "main"
-        and mobile_run.get("head_sha") == source_sha
-        and mobile_run.get("repository", {}).get("full_name") == repository
-    ):
-        raise AdmissionCollectionError("mobile aggregate is not a first-attempt successful push run for the source")
-    jobs = _paginated_items(
-        get,
-        f"/repos/{repository}/actions/runs/{run_id_match.group(1)}/jobs?per_page=100",
-        key="jobs",
-        label="Mobile Release Eligibility jobs",
-    )
-    _one(
-        jobs,
-        label="Mobile Release Eligibility job",
-        predicate=lambda job: str(job.get("id")) == run_id_match.group(2)
-        and job.get("name") == MOBILE_CHECK_NAME
-        and job.get("status") == "completed"
-        and job.get("conclusion") == "success",
-    )
+    # Authenticate the originating workflow and exact job before choosing a
+    # check. A manual emulator run also emits an aggregate; it must not obscure
+    # the canonical push aggregate needed by every platform.
+    runs = {}
+    run_jobs = {}
+
+    def authenticated_check(name, events):
+        candidates = []
+        for check in check_runs:
+            if not (
+                check.get("name") == name
+                and check.get("status") == "completed"
+                and check.get("conclusion") == "success"
+                and check.get("head_sha") == source_sha
+            ):
+                continue
+            url = check.get("details_url", "")
+            match = (
+                re.fullmatch(rf"https://github.com/{re.escape(repository)}/actions/runs/([0-9]+)/job/([0-9]+)", url)
+                if isinstance(url, str)
+                else None
+            )
+            if match is None:
+                continue
+            run_id, job_id = match.groups()
+            if run_id not in runs:
+                runs[run_id] = get(f"/repos/{repository}/actions/runs/{run_id}")
+            run = runs[run_id]
+            if not (
+                run.get("name") == MOBILE_WORKFLOW_NAME
+                and run.get("path") == MOBILE_WORKFLOW_PATH
+                and run.get("event") in events
+                and run.get("status") == "completed"
+                and run.get("conclusion") == "success"
+                and run.get("run_attempt") == 1
+                and run.get("head_branch") == "main"
+                and run.get("head_sha") == source_sha
+                and run.get("repository", {}).get("full_name") == repository
+            ):
+                continue
+            if run_id not in run_jobs:
+                run_jobs[run_id] = _paginated_items(
+                    get,
+                    f"/repos/{repository}/actions/runs/{run_id}/jobs?per_page=100",
+                    key="jobs",
+                    label=f"{name} jobs",
+                )
+            _one(
+                run_jobs[run_id],
+                label=f"{name} job",
+                predicate=lambda job: str(job.get("id")) == job_id
+                and job.get("name") == name
+                and job.get("status") == "completed"
+                and job.get("conclusion") == "success",
+            )
+            candidates.append((check, run))
+        if not candidates:
+            raise AdmissionCollectionError(f"no first-attempt successful canonical {name} for source")
+        # Multiple separate first-attempt manual runs are fine: each must prove
+        # this same immutable main source. Reruns never qualify.
+        return candidates[0]
+
+    aggregate, mobile_run = authenticated_check(MOBILE_CHECK_NAME, {"push"})
     proof = {
         "schema_version": 1,
         "repository": repository,
@@ -228,7 +247,21 @@ def collect_from_github(get: JsonGetter, *, repository: str, source_sha: str) ->
             "repository": repository,
         },
     }
-    validate_admission(proof, sha=source_sha, repository=repository)
+    if platform == "android":
+        check, run = authenticated_check(ANDROID_CHECK_NAME, {"push", "workflow_dispatch"})
+        proof["android_acceptance"] = {
+            "check_name": check["name"],
+            "workflow_name": run["name"],
+            "workflow_path": run["path"],
+            "event": run["event"],
+            "status": check["status"],
+            "conclusion": check["conclusion"],
+            "run_attempt": run["run_attempt"],
+            "head_branch": run["head_branch"],
+            "head_sha": run["head_sha"],
+            "repository": repository,
+        }
+    validate_admission(proof, sha=source_sha, repository=repository, platform=platform)
     return proof
 
 
@@ -262,6 +295,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repository", default=EXPECTED_REPOSITORY)
     parser.add_argument("--sha", required=True)
     parser.add_argument("--token", required=True)
+    parser.add_argument("--platform", choices=("ios", "android"), default="ios")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -269,7 +303,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        proof = collect_from_github(github_getter(args.token), repository=args.repository, source_sha=args.sha)
+        proof = collect_from_github(
+            github_getter(args.token), repository=args.repository, source_sha=args.sha, platform=args.platform
+        )
         args.output.write_text(json.dumps(proof, sort_keys=True), encoding="utf-8")
     except (AdmissionCollectionError, OSError) as error:
         print(f"mobile release admission collection failed: {error}", file=sys.stderr)

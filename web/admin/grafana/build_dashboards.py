@@ -14,7 +14,8 @@ then:
      of /api/omi/stats/profitability for signups/revenue/cost/conversion).
      The mobile board mirrors the macOS board panel-for-panel except the
      desktop-only product surfaces (floating bar, desktop notifications,
-     desktop crash rate, macOS version pies), which have no mobile analog.
+     desktop crash rate, macOS version pies), which have no mobile analog,
+     plus two mobile-only battery-health panels.
 
 Mobile IS instrumented in PostHog (iOS since 2025-03, Android since 2026-05)
 but does not emit `Sign In Completed`, so its signup/activation cohorts anchor
@@ -251,20 +252,18 @@ def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
 
 
 RELEASES_PATH = "/api/omi/stats/releases?days=30"
-RELEASES_CHART_TITLE = "Releases / day — macOS vs iOS"
+RELEASES_CHART_TITLE = "Releases / day — macOS vs mobile"
 
 
 def releases_chart_panel(panel_id: int) -> dict:
-    """All-board timeline: one chart, two series — release cadence per
-    platform. A multi-day flat zero on either line is the alarm."""
+    """All-board timeline: one chart, three series — release cadence per
+    platform. A multi-day flat zero on any series is the alarm."""
     return {
         "id": panel_id,
         "type": "timeseries",
         "title": RELEASES_CHART_TITLE,
-        "description": "macOS: GitHub releases tagged -macos (candidates included). "
-                       "iOS: first day a version clears 200 daily App Store users "
-                       "(TestFlight noise excluded); latest verified against the "
-                       "App Store lookup API.",
+        "description": "macOS = GitHub -macos tags; iOS/Android = distinct $app_build "
+                       "first seen per day (TestFlight/Play builds included).",
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
         "gridPos": {"x": 0, "y": 999, "w": 24, "h": 6},
         "timeFrom": "30d",
@@ -286,6 +285,8 @@ def releases_chart_panel(panel_id: int) -> dict:
                  "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#3b82f6"}}]},
                 {"matcher": {"id": "byName", "options": "iOS releases"},
                  "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#22c55e"}}]},
+                {"matcher": {"id": "byName", "options": "Android releases"},
+                 "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#f59e0b"}}]},
             ],
         },
         "options": {
@@ -304,6 +305,7 @@ def releases_chart_panel(panel_id: int) -> dict:
                  "timestampFormat": "2006-01-02"},
                 {"selector": "macos", "text": "macOS releases", "type": "number"},
                 {"selector": "ios", "text": "iOS releases", "type": "number"},
+                {"selector": "android", "text": "Android releases", "type": "number"},
             ],
         }],
     }
@@ -358,6 +360,136 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
             ],
         }],
     }
+
+
+PENDANT_HEALTH_PATH = "/api/omi/stats/device-health?days=7"
+PHONE_HEALTH_PATH = "/api/omi/stats/device-health?days=14"
+PENDANT_DRAIN_TITLE = "Pendant battery drain %/h — p50 by firmware × platform (7d)"
+PHONE_DRAIN_TITLE = "Phone battery drain %/h — p50 by build (14d)"
+MOBILE_BATTERY_TITLES = {PENDANT_DRAIN_TITLE, PHONE_DRAIN_TITLE}
+
+
+def _drain_bar_overrides(p90_text: str) -> list[dict]:
+    """p90 is a lighter second bar. users stays in the frame for the tooltip
+    and is hidden from the axis so a headcount cannot dwarf %/h."""
+    return [
+        {
+            "matcher": {"id": "byName", "options": p90_text},
+            "properties": [
+                {"id": "custom.fillOpacity", "value": 28},
+                {"id": "custom.lineWidth", "value": 2},
+                {"id": "custom.barWidthFactor", "value": 0.35},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#93c5fd"}},
+            ],
+        },
+        {
+            "matcher": {"id": "byName", "options": "users"},
+            "properties": [
+                {"id": "decimals", "value": 0},
+                {
+                    "id": "custom.hideFrom",
+                    "value": {"tooltip": False, "viz": True, "legend": True},
+                },
+            ],
+        },
+    ]
+
+
+def _battery_bar(panel_id: int, title: str, description: str, root: str,
+                  columns: list[dict], path: str, p90_text: str,
+                  no_value: str | None = None) -> dict:
+    """Categorical bar for one device-health series. The string column is the
+    category. p50 is the bar; p90 is a thinner companion. users is tooltip-only."""
+    defaults: dict = {
+        "unit": "none",
+        "decimals": 2,
+        "min": 0,
+        "color": {"mode": "fixed", "fixedColor": "#3b82f6"},
+        "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            # Schema 39 reads options.barWidth; this copy is the field the
+            # panel contract asks for. max stays unset so the axis autoscales
+            # to the rows the query already filtered.
+            "barWidth": 0.62,
+        },
+    }
+    if no_value:
+        defaults["noValue"] = no_value
+    return {
+        "id": panel_id,
+        "type": "barchart",
+        "title": title,
+        "description": description,
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 12},
+        "fieldConfig": {"defaults": defaults, "overrides": _drain_bar_overrides(p90_text)},
+        "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": True},
+            "orientation": "horizontal",
+            "showValue": "never",
+            "stacking": "none",
+            "tooltip": {"mode": "multi", "sort": "none"},
+            "barWidth": 0.62,
+            "groupWidth": 0.75,
+            "xTickLabelRotation": 0,
+        },
+        "targets": [{
+            "refId": "A",
+            "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+            "type": "json",
+            "source": "url",
+            "parser": "backend",
+            "format": "table",
+            "url": f"{PROXY}{path}",
+            "url_options": {"method": "GET", "data": ""},
+            "root_selector": root,
+            "columns": columns,
+        }],
+    }
+
+
+def device_health_panels() -> list[dict]:
+    return [
+        _battery_bar(
+            1101,
+            PENDANT_DRAIN_TITLE,
+            "Median and 90th-percentile pendant battery drain in percent per hour, "
+            "by firmware and phone platform, over the last 7 days. Rows need at "
+            "least 20 people. Empty, Unknown, and watchOS firmware (a two-digit "
+            "major such as 26.6) are omitted. Original Friend hardware (1.0.4) "
+            "stays, labeled Friend v1. The median uses only samples whose drain "
+            "is between 0.1 and 100. Hover a bar for the number of people.",
+            "pendant_health",
+            [
+                {"selector": "firmware_label", "text": "Firmware", "type": "string"},
+                {"selector": "p50_drain_valid", "text": "p50 drain %/h", "type": "number"},
+                {"selector": "p90_drain_valid", "text": "p90 drain %/h", "type": "number"},
+                {"selector": "users", "text": "users", "type": "number"},
+            ],
+            PENDANT_HEALTH_PATH,
+            "p90 drain %/h",
+            "n/a",
+        ),
+        _battery_bar(
+            1102,
+            PHONE_DRAIN_TITLE,
+            "Median and 90th-percentile phone battery drain in percent per hour, "
+            "by OS, app version, and build, over the last 14 days. Hover a bar "
+            "for the number of people. Empty until Phone Battery Sample events exist.",
+            "phone_health.series",
+            [
+                {"selector": "label", "text": "OS / build", "type": "string"},
+                {"selector": "p50_drain_per_hour", "text": "p50 drain %/h", "type": "number"},
+                {"selector": "p90_drain_per_hour", "text": "p90 drain %/h", "type": "number"},
+                {"selector": "users", "text": "users", "type": "number"},
+            ],
+            PHONE_HEALTH_PATH,
+            "p90 drain %/h",
+            "awaiting instrumentation",
+        ),
+    ]
 
 
 def set_kfactor_tile_description(dash, platform_label: str, scope: str = "all") -> None:
@@ -546,6 +678,11 @@ def build_platform_board(base, scope: str) -> dict:
                                 "(PostHog telemetry; mobile does not emit Sign In Completed).")
 
     prune_vars_and_titles(dash)
+    if scope == "mobile":
+        # Pendant and phone battery telemetry exist only on the mobile clients.
+        # Appended after the shared mirror so macOS stays panel-for-panel and
+        # reflow packs the new row at the bottom.
+        dash["panels"].extend(device_health_panels())
     reflow(dash)
     return finish(dash, f"omi-tv-{scope}", f"Omi TV — {label}")
 

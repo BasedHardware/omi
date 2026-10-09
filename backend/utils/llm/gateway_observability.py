@@ -6,7 +6,6 @@ import threading
 import time
 
 from utils.metrics import (
-    LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS,
     LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS,
     LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS,
 )
@@ -94,34 +93,6 @@ def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged
         reason=reason_label,
         field='none',
         route='direct',
-        request_id='unknown',
-        credential_source='unknown',
-    )
-
-
-def record_gateway_shadow_comparison(*, feature: str, field: str, outcome: str, route: str = 'chat_structured') -> None:
-    feature_label = _safe_label(feature)
-    field_label = _safe_label(field)
-    outcome_label = _safe_label(outcome)
-    route_label = _safe_label(route)
-
-    try:
-        LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(
-            feature=feature_label,
-            field=field_label,
-            outcome=outcome_label,
-        ).inc()
-    except Exception:
-        _report_observation_failure('shadow_comparison_metric')
-
-    _log_gateway_event(
-        kind='shadow_comparison',
-        feature=feature_label,
-        mode=_GATEWAY_MODE_SHADOW,
-        outcome=outcome_label,
-        reason='none',
-        field=field_label,
-        route=route_label,
         request_id='unknown',
         credential_source='unknown',
     )

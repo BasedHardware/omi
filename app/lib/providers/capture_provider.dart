@@ -26,6 +26,10 @@ class CaptureProvider extends CaptureController {
     super.openSocket,
     super.sessionOwner,
     super.processInProgressConversation,
+    super.deviceConnectionLoader,
+    super.omiCallState,
+    super.captureWedgeMonitor,
+    super.calendarGapMonitor,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);

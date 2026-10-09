@@ -11,7 +11,7 @@ export default async function getSharedMemory(id: string) {
         headers: {
           'Content-Type': 'application/json',
         },
-        cache: 'no-cache',
+        cache: 'no-store',
       },
     );
     if (!response.ok) {

@@ -308,6 +308,23 @@ describe('BarChatSurface', () => {
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
+  it('conversation: a mouse-click Send returns focus to the composer (regression for #20218)', async () => {
+    // A real mouse click moves keyboard focus to the clicked button before its
+    // click handler runs — jsdom's fireEvent.click does not reproduce that, so the
+    // button is focused explicitly first to simulate it. Without the fix nothing
+    // moves focus back, and the user has to click the textarea again before typing
+    // the next message. The view stays 'conversation' across this send, so the
+    // mount/expand focus effect does NOT re-fire; only the click handler's own
+    // refocus can restore it.
+    const input = renderLiveSurface(async () => null)
+    fireEvent.change(input, { target: { value: 'hello there' } })
+    const sendButton = screen.getByText('Send')
+    sendButton.focus()
+    expect(document.activeElement).toBe(sendButton)
+    fireEvent.click(sendButton)
+    await vi.waitFor(() => expect(document.activeElement).toBe(input))
+  })
+
   it('conversation: an IN-QUOTA send clears the input and leaves it cleared (no restore)', async () => {
     const props = renderSurface({ view: 'conversation', draft: 'hello there' })
     fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })

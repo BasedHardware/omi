@@ -2,9 +2,11 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from config.action_item_reminder_policy import should_schedule_action_item_reminder
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -15,6 +17,7 @@ from database.redis_db import (
     has_silent_user_notification_been_sent,
 )
 from database.auth import get_user_from_uid
+from utils.integration_telemetry import emit_posthog_event
 from utils.notification_text import to_plain_text
 from .llm.notifications import (
     generate_notification_message,
@@ -227,6 +230,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _emit_tokens_invalidated(user_id: str, count: int) -> None:
+    """Analytics-only signal that permanent-failure tokens were just removed.
+
+    Feeds churn/re-engagement analysis: an `invalidated` event without a later
+    `registered` means the uid has no deliverable push token. Bulk sends carry
+    no uid, so this intentionally fires only on per-user send paths.
+    """
+    try:
+        emit_posthog_event(user_id, 'Push Token Status', {'status': 'invalidated', 'invalidated_count': count})
+    except Exception as exc:  # noqa: BLE001 — analytics must never break a send
+        logger.warning(f'push token invalidated emit failed: {type(exc).__name__}')
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -270,6 +286,7 @@ def _send_to_user(
         # Remove invalid tokens in bulk
         if invalid_tokens:
             notification_db.remove_bulk_tokens(invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -320,6 +337,7 @@ async def _send_to_user_async(
 
         if invalid_tokens:
             await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -337,6 +355,22 @@ def send_notification(
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
+def send_notification_result(
+    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+) -> int:
+    """send_notification with the successful-send count returned.
+
+    The self-heal wedge nudge must distinguish a delivered push from an
+    undeliverable one (no tokens, or every send rejected), which
+    ``send_notification``'s ``None`` return cannot express.
+    """
+    logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
 async def send_notification_async(
@@ -589,11 +623,27 @@ def send_new_app_review_notification(
     send_notification(app_owner_uid, title, body, data)
 
 
-def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
+def send_action_item_data_message(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    *,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+):
     """
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
+    if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
+        from utils.commitment_followup_tasks import schedule_followup
+
+        schedule_followup(user_id, action_item_id, due_at)
     logger.info(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
@@ -772,18 +822,28 @@ def sync_action_item_reminder(
     description: str,
     completed: bool,
     due_at: Optional[Union[datetime, str]],
+    *,
+    status: Optional[str] = None,
+    deleted: bool = False,
 ):
     """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
 
     The mobile client schedules a local reminder from the action-item update/data message and
     cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
-    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
-    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    completed, explicitly non-active, deleted, or undated; only an active (or legacy status-absent)
+    task with a due date is (re)scheduled. Reusing send_action_item_deletion_message is intentional: the client treats it as
     "cancel the scheduled local notification by id", not as a task deletion.
     """
-    if completed or not due_at:
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
+    # The shared admission predicate requires a due date; retain that narrowing
+    # for the datetime/string transport below without duplicating its policy.
+    assert due_at is not None
+    if os.getenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE'):
+        from utils.commitment_followup_tasks import schedule_followup
+
+        schedule_followup(user_id, action_item_id, due_at)
     due_iso: str = due_at.isoformat() if isinstance(due_at, datetime) else due_at
     send_action_item_update_message(
         user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso

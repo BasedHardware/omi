@@ -1,0 +1,101 @@
+name: Provision Grafana dashboards
+
+# Custom dashboards under backend/charts/monitoring/dashboards/ are
+# exported-from-Grafana JSON kept version-controlled here (repo-first). Until
+# now the live boards were updated by manual import, so repo and Grafana
+# drifted (omi-core-features sat 2 versions behind for 5 weeks). This
+# workflow pushes the checked-in JSON to the prod/dev Grafana on merge to
+# main, so "merged" means "on the board".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/charts/monitoring/dashboards/**'
+      - '.github/workflows/grafana_dashboard_provisioning.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the Grafana to provision'
+        type: choice
+        options: [prod, dev, both]
+        default: prod
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-dashboard-provisioning-${{ github.ref == 'refs/heads/main' && 'prod' || github.event.inputs.environment || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate dashboard JSON
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "INVALID JSON: $f" >&2
+              fail=1
+            else
+              uid=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('uid',''))" "$f")
+              if [ -z "$uid" ]; then
+                echo "MISSING UID: $f" >&2
+                fail=1
+              else
+                echo "OK: $f (uid=$uid)"
+              fi
+            fi
+          done < <(find backend/charts/monitoring/dashboards -name '*.json' -print0)
+          exit $fail
+
+  provision:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - environment: prod
+            url: https://monitor.omi.me
+          - environment: dev
+            url: https://monitor.omiapi.com
+    steps:
+      - uses: actions/checkout@v7
+      - name: Skip environments outside the trigger
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_ENV: ${{ github.event.inputs.environment }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$INPUT_ENV" != "both" ] && [ "$INPUT_ENV" != "${{ matrix.environment }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Provision dashboards
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          # Ops Grafana service-account token (same secret family the pusher
+          # auto-deploy uses for alert-route verification). Do not use
+          # GRAFANA_TOKEN; that belongs to the TV Cloud Run instance.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          GRAFANA_URL: ${{ matrix.url }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+          # First land provisions only the custom repo-first boards (string
+          # uids). Community/helm-managed boards keep their manual flow.
+          DASHBOARD_ALLOWLIST: omi-core-features.json,omi-translation.json,resilience-fallbacks.json
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          python3 .github/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir backend/charts/monitoring/dashboards \
+            --grafana-url "$GRAFANA_URL" \
+            --token-env MONITOR_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --allowlist "$DASHBOARD_ALLOWLIST"

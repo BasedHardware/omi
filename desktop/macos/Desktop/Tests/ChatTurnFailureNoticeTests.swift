@@ -26,7 +26,11 @@ final class ChatTurnFailureNoticeTests: XCTestCase {
       "The marker must say exactly what the classifier says — one wording, not a second vocabulary"
     )
     XCTAssertEqual(notice?.retryable, false, "Payment Required is never fixed by resending")
-    XCTAssertNotNil(notice?.text.range(of: "Plan and Usage"), "The marker keeps the classifier's fix path")
+    XCTAssertNotNil(notice?.text.range(of: "AI & Automation"), "The marker keeps the classifier's fix path")
+    XCTAssertFalse(notice?.text.contains("managed lane") ?? true, "The transcript cannot guess the payer")
+    let repeated = ChatTurnFailureNotice.forFailure(
+      errorDescription: notice?.text ?? "", presentsUserError: true)
+    XCTAssertEqual(repeated, notice, "Billing copy stays non-retryable when displayed text is classified again")
   }
 
   /// Stop and supersession are cancellations, never errors (desktop

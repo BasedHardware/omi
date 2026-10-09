@@ -20,6 +20,8 @@ from uuid import uuid4
 
 import yaml
 
+from config.desktop_gemini_attribution_generated import GEMINI_CLIENT_PLATFORMS, GEMINI_LANES
+
 RATE_CARD_FILE = Path(__file__).resolve().parents[1] / 'config' / 'cost_rate_cards.yaml'
 MICRO_USD_PER_USD = 1_000_000
 TOKENS_PER_MILLION = 1_000_000
@@ -83,6 +85,8 @@ class ProviderResponseMetadata:
     provider_response_id: str | None = None
     actual_model_version: str | None = None
     traffic_type: str | None = None
+    # Raw receipt validity is consumed only by v2; legacy normalization is unchanged.
+    billable_usage_complete: bool = False
 
 
 @dataclass(frozen=True)
@@ -154,6 +158,8 @@ class AccountingContext:
     api_surface: str
     payer: str
     app_platform: str | None = None
+    product_lane: str | None = None
+    client_platform: str | None = None
     # Opaque qualification-run correlation. Normal chat leaves this absent.
     jit_run_id: str | None = None
     jit_contract_version: str | None = None
@@ -169,6 +175,8 @@ class AccountingContext:
         api_surface: str,
         payer: str,
         app_platform: str | None = None,
+        product_lane: str | None = None,
+        client_platform: str | None = None,
         jit_run_id: str | None = None,
         jit_contract_version: str | None = None,
     ) -> 'AccountingContext':
@@ -181,6 +189,8 @@ class AccountingContext:
             api_surface=api_surface,
             payer=payer,
             app_platform=app_platform,
+            product_lane=product_lane,
+            client_platform=client_platform,
             jit_run_id=jit_run_id,
             jit_contract_version=jit_contract_version,
         )
@@ -316,6 +326,8 @@ class AccountingEvent:
     cost_basis: str
     provider_response_id: str | None
     app_platform: str | None = None
+    product_lane: str | None = None
+    client_platform: str | None = None
     jit_run_id: str | None = None
     jit_contract_version: str | None = None
 
@@ -332,6 +344,8 @@ class AccountingEvent:
             'api_surface': self.api_surface,
             'payer': self.payer,
             'app_platform': self.app_platform,
+            'product_lane': self.product_lane,
+            'client_platform': self.client_platform,
             'jit_run_id': self.jit_run_id,
             'jit_contract_version': self.jit_contract_version,
             'provider': self.provider,
@@ -368,6 +382,14 @@ class AccountingEvent:
         }
 
 
+def _bounded_desktop_tag(value: str | None, allowed: frozenset[str]) -> str | None:
+    """Absent for other callers; desktop tags share the generated wire vocabulary."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    return normalized if normalized in allowed else 'unknown'
+
+
 def openai_usage_from_response(
     response: Mapping[str, Any],
     *,
@@ -392,6 +414,7 @@ def openai_usage_from_response(
     usage = _openai_usage(raw_usage, cache_requested=cache_requested)
     return ProviderResponseMetadata(
         usage=usage,
+        billable_usage_complete=complete_openai_billable_usage(raw_usage),
         provider_response_id=_string_or_none(response.get('id')),
         actual_model_version=_string_or_none(response.get('model')),
         traffic_type=service_tier,
@@ -591,6 +614,8 @@ def build_accounting_event(
         api_surface=context.api_surface,
         payer=context.payer,
         app_platform=context.app_platform,
+        product_lane=_bounded_desktop_tag(context.product_lane, GEMINI_LANES),
+        client_platform=_bounded_desktop_tag(context.client_platform, GEMINI_CLIENT_PLATFORMS),
         provider=attempt.provider,
         configured_model=attempt.configured_model,
         actual_model_version=attempt.actual_model_version,
@@ -784,6 +809,35 @@ def jit_gateway_receipt_sse_frame(receipt: JITGatewayReceipt) -> bytes:
     """Frame the same receipt as a terminal SSE event before ``[DONE]``."""
     payload = json.dumps({'omi_jit_receipt': receipt.as_dict()}, separators=(',', ':'), sort_keys=True)
     return f'event: omi_jit_receipt\ndata: {payload}\n\n'.encode('utf-8')
+
+
+def complete_openai_billable_usage(raw: Mapping[str, Any]) -> bool:
+    """Validate raw components before permissive legacy normalization loses evidence."""
+    input_count = raw.get('prompt_tokens', raw.get('input_tokens'))
+    output_count = raw.get('completion_tokens', raw.get('output_tokens'))
+    if any(type(value) is not int or value < 0 for value in (input_count, output_count)):
+        return False
+    # Aliases, when both reported, must agree; an omitted total can be derived.
+    for names, count in (
+        (('prompt_tokens', 'input_tokens'), input_count),
+        (('completion_tokens', 'output_tokens'), output_count),
+    ):
+        for name in names:
+            if name in raw and (type(raw[name]) is not int or raw[name] != count):
+                return False
+    if 'total_tokens' in raw and (
+        type(raw['total_tokens']) is not int or raw['total_tokens'] != input_count + output_count
+    ):
+        return False
+    details = raw.get('prompt_tokens_details', raw.get('input_tokens_details', {}))
+    output_details = raw.get('completion_tokens_details', raw.get('output_tokens_details', {}))
+    if not isinstance(details, Mapping) or not isinstance(output_details, Mapping):
+        return False
+    cached, written = details.get('cached_tokens', 0), details.get('cache_write_tokens', 0)
+    reasoning = output_details.get('reasoning_tokens', 0)
+    if any(type(value) is not int or value < 0 for value in (cached, written, reasoning)):
+        return False
+    return cached + written <= input_count and reasoning <= output_count
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:

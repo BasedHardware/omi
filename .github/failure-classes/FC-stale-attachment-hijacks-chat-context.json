@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-attachment-hijacks-chat-context",
+  "violated_contract": "An earlier attachment may remain available to a chat session, but its presence cannot decide the route of a later text-only turn. Routing a follow-up to a file-only model call drops conversation history, the system prompt, and tools, so a question about a recent memory can be answered from an unrelated old image.",
+  "canonical_prevention": "Keep ordinary chat and attachment turns on one agentic path with history and tools. Expose file IDs on their originating messages and let the agent load them when the current request refers to them. Regress a text-only follow-up in a session containing old attachments through the real router.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_async_offload.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/graph.py",
+    "backend/utils/retrieval/agentic.py"
+  ],
+  "status": "open"
+}

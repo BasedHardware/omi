@@ -28,6 +28,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from google.cloud import firestore  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL  # noqa: E402
 
 from database.memory_collections import MemoryCollections  # noqa: E402
 from models.memory_apply import MemoryControlState, WriterMode  # noqa: E402
@@ -44,7 +45,6 @@ from scripts.jit_qa_sweep_repair import (
     repair_tombstone,
     JITQASweepRepairError,
 )  # noqa: E402
-from llm_gateway.gateway import jit_budget  # noqa: E402
 from models.daily_sweep_dispatch import SweepDispatchScope  # noqa: E402
 from models.memory_contracts import MemoryExtractionError  # noqa: E402
 import utils.memory.daily_memory_sweep as daily_sweep  # noqa: E402
@@ -717,22 +717,15 @@ def main() -> int:
         try:
 
             def reserved_provider_crash() -> tuple[dict[str, Any], ...]:
-                with patch.object(jit_budget, "_client", return_value=db_client):
-                    reservation = jit_budget.reserve_jit_provider_attempt(
-                        owner_uid=uid,
-                        run_id=lost_run_id,
-                        contract_version="jit-cloud-qa-v1",
-                        max_attempts=1,
-                        max_spend_micro_usd=50_000,
-                        provider="openai",
-                        model="gpt-5.6-luna",
-                        input_tokens=100,
-                        cached_input_tokens=0,
-                        output_tokens=10,
-                        cache_write_tokens=0,
-                    )
-                if reservation is None:
-                    raise AssertionError("emulator provider reservation was rejected")
+                # Historical reservation fixture: the retired proactivity writer
+                # is gone, but existing evidence must still block unsafe repair.
+                db_client.collection("jit_cloud_qa_budgets_v1").document(lost_run_id).set(
+                    {
+                        "owner_uid": uid,
+                        "run_id": lost_run_id,
+                        "status": "reserved",
+                    }
+                )
                 dispatched.append(1)
                 raise RuntimeError("simulated process death after provider; no accounting write")
 

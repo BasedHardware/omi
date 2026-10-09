@@ -22,7 +22,13 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fs  # noqa: E402
-from gcpauth import assert_readonly_identity  # noqa: E402
+
+if os.environ.get("FINOPS_AUTH") == "cloudrun":
+    import cloudrun  # noqa: E402
+
+    assert_readonly_identity = cloudrun.assert_runtime_identity
+else:
+    from gcpauth import assert_readonly_identity  # noqa: E402
 
 PAGE = 5000
 FIELDS = [

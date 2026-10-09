@@ -6,15 +6,26 @@ import hmac
 import os
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from database import redis_db
 from database._client import get_firestore_client
+from database.voice_preferences import get_assistant_voice
+from database.serving_query_reads import list_desktop_release_snapshots
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_desktop_trial_paywalled
+from utils.tts import (
+    TtsConfigurationError,
+    TtsRequestLog,
+    TtsResponseError,
+    TtsUnavailableError,
+    TtsUpstreamError,
+    get_tts_provider,
+    open_gemini_mp3_stream,
+)
 
 router = APIRouter()
 
@@ -32,7 +43,7 @@ _RELEASES_COLLECTION = "desktop_releases"
 
 class TtsSynthesizeRequest(BaseModel):
     text: str
-    voice_id: str
+    voice_id: str | None = None
     instructions: str | None = None
 
 
@@ -67,6 +78,10 @@ class PromoteReleaseRequest(BaseModel):
 
 def _is_allowed_openai_voice(voice_id: str) -> bool:
     return voice_id in _OPENAI_VOICES
+
+
+def _is_valid_voice_name(voice_id: str) -> bool:
+    return 1 <= len(voice_id) <= 128 and all(char.isalnum() or char in {'-', '_'} for char in voice_id)
 
 
 def _release_channel(release: ReleaseInfo) -> str:
@@ -119,14 +134,8 @@ def _appcast_xml(releases: list[ReleaseInfo], platform: str) -> str:
 
 
 def _release_models() -> list[tuple[str, ReleaseInfo]]:
-    snapshots = (
-        get_firestore_client()
-        .collection(_RELEASES_COLLECTION)
-        .order_by("build_number", direction="DESCENDING")
-        .stream()
-    )
     releases: list[tuple[str, ReleaseInfo]] = []
-    for snapshot in snapshots:
+    for snapshot in list_desktop_release_snapshots():
         try:
             releases.append((snapshot.id, ReleaseInfo.model_validate(snapshot.to_dict())))
         except Exception:
@@ -174,25 +183,51 @@ async def _openai_tts(payload: dict[str, str], api_key: str) -> httpx.Response:
         raise HTTPException(status_code=502, detail="OpenAI TTS request failed")
 
 
-@router.post("/v1/tts/synthesize", responses={200: {"content": {"audio/mpeg": {}}}})
+@router.post(
+    "/v1/tts/synthesize",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "MP3 audio stream.",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_current_user_uid)):
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     if len(text) > _MAX_TTS_CHARS:
         raise HTTPException(status_code=400, detail="text is too long")
-    voice_id = request.voice_id.strip()
-    if not _is_allowed_openai_voice(voice_id):
+    voice_id = (request.voice_id or '').strip()
+    try:
+        provider = get_tts_provider()
+    except TtsConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="TTS service is not configured") from exc
+    if not voice_id:
+        voice_id = await run_blocking(db_executor, get_assistant_voice, uid)
+    if provider == 'legacy':
+        if not _is_allowed_openai_voice(voice_id):
+            if not _is_valid_voice_name(voice_id):
+                raise HTTPException(status_code=400, detail="voice_id is not supported")
+            voice_id = "cedar"
+    elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop", required_byok_provider="openai"):
+    legacy_openai = provider == 'legacy'
+    if await run_blocking(
+        db_executor,
+        is_desktop_trial_paywalled,
+        uid,
+        "desktop",
+        required_byok_provider="openai" if legacy_openai else None,
+        byok_exempt=legacy_openai,
+    ):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
-    api_key = get_byok_key("openai") or os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(status_code=503, detail="OpenAI TTS is not configured")
-    if not get_byok_key("openai"):
+    openai_byok_key = get_byok_key("openai") if legacy_openai else None
+    if not (legacy_openai and openai_byok_key):
         status, _ = await run_blocking(
             critical_executor,
-            redis_db.check_tts_rate_limit,
+            redis_db.check_tts_rate_limit_for_user,
             uid,
             char_count=len(text),
             burst_limit=_TTS_BURST_PER_MINUTE,
@@ -204,12 +239,45 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
             raise HTTPException(status_code=429, detail="TTS burst rate limit exceeded")
         if status == 2:
             raise HTTPException(status_code=429, detail="TTS daily character limit exceeded")
+
+    if provider == 'gemini':
+        try:
+            audio_stream = await open_gemini_mp3_stream(
+                text=text,
+                voice_id=voice_id,
+                client='desktop',
+                style=request.instructions,
+            )
+        except TtsConfigurationError as exc:
+            raise HTTPException(status_code=503, detail="TTS service is not configured") from exc
+        except TtsUpstreamError as exc:
+            # Released macOS clients treat an endpoint 401 as an expired Omi
+            # session. A Gemini credential rejection is a server/provider fault,
+            # not user auth, so keep it on the ordinary system-TTS fallback path.
+            status_code = 502 if exc.status_code == 401 else exc.status_code
+            raise HTTPException(status_code=status_code, detail="Gemini TTS request failed") from exc
+        except (TtsUnavailableError, TtsResponseError) as exc:
+            raise HTTPException(status_code=502, detail="Gemini TTS request failed") from exc
+        return StreamingResponse(audio_stream, media_type="audio/mpeg")
+
+    api_key = openai_byok_key or os.getenv("OPENAI_API_KEY", "").strip()
+    metrics = TtsRequestLog(provider='openai', model=_OPENAI_TTS_MODEL, chars=len(text))
+    if not api_key:
+        metrics.finish('not_configured')
+        raise HTTPException(status_code=503, detail="OpenAI TTS is not configured")
     payload = {"model": _OPENAI_TTS_MODEL, "input": text, "voice": voice_id, "response_format": "mp3"}
     if request.instructions and request.instructions.strip():
         payload["instructions"] = request.instructions.strip()
-    upstream = await _openai_tts(payload, api_key)
+    try:
+        upstream = await _openai_tts(payload, api_key)
+    except HTTPException:
+        metrics.finish('transport_error')
+        raise
     if upstream.is_error:
+        metrics.finish(f'upstream_{upstream.status_code}')
         raise HTTPException(status_code=upstream.status_code, detail="OpenAI TTS request failed")
+    metrics.mark_first_byte()
+    metrics.finish('success')
     return Response(content=upstream.content, media_type="audio/mpeg")
 
 

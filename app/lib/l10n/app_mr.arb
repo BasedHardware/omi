@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "कार्य आयटम",
+    "actionItemsTab": "कार्य",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "यामुळे संबंधित स्मृती, कार्य आणि ऑडिओ फाइल देखील हटवल्या जातील. ही कारवाई पूर्ववत केली जाऊ शकत नाही.",
+    "deleteConversationMessage": "यामुळे संबंधित स्मृती, कार्य आणि ऑडिओ फाइल देखील हटवल्या जातील.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "लोड होत आहे...",
+    "loading": "लोड होत आहे…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "अवधान लोड होत आहे...",
+    "loadingDuration": "अवधान लोड होत आहे…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "वाण प्रोफाइल",
+    "speechProfile": "व्हॉइस प्रोफाइल",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "हटवत आहे...",
+    "deleting": "हटवत आहे…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "शोधत आहे...",
+    "searching": "शोधत आहे",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "संभाषण शोधा...",
+    "searchConversations": "संभाषण शोधा",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "Omi च्या स्मृतीतून आपल्या संदेश हटवत आहे...",
+    "deletingMessages": "Omi च्या स्मृतीतून आपल्या संदेश हटवत आहे…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -366,7 +366,7 @@
     "@reportMessage": {
         "description": "Report dialog title"
     },
-    "reportMessageConfirm": "आप हा संदेश अहवाल द्यायला निश्चित आहात?",
+    "reportMessageConfirm": "हा संदेश नोंदवायचा?",
     "@reportMessageConfirm": {
         "description": "Report message confirmation"
     },
@@ -382,7 +382,7 @@
     "@clearChat": {
         "description": "Button/menu item to clear chat"
     },
-    "clearChatConfirm": "आप चॅट साफ करू इच्छिता? ही कारवाई पूर्ववत केली जाऊ शकत नाही.",
+    "clearChatConfirm": "या चॅटमधील सर्व संदेश हटवले जातील. हे पूर्ववत करता येणार नाही.",
     "@clearChatConfirm": {
         "description": "Clear chat confirmation message"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "अ‍ॅप शोधा...",
+    "searchApps": "अ‍ॅप शोधा",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -466,11 +466,11 @@
     "@cannotBeUndone": {
         "description": "Warning that action is permanent"
     },
-    "allDataErased": "आपली सर्व स्मृती आणि संभाषण स्थायीपणे हटवल्या जातील.",
+    "allDataErased": "तुमच्या स्मृती आणि संभाषणे मिटवली जातील.",
     "@allDataErased": {
         "description": "Delete account warning 1"
     },
-    "appsDisconnected": "आपली अ‍ॅप्स आणि एकीकरण तातडीने डिस्कनेक्ट केली जाईल.",
+    "appsDisconnected": "तुमचे अॅप्स आणि इंटिग्रेशन डिस्कनेक्ट होतील.",
     "@appsDisconnected": {
         "description": "Delete account warning 2"
     },
@@ -609,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "अधिक जाणून घ्या...",
+    "learnMore": "अधिक जाणून घ्या…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -833,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "सेव्ह करत आहे...",
+    "saving": "सेव्ह करत आहे…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -937,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "कार्य आयटम आणि स्वयंचलितपणे कॅप्चर केलेल्या नोट्स.",
+    "providingSubtitle": "कार्य आणि नोट्स, स्वयंचलितपणे कॅप्चर केलेले.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1007,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "आज, omi आहे:",
+    "sharePeriodToday": "आज, Omi आहे:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "या महिन्यात, omi आहे:",
+    "sharePeriodMonth": "या महिन्यात, Omi आहे:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "या वर्षी, omi आहे:",
+    "sharePeriodYear": "या वर्षी, Omi आहे:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "अब तक, omi आहे:",
+    "sharePeriodAllTime": "अब तक, Omi आहे:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1072,7 +1072,7 @@
     "selectLogFile": "लॉग फाइल निवडा",
     "shareLogs": "लॉग्स शेयर करा",
     "debugLogCleared": "डिबग लॉग साफ केला",
-    "exportStarted": "निर्यात सुरू केला. यामुळे काही सेकंद लागू शकतो...",
+    "exportStarted": "निर्यात सुरू केला. यामुळे काही सेकंद लागू शकतो…",
     "exportAllData": "सर्व डेटा निर्यात करा",
     "exportDataDesc": "संभाषण JSON फाइलमध्ये निर्यात करा",
     "exportedConversations": "Omi मधून निर्यात केलेले संभाषण",
@@ -1114,7 +1114,6 @@
     "daySummary": "दिवस सारांश",
     "summaryGenerated": "सारांश तयार केला",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json मध्ये जोडा",
     "copyConfig": "कॉन्फिग कॉपी करा",
     "configCopied": "कॉन्फिग क्लिपबोर्डला कॉपी केला",
     "listeningMins": "ऐकत आहे (मिनिटे)",
@@ -1196,7 +1195,7 @@
             }
         }
     },
-    "disconnectAppMessage": "आप {appName} मधून डिस्कनेक्ट करू इच्छिता? आप कधीही पुन्हा कनेक्ट करू शकता.",
+    "disconnectAppMessage": "तुम्ही {appName} कधीही पुन्हा कनेक्ट करू शकता.",
     "@disconnectAppMessage": {
         "placeholders": {
             "appName": {
@@ -1359,7 +1358,7 @@
         }
     },
     "account": "खाते",
-    "actionItemsSyncedTo": "आपली कृती आयटम्स आपल्या {appName} खात्यासह सिंक केली जातील",
+    "actionItemsSyncedTo": "आपली कार्ये आपल्या {appName} खात्यासह सिंक केली जातील",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1556,7 +1555,7 @@
     "saveChanges": "बदल सेव करा",
     "resetToDefault": "डिफॉल्टमध्ये रीसेट करा",
     "viewTemplate": "टेम्पलेट पहा",
-    "trySomethingLike": "अशा काहीचा प्रयत्न करा...",
+    "trySomethingLike": "अशा काहीचा प्रयत्न करा…",
     "tryIt": "प्रयत्न करा",
     "creatingPlan": "योजना तयार करत आहे",
     "developingLogic": "लॉजिक विकसित करत आहे",
@@ -1565,8 +1564,8 @@
     "finalTouches": "अंतिम स्पर्श",
     "processing": "प्रक्रिया सुरू",
     "features": "वैशिष्ट्ये",
-    "creatingYourApp": "आपली अॅप तयार करत आहे...",
-    "generatingIcon": "आयकन तयार करत आहे...",
+    "creatingYourApp": "आपली अॅप तयार करत आहे…",
+    "generatingIcon": "आयकन तयार करत आहे…",
     "whatShouldWeMake": "आम्ही काय तयार करुशकतो?",
     "appName": "अॅप नाव",
     "description": "वर्णन",
@@ -1583,7 +1582,7 @@
     "usersPayToUse": "वापरकर्ते आपली अॅप वापरण्यासाठी भुगतान करतात",
     "freeForEveryone": "सर्वांसाठी मुक्त",
     "perMonthLabel": "/ महिना",
-    "creating": "तयार करत आहे...",
+    "creating": "तयार करत आहे…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1594,7 +1593,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "उपकरण शोधत आहे...",
+    "searchingForDevices": "उपकरण शोधत आहे",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1647,7 +1646,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "बेहतर स्थिरतेसाठी Omi ला पार्श्वभूमीमध्ये चालू करा",
+    "backgroundActivityDesc": "स्क्रीन बंद असताना किंवा अ‍ॅप बदलल्यावरही Omi रेकॉर्डिंग सुरू ठेवेल.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1655,7 +1654,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "पूर्ण अनुभवासाठी पार्श्वभूमी स्थान सक्षम करा",
+    "locationAccessDesc": "जेणेकरून तुमची संभाषणे कुठे झाली हे Omi नोंदवू शकेल.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1663,7 +1662,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "सूचित राहण्यासाठी सूचना सक्षम करा",
+    "notificationsDesc": "जेणेकरून Omi तुम्हाला संभाषणांचे सारांश, कार्य स्मरणपत्रे आणि तुमच्या अ‍ॅप्सची उत्तरे पाठवू शकेल.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1674,7 +1673,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "स्थान सेवा अक्षम आहे. कृपया सेटिंग्ज > गोपनीयता आणि सुरक्षा > स्थान सेवा वर जा आणि सक्षम करा",
+    "locationServiceDisabledDesc": "या डिव्हाइसवर स्थान सेवा बंद आहेत. त्या सेटिंग्जमध्ये चालू करा.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1904,7 +1903,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "To-Do's",
+    "actionItemsTitle": "कार्य",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1924,7 +1923,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 सर्व पूर्ण!\nकोणतीही अपेक्षित कृती आयटम नाही",
+    "emptyTodoMessage": "🎉 सर्व पूर्ण!\nकोणतेही प्रलंबित कार्य नाही",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1940,19 +1939,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "कृती आयटम अपूर्ण म्हणून चिन्हांकित",
+    "actionItemMarkedIncomplete": "कार्य अपूर्ण म्हणून चिन्हांकित",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "कृती आयटम पूर्ण",
+    "actionItemCompleted": "कार्य पूर्ण",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "कृती आयटम हटवा",
+    "deleteActionItemTitle": "कार्य हटवा",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "आपल्याला खरोखर या कृती आयटम हटवायचे आहे?",
+    "deleteActionItemMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1960,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Are you sure you want to delete {count} selected action item{s}?",
+    "deleteSelectedItemsMessage": "{count} निवडलेली कार्य{s} हटवायची?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1973,7 +1972,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "कृती आयटम \"{description}\" हटवली गेली",
+    "actionItemDeletedResult": "कार्य \"{description}\" हटवले गेले",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1982,7 +1981,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} action item{s} deleted",
+    "itemsDeletedResult": "{count} कार्य{s} हटवली गेली",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1994,7 +1993,7 @@
             }
         }
     },
-    "failedToDeleteItem": "कृती आयटम हटवण्यात अयशस्वी",
+    "failedToDeleteItem": "कार्य हटवण्यात अयशस्वी",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2006,11 +2005,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "कृती आयटमसाठी तयार",
+    "welcomeActionItemsTitle": "कार्यांसाठी तयार",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "आपला AI संभाषणातून कार्य आणि to-do स्वतः काढून घेणार. ते येथे दिसतील जेव्हा तयार होतील.",
+    "welcomeActionItemsDescription": "आपला AI आपल्या संभाषणांमधून कार्ये स्वयंचलितपणे काढेल. ती तयार झाल्यावर येथे दिसतील.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2039,11 +2038,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "स्मृती शोधा...",
+    "searchMemories": "स्मृती शोधा",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "स्मृती हटवली गेली.",
+    "memoryDeleted": "स्मृती हटवली गेली",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2051,7 +2050,7 @@
     "@undo": {
         "description": "Undo button text"
     },
-    "noMemoriesYet": "🧠 अद्याप कोणत्याही स्मृती नाही",
+    "noMemoriesYet": "अद्याप कोणत्याही स्मृती नाही",
     "@noMemoriesYet": {
         "description": "Empty state title when no memories"
     },
@@ -2067,7 +2066,7 @@
     "@noMemoriesInCategories": {
         "description": "Empty state text for filtered categories"
     },
-    "noMemoriesFound": "🔍 कोणत्याही स्मृती सापडली नाही",
+    "noMemoriesFound": "कोणत्याही स्मृती सापडली नाही",
     "@noMemoriesFound": {
         "description": "Empty state title when search/filter has no results"
     },
@@ -2079,7 +2078,7 @@
     "@clearMemoryTitle": {
         "description": "Dialog title for clearing memory"
     },
-    "clearMemoryMessage": "आपल्याला खरोखर Omi ची स्मृती स्पष्ट करायची आहे? हे क्रिया पूर्ववत् केली जाऊ शकत नाही.",
+    "clearMemoryMessage": "तुमच्या सर्व स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryMessage": {
         "description": "Dialog content for clearing memory"
     },
@@ -2099,7 +2098,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "नवीन कृती आयटम तयार करा",
+    "createActionItemTooltip": "नवीन कार्य तयार करा",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2156,7 +2155,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "मला आयस्क्रीम खाण्यास आवडते...",
+    "memoryContentHint": "मला सकाळच्या बैठका आवडतात.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -2172,11 +2171,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "कृती आयटम तयार करा",
+    "createActionItem": "कार्य तयार करा",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "कृती आयटम संपादित करा",
+    "editActionItem": "कार्य संपादित करा",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2184,23 +2183,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "कृती आयटम वर्णन रिक्त असू शकत नाही.",
+    "actionItemDescriptionEmpty": "कार्य वर्णन रिक्त असू शकत नाही.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "कृती आयटम अपडेट केली गेली",
+    "actionItemUpdated": "कार्य अपडेट केले गेले",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "कृती आयटम अपडेट करण्यात अयशस्वी",
+    "failedToUpdateActionItem": "कार्य अपडेट करण्यात अयशस्वी",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "कृती आयटम तयार केली गेली",
+    "actionItemCreated": "कार्य तयार केले गेले",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "कृती आयटम तयार करण्यात अयशस्वी",
+    "failedToCreateActionItem": "कार्य तयार करण्यात अयशस्वी",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2248,19 +2247,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "कृती आयटम हटवली गेली",
+    "actionItemDeleted": "कार्य हटवले गेले",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "कृती आयटम हटवण्यात अयशस्वी",
+    "failedToDeleteActionItem": "कार्य हटवण्यात अयशस्वी",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "कृती आयटम हटवा",
+    "deleteActionItemConfirmTitle": "कार्य हटवा",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "आपल्याला खरोखर या कृती आयटम हटवायचे आहे?",
+    "deleteActionItemConfirmMessage": "हे कार्य हटवायचे?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2276,7 +2275,7 @@
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
-    "languageSettingsHelperText": "अॅप भाषा मेनू आणि बटण बदलते. भाषण भाषा आपल्या रेकॉर्डिंग कसे ट्रांसक्राइब केली जाते यावर परिणाम करते.",
+    "languageSettingsHelperText": "अॅप भाषा मेनू आणि बटणे बदलते. प्राथमिक भाषा तुमची रेकॉर्डिंग कशी ट्रांसक्राइब केली जातात यावर परिणाम करते.",
     "@languageSettingsHelperText": {
         "description": "Helper text explaining the difference between app language and speech language"
     },
@@ -2296,7 +2295,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "काय चुकले याबद्दल आमच्या अधिक सांगा...",
+    "tellUsMoreWhatWentWrong": "काय चुकले याबद्दल आमच्या अधिक सांगा…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2377,7 +2376,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "कृती आयटम क्लिपबोर्डवर कॉपी केल्या गेल्या",
+    "actionItemsCopiedToClipboard": "कार्ये क्लिपबोर्डवर कॉपी केली गेली",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2397,7 +2396,7 @@
     "@deleteMemory": {
         "description": "Confirmation dialog title for deleting memory"
     },
-    "thisActionCannotBeUndone": "हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "thisActionCannotBeUndone": "हे पूर्ववत करता येणार नाही.",
     "@thisActionCannotBeUndone": {
         "description": "Warning message in delete confirmation dialog"
     },
@@ -2593,7 +2592,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "निर्यात सुरू झाली. हे काही सेकंद घेऊ शकते...",
+    "exportStartedMessage": "निर्यात सुरू झाली. हे काही सेकंद घेऊ शकते…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json मध्ये जोडा",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "आपली MCP API की वापरा",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2721,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "स्वयंचलितपणे व्यक्तीची निर्मिती करा",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "नाव सापडल्यावर स्वयंचलितपणे निर्मिती करा",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "अनुवर्तन प्रश्न",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -2745,7 +2728,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "कृती आयटमचे वर्णन रिक्त असू शकत नाही",
+    "actionItemDescriptionCannotBeEmpty": "कार्याचे वर्णन रिक्त असू शकत नाही",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2862,7 +2845,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "की दाबा...",
+    "pressKeys": "की दाबा…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2882,7 +2865,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "शोधा...",
+    "searchPlaceholder": "शोधा",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2952,10 +2935,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "आपल्या Omi डिव्हाइसशी संभाषण कॅप्चर करण्यास सुरुवात करा त्यांना येथे पाहण्यासाठी।",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "ऑडिओ कॅप्चर करण्यासाठी आपल्या मोबाइल अ‍ॅपचा वापर करा",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2988,7 +2967,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "कृती आयटम",
+    "actionItems": "कार्य",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3008,7 +2987,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "कार्य लोड होत आहे...",
+    "loadingTasks": "कार्य लोड होत आहे…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3088,30 +3067,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "कृती आयटम यशस्वीरित्या अपडेट केली गेली",
+    "actionItemUpdatedSuccessfully": "कार्य यशस्वीरित्या अपडेट केले गेले",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "कृती आयटम यशस्वीरित्या तयार केली गेली",
+    "actionItemCreatedSuccessfully": "कार्य यशस्वीरित्या तयार केले गेले",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "कृती आयटम यशस्वीरित्या हटवली गेली",
+    "actionItemDeletedSuccessfully": "कार्य यशस्वीरित्या हटवले गेले",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "कृती आयटम हटवा",
+    "deleteActionItem": "कार्य हटवा",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "आप्या खात्रीने हे कृती आयटम हटवू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "deleteActionItemConfirmation": "हे कार्य हटवायचे? हे पूर्ववत करता येणार नाही.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "कृती आयटमचे वर्णन प्रविष्ट करा...",
+    "enterActionItemDescription": "कार्याचे वर्णन प्रविष्ट करा",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3123,11 +3102,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "अ‍ॅप्स पुनः लोड होत आहे...",
+    "reloadingApps": "अ‍ॅप्स पुनः लोड होत आहे…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "अ‍ॅप्स लोड होत आहे...",
+    "loadingApps": "अ‍ॅप्स लोड होत आहे…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3175,11 +3154,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "आपला अ‍ॅप जमा होत आहे...",
+    "submittingYourApp": "आपला अ‍ॅप जमा होत आहे…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "आपल्यासाठी फॉर्म तयार होत आहे...",
+    "preparingFormForYou": "आपल्यासाठी फॉर्म तयार होत आहे…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3207,7 +3186,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "तुम्ही एक अद्भुत अ‍ॅप आहात, तुमचे काम उपयोगकर्त्याच्या क्वेरीला प्रतिक्रिया देणे आणि त्यांना चांगले वाटवणे आहे...",
+    "chatPromptPlaceholder": "तुम्ही एक अद्भुत अ‍ॅप आहात, तुमचे काम उपयोगकर्त्याच्या क्वेरीला प्रतिक्रिया देणे आणि त्यांना चांगले वाटवणे आहे…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3215,7 +3194,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "तुम्ही एक अद्भुत अ‍ॅप आहात, तुम्हाला संभाषणाची ट्रान्सक्रिप्ट आणि सारांश दिला जाईल...",
+    "conversationPromptPlaceholder": "तुम्ही एक अद्भुत अ‍ॅप आहात, तुम्हाला संभाषणाची ट्रान्सक्रिप्ट आणि सारांश दिला जाईल…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3420,7 +3399,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "क्षमता लोड होत आहे...",
+    "loadingCapabilities": "क्षमता लोड होत आहे…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3553,7 +3532,7 @@
     "@messageReportedSuccessfully": {
         "description": "Success message for reported message"
     },
-    "confirmReportMessage": "आप खात्रीने हा संदेश नोंदवू इच्छितात?",
+    "confirmReportMessage": "हा संदेश नोंदवायचा?",
     "@confirmReportMessage": {
         "description": "Report dialog confirmation text"
     },
@@ -3573,7 +3552,7 @@
     "@clearChatTitle": {
         "description": "Clear chat dialog title"
     },
-    "confirmClearChat": "आप खात्रीने चॅट साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "confirmClearChat": "हा चॅट साफ करायचा? हे पूर्ववत करता येणार नाही.",
     "@confirmClearChat": {
         "description": "Clear chat confirmation text"
     },
@@ -3610,13 +3589,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "लिप्यंतरण होत आहे...",
+    "transcribing": "लिप्यंतरण होत आहे…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "लिप्यंतरण अयशस्वी",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "सोडून दिलेला संभाषण",
     "@discardedConversation": {
@@ -3630,7 +3605,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "कॉपी केले!",
+    "copied": "कॉपी केले",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3683,7 +3658,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "संभाषण पुनः लोड होत आहे...",
+    "reloadingConversations": "संभाषण पुनः लोड होत आहे…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3767,7 +3742,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "स्मृती लोड होत आहे...",
+    "loadingMemories": "स्मृती लोड होत आहे…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3786,7 +3761,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "आपल्या स्मृती लोड होत आहे...",
+    "loadingYourMemories": "आपल्या स्मृती लोड होत आहे…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3827,7 +3802,7 @@
     "@createMemory": {
         "description": "Button text to create new memory"
     },
-    "deleteMemoryConfirmation": "आप खात्रीने हे स्मृती हटवू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही।",
+    "deleteMemoryConfirmation": "ही स्मृती हटवायची? हे पूर्ववत करता येणार नाही.",
     "@deleteMemoryConfirmation": {
         "description": "Confirmation message for deleting memory"
     },
@@ -3878,7 +3853,7 @@
     "@clearOmisMemory": {
         "description": "Confirmation dialog title for clearing all memories"
     },
-    "clearMemoryConfirmation": "आप खात्रीने Omi ची स्मृती साफ करू इच्छितात? हे कृती पूर्ववत केली जाऊ शकत नाही आणि सर्व {count} स्मृती कायमचा हटवेल।",
+    "clearMemoryConfirmation": "सर्व {count} स्मृती हटवल्या जातील. हे पूर्ववत करता येणार नाही.",
     "@clearMemoryConfirmation": {
         "description": "Confirmation message for clearing all memories",
         "placeholders": {
@@ -3946,7 +3921,7 @@
     "pleaseSelectYourPrimaryLanguage": "कृपया आपली प्राथमिक भाषा निवडा",
     "chooseYourLanguage": "आपली भाषा निवडा",
     "selectPreferredLanguageForBestExperience": "सर्वोत्तम Omi अनुभवासाठी आपली पसंदीची भाषा निवडा",
-    "searchLanguages": "भाषा शोधा...",
+    "searchLanguages": "भाषा शोधा",
     "selectALanguage": "भाषा निवडा",
     "tryDifferentSearchTerm": "भिन्न शोध शब्द वापरून पाहा",
     "pleaseEnterYourName": "कृपया आपले नाव प्रविष्ट करा",
@@ -3970,9 +3945,9 @@
     "accessibility": "अॅक्सेसिबिलिटी",
     "detectBrowserBasedMeetings": "ब्राउজर-आधारित मीटिंग्स शोधा",
     "accessibilityDescription": "आपण आपल्या ब्राउজरमध्ये Zoom, Meet किंवा Teams मीटिंग्समध्ये सामील होताना शोधण्यासाठी Omi ला अॅक्सेसिबिलिटी परवानगी आवश्यक आहे.",
-    "pleaseWait": "कृपया प्रतीक्षा करा...",
+    "pleaseWait": "कृपया प्रतीक्षा करा…",
     "joinTheCommunity": "समुदायात सामील व्हा!",
-    "loadingProfile": "प्रोफाइल लोड होत आहे...",
+    "loadingProfile": "प्रोफाइल लोड होत आहे…",
     "profileSettings": "प्रोफाइल सेटिंग्‍स",
     "noEmailSet": "कोणती ईमेल सेट नाही",
     "userIdCopiedToClipboard": "वापरकर्ता ID क्लिपबोर्डवर कॉपी केली",
@@ -4020,7 +3995,7 @@
     "pilotFeaturesDescription": "ही वैशिष्ट्य परीक्षा आहेत आणि कोणतेही समर्थन हमी नाही.",
     "suggestFollowUpQuestion": "फॉलो-अप प्रश्न सुचवा",
     "saveSettings": "सेटिंग्‍स सेव करा",
-    "syncingDeveloperSettings": "डेव्हलपर सेटिंग्‍स सिंक होत आहे...",
+    "syncingDeveloperSettings": "डेव्हलपर सेटिंग्‍स सिंक होत आहे…",
     "summary": "सारांश",
     "auto": "स्वयंचलित",
     "noSummaryForApp": "या अॅप साठी कोणतेही सारांश उपलब्ध नाही. चांगल्या परिणामांसाठी दुसरा अॅप वापरून पाहा.",
@@ -4048,20 +4023,20 @@
         }
     },
     "letOmiChooseAutomatically": "Omi ला स्वयंचलितपणे सर्वोत्तम अॅप निवडू द्या",
-    "deleteConversationConfirmation": "आप हा संभाषण हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteConversationConfirmation": "हे संभाषण हटवायचे? हे पूर्ववत करता येणार नाही.",
     "conversationDeleted": "संभाषण हटवले",
-    "generatingLink": "लिंक तयार होत आहे...",
+    "generatingLink": "लिंक तयार होत आहे…",
     "editConversation": "संभाषण संपादित करा",
     "conversationLinkCopiedToClipboard": "संभाषण लिंक क्लिपबोर्डवर कॉपी केली",
     "conversationTranscriptCopiedToClipboard": "संभाषण लिप्यंतरण क्लिपबोर्डवर कॉपी केली",
     "editConversationDialogTitle": "संभाषण संपादित करा",
     "changeTheConversationTitle": "संभाषण शीर्षक बदला",
     "conversationTitle": "संभाषण शीर्षक",
-    "enterConversationTitle": "संभाषण शीर्षक प्रविष्ट करा...",
+    "enterConversationTitle": "संभाषण शीर्षक प्रविष्ट करा…",
     "conversationTitleUpdatedSuccessfully": "संभाषण शीर्षक यशस्वीरित्या अपडेट केला",
     "failedToUpdateConversationTitle": "संभाषण शीर्षक अपडेट करण्यास अपयश आली",
     "errorUpdatingConversationTitle": "संभाषण शीर्षक अपडेट करण्यात त्रुटी",
-    "settingUp": "सेटअप होत आहे...",
+    "settingUp": "सेटअप होत आहे…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4073,11 +4048,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "लाइव्ह लिप्यंतरण, AI अंतर्दृष्टी आणि स्वयंचलित सेव्हिंगसाठी ऑडियो कॅप्चर करण्यासाठी बटण क्लिक करा.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "पुन्हा कनेक्ट होत आहे...",
+    "reconnecting": "पुन्हा कनेक्ट होत आहे…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4093,7 +4064,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "{countdown} सेकंदांत पुनः सुरू होत आहे...",
+    "resumingInCountdown": "{countdown} सेकंदांत पुनः सुरू होत आहे…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4106,7 +4077,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "ऑडियो ऐकत आहे...",
+    "listeningForAudio": "ऑडियो ऐकत आहे…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4144,15 +4115,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "लाइव्ह लिप्यंतरण पाहण्यासाठी रेकॉर्डिंग सुरू करा",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "विराम दिली",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "आरंभ होत आहे...",
+    "initializing": "आरंभ होत आहे…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4177,10 +4144,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "ऑडियो कॅप्चर होत आहे आणि लिप्यंतरण तयार होत आहे",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "सिस्टम ऑडियो रेकॉर्ड करण्यास सुरू करण्यासाठी क्लिक करा",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4198,7 +4161,7 @@
             }
         }
     },
-    "translatedByOmi": "omi द्वारे अनुवादित",
+    "translatedByOmi": "Omi द्वारे अनुवादित",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4236,7 +4199,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "डिव्हाइसेस लोड होत आहे...",
+    "loadingDevices": "डिव्हाइसेस लोड होत आहे…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4306,7 +4269,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "आप साइन आउट करण्याचे सुनिश्चित आहात?",
+    "signOutConfirmation": "संभाषणे पाहण्यासाठी पुन्हा साइन इन करावे लागेल. पेअर केलेले डिव्हाइस आणि ॲपच्या पसंती या फोनवर राहतील.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4371,7 +4334,7 @@
     "setConversationEndDescription": "संभाषण कधी स्वयंचलितपणे समाप्त होतील हे सेट करा",
     "importDataDescription": "इतर स्रोतांकडून डेटा आयात करा",
     "exportConversationsDescription": "संभाषण JSON मध्ये निर्यात करा",
-    "exportingConversations": "संभाषण निर्यात होत आहे...",
+    "exportingConversations": "संभाषण निर्यात होत आहे…",
     "clearNodesDescription": "सर्व नोड्स आणि कनेक्शन साफ करा",
     "deleteKnowledgeGraphQuestion": "ज्ञान आलेख हटवा?",
     "deleteKnowledgeGraphWarning": "हे सर्व व्युत्पन्न ज्ञान आलेख डेटा हटवेल. आपल्या मूळ आठवणी सुरक्षित राहतात.",
@@ -4420,7 +4383,7 @@
     "@updateAppQuestion": {
         "description": "Dialog title asking to confirm app update"
     },
-    "updateAppConfirmation": "आप आपल्या अॅप अपडेट करण्याचे सुनिश्चित आहात? आमच्या टीम द्वारे पुनरावलोकन केल्यानंतर बदल प्रतिबिंबित होतील.",
+    "updateAppConfirmation": "आमच्या टीमने पुनरावलोकन केल्यानंतर बदल लागू होतील.",
     "@updateAppConfirmation": {
         "description": "Dialog description explaining app update will be reviewed"
     },
@@ -4458,10 +4421,6 @@
                 "type": "String"
             }
         }
-    },
-    "newVersionAvailable": "नवीन संस्करण उपलब्ध 🎉",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
     },
     "no": "नाही",
     "@no": {
@@ -4515,7 +4474,7 @@
     "@cancelSubscriptionQuestion": {
         "description": "Dialog title for cancel subscription"
     },
-    "cancelSubscriptionConfirmation": "आप आपल्या सदस्यता रद्द करण्याचे सुनिश्चित आहात? आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
+    "cancelSubscriptionConfirmation": "आप आपल्या चालू बिलिंग कालावधीच्या शेवटपर्यंत प्रवेश ठेवू शकतील.",
     "@cancelSubscriptionConfirmation": {
         "description": "Dialog description for cancel subscription"
     },
@@ -4523,7 +4482,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "रद्द होत आहे...",
+    "cancelling": "रद्द होत आहे…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4682,7 +4641,7 @@
             }
         }
     },
-    "addingToService": "{serviceName} मध्ये जोडत आहे...",
+    "addingToService": "{serviceName} मध्ये जोडत आहे…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4743,7 +4702,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "API की हे प्रमाणीकरणासाठी वापरली जातात जेव्हा आपल्या अॅप OMI सर्व्हरसह संवाद करते. ते आपल्या अनुप्रयोगास स्मृतिमान तयार करण्यास आणि इतर OMI सेवा सुरक्षितपणे प्रवेश करण्यास अनुमती देते.",
+    "apiKeysDescription": "API की हे प्रमाणीकरणासाठी वापरली जातात जेव्हा आपल्या अॅप Omi सर्व्हरसह संवाद करते. ते आपल्या अनुप्रयोगास स्मृतिमान तयार करण्यास आणि इतर Omi सेवा सुरक्षितपणे प्रवेश करण्यास अनुमती देते.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -4775,7 +4734,7 @@
     "@revokeApiKeyQuestion": {
         "description": "Confirmation dialog title for revoking API key"
     },
-    "revokeApiKeyWarning": "हे क्रिया पूर्ववत् करू शकत नाही. या की वापरणारी कोणतीही अनुप्रयोग यापुढे API मध्ये प्रवेश करू शकणार नाही.",
+    "revokeApiKeyWarning": "ही की वापरणाऱ्या अ‍ॅप्सचा API प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeApiKeyWarning": {
         "description": "Warning message about revoking API key"
     },
@@ -4866,7 +4825,7 @@
             }
         }
     },
-    "deleteItemConfirmation": "आप हा {item} हटविण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "deleteItemConfirmation": "हा {item} हटवणे पूर्ववत करता येणार नाही.",
     "@deleteItemConfirmation": {
         "description": "Dialog message explaining deletion is permanent",
         "placeholders": {
@@ -4879,7 +4838,7 @@
     "@revokeKeyQuestion": {
         "description": "Dialog title asking to confirm key revocation"
     },
-    "revokeKeyConfirmation": "आप \"{keyName}\" की रद्द करण्याचे सुनिश्चित आहात? हे क्रिया पूर्ववत् करू शकत नाही.",
+    "revokeKeyConfirmation": "\"{keyName}\" वापरणाऱ्या सर्व गोष्टींचा प्रवेश बंद होईल. हे पूर्ववत करता येणार नाही.",
     "@revokeKeyConfirmation": {
         "description": "Dialog message explaining key revocation is permanent",
         "placeholders": {
@@ -5126,7 +5085,7 @@
     "@thankYouRequestUnderReview": {
         "description": "Success message after submitting training data request"
     },
-    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल. आप सुनिश्चित आहात?",
+    "planRemainsActiveUntil": "आपल्या योजना {date} पर्यंत सक्रिय राहील. त्यानंतर, आप आपल्या असीम वैशिष्ट्यांमध्ये प्रवेश गमवाल.",
     "@planRemainsActiveUntil": {
         "description": "Message explaining plan remains active until date",
         "placeholders": {
@@ -5262,7 +5221,7 @@
     "@askOmiAnything": {
         "description": "Feature: ask Omi anything"
     },
-    "unlockOmiInfiniteMemory": "Omi च्या अनंत स्मृती अनलॉक करा",
+    "unlockOmiInfiniteMemory": "अमर्यादित स्मृती",
     "@unlockOmiInfiniteMemory": {
         "description": "Feature: unlock infinite memory"
     },
@@ -5278,7 +5237,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "कनेक्शन तपासा आणि पुन्हा प्रयत्न करा",
+    "checkConnectionTryAgain": "तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -5422,7 +5381,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "निर्यात सुरू झाले. यास काही सेकंद लागू शकतात...",
+    "exportStartedMayTakeFewSeconds": "निर्यात सुरू झाले. यास काही सेकंद लागू शकतात…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5430,7 +5389,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "आपल्या दैनिक कृती मुद्दे पचन कॉन्फ़िगर करा",
+    "configureDailySummaryDigest": "आपला दैनिक कार्य डायजेस्ट कॉन्फिगर करा",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5534,7 +5493,7 @@
     "@deleteAllLimitlessConversations": {
         "description": "Dialog title for deleting Limitless data"
     },
-    "deleteAllLimitlessWarning": "हे Limitless मधून आयात केलेले सर्व संभाषण स्थायीरित्या हटाईल. ही कारवाई पूर्ववत्त करता येणार नाही.",
+    "deleteAllLimitlessWarning": "Limitless मधून आयात केलेली सर्व संभाषणे हटवली जातील. हे पूर्ववत करता येणार नाही.",
     "@deleteAllLimitlessWarning": {
         "description": "Warning message in delete dialog"
     },
@@ -5592,7 +5551,7 @@
     "@deleteSampleQuestion": {
         "description": "Dialog title for deleting a speech sample"
     },
-    "deleteSampleConfirmation": "आप {name} चा नमुना हटविण्याचा खरेच निश्चय आहे?",
+    "deleteSampleConfirmation": "{name} यांचा आवाजाचा नमुना काढला जाईल. हे पूर्ववत करता येणार नाही.",
     "@deleteSampleConfirmation": {
         "description": "Confirmation message for deleting a speech sample",
         "placeholders": {
@@ -5605,7 +5564,7 @@
     "@confirmDeletion": {
         "description": "Dialog title for confirming deletion"
     },
-    "deletePersonConfirmation": "आप {name} हटविण्याचा खरेच निश्चय आहे? हे सर्व संबंधित भाषण नमुने देखील काढून टाकेल.",
+    "deletePersonConfirmation": "यामुळे {name} यांचे आवाजाचे नमुने काढले जातील आणि हे पूर्ववत करता येणार नाही. मागील संभाषणांमधील त्यांचे बोलणे नाव नसलेले वक्ते बनेल.",
     "@deletePersonConfirmation": {
         "description": "Confirmation message for deleting a person",
         "placeholders": {
@@ -5756,7 +5715,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "फर्मवेयर आवृत्ती तपासत आहे...",
+    "checkingFirmwareVersion": "फर्मवेयर आवृत्ती तपासत आहे…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5967,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "आपल्या संभाषणातील कार्य येथे दिसतील.\n+ टॅप करून एक मॅन्युअल्ली तयार करा.",
+    "tasksEmptyStateMessage": "कार्य तयार करण्यासाठी संभाषण सुरू करा.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -5991,7 +5950,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "आपली रेकॉर्डिंग लोड करत आहे...",
+    "loadingYourRecording": "आपली रेकॉर्डिंग लोड करत आहे…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -5999,7 +5958,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "विश्लेषण करत आहे...",
+    "analyzing": "विश्लेषण करत आहे…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6007,7 +5966,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Apple Watch तपासत आहे...",
+    "checkingAppleWatch": "Apple Watch तपासत आहे…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6069,7 +6028,7 @@
     "@finishedConversation": {
         "description": "Dialog title asking if user wants to end conversation"
     },
-    "stopRecordingConfirmation": "आप रेकॉर्डिंग थांबवण्याचा आणि संभाषण आता सारांशित करण्याचा खरेच निश्चय आहे?",
+    "stopRecordingConfirmation": "रेकॉर्डिंग थांबवून आत्ताच संभाषणाचा सारांश तयार करायचा?",
     "@stopRecordingConfirmation": {
         "description": "Confirmation message for stopping recording and summarizing"
     },
@@ -6095,7 +6054,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "लेखा किंवा फोटो्स साठी प्रतीक्षा करत आहे...",
+    "waitingForTranscriptOrPhotos": "लेखा किंवा फोटो्स साठी प्रतीक्षा करत आहे…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6257,7 +6216,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "कृती मुद्दे",
+    "wrappedActionItems": "कार्य",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6382,11 +6341,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "प्रक्रियाकरण...",
+    "wrappedProcessingDefault": "प्रक्रियाकरण…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "आपल्या\n२०२५ कथा तयार करत आहे...",
+    "wrappedCreatingYourStory": "आपल्या\n२०२५ कथा तयार करत आहे…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6426,7 +6385,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "सुरू करत आहे...",
+    "wrappedStarting": "सुरू करत आहे…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6698,15 +6657,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "आपले व्हॉइस प्रोफाइल अपलोड करत आहे....",
+    "uploadingVoiceProfile": "आपले व्हॉइस प्रोफाइल अपलोड करत आहे….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "आपले व्हॉइस लक्षात ठेवत आहे...",
+    "memorizingYourVoice": "आपले व्हॉइस लक्षात ठेवत आहे…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "आपला अनुभव व्यक्तिगत करत आहे...",
+    "personalizingExperience": "आपला अनुभव व्यक्तिगत करत आहे…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6877,7 +6836,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "सर्व्हरसह संदेश समन्वय करत आहे...",
+    "syncingMessages": "सर्व्हरसह संदेश समन्वय करत आहे…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7113,11 +7072,11 @@
             }
         }
     },
-    "summarizingConversation": "संभाषण सारांश करत आहे...\nयाला काही सेकंद लागू शकतात",
+    "summarizingConversation": "संभाषण सारांश करत आहे…\nयाला काही सेकंद लागू शकतात",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "संभाषण पुन्हा सारांश करत आहे...\nयाला काही सेकंद लागू शकतात",
+    "resummarizingConversation": "संभाषण पुन्हा सारांश करत आहे…\nयाला काही सेकंद लागू शकतात",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7252,7 +7211,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
+    "premiumMinutesInfo": "दर महिन्याला 300 प्रीमियम मिनिटे. अमर्यादित मोफत ट्रांसक्रिप्शनसाठी \"उपकरणावर\" निवडा.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7296,7 +7255,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "डाउनलोड करत आहे...",
+    "downloading": "डाउनलोड करत आहे…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7363,7 +7322,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
+    "premiumMinutesMonth": "दर महिन्याला 300 प्रीमियम मिनिटे. अमर्यादित मोफत ट्रांसक्रिप्शनसाठी \"उपकरणावर\" निवडा. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -7415,7 +7374,7 @@
             }
         }
     },
-    "preparingModel": "{model} तयार करत आहे...",
+    "preparingModel": "{model} तयार करत आहे…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7451,7 +7410,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omi चा अंतर्निर्मित लाइव्ह ट्रान्सक्रिप्शन स्वयंचलित स्पीकर शोध आणि डायराइজेशनसह रिअल-टाइम संभाषणांसाठी अनुकूलित आहे.",
+    "omiTranscriptionOptimized": "Omi चे लाइव्ह ट्रांसक्रिप्शन रिअल-टाइम संभाषणांसाठी बनवले आहे आणि कोण काय म्हणाले ते दाखवते.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -7463,7 +7422,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "प्रदाता टेम्पलेट निवडा...",
+    "selectProviderTemplate": "प्रदाता टेम्पलेट निवडा…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7737,7 +7696,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "ज्ञान आलेख लोड करत आहे...",
+    "loadingKnowledgeGraph": "ज्ञान आलेख लोड करत आहे…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7745,7 +7704,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "स्मृतीमधून आपला ज्ञान आलेख तयार करत आहे...",
+    "buildingKnowledgeGraphFromMemories": "स्मृतीमधून आपला ज्ञान आलेख तयार करत आहे…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7765,7 +7724,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "{appName} उघडत आहे...",
+    "openingApp": "{appName} उघडत आहे…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7815,7 +7774,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "आपल्या प्रतिसाद लिहा...",
+    "writeYourReply": "आपल्या प्रतिसाद लिहा…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7954,7 +7913,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "संपर्कांचा शोध घ्या...",
+    "searchContactsHint": "संपर्कांचा शोध घ्या",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8093,7 +8052,7 @@
             }
         }
     },
-    "transferring": "स्थानांतरित करत आहे...",
+    "transferring": "स्थानांतरित करत आहे…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8125,7 +8084,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "स्थानांतरण चल रहे आहे...",
+    "transferInProgress": "स्थानांतरण चल रहे आहे…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8133,7 +8092,7 @@
     "@shareRecording": {
         "description": "Menu item to share a recording"
     },
-    "deleteRecordingConfirmation": "आपण खरोखर या रेकॉर्डिंगला कायमीपणे हटवू इच्छिता का? हे पूर्ववत करता येणार नाही.",
+    "deleteRecordingConfirmation": "हे पूर्ववत करता येणार नाही.",
     "@deleteRecordingConfirmation": {
         "description": "Confirmation message for deleting a recording"
     },
@@ -8283,7 +8242,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "गणना करत आहे...",
+    "calculatingETA": "गणना करत आहे…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8300,19 +8259,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "जवळजवळ पूर्ण...",
+    "almostDone": "जवळजवळ पूर्ण…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "omi म्हणते",
+    "omiSays": "Omi म्हणते",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "आपल्या डेटा विश्लेषण करत आहे...",
+    "analyzingYourData": "आपल्या डेटा विश्लेषण करत आहे…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "{level} सुरक्षेला स्थलांतरित करत आहे...",
+    "migratingToProtection": "{level} सुरक्षेला स्थलांतरित करत आहे…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8321,11 +8280,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "स्थलांतरित करण्यासाठी कोणताही डेटा नाही. अंतिम करत आहे...",
+    "noDataToMigrateFinalizing": "स्थलांतरित करण्यासाठी कोणताही डेटा नाही. अंतिम करत आहे…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "{itemType} स्थलांतरित करत आहे... {percentage}%",
+    "migratingItemsProgress": "{itemType} स्थलांतरित करत आहे… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8337,7 +8296,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "सर्व ऑब्जेक्ट्स स्थलांतरित केले. अंतिम करत आहे...",
+    "allObjectsMigratedFinalizing": "सर्व ऑब्जेक्ट्स स्थलांतरित केले. अंतिम करत आहे…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8386,7 +8345,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "उदा., मीटिंग अॅक्शन आयटम एक्सट्रॅक्टर",
+    "templateNameHint": "उदा., मीटिंग कार्य एक्सट्रॅक्टर",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8394,7 +8353,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "उदा., प्रदान केलेल्या संभाषणातून कार्य आयटम, निर्णय आणि मुख्य मुद्दे निकाळा.",
+    "conversationPromptHint": "उदा., प्रदान केलेल्या संभाषणातून कार्ये, घेतलेले निर्णय आणि मुख्य मुद्दे काढा.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8414,15 +8373,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "विवरण तयार करत आहे...",
+    "generatingDescription": "विवरण तयार करत आहे…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "अॅप आयकन तयार करत आहे...",
+    "creatingAppIcon": "अॅप आयकन तयार करत आहे…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "अॅप स्थापित करत आहे...",
+    "installingApp": "अॅप स्थापित करत आहे…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8601,7 +8560,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "अॅप आयकन तयार करत आहे...",
+    "aiGenCreatingAppIcon": "अॅप आयकन तयार करत आहे…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8647,7 +8606,7 @@
     "@connectOmiDevice": {
         "description": "Button text to connect Omi device"
     },
-    "planSwitchingDescriptionWithTitle": "आप्पण आपल्या Unlimited योजना {title} वर स्विच करत आहात. आप्पण आगे जाण्यास खरोखर इच्छुक आहात का?",
+    "planSwitchingDescriptionWithTitle": "तुम्ही तुमची Unlimited योजना {title} वर स्विच करत आहात.",
     "@planSwitchingDescriptionWithTitle": {
         "description": "Dialog description when switching from unlimited plan",
         "placeholders": {
@@ -8680,7 +8639,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "आपल्या JSON कॉन्फिगरेशन येथे पेस्ट करा...",
+    "transcriptionJsonPlaceholder": "आपल्या JSON कॉन्फिगरेशन येथे पेस्ट करा…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8790,7 +8749,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "टेप किंवा सारांश शोधा...",
+    "searchTranscriptOrSummary": "टेप किंवा सारांश शोधा",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9128,11 +9087,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "आपल्या स्मृती वाचत आहे...",
+    "msgReadingMemories": "आपल्या स्मृती वाचत आहे…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "आपल्या स्मृती पासून शिकत आहे...",
+    "msgLearningMemories": "आपल्या स्मृती पासून शिकत आहे…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9202,7 +9161,7 @@
             }
         }
     },
-    "conversationNewIndicator": "नवीन 🚀",
+    "conversationNewIndicator": "नवीन",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9215,7 +9174,7 @@
             }
         }
     },
-    "mergingStatus": "विलीन करत आहे...",
+    "mergingStatus": "विलीन करत आहे…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9388,11 +9347,11 @@
     },
     "newFolder": "नवीन फोल्डर",
     "color": "रंग",
-    "waitingForDevice": "डिव्हाइसची प्रतीक्षा करत आहे...",
+    "waitingForDevice": "डिव्हाइसची प्रतीक्षा करत आहे…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "काही सांगा...",
+    "saySomething": "काही सांगा…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9444,15 +9403,15 @@
     "downloadAudio": "ऑडिओ डाउनलोड करा",
     "audioDownloadSuccess": "ऑडिओ यशस्वीरित्या डाउनलोड केली",
     "audioDownloadFailed": "ऑडिओ डाउनलोड करण्यात अयशस्वी",
-    "downloadingAudio": "ऑडिओ डाउनलोड करत आहे...",
+    "downloadingAudio": "ऑडिओ डाउनलोड करत आहे…",
     "shareAudio": "ऑडिओ शेयर करा",
     "preparingAudio": "ऑडिओ तयार करत आहे",
-    "gettingAudioFiles": "ऑडिओ फाइल मिळवत आहे...",
+    "gettingAudioFiles": "ऑडिओ फाइल मिळवत आहे…",
     "downloadingAudioProgress": "ऑडिओ डाउनलोड करत आहे",
     "processingAudio": "ऑडिओ प्रक्रिया करत आहे",
-    "combiningAudioFiles": "ऑडिओ फाइल एकत्र करत आहे...",
+    "combiningAudioFiles": "ऑडिओ फाइल एकत्र करत आहे…",
     "audioReady": "ऑडिओ तयार",
-    "openingShareSheet": "शेयर शीट उघडत आहे...",
+    "openingShareSheet": "शेयर शीट उघडत आहे…",
     "audioShareFailed": "शेयर अयशस्वी",
     "dailyRecaps": "दैनिक रीकॅप्स",
     "removeFilter": "फिल्टर काढून टाका",
@@ -9529,7 +9488,7 @@
         }
     },
     "mcpConnectionFailed": "MCP सर्व्हरशी जोडणे अयशस्वी झाले",
-    "authorizingMcpServer": "अधिकृत केत आहे...",
+    "authorizingMcpServer": "अधिकृत केत आहे…",
     "whereDidYouHearAboutOmi": "तू आमच्याकडे कसे आला?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9632,7 +9591,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "डिव्हाइसमधून डाउनलोड करत आहे",
-    "reconnectingToInternet": "इंटरनेटशी पुन्हा जोडत आहे...",
+    "reconnectingToInternet": "इंटरनेटशी पुन्हा जोडत आहे…",
     "uploadingToCloud": "{total} पैकी {current} अपलोड करत आहे",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9644,8 +9603,8 @@
             }
         }
     },
-    "processingOnServer": "सर्व्हरवर प्रक्रिया करत आहे...",
-    "processingOnServerProgress": "प्रक्रिया करत आहे... {current}/{total} सेगमेंट",
+    "processingOnServer": "सर्व्हरवर प्रक्रिया करत आहे…",
+    "processingOnServerProgress": "प्रक्रिया करत आहे… {current}/{total} सेगमेंट",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9790,7 +9749,7 @@
     "answerTheCallFrom": "हुंडा कॉल सुनो",
     "onTheCallEnterThisCode": "कॉलवर हा कोड एंटर करा",
     "followTheVoiceInstructions": "व्हॉइस सूचनांचे अनुसरण करा",
-    "statusCalling": "कॉल करत आहे...",
+    "statusCalling": "कॉल करत आहे…",
     "statusCallInProgress": "कॉल प्रगतीमध्ये आहे",
     "statusVerifiedLabel": "सत्यापित",
     "statusCallMissed": "कॉल हरवली गेली",
@@ -9805,11 +9764,11 @@
     "phoneNoContactsFound": "कोणतेही संपर्क आढळले नाहीत",
     "phoneEnterNumber": "नंबर एंटर करा",
     "failedToStartCall": "कॉल सुरू करणे अयशस्वी झाले",
-    "callStateConnecting": "जोडत आहे...",
-    "callStateRinging": "बाजत आहे...",
+    "callStateConnecting": "जोडत आहे…",
+    "callStateRinging": "बाजत आहे…",
     "callStateEnded": "कॉल संपली",
     "callStateFailed": "कॉल अयशस्वी झाली",
-    "transcriptPlaceholder": "ट्रांसक्रिप्ट येथे दिसेल...",
+    "transcriptPlaceholder": "ट्रांसक्रिप्ट येथे दिसेल…",
     "phoneUnmute": "अनम्यूट करा",
     "phoneMute": "म्यूट करा",
     "phoneSpeaker": "स्पीकर",
@@ -9888,7 +9847,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "स्वयंचलित कॉल सारांश आणि कार्य आयटम",
+    "phoneCallsUpsellFeature2": "स्वयंचलित कॉल सारांश आणि कार्ये",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10033,7 +9992,7 @@
         }
     },
     "transcriptionPaused": "रेकॉर्डिंग, पुन्हा जोडत आहे",
-    "transcriptionPausedReconnecting": "अद्याप रेकॉर्डिंग — ट्रांसक्रिप्शनशी पुन्हा जोडत आहे...",
+    "transcriptionPausedReconnecting": "अद्याप रेकॉर्डिंग — ट्रांसक्रिप्शनशी पुन्हा जोडत आहे…",
     "fairUseBannerStatus": "न्याय्य वापर: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10214,7 +10173,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "आम्ही कोणतेही प्रतिक्रिया सराहतो...",
+    "cancelReasonDetailHint": "आम्ही कोणतेही प्रतिक्रिया सराहतो…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10322,10 +10281,10 @@
     "disconnectHistory": "डिस्कनेक्ट इतिहास",
     "noDisconnectsRecorded": "कोणतेही डिस्कनेक्ट रेकॉर्ड केलेले नाहीत",
     "diagnostics": "निदान",
-    "waitingForData": "डेटाची प्रतीक्षा करत आहे...",
+    "waitingForData": "डेटाची प्रतीक्षा करत आहे…",
     "liveRssiOverTime": "वेळेवर लाइव RSSI",
     "noRssiDataYet": "अद्याप कोणताही RSSI डेटा नाही",
-    "collectingData": "डेटा संकलित करत आहे...",
+    "collectingData": "डेटा संकलित करत आहे…",
     "cleanDisconnect": "स्वच्छ डिस्कनेक्ट",
     "connectionTimeout": "जोडणी वेळसीमा",
     "remoteDeviceTerminated": "रिमोट डिव्हाइस समाप्त केली गेली",
@@ -10377,7 +10336,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "सर्वशेष स्थिर फर्मवेअर मिळवत आहे...",
+    "fetchingStableFirmware": "सर्वशेष स्थिर फर्मवेअर मिळवत आहे…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10405,11 +10364,11 @@
     "enableLocationTitle": "स्थान सक्षम करा",
     "enableLocationDescription": "जवळपासून ब्लूटूथ डिव्हाइस शोधण्यासाठी स्थान परवानगी आवश्यक आहे.",
     "voiceRecordingFound": "रेकॉर्डिंग आढळली",
-    "transcriptionConnecting": "ट्रांसक्रिप्शन जोडत आहे...",
+    "transcriptionConnecting": "ट्रांसक्रिप्शन जोडत आहे…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "ट्रांसक्रिप्शन पुन्हा जोडत आहे...",
+    "transcriptionReconnecting": "ट्रांसक्रिप्शन पुन्हा जोडत आहे…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10452,8 +10411,8 @@
     "deleteFlowFeedbackTitle": "आम्हाला अधिक सांगा",
     "deleteFlowFeedbackSubtitle": "Omi तुमच्यासाठी कसे उपयुक्त ठरले असते?",
     "deleteFlowFeedbackHint": "ऐच्छिक — तुमचे विचार आम्हाला एक चांगले उत्पादन बनवण्यात मदत करतात.",
-    "deleteFlowConfirmTitle": "हे कायमचे आहे",
-    "deleteFlowConfirmSubtitle": "एकदा खाते हटवले की ते पुनर्प्राप्त करण्याचा कोणताही मार्ग नाही.",
+    "deleteFlowConfirmTitle": "तुमचे खाते हटवायचे?",
+    "deleteFlowConfirmSubtitle": "हे पूर्ववत करता येणार नाही, सपोर्टलाही नाही.",
     "deleteConsequenceSubscription": "कोणतीही सक्रिय सदस्यता रद्द केली जाईल.",
     "deleteConsequenceNoRecovery": "तुमचे खाते पुनर्संचयित केले जाऊ शकत नाही — सपोर्टद्वारेही नाही.",
     "deleteTypeToConfirm": "पुष्टी करण्यासाठी DELETE टाइप करा",
@@ -10464,10 +10423,6 @@
     "planUpdate": "प्लॅन अपडेट",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये $49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "तुमचा प्लॅन अपग्रेड करा",
     "@upgradeYourPlan": {
@@ -10535,7 +10490,7 @@
     "connectTaskAppToExport": "निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा",
     "deselectAllTasksMenu": "सर्वांची निवड रद्द करा",
     "hideCompletedTasks": "पूर्ण झालेले लपवा",
-    "searchActionItems": "कृती आयटम शोधा",
+    "searchActionItems": "कार्ये शोधा",
     "selectActionItems": "अनेक निवडा",
     "selectAllTasksMenu": "सर्व निवडा",
     "showCompletedTasks": "पूर्ण झालेले दाखवा",
@@ -10604,7 +10559,7 @@
     "syncCustomSttWarningTitle": "सिंक Omi ट्रान्सक्रिप्शन वापरते",
     "syncCustomSttWarningMessage": "तुम्ही तुमचा स्वतःचा ट्रान्सक्रिप्शन प्रदाता वापरता. ही रेकॉर्डिंग सिंक केल्यास ती Omi च्या सर्व्हरवर ट्रान्सक्राइब होतील आणि तुमच्या प्लॅनच्या ट्रान्सक्रिप्शन मर्यादेत मोजली जातील.",
     "transcribeLaterTitle": "नंतर ट्रान्सक्राइब करणे",
-    "transcribeLaterDescription": "थेट ट्रान्सक्राइब करण्याऐवजी आता ऑडिओ रेकॉर्ड करा आणि गरजेनुसार नंतर ट्रान्सक्राइब करा. रेकॉर्डिंग तुमच्या फोनवर साठवली जातात; नंतर ती अपलोड करून संभाषणे तयार करा.",
+    "transcribeLaterDescription": "आता रेकॉर्ड करा, हवे तेव्हा ट्रांसक्राइब करा. तोपर्यंत ऑडिओ तुमच्या फोनवरच राहतो.",
     "transcribeLaterNote": "फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.",
     "transcribeLaterStorageFull": "तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.",
     "unmute": "आवाज सुरू करा",
@@ -10625,11 +10580,11 @@
     "deviceOnboardingTranscriptionTitle": "तुमच्या Omi शी बोला",
     "deviceOnboardingTranscriptionSubtitle": "काही शब्द बोला आणि ते रिअल-टाइममध्ये दिसताना पाहा",
     "deviceOnboardingGoodJob": "छान!",
-    "deviceOnboardingStartSpeaking": "बोलायला सुरुवात करा...",
+    "deviceOnboardingStartSpeaking": "बोलायला सुरुवात करा…",
     "deviceOnboardingAskQuestionTitle": "Omi ला प्रश्न विचारा",
     "deviceOnboardingAskQuestionSubtitle": "बटण एकदा दाबा, तुमचा प्रश्न बोला, आणि झाल्यावर पुन्हा दाबा",
-    "deviceOnboardingProcessingQuestion": "तुमचा प्रश्न प्रोसेस होत आहे...",
-    "deviceOnboardingListening": "ऐकत आहे...",
+    "deviceOnboardingProcessingQuestion": "तुमचा प्रश्न प्रोसेस होत आहे…",
+    "deviceOnboardingListening": "ऐकत आहे…",
     "deviceOnboardingTurnOffTitle": "बंद करा",
     "deviceOnboardingTurnOnTitle": "चालू करा",
     "deviceOnboardingTurnOffSubtitle": "बटण ३ सेकंद दाबून ठेवा",
@@ -10638,7 +10593,7 @@
     "deviceOnboardingStatusConnected": "कनेक्ट झाले",
     "deviceOnboardingStatusConnectedDone": "कनेक्ट झाले!",
     "deviceOnboardingStatusDisconnected": "डिस्कनेक्ट झाले",
-    "deviceOnboardingStatusTurningOff": "बंद होत आहे...",
+    "deviceOnboardingStatusTurningOff": "बंद होत आहे…",
     "deviceOnboardingDoubleTapTitle": "डबल टॅप सानुकूल करा",
     "deviceOnboardingEndConversation": "संभाषण संपवा",
     "deviceOnboardingEndConversationDesc": "सध्याचे संभाषण जतन करून संपवा",
@@ -10709,7 +10664,7 @@
     "cloudTranscription": "क्लाउड ट्रान्सक्रिप्शन",
     "copyMessage": "संदेश कॉपी करा",
     "deleteOnDeviceModel": "मॉडेल हटवा",
-    "deleteOnDeviceModelConfirm": "तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?",
+    "deleteOnDeviceModelConfirm": "हे मॉडेल हटवायचे?",
     "downgradeAnyway": "तरीही डाउनग्रेड करा",
     "downgradeLimitBattery": "७ पट जास्त बॅटरी वापर",
     "downgradeLimitDelay": "५-७ सेकंदांचा विलंब",
@@ -10731,7 +10686,7 @@
     "onDeviceModelSize": "मॉडेलचा आकार",
     "onDeviceTranscription": "डिव्हाइसवरील ट्रान्सक्रिप्शन",
     "onDeviceTranscriptionDesc": "ट्रान्सक्रिप्शन तुमच्या डिव्हाइसवर स्थानिक पातळीवर प्रक्रिया केले जाते",
-    "searchSettings": "सेटिंग्ज शोधा…",
+    "searchSettings": "सेटिंग्ज शोधा",
     "speechToTextProvider": "स्पीच-टू-टेक्स्ट प्रदाता",
     "speechToTextProviderDesc": "ट्रान्सक्रिप्शनसाठी वापरली जाणारी सेवा निवडा",
     "sttFilterAuto": "स्वयंचलित",
@@ -10755,7 +10710,7 @@
     "whisperModelSizeMedium": "मध्यम",
     "whisperModelSizeSmall": "लहान",
     "whisperModelSizeTiny": "अतिशय लहान",
-    "planSheetChooseYourPlan": "अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.",
+    "planSheetChooseYourPlan": "तुमच्यासाठी योग्य प्लॅन निवडा.",
     "availableOnMacMobileWeb": "Mac, मोबाइल आणि वेबवर उपलब्ध",
     "popularBadge": "लोकप्रिय",
     "worksOnDesktop": "डेस्कटॉपवर चालते",
@@ -10796,7 +10751,6 @@
     "prerecordedTranscript": "पूर्व-रेकॉर्डेड",
     "pendantRecordingSyncBlocked": "Pendant अजूनही रेकॉर्ड करत आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.",
     "pendantFullSyncBlocked": "Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.",
-    "conversationsNotCapturedCount": "रेकॉर्ड झाले नाही ({count})",
     "transcriptionNoAudio": "ट्रान्सक्रिप्शन ऑडिओ घेत नाही",
     "chatBlockTask": "कार्य",
     "chatBlockGoal": "ध्येय",
@@ -10823,7 +10777,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा",
+    "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी रेकॉर्ड बटण टॅप करा",
     "processingTakingLonger": "अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.",
     "speechProfileEnrollmentPrompt": "Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.",
     "home": "मुख्यपृष्ठ",
@@ -10834,11 +10788,720 @@
     "moreOptions": "अधिक पर्याय",
     "filterByDate": "तारखेनुसार फिल्टर करा",
     "memoryGraph": "स्मृती आलेख",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try Another Prompt} start{Start Speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Uncheck anything you don't want saved.} saveVoice{Save Voice Profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set Up My Voice Later} keep{Save Selected Answers} without{Continue Without Saving Answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add Another Sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and Finish} retryRemaining{Retry Remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue With What Is Saved} reviewAnswers{Review Answers} originalGoal{Use Original Wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{आवाज ओळखण्यासाठी तयार आहे} saved_sample_awaiting_embedding{नमुना जतन केला; आवाज प्रक्रिया अजून आवश्यक आहे} not_learned{आवाज शिकलेला नाही} other{आवाजाची स्थिती अज्ञात आहे}}",
     "tagSpeakerIncludingLaterSpeech": "या वक्त्याचे नंतरचे बोलणेही टॅग करा",
     "updateSummaryWithNewNames": "नवीन नावांसह सारांश अद्यतनित करा",
     "syncStatusUnsupportedAudio": "ऑडिओ वाचता आला नाही — सिंक करता येत नाही",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess"
+    "chatStarterPrompt": "{kind, select, capabilities{तू माझ्यासाठी काय करू शकतोस?} goal{मला ध्येय ठरवायला मदत कर} activity{माझ्या अलीकडील कामांचा सारांश दे} improve{मी कशी सुधारणा करू शकतो?} other{}}",
+    "nextWeek": "पुढील आठवड्यात",
+    "clearSearch": "शोध साफ करा",
+    "audioUploadFailedKeptLocal": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे.",
+    "audioUploadFailedTapRetry": "अपलोड अयशस्वी — {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे. पुन्हा प्रयत्न करण्यासाठी टॅप करा.",
+    "audioUploadRetrying": "अपलोड पुन्हा करत आहे… {duration} ऑडिओ तुमच्या फोनवर जतन केला आहे",
+    "capturing": "कॅप्चर होत आहे",
+    "capturingPhotos": "फोटो कॅप्चर होत आहेत",
+    "listeningTranscriptWillAppear": "ऐकत आहे… येथे ट्रान्सक्रिप्ट दिसेल.",
+    "recordingOfflineTranscriptWillCatchUp": "ऑफलाइन रेकॉर्डिंग — तुम्ही पुन्हा ऑनलाइन आल्यावर ट्रान्सक्रिप्ट अपडेट होईल.",
+    "transcriptionUnavailableRecordingSaved": "ट्रान्सक्रिप्शन उपलब्ध नाही — रेकॉर्डिंग सुरू आहे आणि तुमचा ऑडिओ जतन होत आहे.",
+    "uploadingAudioForTranscription": "ट्रान्सक्रिप्शनसाठी {duration} ऑडिओ अपलोड होत आहे…",
+    "filterBySpeaker": "वक्त्यानुसार फिल्टर करा",
+    "notNow": "आता नाही",
+    "discard": "टाकून द्या",
+    "keepEditing": "संपादन सुरू ठेवा",
+    "discardChangesTitle": "बदल टाकून द्यायचे?",
+    "discardChangesMessage": "तुमचे जतन न केलेले बदल गमावले जातील.",
+    "pause": "थांबवा",
+    "deleteConversationsTitle": "{count, plural, =1{1 संभाषण हटवायचे?} other{{count} संभाषणे हटवायची?}}",
+    "deleteConversationsMessage": "यामुळे त्यांच्या स्मृती, कार्ये आणि ऑडिओ फाइल्सही हटवल्या जातील.",
+    "conversationsDeletedCount": "{count, plural, =1{1 संभाषण हटवले} other{{count} संभाषणे हटवली}}",
+    "conversationsMovedCount": "{count, plural, =1{1 संभाषण हलवले} other{{count} संभाषणे हलवली}}",
+    "failedToMoveConversations": "संभाषणे हलवता आली नाहीत",
+    "discardedConversationTitle": "टाकून दिलेले · {duration}",
+    "noConversationsHeroMessage": "तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर रेकॉर्ड बटण टॅप करा.",
+    "conversationMap": "संभाषण नकाशा",
+    "conversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
+    "taskCount": "{count, plural, =1{1 कार्य} other{{count} कार्ये}}",
+    "skipBack10Seconds": "10 सेकंद मागे",
+    "skipForward10Seconds": "10 सेकंद पुढे",
+    "failedToShareRecap": "सारांश शेअर करता आला नाही",
+    "captureOfflineBuffering": "ऑफलाइन, बफर होत आहे",
+    "captureOfflineBufferingFor": "ऑफलाइन, बफर होत आहे · {minutes} मिनिटे",
+    "memoryDetailsTitle": "आठवण",
+    "editMemoryTitle": "आठवण संपादित करा",
+    "newMemoryTitle": "नवी आठवण",
+    "memoryReadOnlyHint": "ही आठवण इतिहास म्हणून ठेवली आहे आणि ती संपादित करता येत नाही.",
+    "openConversation": "संभाषण उघडा",
+    "memoryGraphTitle": "आठवणींचा आलेख",
+    "memoryReviewTitle": "आज मी काय शिकलो",
+    "memoryReviewRight": "बरोबर",
+    "memoryReviewWrong": "चूक",
+    "memoryReviewFix": "दुरुस्त करा",
+    "memoryReviewConfirmed": "पुष्टी झाली. मी त्यानुसार वागेन.",
+    "memoryReviewDropped": "वगळले. मी अशा तथ्यांपासून दूर राहीन.",
+    "memoryReviewUpdated": "अपडेट केले.",
+    "memoryReviewSaveFailed": "जतन करता आले नाही, पुन्हा प्रयत्न करा",
+    "indentTask": "इंडेंट करा",
+    "outdentTask": "आउटडेंट करा",
+    "goalDeleted": "उद्दिष्ट हटवले",
+    "sharedTasksAcceptFailed": "ही कार्ये स्वीकारता आली नाहीत. तुम्ही हे शेअर आधीच स्वीकारले असेल.",
+    "pausePlayback": "थांबवा",
+    "deleteSample": "नमुना हटवा",
+    "deletePersonTitle": "व्यक्ती हटवायची?",
+    "deletePersonLabel": "व्यक्ती हटवा",
+    "noPeopleYet": "अद्याप कोणीही नाही",
+    "deleteTasksTitle": "{count, plural, =1{1 कार्य हटवायचे?} other{{count} कार्ये हटवायची?}}",
+    "tasksCountLabel": "{count, plural, =1{1 कार्य} other{{count} कार्ये}}",
+    "sharedTasksAdded": "{count, plural, =1{तुमच्या यादीत 1 कार्य जोडले} other{तुमच्या यादीत {count} कार्ये जोडली}}",
+    "sharedTasksAddButton": "{count, plural, =1{1 कार्य जोडा} other{{count} कार्ये जोडा}}",
+    "sharedTasksTitle": "{name} यांनी {count, plural, =1{1 कार्य शेअर केले} other{{count} कार्ये शेअर केली}}",
+    "exportedToPlatform": "{platform} मध्ये निर्यात केले",
+    "taskDueDate": "देय {date}",
+    "linkEvent": "इव्हेंट लिंक करा",
+    "noCalendarEventsNearby": "या वेळेच्या आसपास कोणतेही कॅलेंडर इव्हेंट सापडले नाहीत.",
+    "suggestedEvent": "सुचवलेले",
+    "openInGoogleCalendar": "Google Calendar मध्ये उघडा",
+    "shareWithAttendees": "सहभागींसोबत शेअर करा",
+    "unlinkCalendarEvent": "कॅलेंडर इव्हेंट अनलिंक करा",
+    "meetingNotesSubject": "नोट्स: {title}",
+    "previousResult": "मागील निकाल",
+    "nextResult": "पुढील निकाल",
+    "playFromHere": "येथून प्ले करा",
+    "shareConversationQuestion": "संभाषण शेअर करायचे?",
+    "conversationTasksEmptyMessage": "या संभाषणातील कार्ये येथे दिसतील.",
+    "noPendingTasks": "कोणतीही प्रलंबित कार्ये नाहीत",
+    "nCompleted": "{count} पूर्ण",
+    "identifySpeaker": "वक्ता ओळखा",
+    "couldNotLoadCheckout": "चेकआउट पृष्ठ लोड होऊ शकले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "phoneFreeCallLimitReached": "मासिक मोफत कॉल मर्यादा गाठली. ती पुढच्या महिन्यात रीसेट होईल.",
+    "couldNotLoadImportHistory": "आयात इतिहास लोड करता आला नाही",
+    "phoneCallButton": "कॉल करा",
+    "searchContacts": "संपर्क शोधा",
+    "phoneContactsAccessTitle": "संपर्कांना प्रवेश द्या",
+    "phoneSelectCountryTitle": "देश निवडा",
+    "phoneNoVerifiedNumbersTitle": "सत्यापित क्रमांक नाहीत",
+    "phoneNoVerifiedNumbersMessage": "Omi द्वारे कॉल करण्यासाठी तुमचा क्रमांक सत्यापित करा.",
+    "phoneDeleteNumberFailed": "हा क्रमांक हटवता आला नाही",
+    "forgetDeviceConfirmTitle": "डिव्हाइस विसरायचे?",
+    "forgetDeviceConfirmMessage": "Omi या डिव्हाइसशी कनेक्ट होणे थांबवेल.",
+    "deviceForgottenMessage": "डिव्हाइस विसरले",
+    "unpairDeviceConfirmTitle": "डिव्हाइस अनपेअर करायचे?",
+    "rollBack": "रोल बॅक करा",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi डिव्हाइस निदान",
+    "diagnosticsFailBadge": "अयशस्वी",
+    "diagnosticsReconnectedIn": "{duration} मध्ये पुन्हा जोडले",
+    "timeCompactDays": "{count}दि",
+    "durationAgo": "{duration} पूर्वी",
+    "sttLanguageFollowsPrimary": "तुमच्या प्राथमिक भाषेनुसार",
+    "creatorPayouts": "निर्मात्यांचे पेआउट",
+    "sttLanguageOverride": "बदला",
+    "sttUsePrimaryLanguage": "प्राथमिक भाषा वापरा",
+    "sttPrimaryLanguageUnsupported": "हा प्रदाता {language} ला समर्थन देत नाही, म्हणून {fallback} वापरतो.",
+    "deviceRamBelowMinimum": "आढळलेली RAM: {ram} GB. शिफारस केलेले किमान: 4 GB.",
+    "olderIphoneModelDetected": "आढळलेले मॉडेल: {model} (iPhone XS पेक्षा जुने). डिव्हाइसवरील ओळख मंद असू शकते.",
+    "copyLogs": "लॉग कॉपी करा",
+    "openProviderDocs": "दस्तऐवज उघडा",
+    "getApiKey": "API की मिळवा",
+    "showApiKey": "API की दाखवा",
+    "hideApiKey": "API की लपवा",
+    "removeVocabularyWord": "{word} काढा",
+    "vocabularyWordCount": "{count, plural, =1{1 शब्द} other{{count} शब्द}}",
+    "phoneFreeCallsRemaining": "या महिन्यात {remaining} मोफत कॉल शिल्लक ({limit} पैकी)",
+    "phoneFreeCallsRemainingWithMax": "या महिन्यात {remaining} मोफत कॉल शिल्लक ({limit} पैकी) · प्रत्येकी {minutes} मिनिटांपर्यंत",
+    "appCreators": "ॲप निर्माते",
+    "homeScreen": "होम स्क्रीन",
+    "phoneCalls": "फोन कॉल",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "स्पीच-टू-टेक्स्ट खर्च कमी करण्यासाठी सर्व्हरवर आवाज फिल्टर",
+    "flashCustomFirmware": "कस्टम फर्मवेअर फ्लॅश करा",
+    "flashCustomFirmwareDescription": "कस्टम फर्मवेअर बिल्ड फ्लॅश करा",
+    "selectFirmwareZip": "फर्मवेअर ZIP फाइल निवडा",
+    "customFirmwareWarning": "कस्टम फर्मवेअरमुळे तुमचे डिव्हाइस बंद पडू शकते. हे वैध Omi फर्मवेअर बिल्ड असल्याची खात्री करा आणि अपडेट सुरू असताना कनेक्शन तोडू नका.",
+    "firmwareFlashed": "फर्मवेअर फ्लॅश झाले",
+    "deviceWillRestart": "तुमचे डिव्हाइस रीस्टार्ट होईल.",
+    "exportFailedTryAgain": "एक्सपोर्ट अयशस्वी झाले. कृपया पुन्हा प्रयत्न करा.",
+    "firmwareFlashTarget": "डिव्हाइस: {deviceName}",
+    "keepSubscription": "सदस्यता ठेवा",
+    "couldNotLoadPage": "हे पृष्ठ लोड करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "leaveFlowStepOf": "पायरी {current} / {total}",
+    "sharedTasksLinkExpired": "ही शेअर केलेली कार्ये सापडली नाहीत किंवा लिंकची मुदत संपली आहे.",
+    "sharedTasksUnknownSender": "कोणीतरी",
+    "allow": "परवानगी द्या",
+    "permissionAllowed": "परवानगी आहे",
+    "permissionBlockedHint": "सेटिंग्जमध्ये बंद आहे. हे वापरण्यासाठी तिथे परवानगी द्या.",
+    "useDifferentAccount": "दुसरे खाते वापरा",
+    "onboardingStepOf": "पायरी {current} / {total}",
+    "onboardingCompleteMessage": "Omi ला 2 दिवस पार्श्वभूमीत चालू ठेवा, मग ते तुम्हाला उपयुक्त अभिप्राय देऊ लागेल.",
+    "cantFindDeviceHint": "तुमचे डिव्हाइस सापडत नाही? ते चालू आहे आणि फोनजवळ आहे याची खात्री करा, मग पुन्हा स्कॅन करा.",
+    "scanAgain": "पुन्हा स्कॅन करा",
+    "howToPair": "पेअर कसे करावे",
+    "contactSupportAction": "सपोर्टशी संपर्क साधा",
+    "deviceOfflineWakeHint": "{deviceName} ऑफलाइन आहे. जागे करण्यासाठी त्याचे बटण दाबा, मग पुन्हा प्रयत्न करा.",
+    "batteryLevelSemantics": "बॅटरी {level}%",
+    "updateOmiGlassFirmware": "OmiGlass फर्मवेअर अपडेट करा",
+    "deviceConnecting": "कनेक्ट होत आहे…",
+    "recordOptionsTip": "टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटणावरील बाण टॅप करा.",
+    "firmwareUpdateFailedTitle": "अपडेट अयशस्वी",
+    "firmwareUpdateFailedMessage": "अपडेट पूर्ण झाले नाही. तुमचे डिव्हाइस अजूनही सध्याच्या फर्मवेअरवर आहे आणि वापरण्यास सुरक्षित आहे. ते चार्ज करून फोनजवळ ठेवा, मग पुन्हा प्रयत्न करा.",
+    "firmwareDownloadFailedMessage": "अपडेट डाउनलोड होऊ शकले नाही आणि तुमच्या डिव्हाइसमध्ये बदल झाला नाही. इंटरनेट कनेक्शन तपासा, मग पुन्हा प्रयत्न करा.",
+    "firmwareBatteryTooLow": "बॅटरी {level}% आहे. अपडेट करण्यापूर्वी डिव्हाइस किमान 15% चार्ज करा.",
+    "startUpdate": "अपडेट सुरू करा",
+    "otaNotSupported": "हे फर्मवेअर Wi-Fi द्वारे अपडेट करता येत नाही.",
+    "otaConnectFailed": "{deviceName} शी कनेक्ट होऊ शकले नाही. ते चालू आणि जवळ ठेवा, मग पुन्हा प्रयत्न करा.",
+    "otaUpdateUnavailable": "हे अपडेट सध्या उपलब्ध नाही. नंतर पुन्हा प्रयत्न करा.",
+    "otaStarting": "अपडेट सुरू होत आहे…",
+    "otaStartFailed": "अपडेट सुरू होऊ शकले नाही. Wi-Fi चे नाव आणि पासवर्ड तपासा, मग पुन्हा प्रयत्न करा.",
+    "otaRebooting": "{deviceName} नवीन फर्मवेअरसह रीस्टार्ट होत आहे.",
+    "otaUpdateCancelled": "अपडेट रद्द केले",
+    "cancelUpdate": "अपडेट रद्द करा",
+    "otaKeepNearby": "अपडेट दरम्यान डिव्हाइस चालू आणि जवळ ठेवा आणि अ‍ॅप बंद करू नका.",
+    "otaWifiConnecting": "Wi-Fi शी कनेक्ट होत आहे…",
+    "otaWifiConnected": "Wi-Fi शी कनेक्ट झाले",
+    "otaWifiFailed": "Wi-Fi शी जोडता आले नाही. नेटवर्कचे नाव आणि पासवर्ड तपासा.",
+    "otaDownloadFailed": "फर्मवेअर डाउनलोड अयशस्वी झाले. Wi-Fi कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "otaInstallFailed": "इंस्टॉल अयशस्वी झाले. तुमचे डिव्हाइस अजूनही सध्याच्या फर्मवेअरवर आहे.",
+    "otaUpdatedMessage": "{deviceName} अपडेट झाले आहे आणि आपोआप रीस्टार्ट होईल.",
+    "showPassword": "पासवर्ड दाखवा",
+    "hidePassword": "पासवर्ड लपवा",
+    "appNotFoundOrRemoved": "हे अ‍ॅप आता उपलब्ध नाही",
+    "startupFailedTitle": "Omi सुरू होऊ शकला नाही",
+    "startupFailedMessage": "Omi सुरू होत असताना काहीतरी चूक झाली. तुमचे कनेक्शन तपासा, नंतर पुन्हा प्रयत्न करा.",
+    "startupFailedConfigMessage": "Omi च्या या बिल्डमध्ये कॉन्फिगरेशन समस्या आहे. ही तुमच्या डिव्हाइसची समस्या नाही. सपोर्टशी संपर्क साधा आणि खालील तपशील समाविष्ट करा.",
+    "discardRecordingTitle": "रेकॉर्डिंग टाकून द्यायची?",
+    "discardRecordingMessage": "तुमचा व्हॉइस सॅम्पल अजून सेव्ह झालेला नाही. आता बाहेर पडल्यास तो टाकून दिला जाईल.",
+    "keepRecording": "रेकॉर्डिंग सुरू ठेवा",
+    "view": "पहा",
+    "appDataAccessTitle": "{appName} ला प्रवेश द्यायचा?",
+    "appDataAccessMessage": "{appName} तुमची संभाषणे, आठवणी आणि रेकॉर्डिंग त्याच्या डेव्हलपरच्या सर्व्हरवर मिळवेल. तिथे त्या डेटाचा वापर कसा होतो यासाठी Omi जबाबदार नाही.",
+    "appDisabledNamed": "{appName} बंद केले",
+    "appRatingCount": "{count, plural, =1{1 रेटिंग} other{{count} रेटिंग}}",
+    "previewImageLabel": "स्क्रीनशॉट {index} / {total}",
+    "chatWithApp": "{appName} सोबत चॅट",
+    "appSettingsLabel": "{appName} सेटिंग्ज",
+    "appOptions": "अ‍ॅप पर्याय",
+    "cancelSubscriptionKeepAccessMessage": "सध्याच्या बिलिंग कालावधीच्या शेवटपर्यंत तुमचा प्रवेश कायम राहील.",
+    "chatSendMessage": "संदेश पाठवा",
+    "chatAddAttachment": "संलग्नक जोडा",
+    "removeAttachment": "संलग्नक काढा",
+    "chatRemoveSelectedText": "उद्धृत मजकूर काढा",
+    "chatOfflineHint": "तुम्ही ऑफलाइन आहात. संदेश पाठवण्यासाठी पुन्हा कनेक्ट करा.",
+    "chatReplyFailed": "Omi उत्तर देऊ शकला नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "disableAppNamed": "{appName} बंद करा",
+    "whatWentWrong": "काय चुकले?",
+    "selectAReason": "कारण निवडा",
+    "submit": "सबमिट करा",
+    "feedbackReasonTooVerbose": "खूप लांबलचक",
+    "feedbackReasonIncorrect": "चुकीचे किंवा बनावट",
+    "feedbackReasonNotHelpful": "उपयोगी नाही किंवा असंबद्ध",
+    "feedbackReasonIgnoredInstructions": "सूचना पाळल्या नाहीत",
+    "additionalFeedbackOptional": "अतिरिक्त अभिप्राय (ऐच्छिक)",
+    "helpful": "उपयुक्त",
+    "daySummaryForDate": "दिवसाचा सारांश · {date}",
+    "chatStarterYesterday": "मी काल काय केले?",
+    "chatStarterDoDifferently": "आज मी काय वेगळे करू शकतो?",
+    "chatStarterTeachMe": "मला काहीतरी नवीन शिकवशील का?",
+    "thinking": "विचार करत आहे",
+    "couldNotLoadWhatsNew": "नवीन काय आहे ते लोड करता आले नाही",
+    "githubRepositoryUrl": "GitHub रिपॉझिटरी URL",
+    "githubRepositoryUrlHint": "तुमच्या अ‍ॅपच्या सोर्स कोड रिपॉझिटरीची लिंक",
+    "triggerEvents": "ट्रिगर इव्हेंट्स",
+    "noAppsInCategoryYet": "या श्रेणीत अद्याप कोणतीही अ‍ॅप नाही",
+    "scopes": "स्कोप",
+    "aiAppGeneratorBannerTitle": "एका टॅपमध्ये AI ने अ‍ॅप तयार करा",
+    "refreshManifest": "मॅनिफेस्ट रिफ्रेश करा",
+    "versionLabel": "आवृत्ती {version}",
+    "appUsersCount": "{count}+ वापरकर्ते",
+    "discovery": "शोध",
+    "chatBlockShowMore": "अधिक दाखवा",
+    "chatBlockShowLess": "कमी दाखवा",
+    "triggerEvent": "ट्रिगर इव्हेंट",
+    "webhookUrl": "वेबहुक URL",
+    "appHomeUrl": "ॲप होम URL",
+    "authUrl": "प्रमाणीकरण URL",
+    "setupCompletedUrl": "सेटअप पूर्ण URL",
+    "chatToolsManifestUrl": "चॅट टूल्स मॅनिफेस्ट URL",
+    "invalidWebhookUrlError": "कृपया वैध वेबहुक URL प्रविष्ट करा",
+    "githubRepositoryUrlRequired": "GitHub रिपॉझिटरी URL आवश्यक आहे",
+    "removeScreenshot": "स्क्रीनशॉट काढा",
+    "addScreenshot": "स्क्रीनशॉट जोडा",
+    "aiGenRegenerateIcon": "आयकॉन पुन्हा तयार करा",
+    "categoryAppCount": "{count, plural, =1{1 ॲप} other{{count} ॲप्स}}",
+    "generateDescription": "वर्णन तयार करा",
+    "selectImageFileTitle": "इमेज फाइल निवडा",
+    "selectThumbnailImageTitle": "थंबनेल इमेज निवडा",
+    "appIdNotFoundError": "अ‍ॅप ID सापडली नाही",
+    "manifestRefreshedSuccess": "मॅनिफेस्ट यशस्वीरित्या रिफ्रेश केले",
+    "manifestRefreshFailed": "मॅनिफेस्ट रिफ्रेश करण्यात अयशस्वी",
+    "captureRecordingsSheetTitle": "या संभाषणाची रेकॉर्डिंग",
+    "captureRecordingSeparate": "वेगळे करा…",
+    "captureRecordingSeparateTitle": "हे रेकॉर्डिंग वेगळे करायचे?",
+    "captureRecordingSeparateMessage": "{recording} स्वतंत्र संभाषण म्हणून दिसेल आणि या इव्हेंटसोबत पुन्हा गटबद्ध होणार नाही.",
+    "captureRecordingSeparateConfirm": "वेगळे करा",
+    "captureRecordingSeparateFailed": "वेगळे करता आले नाही. पुन्हा प्रयत्न करा.",
+    "captureRecordingOpenFailed": "हे रेकॉर्डिंग उघडता आले नाही.",
+    "captureRecordingViewing": "तुम्ही हे रेकॉर्डिंग पाहत आहात",
+    "captureRecordedBy": "{devices} ने रेकॉर्ड केले",
+    "captureSourceDesktop": "डेस्कटॉप",
+    "renameConversation": "नाव बदला",
+    "captureRecordingsCount": "{count, plural, =1{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
+    "captureSourcePendant": "पेंडंट",
+    "conversationDeveloperTools": "संभाषणांमधील डेव्हलपर साधने",
+    "conversationDeveloperToolsDescription": "संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा",
+    "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}",
+    "recordingAndTranscription": "रेकॉर्डिंग आणि प्रतिलेखन",
+    "notificationsAndDisplay": "सूचना आणि प्रदर्शन",
+    "helpAndAbout": "मदत आणि माहिती",
+    "speakerTagPromptTitle": "Omi ला आवाज ओळखायला मदत करा",
+    "speakerTagPromptSubtitle": "गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी",
+    "speakerTagPromptIsThisYou": "हे तुम्ही आहात का?",
+    "speakerTagPromptIsThisPerson": "हे {name} आहेत का?",
+    "speakerTagPromptWhoIsThis": "हे कोण आहे?",
+    "speakerTagPromptThatsMe": "हा मी आहे",
+    "speakerTagPromptNotMe": "मी नाही",
+    "speakerTagPromptSomeoneNew": "नवीन व्यक्ती",
+    "speakerTagPromptDontKnow": "ओळखीचे नसलेले कोणीतरी",
+    "speakerTagPromptNotSure": "खात्री नाही",
+    "speakerTagPromptPlayClip": "क्लिप प्ले करा",
+    "speakerTagPromptProgress": "{current}/{total}",
+    "speakerTagPromptSaveVoicesTitle": "तुम्ही नाव दिलेल्या लोकांचे आवाज लक्षात ठेवा",
+    "speakerTagPromptSaveVoicesBody": "पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो. तुम्ही हे कधीही सेटिंग्जमध्ये बदलू शकता.",
+    "speakerTagPromptThanks": "धन्यवाद! Omi आवाज ओळखण्यात आणखी चांगला होईल.",
+    "speakerTagPromptNameHint": "त्यांचे नाव",
+    "speakerTagPromptClipUnavailable": "ही क्लिप प्ले करता आली नाही",
+    "speakerTagPromptAnswerFailed": "सेव्ह करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+    "voiceSettingsAskToTag": "मला आवाज टॅग करायला सांगा",
+    "voiceSettingsAskToTagSubtitle": "अधूनमधून Omi विचारेल की तुमच्या अलीकडील संभाषणांमध्ये कोण बोलत होते",
+    "voiceSettingsSaveOthersSubtitle": "तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो",
+    "leaveBlank": "रिक्त ठेवा",
+    "mcpOAuthSetup": "claude.ai वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json मध्ये जोडा",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
+    "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
+    "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
+    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
+    "captureSourceCall": "कॉल",
+    "captureSourcePhoneMic": "फोन माइक",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "पुन्हा सुरू करा",
+    "finish": "पूर्ण करा",
+    "pendantPausedResumesWhenYouFinish": "पेंडंट थांबवले आहे · तुम्ही पूर्ण केल्यावर पुन्हा सुरू होईल",
+    "pendantIsListeningTitle": "तुमचे पेंडंट ऐकत आहे",
+    "oneSourceAtATime": "Omi एका वेळी एकाच स्रोतातून रेकॉर्ड करते.",
+    "recordWithPhoneInstead": "त्याऐवजी फोनने रेकॉर्ड करा",
+    "pendantPausesUntilYouFinish": "तुम्ही पूर्ण करेपर्यंत पेंडंट थांबलेले राहील",
+    "pendantPausesDuringCall": "कॉलदरम्यान पेंडंट थांबलेले राहील",
+    "keepUsingPendant": "पेंडंटच वापरत राहा",
+    "recordWith": "रेकॉर्ड करण्याची पद्धत",
+    "moreWaysToRecord": "रेकॉर्ड करण्याचे आणखी मार्ग",
+    "openCall": "कॉल उघडा",
+    "captureRecoveryBanner": "Omi ऑडिओ पाठवत नाही — पुन्हा जोडण्यासाठी टॅप करा",
+    "phoneRecordingBlockedByPendantBatch": "फोनने रेकॉर्ड करण्यापूर्वी तुमच्या पेंडंटवर Transcribe Later थांबवा.",
+    "captureNotTranscribing": "लिप्यंतरण होत नाही",
+    "captureAudioSavedTranscribesLater": "ऑडिओ जतन केला, नंतर लिप्यंतरण होईल",
+    "captureStillRecording": "अजूनही रेकॉर्डिंग सुरू आहे",
+    "captureMicInUseElsewhere": "माइक दुसरे ॲप वापरत आहे",
+    "captureMicInterruptedDetail": "एखाद्या कॉलने किंवा दुसऱ्या ॲपने मायक्रोफोन घेतला आहे, त्यामुळे Omi आत्ता ऐकू शकत नाही. मायक्रोफोन मोकळा झाल्यावर Omi आपोआप पुन्हा सुरू होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
+    "captureCustomSttUnreachableDetail": "तुमच्या कस्टम स्पीच-टू-टेक्स्ट सेवेपर्यंत पोहोचता येत नाही. Omi ऑडिओ या फोनवर ठेवतो आणि सेवा परत आल्यावर पाठवेल. काहीही गमावले जात नाही.",
+    "captureStarting": "सुरू होत आहे…",
+    "capturePhoneStorageFull": "फोन स्टोरेज भरले",
+    "captureStorageAlmostFull": "स्टोरेज जवळजवळ भरले",
+    "capturePendantDisconnectedDetail": "तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
+    "participantsSummaryUncounted": "{name} आणि इतर",
+    "deviceOnboardingVoiceReplyTitle": "Omi ची उत्तरे ऐका",
+    "deviceOnboardingVoiceReplySample": "समजले. तुमची पुढील मीटिंग वीस मिनिटांत सुरू होईल.",
+    "deviceOnboardingAllSetTitle": "सर्व काही तयार आहे",
+    "deviceOnboardingAllSetSubtitle": "पुनरावलोकन किंवा बदल करण्यासाठी ओळीवर टॅप करा.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "तुम्ही बटणाने विचारता तेव्हा, Omi त्याचे उत्तर मोठ्याने वाचू शकतो.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "तुमचे शेवटचे उत्तर ऐका",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "तुमचे शेवटचे उत्तर प्ले करत आहे...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} द्वारे",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "फोन स्पीकरद्वारे",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "सध्याच्या ऑडिओ आउटपुटद्वारे",
+    "deviceOnboardingVoiceReplyOffDescription": "उत्तरे स्क्रीनवर राहतात. काहीच बोलत नाही.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "खाजगी. AirPods, Bluetooth किंवा वायर्ड हेडफोनद्वारेच बोलते.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "हेडफोन कनेक्ट केलेले नसताना फोन स्पीकर वापरतो.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi शांत राहतील. उत्तरे अजूनही ॲपमध्ये दिसतात.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} कनेक्ट केले आहे. Omi येथे बोलतील.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "कोणतेही हेडफोन कनेक्ट केलेले नाहीत. तुम्ही काही कनेक्ट करेपर्यंत Omi शांत राहते.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} द्वारे प्ले.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "फोन स्पीकरद्वारे मोठ्याने वाजते.",
+    "deviceOnboardingVoiceReplySettingsHint": "तुम्ही हे {settings} › {voiceResponse} वर कधीही बदलू शकता",
+    "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} वर कधीही हा टूर पुन्हा प्ले करा",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन्स",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "मिनिटे",
+    "usageWords": "Words",
+    "usageTasks": "कार्य",
+    "usageMonth": "या महिन्यात",
+    "usageYear": "या वर्षी",
+    "usageAll": "सर्व काळ",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "दृश्य",
+    "appearanceSystem": "सिस्टम",
+    "appearanceLight": "हलका",
+    "appearanceDark": "गडद",
+    "chatDiscardRecording": "टाकून द्या",
+    "voiceQuestionNoSpeech": "ऐकू आले नाही — पुन्हा प्रयत्न करा",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "Give feedback",
+    "feedbackAllGood": "All good",
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "feedbackReasonSummaryOther": "Something else",
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "लोक शोधा",
+    "addQueryAsNewPerson": "\"{query}\" ला नवीन व्यक्ती म्हणून जोडा",
+    "showAllPeople": "सर्व {count} लोक दाखवा",
+    "chatGreeting": "नमस्कार {name}, काहीही विचारा",
+    "activity": "क्रियाकलाप",
+    "places": "ठिकाणे",
+    "recaps": "सारांश",
+    "recent": "अलीकडील",
+    "searchPartialFailure": "काही परिणाम लोड होऊ शकले नाहीत",
+    "peopleSearchPlaceholder": "लोक शोधा",
+    "peopleNotHeardYet": "अजून ऐकलेले नाही",
+    "peopleRecent": "अलीकडील",
+    "deletePeopleMessage": "यामुळे त्यांचे आवाजाचे नमुने काढले जातील आणि हे पूर्ववत करता येणार नाही. मागील संभाषणांमधील त्यांचे बोलणे नाव नसलेले वक्ते बनेल.",
+    "personTalkTime": "बोलण्याचा वेळ",
+    "personLastHeard": "शेवटचे ऐकले",
+    "deletePeopleTitle": "{count, plural, =1{1 व्यक्तीला हटवायचे?} other{{count} लोकांना हटवायचे?}}",
+    "peopleFilterNeedsVoice": "आवाज हवा",
+    "peopleCount": "{count, plural, =1{1 व्यक्ती} other{{count} लोक}}",
+    "noMatchingPeople": "जुळणारे लोक नाहीत",
+    "deselectAll": "सर्व निवड रद्द करा",
+    "voiceRecognitionSettings": "आवाज ओळख",
+    "greetingMorning": "सुप्रभात",
+    "greetingAfternoon": "शुभ दुपार",
+    "greetingEvening": "शुभ संध्याकाळ",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "तुम्हाला काय जाणून घ्यायचे आहे?",
+    "askSuggestDecide": "आज मी काय ठरवले?",
+    "askSuggestOwe": "अजून लोकांना मी काय देणे आहे?",
+    "askSuggestNotice": "Omi ला काय लक्षात आले?",
+    "pastChats": "मागील चॅट्स",
+    "newChat": "नवीन चॅट",
+    "startFresh": "नव्याने सुरू करा",
+    "noPastChats": "Omi सोबतचे तुमचे चॅट्स येथे दिसतील.",
+    "deleteChatQuestion": "हे चॅट हटवायचे?",
+    "deleteChatMessage": "ते मागील चॅट्समधून कायमचे जाईल.",
+    "deleteChat": "चॅट हटवा",
+    "appsAskWith": "यासह Omi ला विचारा",
+    "conversationsTodayCount": "{count, plural, =0{आज कोणतेही संभाषण नाही.} =1{आज 1 संभाषण.} other{आज {count} संभाषणे.}}",
+    "meetingScreenshotsTitle": "स्क्रीनवर काय होते",
+    "meetingScreenshotFallbackCaption": "या मीटिंगचा स्क्रीनशॉट",
+    "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटवायचा?",
+    "deleteMeetingScreenshotMessage": "यामुळे या मीटिंगच्या नोटमधून स्क्रीनशॉट काढला जाईल. हे पूर्ववत करता येणार नाही.",
+    "conversationSummaryFailed": "सारांश अयशस्वी झाला",
+    "reconnectionsRecent": "पुन्हा कनेक्शन (गेल्या 7 दिवसांत)",
+    "failedConnections": "अयशस्वी कनेक्शन",
+    "failedConnectionsRecent": "अयशस्वी कनेक्शन (गेल्या 7 दिवसांत)",
+    "diagnosticsCountSincePairing": "जोडणीनंतर {count}",
+    "peopleFilterLowConfidence": "कमी खात्री",
+    "peopleFilterPinned": "पिन केलेले",
+    "peoplePinnedCount": "{count, plural, =1{1 पिन केलेला} other{{count} पिन केलेले}}",
+    "confidenceConfirmed": "पुष्टी केलेले",
+    "confidenceLikely": "संभाव्य",
+    "confidenceUnverified": "असत्यापित",
+    "confidenceMeterLabel": "खात्री: {level}",
+    "confidenceReasonLabeled": "{count, plural, =1{तुम्ही एकदा लेबल केले} other{तुम्ही {count} वेळा लेबल केले}}",
+    "confidenceReasonPicked": "{count, plural, =1{1 सूचनेत निवडले} other{{count} सूचनांमध्ये निवडले}}",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{तुम्ही 1 जुळणीची पुष्टी केली} other{तुम्ही {count} जुळण्यांची पुष्टी केली}}",
+    "confidenceReasonAutoOnly": "फक्त आपोआप जुळवले, कधीही पुष्टी केली नाही",
+    "confidenceReasonNeverConfirmed": "कधीही पुष्टी केली नाही",
+    "confidenceReasonCorrected": "तुम्ही याची जुळणी दुरुस्त केली",
+    "confidenceReasonVoiceReady": "आवाज तयार",
+    "confidenceReasonNeedsVoice": "आवाज हवा",
+    "confidenceReasonNotHeard": "अजून ऐकले नाही",
+    "confidenceSheetTitle": "खात्री",
+    "confidenceSummaryConfirmed": "Omi ला {name} चा आवाज ओळखता येतो आणि तुम्ही त्याची पुष्टी केली आहे.",
+    "confidenceSummaryLikely": "Omi ला साधारणपणे {name} चा आवाज ओळखता येतो, पण तुम्ही त्याची फक्त काही वेळा पुष्टी केली आहे.",
+    "confidenceSummaryUnverified": "तुम्ही केलेले काहीही अजून {name} ला पुष्टी देत नाही.",
+    "confidenceEvidenceHeader": "पुरावा",
+    "evidenceManualLabels": "{count, plural, =1{तुम्ही 1 संभाषणात लेबल केले} other{तुम्ही {count} संभाषणांत लेबल केले}}",
+    "evidenceCardConfirms": "{count, plural, =1{1 सूचनेवर होय} other{{count} सूचनांवर होय}}",
+    "evidenceCardPicks": "{count, plural, =1{1 सूचनेत निवडले} other{{count} सूचनांमध्ये निवडले}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{1 आपोआप जुळणीची पुष्टी केली} other{{count} आपोआप जुळण्यांची पुष्टी केली}}",
+    "evidenceAutoCorrected": "{count, plural, =1{1 जुळणी दुसऱ्याकडे हलवली} other{{count} जुळण्या दुसऱ्याकडे हलवल्या}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 आपोआप जुळणी, ज्याची कोणीही पुष्टी केली नाही} other{{count} आपोआप जुळण्या, ज्यांची कोणीही पुष्टी केली नाही}}",
+    "evidenceVoiceReady": "आवाजाचा नमुना तयार",
+    "evidenceNoVoice": "अजून आवाजाचा नमुना नाही",
+    "evidenceNotHeard": "अजून संभाषणात ऐकले नाही",
+    "evidenceNothing": "तुम्ही अजून यांना लेबल किंवा पुष्टी केलेली नाही",
+    "effectCountsALot": "खूप मदत करते",
+    "effectCounts": "मदत करते",
+    "effectCountsALittle": "थोडी मदत करते",
+    "effectBarelyCounts": "जवळजवळ मदत करत नाही",
+    "effectCountsAgainst": "नुकसान करते",
+    "effectNeeded": "पुष्टी होण्यासाठी आवश्यक",
+    "confidenceToReachConfirmed": "पुष्टी होण्यासाठी",
+    "confidenceNextVoice": "Omi ला {name} च्या आवाजाचा नमुनाही हवा आहे. “आवाज लक्षात ठेवा” चालू ठेवून त्यांना लेबल करा.",
+    "confidenceIsConfirmed": "{name} ची पुष्टी झाली आहे. प्रत्येक लेबलमधून Omi शिकत राहते.",
+    "confidenceFootnote": "खात्री फक्त तुमच्या उत्तरांनीच खूप बदलते. फक्त आपोआप जुळण्या जवळजवळ मदत करत नाहीत.",
+    "personWhyConfidence": "का?",
+    "pinPersonTitle": "{name} ला पिन करा",
+    "pinPersonSubtitle": "{name} ला ठेवा आणि तुमच्या संभाषणांत त्यांची अपेक्षा ठेवा",
+    "pinPersonHonestLine": "जवळपास सारखे आवाज जुळवण्यापूर्वी Omi विचारते.",
+    "pinAction": "पिन करा",
+    "unpinAction": "अनपिन करा",
+    "personPinnedToast": "{name} पिन केले",
+    "personUnpinnedToast": "{name} अनपिन केले",
+    "whyConfidenceMenu": "{level} का?",
+    "deletePersonNamedTitle": "{name} ला हटवायचे?",
+    "deletePinnedPersonMessage": "{name} पिन केलेले आहे. त्यांच्या आवाजाचे नमुने काढले जातात, Omi त्यांना ओळखणे थांबवते आणि जुन्या ट्रान्सक्रिप्टमध्ये ते नाव नसलेले वक्ता म्हणून दिसतात. हे पूर्ववत करता येत नाही.",
+    "deleteNamedPerson": "{name} ला हटवा",
+    "selectPeople": "लोक निवडा",
+    "cleanUpEllipsis": "स्वच्छ करा…",
+    "cleanUpUnsureCount": "{count, plural, =1{Omi ला खात्री नसलेली 1 व्यक्ती} other{Omi ला खात्री नसलेले {count} लोक}}",
+    "cleanUpBannerBody": "बहुतेक चुकीचे ऐकलेली नावे. त्यांचे पुनरावलोकन करा आणि खरी नसलेली काढून टाका.",
+    "reviewAction": "पुनरावलोकन",
+    "cleanUpTitle": "स्वच्छता",
+    "cleanUpLead": "{count, plural, =1{Omi ला या व्यक्तीबद्दल खात्री नाही. ठेवण्यासाठी त्यांची निवड काढा.} other{Omi ला या {count} लोकांबद्दल खात्री नाही. बहुतेक ट्रान्सक्रिप्टमधून चुकीची ऐकलेली नावे आहेत. ज्यांना ठेवायचे आहे त्यांची निवड काढा.}}",
+    "cleanUpPinnedNote": "पिन केलेले लोक स्वच्छतेत कधीही समाविष्ट होत नाहीत.",
+    "deletePeopleCountAction": "{count, plural, =1{1 व्यक्ती हटवा} other{{count} लोक हटवा}}",
+    "peopleDeletedToast": "{count, plural, =1{1 व्यक्ती हटवली} other{{count} लोक हटवले}}",
+    "cleanUpNothingTitle": "स्वच्छ करण्यासारखे काही नाही",
+    "cleanUpNothingMessage": "सध्या Omi ला कोणाबद्दलही शंका नाही.",
+    "selectAllSkipsPinned": "सर्व निवडा पिन केलेल्या लोकांना वगळते. त्यांना त्यांच्या पेजवरून एकेक करून हटवा.",
+    "pinnedNotSelectable": "पिन केलेले, निवडता येत नाही",
+    "ignoredVoicesTitle": "दुर्लक्षित आवाज",
+    "ignoredVoicesSubtitle": "टीव्ही, पॉडकास्ट आणि तुम्ही “व्यक्ती नाही” म्हणून चिन्हांकित केलेले इतर आवाज",
+    "ignoredVoicesEmpty": "दुर्लक्षित आवाज नाहीत",
+    "restoreAction": "पुनर्संचयित करा",
+    "voiceRestoredToast": "Omi या आवाजाबद्दल पुन्हा विचारू शकते",
+    "speakerTagPromptSomeoneElse": "इतर कोणीतरी…",
+    "speakerTagPromptNotAPerson": "व्यक्ती नाही",
+    "speakerTagPromptNotSureAction": "खात्री नाही",
+    "speakerTagPromptThatsMeAction": "मीच आहे",
+    "speakerTagPromptClosestVoices": "सर्वात जवळचे आवाज",
+    "speakerTagPromptRecentPeople": "तुम्ही अलीकडे ज्यांच्याशी बोललात ते लोक",
+    "voiceMatchClose": "जवळची जुळणी",
+    "voiceMatchPossible": "शक्य जुळणी",
+    "voiceMatchWeak": "कमकुवत जुळणी",
+    "voiceMatchMeterLabel": "आवाज जुळणी: {level}",
+    "speakerTagPromptHintIdentify": "प्रत्येक उत्तर Omi ला एक आवाज शिकवते आणि त्या व्यक्तीची खात्री वाढवते.",
+    "speakerTagPromptHintConfirm": "होय म्हटल्याने {name} बद्दलची खात्री वाढते.",
+    "speakerTagPromptHintOwner": "तुमचे स्वतःचे आवाज प्रोफाइल अचूक ठेवते, जेणेकरून Omi तुम्हाला कधीही दुसरे कोणी म्हणून नाव देणार नाही.",
+    "speakerTagPromptSavedAs": "{name} म्हणून सेव्ह केले",
+    "speakerTagPromptSavedAsYou": "तुम्ही म्हणून सेव्ह केले",
+    "speakerTagPromptIgnoredNote": "Omi या आवाजाबद्दल पुन्हा विचारणार नाही",
+    "speakerTagPromptLabeledToast": "{name} म्हणून लेबल केले",
+    "speakerTagPromptLabeledYouToast": "तुम्ही म्हणून लेबल केले",
+    "speakerTagPromptNotAPersonToast": "व्यक्ती नाही म्हणून चिन्हांकित",
+    "speakerTagPromptRejectedToast": "लेबल काढले",
+    "whoIsItTitle": "हे कोण आहे?",
+    "newPersonEllipsis": "नवीन व्यक्ती…",
+    "addNamedPersonAction": "“{name}” जोडा",
+    "everyoneHeader": "सर्वजण",
+    "speakerSuggestionChip": "{name}?",
+    "speakerSuggestionAppliesToSpeaker": "या वक्त्याच्या प्रत्येक ओळीला लागू होते",
+    "collapseAction": "आकसा",
+    "speakerTagPromptNotMeAction": "मी नाही",
+    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
+    "siriShortcutsSetupHint": "शॉर्टकट्स → Siri मध्ये Omi चालू करा. “{askPhrase}” किंवा “{questionPhrase}” म्हणा, नंतर तुमचा प्रश्न विचारा.",
+    "siriShortcutsSearchHint": " तुम्ही “{searchPhrase} for what I did today” असेही म्हणू शकता.",
+    "updateAvailableTitle": "अपडेट उपलब्ध आहे",
+    "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
+    "updateRequiredTitle": "अपडेट आवश्यक आहे",
+    "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा.",
+    "exportingAllData": "तुमचा डेटा एक्सपोर्ट होत आहे… Omi उघडे ठेवा; मोठ्या खात्यांना अनेक मिनिटे लागू शकतात.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 वक्ता} other{{count} वक्ते}}",
+    "autoRemoveSyncedCopiesTitle": "सिंक केलेल्या प्रती आपोआप काढा",
+    "autoRemoveSyncedCopiesDays": "सिंक केलेल्या प्रती {days} दिवसांनंतर हटवल्या जातात",
+    "autoRemoveSyncedCopiesDescription": "सिंकनंतर {days} दिवसांनी स्थानिक प्रती हटवते. क्लाउड प्रती ठेवल्या जातात.",
+    "localCopiesSection": "स्थानिक प्रती",
+    "speakerLabelLinesLabeled": "{count, plural, =1{1 ओळीला लेबल लावले} other{{count} ओळींना लेबल लावले}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{आवाज शिकला} pending{आवाज शिकत आहे…} disabled{आवाज जतन करणे बंद आहे} other{आवाज अजून शिकलेला नाही}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi पुढच्या वेळी {name} यांना ओळखेल.} pending{यास काही सेकंद लागतात.} disabled{Omi ला {name} यांना ओळखता यावे म्हणून सेटिंग्जमध्ये आवाज जतन करणे चालू करा.} other{Omi ला {name} यांचे आणखी स्पष्ट बोलणे हवे आहे आणि तो प्रयत्न करत राहील.}}",
+    "speakerLabelEarlierMatches": "{count, plural, =1{मागील 1 संभाषणात आढळला} other{मागील {count} संभाषणांमध्ये आढळला}}",
+    "speakerLabelText": "{part, select, likely{संभाव्य} soundsLike{{name} सारखा वाटतो} notPerson{{name} नाही} carried{अजूनही {name}. तुमच्या मागील संभाषणातून पुढे आणले.} change{बदला} alsoTitle{हे देखील {name} आहेत का?} alsoBody{Omi ला हाच आवाज मागील संभाषणांमध्ये आढळला.} confirmed{तुम्ही हे लेबल निश्चित केले} other{पुनरावलोकन}}",
+    "speakerLabelTalkTime": "या आवाजाचे {duration}",
+    "findDeviceNoneTitle": "कोणताही Omi सापडला नाही",
+    "findDeviceNoneMessage": "ते चालू करा आणि तुमच्या फोनजवळ धरा.",
+    "startupFailedDetails": "तपशील",
+    "couldNotLoadApiKeys": "API की लोड करता आल्या नाहीत.",
+    "speakerTagPromptNoAction": "नाही…",
+    "diagnosticsRightNow": "आत्ता",
+    "diagnosticsLast7Days": "गेले 7 दिवस",
+    "diagnosticsConnectedFor": "कनेक्ट असलेला वेळ",
+    "diagnosticsVerdictReconnects": "आपोआप पुन्हा जोडले जाते",
+    "diagnosticsVerdictReconnectsDetail": "थोडक्यात खंड, प्रत्येक वेळी सुमारे {duration} मध्ये परत",
+    "diagnosticsVerdictNoDrops": "या आठवड्यात कोणताही खंड नाही",
+    "diagnosticsVerdictTrouble": "कनेक्ट होण्यात अडचण",
+    "diagnosticsVerdictTroubleDetail": "गेल्या 24 तासांतील अयशस्वी कनेक्शन: {count}",
+    "diagnosticsDrops": "खंड",
+    "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
+    "diagnosticsLongestGap": "सर्वात मोठा खंड",
+    "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
+    "diagnosticsLastDuration": "गेले {duration}",
+    "chatReplyOffline": "कनेक्ट करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
+    "chatReplyServerError": "आमच्या बाजूने काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+    "chatReplyTimeout": "उत्तर येण्यासाठी खूप वेळ लागला. कृपया पुन्हा प्रयत्न करा.",
+    "chatReplyNotSignedIn": "तुम्ही साइन इन केलेले नाही. साइन इन करा आणि पुन्हा प्रयत्न करा.",
+    "chatAppsLoadFailed": "चॅट अॅप्स लोड होऊ शकले नाहीत. कृपया पुन्हा प्रयत्न करा.",
+    "assistantVoiceSettingsTitle": "आवाज",
+    "assistantVoice": "सहाय्यकाचा आवाज",
+    "voiceSharedAcrossDevices": "तुमचा निवडलेला आवाज मोबाइल आणि डेस्कटॉप दोन्हींवर शेअर होतो.",
+    "readChatRepliesAloud": "चॅट उत्तरे मोठ्याने वाचा",
+    "readChatRepliesAloudDescription": "फक्त \"व्हॉइस रिस्पॉन्स\" परवानगी दिली तेव्हाच बोलते.",
+    "voicePreviewSample": "हाय, मी Omi आहे. हा माझा आवाज आहे.",
+    "peopleStatsIncomplete": "मोजणी अपूर्ण असू शकते.",
+    "previousDay": "मागील दिवस",
+    "nextDay": "पुढील दिवस",
+    "noTasksOnDate": "{date} रोजी कोणतीही कामे नाहीत",
+    "reprocessingConversationProgress": "संभाषण पुन्हा प्रक्रिया होत आहे…",
+    "conversationReprocessed": "संभाषण अपडेट झाले",
+    "loadingTranscript": "उतारा लोड होत आहे…",
+    "transcriptLoadFailed": "उतारा लोड करता आला नाही.",
+    "processingConversationProgress": "संभाषणावर प्रक्रिया होत आहे…",
+    "conversationProcessingFailedMessage": "या संभाषणावर प्रक्रिया करता आली नाही.",
+    "waitForReprocessing": "पुन्हा प्रक्रिया पूर्ण होईपर्यंत थांबा.",
+    "unnamedSpeakerLabel": "वक्ता",
+    "unresolvedSpeakersNotice": "रेकॉर्डिंगमध्ये वक्ते वेगळे केलेले नाहीत.",
+    "unresolvedSpeakersTitle": "स्पीकर लेबलबद्दल",
+    "unresolvedSpeakersMessage": "Omi रेकॉर्डिंगमध्ये इतर आवाज वेगळे करू शकला नाही. कोण बोलत आहे ते नाव देण्यासाठी स्पीकर लेबलवर टॅप करा.",
+    "nameSpeakerTitle": "वक्त्याला नाव द्या",
+    "playbackPreparingAudio": "ऑडिओ तयार होत आहे…",
+    "playbackBackToCurrent": "वर्तमानावर परत जा",
+    "playbackAudioUnavailable": "ऑडिओ उपलब्ध नाही",
+    "playbackAudioLoadFailed": "ऑडिओ लोड होऊ शकला नाही",
+    "playbackAudioNetworkFailed": "कनेक्शन तपासा",
+    "capturePendantDisconnectedShort": "Omi आपोआप पुन्हा कनेक्ट होईल",
+    "forYou": "तुमच्यासाठी",
+    "stopThese": "हे थांबवा",
+    "dismiss": "लपवा",
+    "syncCardDownloadPercent": "{percent}%",
+    "syncCardDownloadPercentSpeed": "{percent}% · {speed} KB/s",
+    "showOnLockScreen": "लॉक स्क्रीनवर दाखवा",
+    "accountDeletionInProgressSignInAgain": "हे खाते हटवले जात आहे. दुसऱ्या खात्याने साइन इन करा, किंवा काही मिनिटे थांबून पुन्हा प्रयत्न करा.",
+    "onboardingSetupTitle": "तुमचा Omi सेट केला जात आहे",
+    "onboardingSetupSubtitle": "Omi ला वैयक्तिकरणासाठी थोडा वेळ द्या",
+    "onboardingSetupStepWorkspace": "तुमचे वर्कस्पेस तयार केले जात आहे",
+    "onboardingSetupStepLanguage": "तुमच्या भाषेसाठी ट्रान्सक्रिप्शन ट्यून केले जात आहे",
+    "onboardingSetupStepMemory": "तुमची मेमरी सेट केली जात आहे",
+    "onboardingSetupStepDevices": "तुमची डिव्हाइसेस कनेक्ट केली जात आहेत",
+    "onboardingSetupStepPersonalize": "तुमचा अनुभव वैयक्तिकृत केला जात आहे",
+    "onboardingRatingPromptTitle": "तुम्हाला Omi आवडत आहे का?",
+    "onboardingRatingPromptYes": "हो",
+    "onboardingRatingPromptNo": "नाही",
+    "partialRecording": "अंशतः रेकॉर्डिंग",
+    "importTranscriptFiles": "प्रतिलेख फाइल्स",
+    "importTranscriptFilesDescription": "SRT, VTT किंवा TXT प्रतिलेख किंवा त्यांची ZIP फाइल निवडा",
+    "importTooManyAttempts": "सध्या खूप जास्त आयात होत आहेत. नंतर पुन्हा प्रयत्न करा.",
+    "importFileTooLarge": "ही फाइल आयात करण्यासाठी खूप मोठी आहे.",
+    "importUnsupportedFileType": "या प्रकारची फाइल आयात करता येत नाही.",
+    "reviewTitle": "पुनरावलोकन",
+    "reviewEntryTitle": "तुमच्यासाठी प्रश्न",
+    "reviewRemaining": "{count} बाकी",
+    "reviewQuestionSpeaker": "हे कोण म्हणाले?",
+    "reviewQuestionSamePerson": "“{name}” हीच व्यक्ती आहे का?",
+    "reviewQuestionSpelling": "हे कसे लिहितात?",
+    "reviewPlayClip": "क्लिप प्ले करा",
+    "reviewStopClip": "क्लिप थांबवा",
+    "reviewOpenDetailsHint": "तपशील उघडते",
+    "reviewAnswerMe": "मी",
+    "reviewAnswerOther": "इतर",
+    "reviewAddTask": "टास्क जोडा",
+    "reviewAnswerFailed": "तुमचे उत्तर सेव्ह करता आले नाही. पुन्हा प्रयत्न करा.",
+    "reviewAnswersConversations": "हे उत्तर {count} संभाषणांना लेबल लावते",
+    "reviewUnknownSpeaker": "अज्ञात वक्ता",
+    "reviewNewPersonName": "त्यांचे नाव",
+    "reviewSomeoneElse": "इतर कोणीतरी…",
+    "reviewConfirm": "पुष्टी करा",
+    "reviewConfirmPerson": "{name} ची पुष्टी करा",
+    "reviewNotSure": "खात्री नाही",
+    "reviewOpenConversation": "संभाषण",
+    "reviewTaskField": "टास्क",
+    "reviewDue": "अंतिम तारीख",
+    "reviewNoDate": "काहीही नाही",
+    "reviewProject": "प्रोजेक्ट",
+    "reviewReasonAlreadyDone": "आधीच झाले",
+    "reviewReasonNotMine": "माझे नाही",
+    "reviewReasonNotUseful": "उपयुक्त नाही",
+    "reviewYesMerge": "होय, विलीन करा",
+    "reviewConversationCount": "संभाषणे: {count}",
+    "reviewSpellingCustom": "टाइप करा",
+    "reviewLoadFailed": "तुमचे प्रश्न लोड करता आले नाहीत.",
+    "reviewCaughtUpTitle": "उत्तर देण्यासारखे काही नाही",
+    "reviewCaughtUpBody": "Omi ला तुमची गरज असेल तेव्हाच येथे विचारेल.",
+    "reviewRecentChanges": "अलीकडील बदल",
+    "reviewChangesIntro": "गेल्या 30 दिवसांत Omi ने स्वतः काय बदलले. चुकीचे वाटेल ते पूर्ववत करा.",
+    "reviewChangeUndone": "पूर्ववत केले. Omi हे स्वतः पुन्हा करणार नाही.",
+    "reviewChangeFailed": "हा बदल अपडेट करता आला नाही. पुन्हा प्रयत्न करा.",
+    "reviewChangesLoadFailed": "अलीकडील बदल लोड करता आले नाहीत.",
+    "reviewNoChangesTitle": "अजून कोणतेही बदल नाहीत",
+    "reviewNoChangesBody": "Omi ने तुमच्या नोट्स नीट लावल्या की बदल येथे दिसतील.",
+    "reviewShowMore": "आणखी दाखवा",
+    "entityKeptCurrent": "Omi द्वारे अद्ययावत ठेवलेले",
+    "entityNotRight": "बरोबर नाही?",
+    "entityCorrectionTitle": "काय बरोबर नाही?",
+    "entityCorrectionHint": "काय दुरुस्त करायचे ते Omi ला सांगा",
+    "entityCorrectionSaved": "धन्यवाद. Omi हे दुरुस्त करेल.",
+    "entityCorrectionFailed": "तुमची दुरुस्ती पाठवता आली नाही. पुन्हा प्रयत्न करा.",
+    "entityLoadFailed": "हे पेज लोड करता आले नाही.",
+    "entityProject": "प्रोजेक्ट",
+    "entityProjects": "प्रोजेक्ट",
+    "entityDecisions": "निर्णय",
+    "entityOpenTasks": "खुले टास्क",
+    "entityOpenThreads": "खुले मुद्दे",
+    "entityWaitingOn": "{name} ची प्रतीक्षा",
+    "entityDue": "अंतिम तारीख {date}",
+    "entityWhatOmiKnows": "Omi ला काय माहीत आहे",
+    "entityRecentConversations": "अलीकडील संभाषणे",
+    "tasksNoProject": "प्रोजेक्ट नाही",
+    "tasksGroupByProject": "प्रोजेक्टनुसार गटबद्ध करा",
+    "tasksGroupByDate": "तारखेनुसार गटबद्ध करा",
+    "dreamReportTitle": "Dream अहवाल",
+    "dreamReportShadowBanner": "पूर्वावलोकन मोड: Dream काय बदलले असते ते दाखवते, पण तुमच्या खात्यात अजून काहीही बदलत नाही.",
+    "dreamReportLiveBanner": "Dream हे बदल स्वतःच लागू करते. कोणताही बदल अलीकडील बदल मध्ये पूर्ववत करा.",
+    "dreamReportRunNow": "आता चालवा",
+    "dreamReportRunLimit": "आज एकही मॅन्युअल रन शिल्लक नाही",
+    "dreamReportRunInProgress": "एक पास आधीच सुरू आहे. एका मिनिटाने पुन्हा प्रयत्न करा.",
+    "dreamReportRunFailed": "Dream चालवता आले नाही. पुन्हा प्रयत्न करा.",
+    "dreamReportIdle": "पाहण्यासाठी अजून काही नवीन नाही.",
+    "dreamReportLoadFailed": "Dream अहवाल लोड करता आला नाही.",
+    "dreamReportEmptyTitle": "अजून एकही पास नाही",
+    "dreamReportEmptyBody": "Dream साधारण दर तासाला तुमच्या खात्यात काय बदलले ते पाहते.",
+    "dreamReportScheduled": "शेड्यूल केलेले",
+    "dreamReportManual": "मॅन्युअल",
+    "dreamReportFailed": "अयशस्वी ({error})",
+    "dreamReportTimedOut": "वेळमर्यादेवर थांबले",
+    "dreamReportNothingFound": "दुरुस्त करण्यासारखे काही नाही",
+    "dreamReportStats": "{records} आयटम वाचले · {tokens} टोकन",
+    "dreamReportWouldFix": "दुरुस्त केले असते",
+    "dreamReportFixed": "दुरुस्त केले",
+    "dreamReportWouldAsk": "तुम्हाला विचारले असते",
+    "dreamReportWouldSuggestTasks": "कामे सुचवली असती",
+    "dreamReportLearnedWords": "शिकलेले शब्द",
+    "dreamReportFeedback": "Omi टीमला कळवले",
+    "dreamReportDeletedItem": "हटवलेला आयटम",
+    "dreamReportPasses": "आज {count}/{limit} पास",
+    "dreamReportQueued": "{count, plural, =0{कोणताही बदल प्रतीक्षेत नाही} =1{1 बदल प्रतीक्षेत} other{{count} बदल प्रतीक्षेत}}",
+    "dreamReportRunsLeft": "{count, plural, =1{आज 1 मॅन्युअल रन शिल्लक} other{आज {count} मॅन्युअल रन शिल्लक}}",
+    "dreamReportFound": "{fixes, plural, =1{1 दुरुस्ती} other{{fixes} दुरुस्त्या}} · {asks, plural, =1{1 सूचना} other{{asks} सूचना}}",
+    "dreamReportDropped": "{count, plural, =1{1 जुना बदल वगळला} other{{count} जुने बदल वगळले}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}"
 }

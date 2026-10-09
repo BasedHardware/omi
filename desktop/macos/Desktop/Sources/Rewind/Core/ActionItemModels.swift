@@ -34,6 +34,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
   var dueConfidence: Double?
   var provenanceJson: String?
   var supersededBy: String?
+  var isLocked: Bool?
 
   // Desktop extraction fields
   var screenshotId: Int64?
@@ -101,6 +102,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     dueConfidence: Double? = nil,
     provenanceJson: String? = nil,
     supersededBy: String? = nil,
+    isLocked: Bool? = false,
     screenshotId: Int64? = nil,
     confidence: Double? = nil,
     sourceApp: String? = nil,
@@ -149,6 +151,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     self.dueConfidence = dueConfidence
     self.provenanceJson = provenanceJson
     self.supersededBy = supersededBy
+    self.isLocked = isLocked
     self.screenshotId = screenshotId
     self.confidence = confidence
     self.sourceApp = sourceApp
@@ -339,6 +342,7 @@ extension ActionItemRecord {
       dueConfidence: item.dueConfidence,
       provenanceJson: provenanceJson,
       supersededBy: item.supersededBy,
+      isLocked: item.isLocked,
       screenshotId: nil,
       confidence: nil,
       sourceApp: item.sourceApp,
@@ -400,6 +404,7 @@ extension ActionItemRecord {
     self.provenanceJson = item.provenance.flatMap { try? JSONEncoder().encode($0) }
       .flatMap { String(data: $0, encoding: .utf8) }
     self.supersededBy = item.supersededBy
+    self.isLocked = item.isLocked
     self.metadataJson = item.metadata
     if let staged = item.fromStaged {
       self.fromStaged = staged
@@ -501,6 +506,7 @@ extension ActionItemRecord {
       provenance: provenanceJson.flatMap { $0.data(using: .utf8) }
         .flatMap { try? JSONDecoder().decode([OmiAPI.EvidenceRef].self, from: $0) },
       supersededBy: supersededBy,
+      isLocked: isLocked ?? false,
       sortOrder: sortOrder,
       indentLevel: indentLevel,
       relevanceScore: relevanceScore,

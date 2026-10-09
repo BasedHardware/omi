@@ -9,11 +9,12 @@ from utils.llm.memories import CanonicalL1MemoryCandidate
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
+    import utils.conversations.notes_task_context as notes_task_context_module
     import utils.conversations.process_conversation as process_module
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
     # test explicitly opts its local process into the enabled read/write mode.
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
 
     def run_selected_postprocess(_executor, fn, *args, **kwargs):
         if fn.__name__ in {"_extract_memories", "_save_action_items"}:
@@ -36,45 +37,32 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "track_usage", lambda *args, **kwargs: _NoopContext())
     monkeypatch.setattr(process_module, "should_discard_conversation", lambda *args, **kwargs: False)
-    monkeypatch.setattr(process_module, "find_similar_action_items", lambda *args, **kwargs: [])
+    # Dedup similarity lookup moved to utils.conversations.notes_task_context;
+    # stub it where the production call now resolves.
+    monkeypatch.setattr(notes_task_context_module, "find_similar_action_items", lambda *args, **kwargs: [])
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
-    monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
     monkeypatch.setattr(process_module, "precache_conversation_audio", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
-    monkeypatch.setattr(
-        process_module,
-        "get_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle",
+
+    def notes_result(prefix, **_kwargs):
+        reprocess = "Remember to ship" in prefix.context
+        return Structured(
+            title=("Hermetic Conversation Lifecycle Reprocessed" if reprocess else "Hermetic Conversation Lifecycle"),
             overview="A deterministic processing result created by the E2E harness.",
             emoji="🧪",
             category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "get_reprocess_transcript_structure",
-        lambda *args, **kwargs: Structured(
-            title="Hermetic Conversation Lifecycle Reprocessed",
-            overview="A deterministic reprocess result created by the E2E harness.",
-            emoji="🧪",
-            category="work",
-        ),
-    )
-    monkeypatch.setattr(
-        process_module,
-        "extract_action_items",
-        lambda *args, **kwargs: [
-            ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
-        ],
-    )
+            action_items=[
+                ActionItem(description="Ship deterministic conversation lifecycle coverage", completed=False)
+            ],
+        )
+
+    monkeypatch.setattr(process_module, "get_conversation_notes", notes_result)
 
     def extract_canonical_candidates(_uid, _source_id, segments, **_kwargs):
         return [

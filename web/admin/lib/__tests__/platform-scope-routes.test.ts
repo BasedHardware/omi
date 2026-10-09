@@ -9,6 +9,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const captured: string[] = [];
+const releaseRows: [string, string, string][] = [];
+let releaseBoundaryTimestamp: string | null = null;
+let releasePosthogFailure = false;
 
 vi.mock("@/lib/auth", () => ({
   verifyAdmin: vi.fn(async () => ({ uid: "test" })),
@@ -25,7 +28,21 @@ vi.mock("@/lib/posthog", () => ({
   posthogResults: vi.fn(
     async (_h: string, _p: string, _k: string, query: string) => {
       captured.push(query);
-      return [];
+      if (releasePosthogFailure && query.includes("properties.$app_build")) {
+        throw new Error("PostHog unavailable");
+      }
+      if (releaseBoundaryTimestamp && query.includes("properties.$app_build")) {
+        const timestamp = new Date(releaseBoundaryTimestamp);
+        const day = query.includes(
+          "toDate(toTimeZone(timestamp, 'America/New_York'))"
+        )
+          ? timestamp.toLocaleDateString("en-CA", {
+              timeZone: "America/New_York",
+            })
+          : timestamp.toISOString().slice(0, 10);
+        return [["iOS", "boundary-build", day]];
+      }
+      return query.includes("properties.$app_build") ? releaseRows : [];
     }
   ),
   POSTHOG_SERVED_MAX_ROWS: 50_000,
@@ -74,6 +91,9 @@ function expectScoped(queries: string[], scope: "macos" | "mobile" | "all") {
 }
 
 beforeEach(() => {
+  releaseRows.length = 0;
+  releaseBoundaryTimestamp = null;
+  releasePosthogFailure = false;
   process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
   process.env.POSTHOG_PROJECT_ID = "1";
   process.env.POSTHOG_HOST = "https://posthog.test";
@@ -255,23 +275,147 @@ describe("viral-metrics definitions", () => {
 });
 
 describe("releases route", () => {
-  it("buckets the iOS release timeline by New York calendar day", async () => {
-    // GitHub + iTunes calls are irrelevant here; the assertion is that the
-    // PostHog rollout-crossing query follows the boards' NYC-day contract
-    // (UTC toDate would push evening releases onto the next day).
+  it("counts first-seen builds separately for iOS and Android", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T12:00:00Z"));
+    releaseRows.push(
+      ["iOS", "1270", "2026-09-27"],
+      ["iOS", "1271", "2026-09-27"],
+      ["Android", "1270", "2026-09-27"],
+      ["Android", "1271", "2026-09-28"]
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => [] } as any))
     );
     try {
-      const queries = await capture(
-        () => import("@/app/api/omi/stats/releases/route"),
-        "/api/omi/stats/releases?days=30"
+      captured.length = 0;
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toContain(
+        "properties.$os_name IN ('iOS', 'Android')"
       );
-      const ios = queries.find((q) => q.includes("$app_version"));
-      expect(ios).toBeTruthy();
-      expect(ios).toContain("toTimeZone(timestamp, 'America/New_York')");
+      expect(captured[0]).toContain(
+        "min(toDate(toTimeZone(timestamp, 'America/New_York'))) AS first_seen_day"
+      );
+      expect(captured[0]).toContain("GROUP BY platform, build");
+      expect(captured[0]).not.toContain("$app_version");
+      expect(captured[0]).not.toContain("HAVING");
+      expect(data.daily.find((row: any) => row.date === "2026-09-27")).toEqual({
+        date: "2026-09-27",
+        macos: 0,
+        ios: 2,
+        android: 1,
+      });
+      expect(data.daily.find((row: any) => row.date === "2026-09-28")).toEqual({
+        date: "2026-09-28",
+        macos: 0,
+        ios: 0,
+        android: 1,
+      });
+      await GET(request("/api/omi/stats/releases?days=3"));
+      expect(captured).toHaveLength(1); // 15-minute in-process response cache
     } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a 01:00 UTC mobile build on the previous New York day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T01:00:00Z"));
+    releaseBoundaryTimestamp = "2026-09-28T01:00:00Z";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] } as any))
+    );
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=1"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).daily).toEqual([
+        { date: "2026-09-27", macos: 0, ios: 1, android: 0 },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns 500 when PostHog fails even if GitHub and iTunes succeed", async () => {
+    releasePosthogFailure = true;
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        new URL(url).host === "itunes.apple.com"
+          ? {
+              results: [
+                {
+                  version: "1.2",
+                  currentVersionReleaseDate: "2026-09-27T12:00:00Z",
+                },
+              ],
+            }
+          : [],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "PostHog unavailable" });
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        expect.stringContaining(
+          "api.github.com/repos/BasedHardware/omi/releases"
+        ),
+        expect.stringContaining("itunes.apple.com/lookup"),
+      ]);
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps iTunes failure optional but returns 500 for a GitHub failure", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (new URL(url).host === "itunes.apple.com")
+        throw new Error("iTunes unavailable");
+      return { ok: true, json: async () => [] };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).latest.ios.display).toBe(
+        "no releases found"
+      );
+
+      fetchMock.mockImplementation(async (url: string) => {
+        if (new URL(url).host === "api.github.com")
+          return { ok: false, status: 503, json: async () => [] };
+        return { ok: true, json: async () => [] };
+      });
+      vi.resetModules();
+      const failingRoute = await import("@/app/api/omi/stats/releases/route");
+      const failed = await failingRoute.GET(
+        request("/api/omi/stats/releases?days=3")
+      );
+      expect(failed.status).toBe(500);
+      expect((await failed.json()).error).toContain(
+        "GitHub releases fetch failed: 503"
+      );
+    } finally {
+      errorLog.mockRestore();
       vi.unstubAllGlobals();
     }
   });

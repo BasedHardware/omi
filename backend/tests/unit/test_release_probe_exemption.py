@@ -61,5 +61,5 @@ def test_desktop_gates_exempt_only_the_probe_uid() -> None:
     # lane's terminal contract completes only through a kept conversation, so
     # both of its verdicts (the LLM discard decision and the empty-title
     # fallback) must skip for the probe uid (run 35583992730).
-    assert 'if is_release_probe_uid(uid):\n            discarded = False' in process_source
+    assert 'exempt=is_release_probe_uid(uid),' in process_source
     assert "structured.title == '' and not is_release_probe_uid(uid)" in process_source

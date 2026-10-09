@@ -126,6 +126,42 @@ exclusive. Omitting both leaves the unit unchanged.
 Goal types: `boolean`, `scale`, `numeric`. Up to **3 active goals per user**;
 the oldest is deactivated automatically when you create a fourth.
 
+## `omi app`
+
+Build and test an Omi app without a device. Every event is a POST to the URL
+the user configures in Developer Settings; these commands replay the same
+request locally and receive it locally.
+
+| Command                                                   | What it does                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| `omi app events`                                          | List the webhook events an app can receive, with their body shapes. |
+| `omi app payload EVENT [--uid UID]`                       | Print the sample body for one event.                                |
+| `omi app send EVENT --to URL [--uid U] [--payload-file F] [--idempotency-key K] [--timeout S]` | POST one sample event the way Omi posts it.   |
+| `omi app verify --to URL [--event E] [--uid U]`           | Report whether a URL would work in production.                      |
+| `omi app serve [--port N] [--host H] [--status N] [--reply JSON] [--requests N]` | Receive deliveries locally and print each one.   |
+
+Events: `memory_created`, `realtime_transcript`, `day_summary`, `audio_bytes`,
+`button_event`.
+
+```bash
+omi app serve --reply '{"message": "Noted, I will remind you"}'   # one terminal
+omi app send realtime_transcript --to http://127.0.0.1:8787/webhook  # another
+```
+
+`send` exits non-zero when the receiver does not answer 2xx, so it works as a
+check in CI. It also reports what Omi would do next: whether the delivery would
+be retried or dropped, and for `realtime_transcript` whether your reply was
+long enough to reach the user as a notification.
+
+`verify` posts every event to one URL and prints a report card: whether Omi's
+delivery client would accept the URL at all, the status and latency per event,
+whether a failure would be retried or dropped, and whether a
+`realtime_transcript` reply would reach the user. A private or loopback host, a
+redirect, or a response slower than 30 seconds all fail, because the backend
+refuses the first, never follows the second, and gives up on the third. It
+exits non-zero when any check fails. The events it posts are real deliveries,
+so point it at staging if your app writes somewhere on receipt.
+
 ---
 
 ## Environment variables

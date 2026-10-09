@@ -13,7 +13,7 @@ describe('buildCloudConnectors (field correctness — Mac parity)', () => {
       'https://claude.ai/customize/connectors?modal=add-custom-connector'
     )
     expect(rowValue(claude.rows, 'Name')?.value).toBe('Omi Memory')
-    expect(rowValue(claude.rows, 'Server URL')?.value).toBe('https://api.omi.me/v1/mcp/sse')
+    expect(rowValue(claude.rows, 'Server URL')?.value).toBe('https://api.omi.me/v1/mcp')
     expect(rowValue(claude.rows, 'OAuth Client ID')?.value).toBe('omi-claude-prod')
     expect(rowValue(claude.rows, 'OAuth Client Secret')?.blank).toBe(true)
   })

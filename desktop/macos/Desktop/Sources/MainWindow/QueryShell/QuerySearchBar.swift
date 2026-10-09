@@ -34,6 +34,8 @@ struct QuerySearchBar: View {
       // Typing on the page with nothing focused starts a search here. The bar is not focused ahead
       // of time — no caret, no stroke — until the first key arrives (`StrayTypingRouter`).
       .straysTypingHere(focus ?? $internalFocus)
+      // ⌘F lands here while this page is the one on screen (`FindCommandRouter`).
+      .focusesOnFind(focus ?? $internalFocus)
   }
 
   private func reportFocus(_ focused: Bool) {
@@ -61,7 +63,7 @@ struct QuerySearchBar: View {
         }
         .buttonStyle(.plain)
         .onHover { isClearHovered = $0 }
-        .accessibilityLabel("Clear search")
+        .accessibilityLabel("Clear Search")
         .help("Clear the search")
       }
     }

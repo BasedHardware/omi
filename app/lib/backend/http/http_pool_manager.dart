@@ -55,8 +55,13 @@ class HttpPoolManager {
     });
 
     if (isGet) {
-      _pendingGets[url] = future;
-      future.whenComplete(() => _pendingGets.remove(url));
+      // Share the cleanup future with callers so request failures cannot escape
+      // through a second, unobserved future (even when the caller catches them).
+      final tracked = future.whenComplete(() {
+        _pendingGets.remove(url);
+      });
+      _pendingGets[url] = tracked;
+      return tracked;
     }
     return future;
   }
@@ -86,12 +91,38 @@ class HttpPoolManager {
     Object? lastError;
 
     for (var i = 0; i <= retries; i++) {
+      final attemptDeadline = Stopwatch()..start();
+      final abort = Completer<void>();
       try {
-        final request = requestBuilder();
+        final built = requestBuilder();
+        final request = http.AbortableRequest(built.method, built.url, abortTrigger: abort.future)
+          ..followRedirects = built.followRedirects
+          ..maxRedirects = built.maxRedirects
+          ..persistentConnection = built.persistentConnection
+          ..encoding = built.encoding
+          ..headers.addAll(built.headers)
+          ..bodyBytes = built.bodyBytes;
         stampRequestTime(request);
         _applyJourneyFaults(request);
-        final streamed = await _client.send(request).timeout(timeout);
-        lastResponse = await http.Response.fromStream(streamed);
+        final streamed = await _client.send(request).timeout(
+          timeout,
+          onTimeout: () {
+            if (!abort.isCompleted) abort.complete();
+            throw TimeoutException('Request timeout');
+          },
+        );
+        // One deadline covers headers and body: a server that sends headers
+        // and then stalls the body must not extend the caller's budget to
+        // timeout + timeout. Spend only what is left of this attempt.
+        final bodyBudget = timeout - attemptDeadline.elapsed;
+        if (bodyBudget <= Duration.zero) throw TimeoutException('Request timeout');
+        lastResponse = await http.Response.fromStream(streamed).timeout(
+          bodyBudget,
+          onTimeout: () {
+            if (!abort.isCompleted) abort.complete();
+            throw TimeoutException('Request timeout');
+          },
+        );
 
         if (lastResponse.statusCode < 500) {
           return lastResponse;
