@@ -24,6 +24,12 @@ def preflight() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+@pytest.fixture(scope="module")
+def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
+    module = SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+    return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -186,9 +192,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
-        "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
-        "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
@@ -198,6 +202,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
+        "OMI_SHAPED_AGENT_MODE": "on",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
@@ -222,10 +227,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SONIOX_WIRE_LEDGER": "false",
         "SONIOX_ORDERED_FINALIZE": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
-        "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
-        "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED": "true",
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
@@ -253,9 +256,18 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
 @pytest.mark.parametrize("env_name", ["PROACTIVITY_V2_POSTHOG_TOKEN", "PROACTIVITY_V2_POSTHOG_HOST"])
 @pytest.mark.parametrize("mutation", ["missing", "changed", "secret"])
 def test_dev_pusher_dedicated_posthog_literals_reject_rendered_drift(
-    preflight: SimpleNamespace, env_name: str, mutation: str
+    monkeypatch,
+    preflight: SimpleNamespace,
+    dev_pusher_contract_baseline: tuple[dict, tuple],
+    env_name: str,
+    mutation: str,
 ):
-    deployment = preflight.rendered_pusher_deployment("dev")
+    deployment = copy.deepcopy(dev_pusher_contract_baseline[0])
+    monkeypatch.setitem(
+        preflight.validate_dev_pusher_binding_contract.__globals__,
+        "dev_pusher_binding_contract",
+        lambda: dev_pusher_contract_baseline[1],
+    )
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     entry = next(item for item in env if item["name"] == env_name)
     if mutation == "missing":

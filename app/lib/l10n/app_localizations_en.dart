@@ -12426,16 +12426,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalizing your experience';
 
   @override
-  String get onboardingRatingPromptTitle => 'While you wait, has Omi been nice to use?';
+  String get onboardingRatingPromptTitle => 'Are you enjoying Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Rating us 5 stars really helps us out ❤️';
+  String get onboardingRatingPromptYes => 'Yes';
 
   @override
-  String get onboardingRatingPromptYes => 'Yes, I want to support you!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Not really';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Partial recording';
@@ -12454,6 +12451,203 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'This file type can\'t be imported.';
+
+  @override
+  String get reviewTitle => 'Review';
+
+  @override
+  String get reviewEntryTitle => 'Questions for you';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count left';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Who said this?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Same person as “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'How is this spelled?';
+
+  @override
+  String get reviewPlayClip => 'Play clip';
+
+  @override
+  String get reviewStopClip => 'Stop clip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Opens details';
+
+  @override
+  String get reviewAnswerMe => 'Me';
+
+  @override
+  String get reviewAnswerOther => 'Other';
+
+  @override
+  String get reviewAddTask => 'Add Task';
+
+  @override
+  String get reviewAnswerFailed => 'Couldn’t save your answer. Try again.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'This answer labels $count conversations';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Unknown speaker';
+
+  @override
+  String get reviewNewPersonName => 'Their name';
+
+  @override
+  String get reviewSomeoneElse => 'Someone Else…';
+
+  @override
+  String get reviewConfirm => 'Confirm';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Confirm $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Not Sure';
+
+  @override
+  String get reviewOpenConversation => 'Conversation';
+
+  @override
+  String get reviewTaskField => 'Task';
+
+  @override
+  String get reviewDue => 'Due';
+
+  @override
+  String get reviewNoDate => 'None';
+
+  @override
+  String get reviewProject => 'Project';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Already Done';
+
+  @override
+  String get reviewReasonNotMine => 'Not Mine';
+
+  @override
+  String get reviewReasonNotUseful => 'Not Useful';
+
+  @override
+  String get reviewYesMerge => 'Yes, Merge';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Conversations: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Type it';
+
+  @override
+  String get reviewLoadFailed => 'Couldn’t load your questions.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nothing to answer';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi will ask here only when it needs you.';
+
+  @override
+  String get reviewRecentChanges => 'Recent Changes';
+
+  @override
+  String get reviewChangesIntro => 'What Omi changed on its own in the last 30 days. Undo anything that looks wrong.';
+
+  @override
+  String get reviewChangeUndone => 'Undone. Omi won’t redo this on its own.';
+
+  @override
+  String get reviewChangeFailed => 'Couldn’t update this change. Try again.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Couldn’t load recent changes.';
+
+  @override
+  String get reviewNoChangesTitle => 'No changes yet';
+
+  @override
+  String get reviewNoChangesBody => 'When Omi tidies your notes, the changes appear here.';
+
+  @override
+  String get reviewShowMore => 'Show More';
+
+  @override
+  String get entityKeptCurrent => 'Kept current by Omi';
+
+  @override
+  String get entityNotRight => 'Not right?';
+
+  @override
+  String get entityCorrectionTitle => 'What’s not right?';
+
+  @override
+  String get entityCorrectionHint => 'Tell Omi what to fix';
+
+  @override
+  String get entityCorrectionSaved => 'Thanks. Omi will fix it.';
+
+  @override
+  String get entityCorrectionFailed => 'Couldn’t send your correction. Try again.';
+
+  @override
+  String get entityLoadFailed => 'Couldn’t load this page.';
+
+  @override
+  String get entityProject => 'Project';
+
+  @override
+  String get entityProjects => 'Projects';
+
+  @override
+  String get entityDecisions => 'Decisions';
+
+  @override
+  String get entityOpenTasks => 'Open tasks';
+
+  @override
+  String get entityOpenThreads => 'Open threads';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Waiting on $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Due $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'What Omi knows';
+
+  @override
+  String get entityRecentConversations => 'Recent conversations';
+
+  @override
+  String get tasksNoProject => 'No project';
+
+  @override
+  String get tasksGroupByProject => 'Group by Project';
+
+  @override
+  String get tasksGroupByDate => 'Group by Date';
 
   @override
   String get singlePress => 'Single Press';

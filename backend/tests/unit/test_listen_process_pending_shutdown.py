@@ -658,7 +658,9 @@ async def test_fresh_server_generated_id_skips_the_existence_read():
     create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
     assert len(create_calls) == 1, f'expected the new-conversation path to run, got {host.calls}'
     assert host.state.current_conversation_id is not None
-    host.speakers.refresh_for_conversation.assert_awaited_once_with(host.state.current_conversation_id)
+    host.speakers.refresh_for_conversation.assert_awaited_once_with(
+        host.state.current_conversation_id, owner_carry_scope=None, owner_carry_donor=None
+    )
 
 
 async def test_rollover_generation_skips_the_existence_read():

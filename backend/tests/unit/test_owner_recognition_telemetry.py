@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -280,11 +281,13 @@ def test_metrics_survive_module_reload():
     share = mod.OWNER_RECOGNITION_OWNER_SHARE
     decisions = mod.LIVE_SPEAKER_DECISIONS
     rollover = mod.LIVE_SPEAKER_ROLLOVER
+    repair = mod.OWNER_IDENTITY_REPAIR
     importlib.reload(mod)
     assert mod.OWNER_RECOGNITION_CONVERSATIONS is first
     assert mod.OWNER_RECOGNITION_OWNER_SHARE is share
     assert mod.LIVE_SPEAKER_DECISIONS is decisions
     assert mod.LIVE_SPEAKER_ROLLOVER is rollover
+    assert mod.OWNER_IDENTITY_REPAIR is repair
     mod.record_live_speaker_decision('owner', 'accepted')
 
 
@@ -618,6 +621,11 @@ def _stub_sync_enrichment(monkeypatch, store):
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
     monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', _persist)
     monkeypatch.setattr(module.users_db, 'get_people_by_ids', lambda *args, **kwargs: [])
+
+    def _update(uid, conversation_id, updates):
+        store.rows[('users', uid, 'conversations', conversation_id)].update(updates)
+
+    monkeypatch.setattr(module.conversations_db, 'update_conversation', _update)
     monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2, 0.3])
     monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
 
@@ -783,6 +791,7 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
+    monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 
 def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch):

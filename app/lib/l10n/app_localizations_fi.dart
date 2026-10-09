@@ -12442,16 +12442,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Kokemustasi personoidaan';
 
   @override
-  String get onboardingRatingPromptTitle => 'Odotellessasi: onko Omin käyttö ollut mukavaa?';
+  String get onboardingRatingPromptTitle => 'Pidätkö Omista?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tähteä auttaa meitä todella paljon ❤️';
+  String get onboardingRatingPromptYes => 'Kyllä';
 
   @override
-  String get onboardingRatingPromptYes => 'Kyllä, haluan tukea teitä!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ei oikeastaan';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osittainen tallenne';
@@ -12470,6 +12467,204 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Tämän tyyppistä tiedostoa ei voi tuoda.';
+
+  @override
+  String get reviewTitle => 'Tarkistus';
+
+  @override
+  String get reviewEntryTitle => 'Kysymyksiä sinulle';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count jäljellä';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kuka sanoi tämän?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Sama henkilö kuin ”$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Miten tämä kirjoitetaan?';
+
+  @override
+  String get reviewPlayClip => 'Toista klippi';
+
+  @override
+  String get reviewStopClip => 'Pysäytä klippi';
+
+  @override
+  String get reviewOpenDetailsHint => 'Avaa tiedot';
+
+  @override
+  String get reviewAnswerMe => 'Minä';
+
+  @override
+  String get reviewAnswerOther => 'Muu';
+
+  @override
+  String get reviewAddTask => 'Lisää tehtävä';
+
+  @override
+  String get reviewAnswerFailed => 'Vastausta ei voitu tallentaa. Yritä uudelleen.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Tämä vastaus nimeää $count keskustelua';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Tuntematon puhuja';
+
+  @override
+  String get reviewNewPersonName => 'Heidän nimensä';
+
+  @override
+  String get reviewSomeoneElse => 'Joku muu…';
+
+  @override
+  String get reviewConfirm => 'Vahvista';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Vahvista $name';
+  }
+
+  @override
+  String get reviewNotSure => 'En ole varma';
+
+  @override
+  String get reviewOpenConversation => 'Keskustelu';
+
+  @override
+  String get reviewTaskField => 'Tehtävä';
+
+  @override
+  String get reviewDue => 'Määräpäivä';
+
+  @override
+  String get reviewNoDate => 'Ei mitään';
+
+  @override
+  String get reviewProject => 'Projekti';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Jo tehty';
+
+  @override
+  String get reviewReasonNotMine => 'Ei minun';
+
+  @override
+  String get reviewReasonNotUseful => 'Ei hyödyllinen';
+
+  @override
+  String get reviewYesMerge => 'Kyllä, yhdistä';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Keskustelut: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Kirjoita itse';
+
+  @override
+  String get reviewLoadFailed => 'Kysymyksiäsi ei voitu ladata.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Ei vastattavaa';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi kysyy täällä vain, kun se tarvitsee sinua.';
+
+  @override
+  String get reviewRecentChanges => 'Viimeaikaiset muutokset';
+
+  @override
+  String get reviewChangesIntro =>
+      'Mitä Omi on muuttanut itse viimeisen 30 päivän aikana. Kumoa kaikki, mikä näyttää väärältä.';
+
+  @override
+  String get reviewChangeUndone => 'Kumottu. Omi ei toista tätä itse.';
+
+  @override
+  String get reviewChangeFailed => 'Muutosta ei voitu päivittää. Yritä uudelleen.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Viimeaikaisia muutoksia ei voitu ladata.';
+
+  @override
+  String get reviewNoChangesTitle => 'Ei vielä muutoksia';
+
+  @override
+  String get reviewNoChangesBody => 'Kun Omi siistii muistiinpanojasi, muutokset näkyvät täällä.';
+
+  @override
+  String get reviewShowMore => 'Näytä lisää';
+
+  @override
+  String get entityKeptCurrent => 'Omin ajan tasalla pitämä';
+
+  @override
+  String get entityNotRight => 'Eikö oikein?';
+
+  @override
+  String get entityCorrectionTitle => 'Mikä ei ole oikein?';
+
+  @override
+  String get entityCorrectionHint => 'Kerro Omille, mitä korjataan';
+
+  @override
+  String get entityCorrectionSaved => 'Kiitos. Omi korjaa sen.';
+
+  @override
+  String get entityCorrectionFailed => 'Korjausta ei voitu lähettää. Yritä uudelleen.';
+
+  @override
+  String get entityLoadFailed => 'Tätä sivua ei voitu ladata.';
+
+  @override
+  String get entityProject => 'Projekti';
+
+  @override
+  String get entityProjects => 'Projektit';
+
+  @override
+  String get entityDecisions => 'Päätökset';
+
+  @override
+  String get entityOpenTasks => 'Avoimet tehtävät';
+
+  @override
+  String get entityOpenThreads => 'Avoimet asiat';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Odotetaan: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Määräpäivä $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Mitä Omi tietää';
+
+  @override
+  String get entityRecentConversations => 'Viimeisimmät keskustelut';
+
+  @override
+  String get tasksNoProject => 'Ei projektia';
+
+  @override
+  String get tasksGroupByProject => 'Ryhmittele projektin mukaan';
+
+  @override
+  String get tasksGroupByDate => 'Ryhmittele päivämäärän mukaan';
 
   @override
   String get singlePress => 'Yksi painallus';

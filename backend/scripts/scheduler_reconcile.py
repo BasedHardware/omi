@@ -261,8 +261,7 @@ def reconcile(
                 session,
                 "post",
                 f"{SCHEDULER_API}/{parent}/jobs",
-                params={"jobId": job["name"]},
-                json=desired,
+                json={"name": resource_name, **desired},
             )
             if job["state"] == "PAUSED":
                 _pause_state(session, resource_name, "PAUSED", "ENABLED")

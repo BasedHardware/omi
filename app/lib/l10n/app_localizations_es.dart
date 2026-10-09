@@ -12474,16 +12474,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Personalizando tu experiencia';
 
   @override
-  String get onboardingRatingPromptTitle => 'Mientras esperas, ¿te ha gustado usar Omi?';
+  String get onboardingRatingPromptTitle => '¿Te está gustando Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Valorarnos con 5 estrellas nos ayuda muchísimo ❤️';
+  String get onboardingRatingPromptYes => 'Sí';
 
   @override
-  String get onboardingRatingPromptYes => '¡Sí, quiero apoyaros!';
-
-  @override
-  String get onboardingRatingPromptNo => 'No mucho';
+  String get onboardingRatingPromptNo => 'No';
 
   @override
   String get partialRecording => 'Grabación parcial';
@@ -12502,6 +12499,204 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Este tipo de archivo no se puede importar.';
+
+  @override
+  String get reviewTitle => 'Revisión';
+
+  @override
+  String get reviewEntryTitle => 'Preguntas para ti';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Quedan $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => '¿Quién dijo esto?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '¿Es la misma persona que “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => '¿Cómo se escribe esto?';
+
+  @override
+  String get reviewPlayClip => 'Reproducir clip';
+
+  @override
+  String get reviewStopClip => 'Detener clip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Abre los detalles';
+
+  @override
+  String get reviewAnswerMe => 'Yo';
+
+  @override
+  String get reviewAnswerOther => 'Otro';
+
+  @override
+  String get reviewAddTask => 'Añadir tarea';
+
+  @override
+  String get reviewAnswerFailed => 'No se pudo guardar tu respuesta. Inténtalo de nuevo.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Esta respuesta etiqueta $count conversaciones';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Hablante desconocido';
+
+  @override
+  String get reviewNewPersonName => 'Su nombre';
+
+  @override
+  String get reviewSomeoneElse => 'Otra persona…';
+
+  @override
+  String get reviewConfirm => 'Confirmar';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Confirmar a $name';
+  }
+
+  @override
+  String get reviewNotSure => 'No estoy seguro';
+
+  @override
+  String get reviewOpenConversation => 'Conversación';
+
+  @override
+  String get reviewTaskField => 'Tarea';
+
+  @override
+  String get reviewDue => 'Vence';
+
+  @override
+  String get reviewNoDate => 'Ninguna';
+
+  @override
+  String get reviewProject => 'Proyecto';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Ya hecho';
+
+  @override
+  String get reviewReasonNotMine => 'No es mía';
+
+  @override
+  String get reviewReasonNotUseful => 'No es útil';
+
+  @override
+  String get reviewYesMerge => 'Sí, combinar';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Conversaciones: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Escríbelo';
+
+  @override
+  String get reviewLoadFailed => 'No se pudieron cargar tus preguntas.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nada que responder';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi solo preguntará aquí cuando te necesite.';
+
+  @override
+  String get reviewRecentChanges => 'Cambios recientes';
+
+  @override
+  String get reviewChangesIntro =>
+      'Lo que Omi cambió por su cuenta en los últimos 30 días. Deshaz lo que te parezca incorrecto.';
+
+  @override
+  String get reviewChangeUndone => 'Deshecho. Omi no lo repetirá por su cuenta.';
+
+  @override
+  String get reviewChangeFailed => 'No se pudo actualizar este cambio. Inténtalo de nuevo.';
+
+  @override
+  String get reviewChangesLoadFailed => 'No se pudieron cargar los cambios recientes.';
+
+  @override
+  String get reviewNoChangesTitle => 'Aún no hay cambios';
+
+  @override
+  String get reviewNoChangesBody => 'Cuando Omi ordene tus notas, los cambios aparecerán aquí.';
+
+  @override
+  String get reviewShowMore => 'Mostrar más';
+
+  @override
+  String get entityKeptCurrent => 'Mantenido al día por Omi';
+
+  @override
+  String get entityNotRight => '¿No es correcto?';
+
+  @override
+  String get entityCorrectionTitle => '¿Qué no es correcto?';
+
+  @override
+  String get entityCorrectionHint => 'Dile a Omi qué corregir';
+
+  @override
+  String get entityCorrectionSaved => 'Gracias. Omi lo corregirá.';
+
+  @override
+  String get entityCorrectionFailed => 'No se pudo enviar tu corrección. Inténtalo de nuevo.';
+
+  @override
+  String get entityLoadFailed => 'No se pudo cargar esta página.';
+
+  @override
+  String get entityProject => 'Proyecto';
+
+  @override
+  String get entityProjects => 'Proyectos';
+
+  @override
+  String get entityDecisions => 'Decisiones';
+
+  @override
+  String get entityOpenTasks => 'Tareas abiertas';
+
+  @override
+  String get entityOpenThreads => 'Temas abiertos';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Esperando a $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Vence $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Lo que Omi sabe';
+
+  @override
+  String get entityRecentConversations => 'Conversaciones recientes';
+
+  @override
+  String get tasksNoProject => 'Sin proyecto';
+
+  @override
+  String get tasksGroupByProject => 'Agrupar por proyecto';
+
+  @override
+  String get tasksGroupByDate => 'Agrupar por fecha';
 
   @override
   String get singlePress => 'Pulsación única';

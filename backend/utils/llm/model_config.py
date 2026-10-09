@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.model_constants import LUNA_MODEL
 from utils.llm.vertex_pt_routing import (
     LANE_OVERFLOW_ORIGINS as FEATURE_PT_OVERFLOW_ORIGIN,
     OVERFLOW_ORIGIN_OPTION,
@@ -40,25 +41,23 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 # Canonical Luna model id. Feature defaults, scripts, and tests import this
 # instead of embedding a versioned string. A bump changes this constant plus
 # the gateway route artifacts and the provider rate card.
-LUNA_MODEL = 'gpt-6-luna'
-
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #
-# Each profile maps every feature to a (model, provider) tuple.
+# Each company-paid profile maps every feature to a (model, provider) tuple.
 # The profile is the SINGLE SOURCE OF TRUTH for both model and provider.
 # Provider is never inferred from model name — it is declared explicitly.
 #
-# This means the same model can be hosted by different providers:
-#   feature_a: ('gemini-2.5-flash', 'gemini')      → Google direct
-#   feature_b: ('gemini-2.5-flash', 'openrouter')   → OpenRouter
+# The provider is declared explicitly because the gateway owns routing for
+# company-paid work while BYOK profiles may still select provider-specific APIs.
 #
 # Global switch:     MODEL_QOS=premium        (selects entire profile)
 #
 # Profiles:
 #   premium  — maximize cost savings while preserving 80% of max quality
 #   max      — 100% quality, best models available, no cost optimization
-#   byok     — same models as max (BYOK users pay their own API costs)
+#   byok     — same managed defaults, with legacy Gemini-specialty routes kept
+#              only for requests carrying the user's own Gemini/OpenRouter key
 # ---------------------------------------------------------------------------
 
 # All QoS profiles deliberately share this two-tier map. Keeping independent
@@ -104,20 +103,40 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_category': ('gpt-5-nano', 'openai'),
     'smart_glasses': ('gpt-5-nano', 'openai'),
     'persona_chat': ('gpt-5-nano', 'openai'),
-    # Non-OpenAI routes remain intentionally unchanged.
-    'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
-    'followup': ('gemini-2.5-flash-lite', 'gemini'),
-    'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
-    'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
-    'trends': ('gemini-2.5-flash-lite', 'gemini'),
-    'translation': ('gemini-2.5-flash-lite', 'gemini'),
-    'screen_frame_judge': ('gemini-2.5-flash-lite', 'gemini'),
-    'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+    # Backend utility Gemini generation moves to Luna. Desktop reserved-capacity
+    # generation is governed separately by vertex_pt_routing.
+    # The gateway owns Luna dispatch for these features, even when its optional
+    # rollout mode is disabled. BYOK retains the previous choices below.
+    'session_titles': (LUNA_MODEL, 'openai'),
+    'followup': (LUNA_MODEL, 'openai'),
+    'onboarding': (LUNA_MODEL, 'openai'),
+    'app_integration': (LUNA_MODEL, 'openai'),
+    'trends': (LUNA_MODEL, 'openai'),
+    'translation': (LUNA_MODEL, 'openai'),
+    'screen_frame_judge': (LUNA_MODEL, 'openai'),
+    'wrapped_analysis': (LUNA_MODEL, 'openai'),
     'web_search': ('sonar-pro', 'perplexity'),
 }
 
+# AI Studio 404s gemini-2.5-* for projects that have not used them
+# ("This model models/gemini-2.5-flash..."). Vertex reservations still serve 2.5.
+BYOK_GEMINI_MODEL = 'gemini-3.5-flash-lite'
+_BYOK_GEMINI_ROUTES: Dict[str, Tuple[str, str]] = {
+    'session_titles': (BYOK_GEMINI_MODEL, 'gemini'),
+    'followup': (BYOK_GEMINI_MODEL, 'gemini'),
+    'onboarding': (BYOK_GEMINI_MODEL, 'gemini'),
+    'app_integration': (BYOK_GEMINI_MODEL, 'gemini'),
+    'trends': (BYOK_GEMINI_MODEL, 'gemini'),
+    'translation': (BYOK_GEMINI_MODEL, 'gemini'),
+    'screen_frame_judge': (BYOK_GEMINI_MODEL, 'gemini'),
+    'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+}
+
+_BYOK_MODEL_PROFILE = {**_TWO_TIER_MODEL_PROFILE, **_BYOK_GEMINI_ROUTES}
 MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
-    profile_name: dict(_TWO_TIER_MODEL_PROFILE) for profile_name in ('premium', 'max', 'byok')
+    'premium': dict(_TWO_TIER_MODEL_PROFILE),
+    'max': dict(_TWO_TIER_MODEL_PROFILE),
+    'byok': dict(_BYOK_MODEL_PROFILE),
 }
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
@@ -125,17 +144,23 @@ _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
     'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', LUNA_MODEL).strip() or LUNA_MODEL, 'openai'),
 }
 
-# Resolve active profile once at startup.
+# BYOK QoS is request-scoped. It is selected only after a provider-scoped user
+# key is found and is never a valid managed profile.
+_byok_profile_name = 'byok'
+_byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
+
+# Resolve active managed profile once at startup. Older deploys could set
+# MODEL_QOS=byok and thereby make a keyless paid request resolve to a direct
+# Gemini route. BYOK routing is request-scoped, so normalize that value to the
+# safe managed default while retaining the separate BYOK profile above.
 _active_profile_name = os.environ.get('MODEL_QOS', 'premium').strip().lower()
-if _active_profile_name not in MODEL_QOS_PROFILES:
+if _active_profile_name == _byok_profile_name:
+    logger.warning('MODEL_QOS=byok is request-scoped; using premium for managed requests')
+    _active_profile_name = 'premium'
+elif _active_profile_name not in MODEL_QOS_PROFILES:
     logger.warning('MODEL_QOS=%s is not a valid profile, falling back to premium', _active_profile_name)
     _active_profile_name = 'premium'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
-
-# BYOK QoS — all BYOK users get routed to 'byok' profile (top-tier all-OpenAI).
-# BYOK users pay their own API costs, so we give them maximum quality models.
-_byok_profile_name = 'byok'
-_byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
 
 def validate_no_prohibited_company_paid_models(
@@ -195,7 +220,7 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
-# Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
+# Features that call .with_structured_output().
 _STRUCTURED_OUTPUT_FEATURES = {
     'chat_extraction',
     'proactive_notification',
@@ -239,9 +264,9 @@ _FOREGROUND_TIMEOUT_FEATURES = frozenset(
 )
 
 
-# Future migration point for features that should call the gateway via an auto
-# lane. Keep empty until a ticket explicitly wires and verifies shadow/live
-# traffic; existing direct LLM routing never consults this map.
+# Explicit ``get_route_ref`` overrides for callers that need a route reference
+# rather than constructing through ``get_llm``. Managed ``get_llm`` generation
+# already uses feature auto lanes and deliberately does not depend on this map.
 _AUTO_LANE_FEATURES: Dict[str, str] = {}
 
 
@@ -414,6 +439,14 @@ def get_all_configured_features() -> set[str]:
 
 def get_byok_profile() -> Dict[str, Tuple[str, str]]:
     return _byok_profile
+
+
+def get_byok_provider(feature: str) -> str:
+    """Return the provider selected for this feature when an enrolled BYOK key is present."""
+    try:
+        return _byok_profile[feature][1]
+    except KeyError as exc:
+        raise UnknownLLMFeature(feature) from exc
 
 
 def get_byok_profile_name() -> str:

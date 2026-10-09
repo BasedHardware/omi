@@ -1,33 +1,28 @@
 // Which assistant lane may burn the Vertex PT Flash reservation — a ratchet.
 //
-// Company-paid `gemini-2.5-flash` in us-central1 burns a saturated, prepaid
-// Provisioned Throughput reservation (13,450 tok/s) that is kept for task
-// extraction — the one lane Flash-Lite measurably fails (sidebar false-extraction
-// at confidence 0.9; silently dropped second commitment). Everything else runs on
-// `gemini-2.5-flash-lite`, which is `shared`/on-demand on Vertex and never
-// competes with task extraction for the reservation. Evidence: omi-knowledge-base,
-// vertex-pt-flash-spend, 2026-08-17 workload value ranking + overflow bakeoff.
-//
-// Re-pinning a lane onto `gemini-2.5-flash` is a cost regression on a saturated
-// reservation, not a free upgrade: change this test only with new lane-level
-// evidence, in the same PR as the pin change.
+// Company-paid task extraction now uses the JEV admission gate and Luna through
+// the desktop LLM gateway. It does not consume the Vertex Flash reservation.
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('electron', () => ({ net: { fetch: vi.fn() } }))
+vi.mock('electron', () => ({
+  net: { fetch: vi.fn() },
+  app: { isPackaged: false, getVersion: () => 'test' }
+}))
 vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
+vi.mock('../ocr/helperProcess', () => ({ helperProcess: { ocr: vi.fn() } }))
+vi.mock('./aiUserProfile/service', () => ({ getLatestProfileText: () => null }))
 
-import { TASK_MODEL, TASK_FALLBACK_MODEL } from './tasks/geminiWire'
+import { TASK_MODEL } from './tasks/screenTaskPipeline'
 import { MODEL as FOCUS_MODEL } from './focus/gemini'
 import { MODEL as MEMORY_MODEL } from './memory/gemini'
 import { geminiProxyFetch, type GeminiFetch } from '../../shared/geminiProxy'
 
-const PT_MODEL = 'gemini-2.5-flash'
 const OFF_PT_MODEL = 'gemini-2.5-flash-lite'
+const PT_MODEL = 'gemini-2.5-flash'
 
 describe('assistant model pins vs the Vertex PT reservation', () => {
-  it('task extraction keeps the reservation (nowhere cheaper to go)', () => {
-    expect(TASK_MODEL).toBe(PT_MODEL)
-    expect(TASK_FALLBACK_MODEL).toBe(PT_MODEL)
+  it('task extraction uses the mandatory gateway screen extractor alias', () => {
+    expect(TASK_MODEL).toBe('gemini-3.8-flash')
   })
 
   it('focus keeps the reservation (small payloads, best-performing lane)', () => {
