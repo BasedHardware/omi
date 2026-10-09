@@ -121,6 +121,7 @@ def _load_memory_service(monkeypatch):
         database.memories = memories_db_mod
         database.vector_db = vector_db_mod
     service_mod._prod_get_memories = service_mod.memories_db.get_memories
+    service_mod._prod_get_memories_by_ids = service_mod.memories_db.get_memories_by_ids
     service_mod._prod_list_memory_updated_or_created_index = (
         service_mod.memories_db.list_memory_updated_or_created_index
     )

@@ -944,8 +944,12 @@ class HistoricalMemoryAdapter:
             return records
         try:
             raw_rows = memories_db.get_memories_by_ids(uid, memory_ids, budget=budget, **self._firestore_kwargs())
-        except ListReadBudgetExhausted:
-            raise
+        except ListReadBudgetExhausted as exc:
+            # A charge that dies after the documents were fetched still carries
+            # those rows. Ship them; the budget is already truncated.
+            raw_rows = getattr(exc, 'partial_memories', None)
+            if not raw_rows:
+                raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         adapted: Dict[str, HistoricalMemoryRecord] = {}
@@ -2737,17 +2741,26 @@ class MemoryService:
         if state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
         page = merged[bounded_offset : bounded_offset + bounded_limit]
-        if canonical_unavailable is not None and budget is not None and not budget.truncated:
-            # Canonical is missing, so the route must not present this page as
-            # a complete account. The historical rows themselves are known and
-            # still need their content filled in.
-            budget.mark_exhausted('documents')
         if truncated and canonical_unavailable is None:
             # The request budget died before content was known. Do not ship
             # empty stubs as if they were a finished page.
             page = [memory for memory in page if memory.id not in kept_stub_ids]
         elif kept_stub_ids:
-            page = self._hydrate_merged_historical_stubs(uid, page, kept_stub_ids, budget=budget)
+            # Hydrate while the budget can still be charged. Marking it
+            # exhausted first makes the next charge raise even when documents
+            # and time remain, and the route then 500s instead of returning
+            # this page.
+            try:
+                page = self._hydrate_merged_historical_stubs(uid, page, kept_stub_ids, budget=budget)
+            except ListReadBudgetExhausted:
+                # Nothing fetched survived. Drop the empty stubs. Rows already
+                # on the page stay, and the budget flag below keeps the page
+                # truncated rather than raising after content exists.
+                page = [memory for memory in page if memory.id not in kept_stub_ids]
+        if canonical_unavailable is not None and budget is not None and not budget.truncated:
+            # Canonical is missing, so the route must not present this page as
+            # a complete account. Hydration has already run.
+            budget.mark_exhausted('documents')
         return page
 
     def _hydrate_merged_historical_stubs(

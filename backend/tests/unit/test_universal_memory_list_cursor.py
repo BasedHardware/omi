@@ -1513,6 +1513,110 @@ def test_offset_canonical_failure_returns_historical_rows_and_marks_truncated(se
     service_mod.read_canonical_memories.assert_not_called()
 
 
+class _LegacyDocRef:
+    def __init__(self, client: "_ChargingLegacyDb", path: str):
+        self._client = client
+        self.path = path
+
+    def collection(self, name: str) -> "_LegacyCollection":
+        return _LegacyCollection(self._client, f"{self.path}/{name}")
+
+
+class _LegacyCollection:
+    def __init__(self, client: "_ChargingLegacyDb", path: str):
+        self._client = client
+        self.path = path
+
+    def document(self, doc_id: str) -> _LegacyDocRef:
+        return _LegacyDocRef(self._client, f"{self.path}/{doc_id}")
+
+
+class _LegacySnapshot:
+    def __init__(self, payload, *, exists: bool, reference: _LegacyDocRef):
+        self._payload = payload
+        self.exists = exists
+        self.reference = reference
+
+    def to_dict(self):
+        return None if self._payload is None else dict(self._payload)
+
+
+class _ChargingLegacyDb:
+    """Stand-in whose ``get_all`` is the production ``get_memories_by_ids`` charge site."""
+
+    def __init__(self, docs):
+        self.docs = {path: dict(payload) for path, payload in docs.items()}
+
+    def collection(self, name: str) -> _LegacyCollection:
+        return _LegacyCollection(self, name)
+
+    def document(self, path: str) -> _LegacyDocRef:
+        return _LegacyDocRef(self, path)
+
+    def get_all(self, refs, timeout=None):
+        del timeout
+        for ref in refs:
+            payload = self.docs.get(ref.path)
+            yield _LegacySnapshot(payload, exists=payload is not None, reference=ref)
+
+
+def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents: Optional[int] = None):
+    """Canonical keyset down, one unhydrated legacy row, real id-hydration that charges."""
+    from tests.unit.test_memory_service_parity import _sample_memory_dict
+    from utils.other.list_budget import ListReadBudget
+
+    memory_id = "leg-budget-1"
+    stored = _sample_memory_dict(memory_id)
+    stored["content"] = "Legacy row hydrated under a live list budget"
+    stored["uid"] = "uid-test"
+    db = _ChargingLegacyDb({f"users/uid-test/memories/{memory_id}": stored})
+    before = {path: dict(payload) for path, payload in db.docs.items()}
+    monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", service_mod._prod_get_memories_by_ids)
+    service = service_mod.MemoryService(db_client=db)
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, memory_id, content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", memory_id),
+        hydrated=False,
+    )
+    service.history.read = lambda *_args, **_kwargs: [stub]
+    service.canonical_statuses = MagicMock(return_value={})
+    budget_kwargs = {"route": "memories", "seconds": 60}
+    if max_documents is not None:
+        budget_kwargs["max_documents"] = max_documents
+    budget = ListReadBudget.for_request(None, **budget_kwargs)
+    rows = service.read("uid-test", limit=8, budget=budget)
+    assert db.docs == before
+    return rows, budget
+
+
+def test_budgeted_legacy_hydration_returns_the_row_truncated(service_mod, monkeypatch):
+    """A live document budget must hydrate the legacy stub before truncation is flagged.
+
+    Production ``get_memories_by_ids`` charges the request budget. Marking that
+    budget exhausted first makes the charge raise ``ListReadBudgetExhausted``
+    and the route 500s instead of returning the truncated page.
+    """
+    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch)
+
+    assert [memory.id for memory in rows] == ["leg-budget-1"]
+    assert rows[0].content == "Legacy row hydrated under a live list budget"
+    assert budget.truncated is True
+    assert budget.remaining_documents > 20_000
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_budgeted_legacy_hydration_keeps_rows_when_the_charge_exhausts(service_mod, monkeypatch):
+    """Hydration that spends the last document still ships that row, truncated."""
+    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, max_documents=0)
+
+    assert [memory.id for memory in rows] == ["leg-budget-1"]
+    assert rows[0].content == "Legacy row hydrated under a live list budget"
+    assert budget.truncated is True
+    service_mod.read_canonical_memories.assert_not_called()
+
+
 def test_lookahead_budget_exhaustion_keeps_the_filled_page(service_mod, monkeypatch):
     """limit=1 fills the page, then the next-chunk peek hits the scan budget.
 
