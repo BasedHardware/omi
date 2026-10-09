@@ -309,12 +309,17 @@ void main() {
 
   test('launch context mapping distinguishes cold start, resume, restoration, and unknown', () {
     BackgroundInterruptProcessLaunch.resetForTesting();
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
     expect(
-      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.markObserved()),
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.peek()),
       'cold_start',
     );
+    expect(BackgroundInterruptProcessLaunch.peek(), isFalse);
+    BackgroundInterruptProcessLaunch.mark();
+    expect(BackgroundInterruptProcessLaunch.peek(), isTrue);
     expect(
-      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.markObserved()),
+      classifyBackgroundInterruptLaunch(processAlreadyObserved: BackgroundInterruptProcessLaunch.peek()),
       'resume',
     );
     expect(

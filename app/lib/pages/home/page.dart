@@ -428,10 +428,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     unawaited(
       _backgroundResourceTelemetry.recoverInterrupted(
         launchContext: classifyBackgroundInterruptLaunch(
-          processAlreadyObserved: BackgroundInterruptProcessLaunch.markObserved(),
+          processAlreadyObserved: BackgroundInterruptProcessLaunch.peek(),
         ),
       ),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        BackgroundInterruptProcessLaunch.mark();
+      }
+    });
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;

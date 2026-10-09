@@ -73,7 +73,7 @@ const _knownBackgroundInterruptLaunchContexts = {
 
 /// Best-effort relaunch label for an interrupted background observation.
 ///
-/// [processAlreadyObserved] is true once this isolate has already created Home.
+/// [processAlreadyObserved] is true once this isolate has already painted Home.
 /// [osStateRestored] is true only when a Dart-visible signal says the OS restored
 /// UI state. iOS `UIApplication.launchOptions` and UIKit restoration are not
 /// forwarded by any existing pigeon or platform channel, and the app does not
@@ -91,17 +91,18 @@ String? normalizeBackgroundInterruptLaunchContext(String? raw) {
   return raw;
 }
 
-/// Process-lifetime Home creation flag. Statics die with the isolate, so the
-/// first Home in a process is a cold start and a later Home is a same-process
-/// replacement.
+/// Process-lifetime flag set after Home paints a frame. Statics die with the
+/// isolate, so the first Home that completes a frame is a cold start and a
+/// later Home is a same-process replacement. [peek] does not record a frame.
 class BackgroundInterruptProcessLaunch {
   static bool _observed = false;
 
-  /// Whether Home was already created in this process. Records that it now has been.
-  static bool markObserved() {
-    final already = _observed;
+  /// Whether a Home in this process has already completed a frame.
+  static bool peek() => _observed;
+
+  /// Records that Home completed a frame in this process.
+  static void mark() {
     _observed = true;
-    return already;
   }
 
   @visibleForTesting
