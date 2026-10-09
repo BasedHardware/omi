@@ -53,6 +53,15 @@ def merge():
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
 
+    # merge_conversations imports the deletion-intent module at module scope; the
+    # audio-chunk copy surface under test never calls it, so a stub keeps the
+    # hermetic import graph intact.
+    tombstones_stub = ModuleType("database.conversation_tombstones")
+    tombstones_stub.db = MagicMock(name="tombstone-db")
+    tombstones_stub.COLLECTION = "deleted_conversations"
+    tombstones_stub.is_deleted = MagicMock(return_value=False)
+    tombstones_stub.record_deletion = MagicMock()
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
 
@@ -120,6 +129,7 @@ def merge():
         "database": database_pkg,
         "database._client": client_stub,
         "database.conversations": conversations_stub,
+        "database.conversation_tombstones": tombstones_stub,
         "database.vector_db": vector_db_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.other.storage": storage_stub,
