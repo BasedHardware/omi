@@ -1,12 +1,17 @@
 """Vertex JSON Schema wire contract for real structured-output consumers."""
 
 from copy import deepcopy
+import json
 
 import pytest
 from pydantic import ValidationError
 
+from llm_gateway.gateway.provider_types import ProviderFailure
+from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.vertex_pt_policy import VertexPTPolicyMixin
 from llm_gateway.gateway.vertex_wire import _vertex_request
 from models.dream_agent import Plan, Triage
+from utils.llm import vertex_pt_routing as ptr
 from utils.translation_core.providers import LunaTranslationBatch
 
 # Vertex v1 GenerationConfig.response_json_schema's documented keyword set.
@@ -39,6 +44,8 @@ SUPPORTED = {
 def assert_vertex_subset(node):
     assert isinstance(node, dict)
     assert set(node) <= SUPPORTED
+    if 'enum' in node:
+        assert all(isinstance(value, (str, int, float)) and not isinstance(value, bool) for value in node['enum'])
     if '$ref' in node:
         assert all(key.startswith('$') for key in node)
     for key in ('properties', '$defs'):
@@ -121,8 +128,6 @@ def test_const_nullable_ref_siblings_and_keyword_named_properties():
 
 @pytest.mark.parametrize('ref', ['https://invalid.example/schema', '#/$defs/Missing'])
 def test_unresolvable_refs_fail_before_dispatch(ref):
-    from llm_gateway.gateway.provider_types import ProviderFailure
-    from llm_gateway.gateway.schemas import FailureClass
 
     with pytest.raises(ProviderFailure) as failure:
         _vertex_request(
@@ -168,9 +173,6 @@ def test_optional_recursive_ref_remains_compact():
     ],
 )
 def test_vertex_4xx_log_only_emits_sanitized_reason_class(capsys, message, reason):
-    import json
-    from llm_gateway.gateway.vertex_pt_policy import VertexPTPolicyMixin
-    from utils.llm import vertex_pt_routing as ptr
 
     provider = VertexPTPolicyMixin()
     provider._observe_attempt(
@@ -219,3 +221,36 @@ def test_legacy_definitions_and_escaped_pointer_names():
     assert_vertex_subset(converted)
     assert converted['$defs']['a/b~c'] == {'type': 'string'}
     assert converted['properties']['item'] == {'$ref': '#/$defs/a~1b~0c'}
+
+
+@pytest.mark.parametrize('values', [[True, False], [None], ['synthetic', None], [{'type': 'string'}]])
+def test_enums_outside_vertex_scalar_vocabulary_are_left_to_caller_validation(values):
+    converted = _vertex_request(
+        {
+            'messages': [],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': {'enum': values}}},
+        }
+    )['generationConfig']['responseJsonSchema']
+    assert 'enum' not in converted
+
+
+def test_string_and_numeric_enums_remain_constrained():
+    converted = _vertex_request(
+        {
+            'messages': [],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': {'enum': ['synthetic', 1, 1.5]}}},
+        }
+    )['generationConfig']['responseJsonSchema']
+    assert converted['enum'] == ['synthetic', 1, 1.5]
+
+
+def test_optional_reference_to_schema_root_remains_compact():
+    schema = {'type': 'object', 'properties': {'child': {'anyOf': [{'$ref': '#'}, {'type': 'null'}]}}}
+    converted = _vertex_request(
+        {
+            'messages': [],
+            'response_format': {'type': 'json_schema', 'json_schema': {'schema': schema}},
+        }
+    )['generationConfig']['responseJsonSchema']
+    assert_vertex_subset(converted)
+    assert converted['properties']['child']['anyOf'][0] == {'$ref': '#'}

@@ -81,7 +81,8 @@ OpenAI `response_format: json_schema` is translated to Vertex v1 `responseJsonSc
 with `responseMimeType: application/json`; `responseSchema` is omitted. The shared
 normalizer preserves `$defs`/`$ref`, nullable `anyOf` branches, properties, required
 fields, additional-properties rules, numeric/array bounds, and property ordering.
-String/numeric `const` becomes a singleton `enum`. Unsupported generation constraints
+String/numeric `const` becomes a singleton `enum`; boolean/null/container enums
+remain caller-enforced because Vertex documents only string/number enums. Unsupported generation constraints
 (such as `default`, `minLength`, `maxLength`, and `pattern`) are omitted. Consumers
 must validate against the original schema; dream's Pydantic validation, including
 `ReviewItem`'s matching-payload validator, remains authoritative. Luna receives the

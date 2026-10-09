@@ -1,6 +1,7 @@
 """Dispatch contract: company-paid Gemini is dedicated-only; overflow is Luna."""
 
 import json
+import time
 from unittest.mock import AsyncMock
 
 import httpx
@@ -8,11 +9,12 @@ import pytest
 import yaml
 
 from config.vertex_reservations import State
+import llm_gateway.gateway.reserved_fallback as telemetry
 from llm_gateway.gateway.accounting import AttemptTrace
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import DEFAULT_CONFIG_DIR, ConfigValidationError, load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.errors import GatewayProviderFailureError
+from llm_gateway.gateway.errors import GatewayProviderFailureError, GatewayProviderRequestRejectedError
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     _gemini_thinking_effort_for_luna,
@@ -20,9 +22,19 @@ from llm_gateway.gateway.executor import (
 )
 from llm_gateway.gateway.metrics import LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
 from utils.llm import desktop_gemini_gateway as dgg
-from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider, VertexGeminiProvider
-from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.routers.openai_compatible import _prepared_streaming_iterator
+from llm_gateway.gateway.providers import (
+    FakeChatCompletionProvider,
+    OpenAICompatibleChatCompletionProvider,
+    ProviderFailure,
+    VertexGeminiProvider,
+)
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider
+from llm_gateway.gateway.resolver import is_lkg_eligible, resolve_chat_completion_route
+from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+from llm_gateway.main import app
+from llm_gateway.routers import dependencies
+from models.dream_agent import Plan
+from llm_gateway.routers.openai_compatible import _prepared_streaming_iterator, _stream_with_terminal_metrics
 from utils.llm import vertex_pt_routing as ptr
 
 
@@ -293,10 +305,6 @@ async def test_macos_task_extraction_payload_maps_budget_and_counts_dropped_cont
 )
 @pytest.mark.asyncio
 async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, lane, streaming):
-    from llm_gateway.gateway.schemas import FailureClass
-    from llm_gateway.routers.openai_compatible import _stream_with_terminal_metrics
-    from models.dream_agent import Plan
-    import llm_gateway.gateway.reserved_fallback as telemetry
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     seen, events = [], []
@@ -372,9 +380,6 @@ async def test_reserved_invalid_request_recovers_through_luna(monkeypatch, lane,
     'mutation', ['byok', 'shared', 'wrong_fallback', 'luna_primary', 'luna_failure', 'credential_denied']
 )
 def test_invalid_request_exception_is_only_reserved_paid_primary_to_luna(mutation):
-    from llm_gateway.gateway.reserved_fallback import can_try_next_provider
-    from llm_gateway.gateway.resolver import is_lkg_eligible
-    from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
 
     config = load_gateway_config()
     route = config.route_artifacts[config.lanes['omi:auto:dream-reasoning'].active_route]
@@ -407,9 +412,6 @@ def test_invalid_request_exception_is_only_reserved_paid_primary_to_luna(mutatio
 
 @pytest.mark.asyncio
 async def test_reserved_schema_translation_runs_through_local_http_endpoint(monkeypatch):
-    from llm_gateway.main import app
-    from llm_gateway.routers import dependencies
-    from models.dream_agent import Plan
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-token')
@@ -456,8 +458,6 @@ async def test_reserved_schema_translation_runs_through_local_http_endpoint(monk
 @pytest.mark.parametrize('streaming', [False, True])
 @pytest.mark.asyncio
 async def test_luna_rejection_exhausts_reserved_fallback_once(monkeypatch, streaming):
-    import llm_gateway.gateway.reserved_fallback as telemetry
-    from llm_gateway.gateway.errors import GatewayProviderRequestRejectedError
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     seen, events = [], []
@@ -497,10 +497,6 @@ async def test_luna_rejection_exhausts_reserved_fallback_once(monkeypatch, strea
 
 @pytest.mark.asyncio
 async def test_invalid_request_after_first_stream_chunk_never_calls_luna(monkeypatch):
-    from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
-    from llm_gateway.gateway.schemas import FailureClass
-    from llm_gateway.routers.openai_compatible import _stream_with_terminal_metrics
-    import time
 
     async def stream(*args, **kwargs):
         yield b'data: {"choices":[{"delta":{"content":"synthetic"}}]}\n\n'

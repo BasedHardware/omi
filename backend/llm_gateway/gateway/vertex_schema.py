@@ -47,6 +47,8 @@ def vertex_response_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """
 
     def resolve(ref: str) -> Mapping[str, Any]:
+        if ref == '#':
+            return schema
         if not ref.startswith('#/'):
             raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
         target: Any = schema
@@ -84,6 +86,13 @@ def vertex_response_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         for key, value in node.items():
             if key == '$ref':
                 result[key] = value.replace('#/definitions/', '#/$defs/', 1)
+            elif key == 'enum':
+                if not isinstance(value, list):
+                    raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+                # Vertex documents only string/number enums. Other enum values
+                # remain enforced by the caller, like omitted string bounds.
+                if all(isinstance(item, (str, int, float)) and not isinstance(item, bool) for item in value):
+                    result[key] = deepcopy(value)
             elif key in _VALUE_KEYS:
                 result[key] = deepcopy(value)
             elif key in _SCHEMA_MAP_KEYS:
