@@ -23,11 +23,14 @@ void main() {
 
       expect(shouldAttachOmiCredentials(fixture), isFalse, reason: 'unregistered fixture stays untrusted');
 
+      Env.overrideApiBaseUrl('http://127.0.0.1:9/');
       Env.armDebugJourneyCredentialTrust();
       expect(shouldAttachOmiCredentials(fixture), isFalse, reason: 'arming alone does not trust every loopback host');
 
       Env.addDebugTrustedAuthority('127.0.0.1');
       expect(shouldAttachOmiCredentials(fixture), isTrue);
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:10/v1/conversations/seeded'), isFalse,
+          reason: 'trust is the active fixture origin, not every port on that host');
       expect(shouldAttachOmiCredentials('http://localhost:9/v1/conversations/seeded'), isFalse,
           reason: 'trust is exact host membership, not every loopback name');
       expect(
@@ -84,7 +87,28 @@ void main() {
       expect(trusted['Authorization'], 'Bearer synthetic-journey-bearer');
     });
 
+    test('replacing the override disarms fixture trust, including another loopback port', () async {
+      Env.overrideApiBaseUrl('http://127.0.0.1:9/');
+      Env.armDebugJourneyCredentialTrust();
+      Env.addDebugTrustedAuthority('127.0.0.1');
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:9/v1/conversations/seeded'), isTrue);
+
+      Env.overrideApiBaseUrl('http://127.0.0.1:10/');
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:10/v1/conversations/seeded'), isFalse);
+      expect(shouldAttachOmiCredentials('http://127.0.0.1:9/v1/conversations/seeded'), isFalse,
+          reason: 'the previous fixture is no longer trusted after the override moves');
+
+      final headers = await buildHeaders(
+        requireAuthCheck: false,
+        url: 'http://127.0.0.1:10/v1/conversations/seeded',
+        method: 'GET',
+        fromHeaders: const {'Authorization': 'Bearer leaked'},
+      );
+      expect(headers.keys.map((key) => key.toLowerCase()), isNot(contains('authorization')));
+    });
+
     test('an armed fixture does not let a user-configured custom backend receive credentials', () async {
+      Env.overrideApiBaseUrl('http://127.0.0.1:9/');
       Env.armDebugJourneyCredentialTrust();
       Env.addDebugTrustedAuthority('127.0.0.1');
       Env.overrideApiBaseUrl('https://self-hosted.example.test/');

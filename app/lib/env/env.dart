@@ -42,6 +42,9 @@ abstract class Env {
 
   static void overrideApiBaseUrl(String url) {
     _apiBaseUrlOverride = url;
+    // A replacement override is a new trust boundary. The hermetic journey
+    // boot re-arms only after it has installed the fixture URL.
+    _disarmDebugJourneyCredentialTrust();
   }
 
   static bool get hasApiBaseUrlOverride => _apiBaseUrlOverride != null;
@@ -91,13 +94,25 @@ abstract class Env {
     _debugTrustedAuthorities.clear();
   }
 
-  /// True when [uri] is the loopback fixture the hermetic journey boot
-  /// registered. False for every user-configured override, and in release
-  /// and profile builds.
+  /// True when [uri] is the loopback fixture currently installed as the API
+  /// override. A different host, port, or scheme is not the fixture, and a
+  /// later [overrideApiBaseUrl] disarms the registry entirely.
   static bool debugTrustedFixtureAuthority(Uri uri) {
     if (!_debugJourneyTrustPermitted || !_debugJourneyCredentialTrustArmed) return false;
-    if (!_debugTrustedAuthorities.contains(uri.host.toLowerCase())) return false;
-    switch (uri.scheme.toLowerCase()) {
+    if (!_debugJourneyWebScheme(uri.scheme)) return false;
+    final override = _apiBaseUrlOverride;
+    if (override == null || override.isEmpty) return false;
+    final overrideUri = Uri.tryParse(override);
+    if (overrideUri == null || overrideUri.host.isEmpty) return false;
+    if (!_debugJourneyWebScheme(overrideUri.scheme)) return false;
+    if (uri.scheme.toLowerCase() != overrideUri.scheme.toLowerCase()) return false;
+    if (uri.host.toLowerCase() != overrideUri.host.toLowerCase()) return false;
+    if (uri.port != overrideUri.port) return false;
+    return _debugTrustedAuthorities.contains(overrideUri.host.toLowerCase());
+  }
+
+  static bool _debugJourneyWebScheme(String scheme) {
+    switch (scheme.toLowerCase()) {
       case 'http':
       case 'https':
       case 'ws':
