@@ -1,0 +1,1 @@
+{"change": "Prevent repeated Android sync keep-alive restarts after its daily foreground-service time limit is reached."}
