@@ -764,13 +764,8 @@ final class QuickActionsIconPatcher: NSObject {
         }
 
         // Each chunk goes straight to Flutter's capture path, the only consumer of Watch audio.
-        // Nothing is kept here: holding a whole recording (~115 MB per hour) until the last chunk
-        // got the app killed on long sessions (#20479). The final chunk is an empty end marker.
-        guard !audioChunk.isEmpty else { return }
-        // Prepend 3 dummy bytes so downstream can uniformly strip headers
-        var prefixedChunk = Data([0x00, 0x00, 0x00])
-        prefixedChunk.append(audioChunk)
-        let flutterData = FlutterStandardTypedData(bytes: prefixedChunk)
+        guard let payload = WatchAudioChunkRelay.flutterPayload(for: audioChunk) else { return }
+        let flutterData = FlutterStandardTypedData(bytes: payload)
         self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
             switch result {
             case .success:
