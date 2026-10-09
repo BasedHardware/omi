@@ -15,23 +15,23 @@ import 'package:omi/utils/platform/platform_manager.dart';
 final _l10n = lookupAppLocalizations(const Locale('en'));
 
 App _app(AppReview review) => App(
-  id: 'reviewed-app',
-  uid: 'owner',
-  name: 'Reviewed app',
-  author: 'Omi',
-  description: 'An app with one review.',
-  image: 'https://example.invalid/app.png',
-  capabilities: {'chat'},
-  status: 'approved',
-  category: 'productivity',
-  approved: true,
-  ratingCount: 1,
-  ratingAvg: 4,
-  enabled: false,
-  deleted: false,
-  isPaid: false,
-  isUserPaid: false,
-)..reviews = [review];
+      id: 'reviewed-app',
+      uid: 'owner',
+      name: 'Reviewed app',
+      author: 'Omi',
+      description: 'An app with one review.',
+      image: 'https://example.invalid/app.png',
+      capabilities: {'chat'},
+      status: 'approved',
+      category: 'productivity',
+      approved: true,
+      ratingCount: 1,
+      ratingAvg: 4,
+      enabled: false,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    )..reviews = [review];
 
 /// Records local reply updates so a failed send is observably not applied.
 class _RecordingAppProvider extends AppProvider {
