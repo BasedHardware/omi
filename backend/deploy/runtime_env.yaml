@@ -1925,6 +1925,11 @@ environments:
             value: https://us.posthog.com
             category: telemetry
           MENTOR_PIPELINE: {value: cohort, category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2078,6 +2083,11 @@ environments:
             value: https://us.posthog.com
             category: telemetry
           MENTOR_PIPELINE: {value: cohort, category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2389,6 +2399,11 @@ environments:
               category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2625,6 +2640,11 @@ environments:
               category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2835,6 +2855,11 @@ environments:
               category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -3010,6 +3035,11 @@ environments:
               category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:

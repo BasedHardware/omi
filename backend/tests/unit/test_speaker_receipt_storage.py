@@ -115,3 +115,25 @@ def test_blocked_manual_write_never_emits_review(world, monkeypatch, field, erro
     with pytest.raises(error):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert observed == []
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_shadow_agreement_only_after_committed_correction(world, monkeypatch, level):
+    from utils.conversations import speaker_grouping_shadow as shadow
+
+    store, path, _ = world
+    store.rows[path]['data_protection_level'] = level
+    store.rows[path]['transcript_segments'][1]['speaker_grouping_shadow'] = {
+        'provider_strict': 'person:new',
+        'owner_link': 'user',
+    }
+    store.rows[path] = db._prepare_conversation_for_write(store.rows[path], 'u', level)
+    events = []
+    monkeypatch.setattr(shadow, 'count', lambda variant, outcome, amount=1: events.append((variant, outcome)))
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    assert events == [('provider_strict', 'correction_agreed'), ('owner_link', 'correction_disagreed')]
+    assert read(world)['transcript_segments'][1]['speaker_grouping_shadow']['owner_link'] == 'user'
+    events.clear()
+    with pytest.raises(ValueError):
+        db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['missing'])
+    assert not events

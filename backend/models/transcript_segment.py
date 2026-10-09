@@ -123,6 +123,10 @@ class TranscriptSegment(BaseModel):
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.
     speaker_match_scores: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+    # Storage-only provenance and frozen predictions use the transcript's existing
+    # compression/encryption boundary. Never expose these on JSON/API responses.
+    provider_speaker: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+    speaker_grouping_shadow: SkipJsonSchema[Optional[Dict[str, str]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
@@ -166,7 +170,14 @@ class TranscriptSegment(BaseModel):
         # rewrites; JSON-mode dumps are API responses, which must never carry them.
         if getattr(info, 'mode', 'python') == 'json':
             return data
-        for key in ('audio_capture_start', 'audio_capture_end', 'audio_source', 'speaker_match_scores'):
+        for key in (
+            'audio_capture_start',
+            'audio_capture_end',
+            'audio_source',
+            'speaker_match_scores',
+            'provider_speaker',
+            'speaker_grouping_shadow',
+        ):
             value = getattr(self, key)
             if value is not None and key not in excluded and (included is None or key in included):
                 data[key] = value
@@ -211,6 +222,9 @@ class TranscriptSegment(BaseModel):
         self._capture_merge_proof = None
 
     def _clear_audio_evidence(self) -> None:
+        if self.provider_speaker is not None:
+            self.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
+        self.speaker_grouping_shadow = None
         self._clear_audio_capture_window()
         self._audio_capture_reason = 'partial_redistribution'
         self.audio_source = None
@@ -289,6 +303,17 @@ class TranscriptSegment(BaseModel):
 
     def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
         """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
+        if (
+            self.provider_speaker is None
+            and self.speaker_id_scope
+            and not self.speaker_id_scope.startswith(('conversation:', 'legacy-conversation:'))
+            and not self._speaker_id_synthesized
+        ):
+            self.provider_speaker = {
+                'id': self.speaker_id,
+                'scope': self.speaker_id_scope,
+                'provider': self.stt_provider,
+            }
         self.speaker_id = speaker_id
         self.speaker = f'SPEAKER_{speaker_id}'
         self.speaker_id_scope = scope
@@ -458,6 +483,10 @@ class TranscriptSegment(BaseModel):
         removed_ids: List[str] = []
 
         def _absorb(child: Optional['TranscriptSegment'], parent: Optional['TranscriptSegment']) -> None:
+            if child is not None and parent is not None and (child.provider_speaker or parent.provider_speaker):
+                if child.provider_speaker != parent.provider_speaker:
+                    parent.provider_speaker = {'id': -1, 'scope': 'ambiguous'}
+                parent.speaker_grouping_shadow = None
             if child is None or not child.id:
                 return
             if child.id not in absorbed_into:

@@ -77,6 +77,10 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+        SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
@@ -316,6 +320,10 @@ overlay:
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+        SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+        SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
         SPEAKER_MATCH_SCORES_ENABLED:
           value: 'true'
           category: rollout
@@ -537,6 +545,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -734,6 +746,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -897,6 +913,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout
@@ -1041,6 +1061,10 @@ overlay:
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'cohort', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          SPEAKER_GROUPING_MODE: {value: 'incumbent', category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED:
             value: 'true'
             category: rollout

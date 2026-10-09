@@ -2890,7 +2890,28 @@ def assign_conversation_speaker(
 
     result = run_assignment_transaction(client, assign)
     invalidate_people_stats_cache(uid)
-    current, _, _, before = result
+    current, resolved, _, before = result
+    if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
+        try:
+            from utils.conversations.speaker_grouping_shadow import record_correction
+
+            record_correction(current, resolved)
+        except Exception as error:
+            # A committed user correction cannot fail because optional telemetry
+            # is unavailable (including its lazy import).
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='speaker_grouping',
+                to_mode='incumbent',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+            logger.warning(
+                'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
+            )
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
     try:
