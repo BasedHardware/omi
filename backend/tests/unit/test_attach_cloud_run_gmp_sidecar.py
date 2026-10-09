@@ -777,3 +777,45 @@ def test_dropping_a_pin_that_is_absent_is_not_an_error():
     service = {'spec': {'template': {'metadata': {'annotations': {}}}}}
     assert module._drop_pinned_revision_name(service) is None
     assert module._drop_pinned_revision_name({}) is None
+
+
+def test_job_sidecar_preserves_task_settings_and_is_idempotent():
+    module = _load_module()
+    job = {
+        'apiVersion': 'run.googleapis.com/v1',
+        'kind': 'Job',
+        'metadata': {'name': 'notifications-job'},
+        'spec': {
+            'template': {
+                'spec': {
+                    'taskCount': 1,
+                    'template': {
+                        'metadata': {'annotations': {'run.googleapis.com/vpc-access-connector': 'keep'}},
+                        'spec': {
+                            'timeoutSeconds': '600',
+                            'maxRetries': 0,
+                            'serviceAccountName': 'runtime',
+                            'containers': [{'image': 'app:sha', 'env': [{'name': 'FLAG', 'value': 'on'}]}],
+                        },
+                    },
+                }
+            }
+        },
+    }
+    kwargs = dict(project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7')
+    patched = module.patch_job(job, **kwargs)
+    assert module.patch_job(patched, **kwargs) == patched
+    task = patched['spec']['template']['spec']['template']
+    assert task['spec']['timeoutSeconds'] == '600'
+    assert task['spec']['serviceAccountName'] == 'runtime'
+    app, collector = task['spec']['containers']
+    assert {'name': 'FLAG', 'value': 'on'} in app['env']
+    assert {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'} in app['env']
+    assert collector['image'] == module.SIDECAR_IMAGE
+    assert collector['env'] == [{'name': 'K_SERVICE', 'value': 'notifications-job'}]
+    assert 'sleep 35; kill -TERM' in collector['args'][0]
+    assert (
+        task['metadata']['annotations']['run.googleapis.com/container-dependencies']
+        == '{"collector":["notifications-job"]}'
+    )
+    assert job['spec']['template']['spec']['template']['spec']['containers'][0].get('name') is None

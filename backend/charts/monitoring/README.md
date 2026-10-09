@@ -64,7 +64,7 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
-Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. **`backend-sync` is not in that allowlist**, so `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_*` with `source="sync"` are empty in Prometheus until a follow-up adds it (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. **`backend-sync` is not in that allowlist**, so `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_*` with `source="sync"` are empty in Prometheus until a follow-up adds it (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
 ## Components
 
@@ -118,7 +118,7 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Load-balancer Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
-| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend` and `desktop-backend` via isolated exporter | 30s | None |
+| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` via isolated exporter | 30s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
@@ -186,7 +186,7 @@ Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are
 Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):
 
 - `prod-omi-prometheus-stackdriver-exporter` keeps the latency-sensitive load-balancer prefixes at the existing 1-second Prometheus scrape interval.
-- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend` and `desktop-backend`; Prometheus scrapes this release every 30 seconds.
+- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, `backend-sync`, `backend-sync-backfill`, and `notifications-job`; Prometheus scrapes this release every 30 seconds.
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 

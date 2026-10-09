@@ -217,3 +217,31 @@ gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
 9. Confirm the public route remains protected without printing the token: unauthenticated and invalid-bearer requests to `/metrics` must return 401; only the loopback listener is unauthenticated.
 
 Rollback Cloud Run traffic with the existing recovery workflows. Rolling back to a pre-sidecar revision removes new ingestion for that service but does not affect request serving. Roll back the monitoring changes with Helm rollback of both environment-specific releases; do not change the original load-balancer exporter.
+
+## Notifications job metrics
+
+`gcp_notifications_job.yml` uses the same pinned collector/config-secret helper
+with `--job`. A Job has a nested task template and no revision traffic. GMP
+reads `K_SERVICE` for its namespace (see [upstream metadata mapping](https://github.com/GoogleCloudPlatform/run-gmp-sidecar/blob/main/confgenerator/util.go));
+Cloud Run Jobs supply `CLOUD_RUN_JOB` instead, so the helper explicitly gives
+only the collector `K_SERVICE=notifications-job`. The resulting GMP target
+has `namespace=notifications-job` and `cluster=__run__`. Both dedicated exporter
+values retain the service namespaces and add this exact namespace to `one_of`.
+The kube-prometheus-stack values own the scrape and name normalization, not
+the monitored-resource namespace filter.
+
+The pinned collector image contains `/bin/sh` and `/run-gmp-entrypoint`.
+A shared in-memory completion marker bounds its lifetime: the application
+keeps 127.0.0.1:9090 alive for 45 seconds after marking completion, and the
+collector waits 35 seconds (at least one 30-second scrape) before SIGTERM and
+flush. This avoids leaving a successful Job waiting on an infinite collector.
+The application startup probe gates collector startup on the metrics listener.
+Check execution completion as well as collector export errors after rollout.
+
+Dispatch the notifications job and production metrics-egress workflows after
+merge. The Core Features daily-recap row stays No-data until both ship.
+The two log-based Cloud Monitoring alerts require only the notifications
+workflow: sustained incomplete cohort rate for three hours, or a summary
+heartbeat absent for 60 minutes under the always-on 15-minute schedule.
+Absence policies need a previously observed heartbeat series; verify one
+healthy execution after provisioning before treating that alert as armed.
