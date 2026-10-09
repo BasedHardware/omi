@@ -3,6 +3,13 @@ import SwiftUI
 @main
 struct PreviewApp: App {
     @StateObject private var harness = PreviewHarness()
+    /// UI tests launch without animations to run faster; tests that check an animation launch without the flag.
+    private static let animationsOff = ProcessInfo.processInfo.arguments.contains("-ui-test-no-animations")
+
+    init() {
+        if Self.animationsOff { UIView.setAnimationsEnabled(false) }
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -24,6 +31,9 @@ struct PreviewApp: App {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                         harness.revealOnboardingChrome()
                     }
+                }
+                .transaction { transaction in
+                    if Self.animationsOff { transaction.animation = nil; transaction.disablesAnimations = true }
                 }
                 .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("large") ? .accessibility3 : .large)
                 .environment(\.nativeGraphReduceMotion, ProcessInfo.processInfo.arguments.contains("reduce-motion"))
@@ -139,7 +149,7 @@ private final class ModalFixtureController: UIViewController {
     private func showActivity() {
         let label = ProcessInfo.processInfo.arguments.contains("large")
             ? "Saving your changes to this conversation summary" : "Saving"
-        var request: [String: Any] = ["requestId": 2, "label": label, "appearance": "dark", "locale": "en", "direction": "ltr"]
+        var request: [String: Any] = ["requestId": 2, "label": label, "appearance": Self.appearance, "locale": "en", "direction": "ltr"]
         do {
             try presenter.presentActivity(request) { [weak self] response in
                 self?.model.reason = "reason:\((response as? [String: Any])?["reason"] as? String ?? "")"
@@ -157,6 +167,9 @@ private final class ModalFixtureController: UIViewController {
         }
     }
 
+    /// Dark unless the test asks for the light appearance.
+    private static var appearance: String { ProcessInfo.processInfo.arguments.contains("light") ? "light" : "dark" }
+
     private func open() {
         func row(_ id: String, _ title: String, _ kind: String, _ value: Any? = nil) -> [String: Any] {
             var result: [String: Any] = ["id": id, "title": title, "kind": kind,
@@ -164,7 +177,7 @@ private final class ModalFixtureController: UIViewController {
             if let value { result["value"] = value }
             return result
         }
-        var snapshot: [String: Any] = ["version": 1, "revision": 0, "title": "Edit Person", "appearance": "dark",
+        var snapshot: [String: Any] = ["version": 1, "revision": 0, "title": "Edit Person", "appearance": Self.appearance,
             "locale": "en", "direction": "ltr", "loading": false, "failed": false, "empty": "",
             "toolbar": [row("cancel", "Cancel", "button"), row("save", "Save", "button")],
             "searchEnabled": false, "searchValue": "", "searchPlaceholder": "", "refreshEnabled": false,
@@ -280,7 +293,8 @@ private final class ToastFixtureController: UIViewController {
         let rtl = arguments.contains("rtl")
         nextId += 1
         var request: [String: Any] = ["requestId": nextId, "session": "preview", "kind": kind,
-            "durationMs": NativeToastRequest.durations[kind] ?? 0, "bottomClearance": 64.0, "appearance": "dark",
+            "durationMs": NativeToastRequest.durations[kind] ?? 0, "bottomClearance": 64.0,
+            "appearance": arguments.contains("light") ? "light" : "dark",
             "locale": rtl ? "ar" : "en", "direction": rtl ? "rtl" : "ltr"]
         switch kind {
         case "undo":
@@ -703,6 +717,36 @@ final class PreviewHarness: ObservableObject {
                 ]],
             ]
         }
+        if ProcessInfo.processInfo.arguments.contains("form-rows") {
+            // Review-only form rows: segmented, colour, date, progress, a toggle and a destructive action.
+            func row(_ id: String, _ title: String, _ kind: String, value: Any? = nil, options: [(String, String)] = [],
+                     subtitle: String = "", destructive: Bool = false) -> [String: Any] {
+                var result: [String: Any] = ["id": id, "title": title, "kind": kind, "subtitle": subtitle, "enabled": true,
+                    "destructive": destructive, "options": options.map { ["id": $0.0, "title": $0.1] }]
+                if let value { result["value"] = value }
+                return result
+            }
+            var quota = row("quota", "Transcription", "progress", value: 42.0, subtitle: "42 of 100 minutes")
+            quota["maximumValue"] = 100.0
+            var reminder = row("reminder", "Daily reminder", "date", value: "1791561600000")
+            reminder["minimumDate"] = "0"
+            surfaceRaw["title"] = "Preferences"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [
+                ["id": "display", "title": "Display", "footer": "Choose how summaries look.", "rows": [
+                    row("density", "Density", "segmented", value: "comfortable",
+                        options: [("compact", "Compact"), ("comfortable", "Comfortable")]),
+                    row("colour", "Folder colour", "color", value: "#30D158",
+                        options: [("#FF453A", "Red"), ("#FF9F0A", "Orange"), ("#30D158", "Green"), ("#0A84FF", "Blue"),
+                                  ("#FFFFFF", "White"), ("#1C1C1E", "Black")]),
+                    row("haptics", "Haptics", "toggle", value: false),
+                    reminder,
+                ]],
+                ["id": "usage", "title": "Usage", "footer": "", "rows": [quota]],
+                ["id": "danger", "title": "", "footer": "", "rows": [
+                    row("delete_account", "Delete Account", "button", destructive: true)]],
+            ]
+        }
         addListInteractionFixtures()
         if ProcessInfo.processInfo.arguments.contains("level") {
             surfaceRaw["title"] = "Device"
@@ -743,6 +787,10 @@ final class PreviewHarness: ObservableObject {
                                 ["id": "recap-2", "title": "Planning the Native Launch", "date": "Mon, Sep 28", "emoji": "🚀"],
                                 ["id": "recap-3", "title": "Quiet Sunday", "date": "Sun, Sep 27", "emoji": "🌿"]]
             raw["chrome"] = chrome
+        }
+        if ProcessInfo.processInfo.arguments.contains("followup"), var chat = surfaceRaw["chat"] as? [String: Any] {
+            chat["followup"] = "What should I do next?"
+            surfaceRaw["chat"] = chat
         }
         if ProcessInfo.processInfo.arguments.contains("attachments"), var chat = surfaceRaw["chat"] as? [String: Any] {
             var actions = chat["actions"] as! [[String: Any]]

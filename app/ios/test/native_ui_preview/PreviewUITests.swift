@@ -521,7 +521,8 @@ final class PreviewUITests: XCTestCase {
     }
 
     func testLevelShowsTitleAndValueAndCommitsOnceOnRelease() {
-        let app = start(["surface", "level"])
+        // The long thumb drag needs the slider's own tracking animation, so this launch keeps animations on.
+        let app = start(["surface", "level"], animations: true)
         let level = app.descendants(matching: .any).matching(identifier: "led_brightness").firstMatch
         XCTAssertTrue(level.waitForExistence(timeout: 10))
         // One adjustable element: the visible title is its label and the owner's label its value.
@@ -619,9 +620,11 @@ final class PreviewUITests: XCTestCase {
         }
     }
 
-    func start(_ arguments: [String] = []) -> XCUIApplication {
+    /// Launches the fixture without animations, which keeps the suite fast; a test that checks an animation
+    /// passes `animations: true`. The flag goes last, so it never takes another argument as its value.
+    func start(_ arguments: [String] = [], animations: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = arguments
+        app.launchArguments = animations ? arguments : arguments + ["-ui-test-no-animations"]
         app.launch()
         return app
     }
@@ -931,7 +934,8 @@ final class PreviewUITests: XCTestCase {
     }
 
     func testGraphPlaceholderPulsesThenRests() {
-        let app = start(["surface", "graph-placeholder"])
+        // The pulse is an animation, so this launch keeps animations on.
+        let app = start(["surface", "graph-placeholder"], animations: true)
         let graph = app.otherElements["graph_canvas"]
         XCTAssertTrue(graph.waitForExistence(timeout: 30))
         XCTAssertTrue(app.descendants(matching: .any)["native-surface-loading"].waitForExistence(timeout: 10))
@@ -952,7 +956,8 @@ final class PreviewUITests: XCTestCase {
     }
 
     func testGraphPlaceholderIsStaticUnderReduceMotion() {
-        let app = start(["surface", "graph-placeholder", "reduce-motion"])
+        // Reduce Motion is checked against a launch whose animations are otherwise on.
+        let app = start(["surface", "graph-placeholder", "reduce-motion"], animations: true)
         let graph = app.otherElements["graph_canvas"]
         XCTAssertTrue(graph.waitForExistence(timeout: 30))
         let skeleton = skeletonRegion(graph.frame)
@@ -1297,6 +1302,54 @@ final class PreviewUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
         app.buttons["Try again"].tap()
         XCTAssertTrue(app.staticTexts["chat_rich_retry:"].waitForExistence(timeout: 5))
+    }
+
+    /// Visual review captures in the light appearance and right to left, and of the open editor sheet, which
+    /// the behaviour tests above only capture after it closes. Each waits for its screen; nothing is tapped
+    /// beyond opening the presentation under review.
+    func testLightRightToLeftAndSheetReviewCaptures() {
+        var app = start(["chat", "chat-rich", "light"])
+        XCTAssertTrue(app.buttons["Try again"].waitForExistence(timeout: 10))
+        capture(app, "native-chat-rich-light")
+        app = start(["chat", "attachments", "rtl", "chrome"])
+        XCTAssertTrue(app.buttons["chat_attach"].waitForExistence(timeout: 10))
+        capture(app, "native-chat-rtl")
+        app = start(["chat", "voice"])
+        XCTAssertTrue(app.buttons["chat_voice_stop"].waitForExistence(timeout: 10))
+        capture(app, "native-chat-voice")
+        app = start(["chat", "attachments", "followup", "light"])
+        XCTAssertTrue(app.buttons["What should I do next?"].waitForExistence(timeout: 10))
+        capture(app, "native-chat-followup-light")
+        app = start(["surface", "reader", "light"])
+        XCTAssertTrue(app.buttons["play"].waitForExistence(timeout: 10))
+        capture(app, "native-conversation-reader-light")
+        app = start(["surface", "light"])
+        XCTAssertTrue(app.switches["enabled"].waitForExistence(timeout: 10))
+        capture(app, "native-settings-light")
+        for appearance in ["dark", "light"] {
+            app = start(["surface", "form-rows", appearance])
+            XCTAssertTrue(app.buttons["delete_account"].waitForExistence(timeout: 10))
+            capture(app, "native-form-rows-\(appearance)")
+        }
+        for appearance in ["dark", "light"] {
+            app = start(["modal", appearance])
+            app.buttons["modal-open"].tap()
+            XCTAssertTrue(app.textFields["draft"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["save"].waitForExistence(timeout: 5))
+            capture(app, "native-modal-sheet-\(appearance)")
+        }
+        app = start(["modal", "light"])
+        app.buttons["activity-open"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["native-activity"].waitForExistence(timeout: 5))
+        capture(app, "native-activity-light")
+        app = start(["toast", "light"])
+        app.buttons["toast-error"].tap()
+        XCTAssertTrue(app.buttons["native-toast-close"].waitForExistence(timeout: 5))
+        capture(app, "native-toast-light")
+        app = start(["toast"])
+        app.buttons["toast-confirm"].tap()
+        XCTAssertTrue(app.staticTexts["native-toast-message"].waitForExistence(timeout: 5))
+        capture(app, "native-toast-confirm")
     }
 
     func testCategoricalBarChartsKeepLongLabelsSinglePointAndLargeText() {
