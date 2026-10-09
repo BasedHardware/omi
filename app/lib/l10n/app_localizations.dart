@@ -1323,13 +1323,13 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
-  /// No description provided for @tripleTap.
+  /// Triple tap row title
   ///
   /// In en, this message translates to:
   /// **'Triple Tap'**
   String get tripleTap;
 
-  /// No description provided for @tripleTapAction.
+  /// Triple tap action setting
   ///
   /// In en, this message translates to:
   /// **'Triple Tap Action'**

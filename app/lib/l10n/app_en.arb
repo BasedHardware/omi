@@ -15361,5 +15361,11 @@
                 "type": "int"
             }
         }
+    },
+    "@tripleTap": {
+        "description": "Triple tap row title"
+    },
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
     }
 }
