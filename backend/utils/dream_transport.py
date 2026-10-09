@@ -24,7 +24,7 @@ class PreTokenFailure(RuntimeError):
     """The gateway rejected a call before producing any billable model output."""
 
 
-async def model_turn(uid, lane, mount, messages, *, usage_sink=None):
+async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
     if usage_sink is not None:
         usage_sink['usage_unknown'] = False
     schema = mount.schema.model_json_schema()
@@ -32,7 +32,7 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None):
     remaining = mount.budget.tokens - ceiling
     if remaining < 128:
         raise ValueError('dream_input_token_budget')
-    completion = min(4096 if lane == MAIN_LANE else 768, remaining)
+    completion = min(4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
     # Resolve local configuration before marking the provider outcome unknown.
@@ -67,5 +67,6 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None):
     if usage_sink is not None:
         usage_sink['tokens'] += tokens
         usage_sink['usage_unknown'] = False
+        usage_sink.setdefault('model_lanes', []).append(lane)
     value = mount.schema.model_validate_json(body['choices'][0]['message']['content'])
     return Turn(value=value, tokens=tokens)
