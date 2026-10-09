@@ -7,21 +7,94 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 # Listen + Pusher Pipeline — Sequence Diagrams
 
 > Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+
+Conversation finalization notes and opted-in mobile/app chat use shaped invocation
+when `OMI_SHAPED_AGENT_MODE=on` on prod backend, backend-sync,
+backend-sync-backfill, backend-listen, and pusher.
+The legacy notes writer and shaped comparison/shadow branches have been removed.
+`cohort` now serves the same shaped path as `on` for every UID. Episode evidence
+capture and its ENABLED/PERCENT flags are retired; rich roster and screen inputs
+continue under their own flags, without constructing unconsumed evidence items.
+An off, unset, or unknown mode disables shaped serving; restoring the legacy
+notes/mobile chat path requires an image revert, not a flag flip. Stateless chat
+generation remains on its separate OpenAI-compatible runner.
+
+Dev finalization hosts declare the same shaped mode as prod. Admission requires
+`OMI_SHAPED_AGENT_MODE` on every finalization host and enforces literal agreement.
+Explicit-cache options pass through `get_llm` after BYOK model resolution; notes,
+structure, chat and memory content breakpoints require that resolved model to be
+GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
+
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Production backend-listen and pusher set `DREAM_AGENT_MODE=shadow` with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
+Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live keyterms;
+Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
+Vocabulary and STT gate defaults remain off.
+
+The live calendar stamp includes the meeting title (an empty string when absent)
+so it is a valid `CalendarMeetingContext` for finalization and summarization even
+when its scheduled window makes continuity hydration unnecessary.
+
+Live calendar-backed conversations with content retain their conversation across
+silence until the stored `external_data.calendar_meeting_context.start_time` +
+`duration_minutes` + 120 seconds of grace. The stored calendar event id owns this
+window; screen-derived identity does not extend it, and meeting-treatment
+eligibility does not gate it. Reconnect admission, continuation-pointer lookup,
+and the active lifecycle loop use the same deadline. Source/device/lock partitions
+and empty-generation deletion keep their existing checks; non-meeting recordings
+keep the 120-second silence rule. The continuation transaction reads the complete
+conversation metadata, including the stored calendar context, without decoding
+transcripts; compressed rows use the durable `has_content` marker. If only an
+existing calendar event id is available (partial meeting context, external
+calendar event id, or a linked Google event), the same paths read that exact
+`users/{uid}/meetings` document using the calendar source + event id natural key.
+They never infer a meeting from an overlap query. Missing/mismatched records keep
+the ordinary silence deadline; lookup faults emit fallback telemetry.
+
+`PATCH /v1/conversations/{id}/assign-speaker/{speaker_id}` accepts optional paired
+`start` / `end` query parameters in conversation-offset seconds. Only complete
+segments inside `[start, end)` are assigned; segments crossing a boundary stay
+unchanged. Range edits write segment-only manual receipts and never promote their
+labels or rejections to a whole voice or a future rollover. Omitting the range
+retains the existing whole-cluster assignment, including clearing older selected
+overrides. Stable-id redirects select the range on the donor's original timeline.
+
+The live path observes a run of at least ten distinct segments on one scoped
+speaker plus three consecutive rejected voice matches. It emits one
+`omi_live_speaker_collapse_total` increment and an `event=live_speaker_collapse`
+log per run, with segment/match counts only. A different voice/provider scope or
+conversation resets the observation; accepted matches reset the rejection count.
+This signal does not change diarization, thresholds, provider choice or labeling.
+
+Conversation responses project the internal receipt's `capture_evidence.coverage`
+into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
+source-position receipts remain excluded from the wire. Mobile conversation
+detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
+unknown and mapped rows stay quiet. No conversation-list placeholder is added.
+
 Phone safety-WAL uploads may carry the client recording id and audio interval.
-Listen creates a new server recording id and conversation on every silence
+Listen creates a new server recording id and conversation on a silence
 rollover, while the phone tags all WALs with `client_conversation_id`, stored
 on each live generation as `external_data.recording_origin_id`. Sync binds each
 VAD segment to the one generation whose source, device, lock and interval
 (5 s early, 60 s past its last word) hold it; donors resolve to their survivor,
-overlaps bind only when the phone's stamp names one strict canonical row —
-otherwise the segment keeps no target under `ambiguous_pending`, rechecked
-against a fresh lineage read at most three times before the retryable
-failed-segment path — and straddles split. Otherwise a segment keeps the phone's
+and a strictly contained multi-canonical overlap decides in a fixed order — the
+phone's stamp among rows a visible (not deleted, not discarded) covering
+canonical proves, then the single canonical backed by a validated committed
+live run covering or exactly adjoining the segment's decoded source frames
+(ownership evidence only; the segment is still transcribed), then a lone
+visible canonical — otherwise the segment keeps no target under
+`ambiguous_pending`, rechecked against a fresh lineage read at most three
+times before the retryable
+failed-segment path — and straddles split. Missing or non-deciding frame
+evidence (no decoded map, or none projected) is an ordinary abstain, not a
+failure: two visible covering canonicals stay pending while a lone visible
+canonical wins. Otherwise a segment keeps the phone's
 `conversation_id` stamp or the unbound path, which never adopts a live row.
 Bound segments lexically repeating a live window drop only when independent
 source-frame evidence proves the repeat — a unique `sync_vad` receipt per
@@ -77,7 +150,12 @@ complete validated S1 upload claim set for the exact uploaded basename set
 under `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Absent, invalid or incomplete claims
 fall back to the pre-lineage whole-batch resolver even for admitted users, and
 a post-decode mapping-count mismatch at the coordinator takes the same route
-before VAD. Turning the gate off broadens eligibility back to the prior
+before VAD. Each refusal emits exactly one bounded
+`omi_sync_lineage_resolve_total{outcome="s1_refused"}` increment and log line
+with a closed reason (`no_claims`, `parse_failed`, `count_mismatch`,
+`filename_mismatch`, `not_admitted`) and no ids, names or claim content;
+claims rejected at the upload HTTP boundary reach the gate as `{}` and
+classify as `no_claims`. Turning the gate off broadens eligibility back to the prior
 ungated binding; it is not a lineage kill switch and never widens the
 allowlist or bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Prod declares `true` on
 Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and
@@ -88,7 +166,10 @@ The full API `backend-integration` image also mounts sync and listen routes and 
 
 The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no
-binding. With lineage enabled, sync defers enrichment for an open live row,
+binding. The read projects the lineage routing field paths only — widened to
+each row's `capture_evidence` envelope solely when the tiebreak could decide
+(safe-overlap admitted, dark write on, a decoded segment map present), under
+the same document ceiling. With lineage enabled, sync defers enrichment for an open live row,
 and fresh live speech advances the revision fence after sync has enriched it.
 Sync preserves a pinned live origin when the WAL begins earlier; pre-pin
 speech is retained but marked unplaced for playback. The index must include
@@ -238,6 +319,13 @@ transition metrics, classified outcome counters and static/proposed pairs are
 documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
+Router-promoted paid spillover validates each configured provider cap (integer
+0–10000); malformed values deny promotion and preserve configured order with one
+warning per provider per process. The recovery terminal-after-text alert aggregates
+all `backend-listen-metrics` traffic, including stable and former-canary series;
+the pinned recovery flag is enabled across production listen. See the
+[routing runbook](runbooks/live-stt-routing.md#router-on-readiness-controls-default-off).
+
 The adapter log statements routed through `sanitize_provider_error()` do
 not echo raw provider or user text. Live-socket, batch, and auxiliary STT error paths
 route exception strings and provider frames through
@@ -319,26 +407,29 @@ send span. Soniox's [keepalive](https://soniox.com/docs/stt/rt/connection-keepal
 and [manual finalization](https://soniox.com/docs/stt/rt/manual-finalization)
 docs describe this lifecycle, but do not promise an exact timestamp shift across
 a pause. Production final tokens observed 1–30 seconds beyond the cumulative
-sent-PCM axis. For Soniox only, the ledger therefore advances the provider
-position by elapsed capture wall time between accepted sends while recording
-no send span for withheld audio. Text timed inside that hole stays unplaced;
-Modulate and other providers retain their cumulative sent-PCM axis. The
-5/9/34-second managed-chain tests pin the observed model and the exact gated
-PCM payload. A live Soniox timing probe remains necessary to establish whether
-every paused session advances by precisely that duration.
+sent-PCM axis. This does not establish clock semantics: the default shadow
+ledger reserves elapsed wall gaps only as a hypothesis, without registering
+withheld audio as received. Compact placement stays authoritative. No PCM
+silence is synthesized by the managed leg or adapter. Pre-roll and the hangover
+are real receiver PCM and their spans are registered when admitted. Neither
+keepalive nor finalize establishes that Soniox advances its audio clock.
+The 5/9/34-second tests simulate the elapsed hypothesis; they do not prove
+remote provider timing. A controlled timing probe remains necessary.
+
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-Realtime mentor dispatch validates `MENTOR_PIPELINE=legacy|v2|cohort` locally
-before running `process_mentor_notification`, the shared paid/opt-in,
-buffering and debounce admission. Only when admission returns conversation
-messages does `cohort` resolve the PostHog flag; explicit `legacy` and `v2`
-dispatch make no flag lookup, and an invalid value invokes neither lane.
-Both lanes receive the same admitted messages. The shared bounded flag cache,
-failure diagnostics and rollback latency are defined in the
+Realtime mentor dispatch validates `MENTOR_PIPELINE=cohort` locally before
+running `process_mentor_notification`, the shared paid/opt-in, buffering and
+debounce admission. Only when admission returns conversation messages does the
+cohort resolve the PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
+false, unknown or a flag error dispatches nothing (fail closed) — the legacy
+mentor lane was deleted after v2 reached 100%. Any other env value invokes
+neither path. The shared bounded flag cache, failure diagnostics and rollback
+latency are defined in the
 [proactivity v2 contract](proactivity_v2/CONTRACT.md#enablement-prerequisites).
 
 Provider speaker labels are connection-local. Before a live segment enters a
@@ -728,6 +819,73 @@ any error keeps both. Every answered pair stores a server-only
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
 
+One more deterministic gate never reaches Jev: a discarded capture of the same
+source and `client_device_id` whose `started_at`/`finished_at` interval
+intersects the open gap — survivor `finished_at` to the donor's
+`max(started_at, created_at)`, so the wall-clock rescue gap is covered too —
+refuses the fold with `event=smart_merge decision=skip
+reason=intervening_discarded`. Endpoint touches and rows wholly outside the
+gap do not block, so a tombstone ending exactly at the survivor's finish still
+lets future chains merge. One verified exemption: a deleted donor tombstone
+that already redirected into this survivor, carries the donor ledger entry for
+it, and is listed in the survivor's own fragment ledger or `sync_merged_from`
+set is a constituent of the predecessor — its absorbed content is not an
+independent discarded capture, and a drifted finish on it cannot fence the
+survivor off forever. Every other discarded row, deleted or not, counts. The
+scan reuses the same registered preceding query (and its
+`conversations_discarded_source_status_created` index) with `discarded=True`,
+no page limit, and a `created_at` upper bound of `datetime.max`, so barriers
+older than the predecessor page still count and a capture whose ingestion
+landed after the donor's `created_at` cannot hide — the gate never assumes
+`created_at` ordering matches speech times.
+The absorb transaction re-runs the identical interval check on its freshly
+read rows before planning or any write, so a discard committed between the
+decision and the absorb still rejects with the same reason. No flags or
+thresholds changed.
+
+`CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
+unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
+narrow case: two rows proven to be generations of the same client recording.
+Live creators stamp `external_data.recording_session_id` (per server rollover
+generation) and `external_data.recording_origin_id` (the client's stable
+recording id); proof requires both stamps nonempty on both rows plus equal
+origin ids — generation ids are never equated — and the usual source,
+device-partition and lock gates still apply. Under `on` the legacy gate runs
+first and the wall-clock path is rescue-only: a pair the legacy gate accepts
+keeps the exact legacy result (same reason, recorded and speech gaps, Jev
+state and metrics as `off`), and the wall-clock check runs only on a legacy
+skip. There the gap is `new.created_at` minus the newest fragment's own row
+`finished_at`,
+where "newest" is the maximum `finished_at` in the survivor's
+`smart_merge.fragments` ledger (the ledger stays on the drifted speech axis,
+so selection never trusts `started_at`). When that fragment is a donor
+tombstone rather than the survivor, its full row is read once at decision
+time — only when the rescue path actually runs — and re-read inside the
+absorb transaction — reusing the flatten ancestry
+read when possible — and the plan re-verifies lineage, wall times and span
+against that fresh row, so a mutation such as a moved `finished_at` is
+decided on the transaction's current data rather than the decision-time
+read. The absorb transaction re-applies the same union rule — legacy pass
+or wall-clock pass — so planning and the transaction cannot disagree.
+Gaps of `0..3600` s are eligible, negative or malformed wall times get
+the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
+the 3 h span cap is measured on `created_at`/`finished_at`. The existing
+`event=smart_merge` lines carry `gap_path=legacy` or `gap_path=wallclock`
+under `on` (absent otherwise): the decision-time keep line names the gate
+that admitted the pair at planning, while the absorb transaction's
+merged/kept lines name the gate that admitted it on the transaction's
+fresh rows. `shadow` keeps
+the legacy verdict but asks Jev once with corrected timing for proven pairs
+the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
+counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting
+ships `off` in the shared base and `shadow` in both the dev and prod
+overlays on all six smart-merge hosts (`backend`, `backend-sync`,
+`backend-sync-backfill`, `backend-integration`, `backend-listen`,
+`pusher`). No timestamp computation changes: `started_at` still anchors
+rebasing and stored ledger fragments; only the decision-time gap and the
+Jev state endpoints use server wall times. No further timestamp behavior
+changes are intended here.
+
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the
 sync bridge's redirect tombstone (`deleted`, `discarded`, `sync_merged_into`),
@@ -912,17 +1070,36 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 
 The new live-STT recovery behavior described below — enlarged replay retention,
 paced prefix replay, the recovery controller, and its metrics — is gated by
-`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code, chart, dev,
-and prod values. The mode is pinned once at session start; in-flight sessions
+`STT_FAILOVER_RECOVERY_ENABLED`, which defaults to `false` in code and remains
+`false` for dev listen; prod listen chart/runtime values set it to `true`.
+The mode is pinned once at session start; in-flight sessions
 and successor legs keep it even if the environment changes, so toggling the
 variable only affects new sessions (or replacement pods). When off, sessions
 run the pre-recovery paths: the 135-second capture cap and legacy reconnect
 budgets, plain `asyncio.Queue` provider send queues without writer pacing, the
 legacy finalize/EOS order, and legacy circuit rejection semantics; the new
-recovery metrics register but stay at zero. When on — intended only for the
-separately enabled canary Deployment — the recovery paths below apply. No
-deployment or enablement is performed by this change. See the rollout gate in
+recovery metrics register but stay at zero. When on, including prod listen
+after the stable Helm rollout, the recovery paths below apply. See the rollout
+gate in
 `backend/docs/operational/windowed-live-stt.md`.
+
+Recovery-armed initial paid legs and recovered successors use the independent
+paced tail, including when the replay prefix is empty. Its supervised pump
+waits for bounded send-queue headroom; capture and disconnect observation
+continue while wire delivery waits. A stalled writer still times out within
+the adapter's two-second queue bound. On later failover without a window replay
+ring, the old wrapper transfers its unwritten tail to the next successor before
+abort, preserving capture timestamps and debiting confirmed writes. This path
+retains the 26-second tail admission cap and 28-second packet residence bound;
+overload/expired backlog keeps the existing failure/skipped-audio accounting. A synchronous enqueue that latches a typed
+capacity failure retains that cause; it does not open a provider-outage circuit
+as `send_failed`. Flag-off sends retain their original behavior.
+
+A client disconnect with code 1006 is a cancellation unless separate terminal
+STT or runtime failure evidence exists. Recovery's graceful drain eligibility
+is separate from that label. Any-text attempt success is irreversible, so later
+STT loss needs a session-close gate; see the comparison notes in
+`backend/docs/runbooks/listen-stt-careful-rollout.md`.
 
 For an allocated windowed-TDT session, listen retains a bounded 90-second
 capture-positioned PCM ring. Delivered window segments advance its finalized
@@ -1369,24 +1546,47 @@ The projection can increase bytes materially for large provenance arrays even
 though query/document counts do not change. Legacy missing-completion harvests
 retain the lean projection and may understate anchor coverage.
 
-With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
+Notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
 names and organizations come from the resolved calendar or screen-derived
 meeting context, and `spk` cluster binding follows the stricter roster guard.
 A desktop meeting capture treats the remote audio channel as mixed — when more
 than one remote participant could share it, that cluster stays `spk ?` rather
 than attributing several people's words to one name. Background context (prior
-meetings, people facts, goals, memories, and — under
-`MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` — screen text) is gathered
+meetings, people facts, goals, memories, and screen text) is gathered
 best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
+
+The default-off `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` switch also requires
+sticky percentage admission (default0). Kept captures gather the existing rich
+inputs only after relevance; discard behavior and consent gates stay unchanged.
+Typed speech, screen/OCR, messages and background evidence share source IDs,
+times and actors. Connected non-speech evidence can explain the episode but
+must never be presented as speech; unrelated screen content stays excluded.
+Claims are optional and default off; sharing is the owner's whole-note decision.
+David locked deterministic selection with C7/no effort override and C6/xhigh at
+1500 speech words and two admitted source kinds. One bounded repair addresses
+vacuity/provenance/presentation; residual violations retain the best usable note.
+Detail reads filter stale claim spans; list/search omit the metadata. Memory and
+app prompts retain their existing gates. See `utils/conversations/EPISODE_EVIDENCE.md`
+and `utils/conversations/EPISODE_ROLLOUT.md` for mapping, acceptance and ramp.
+Extended writer budgets apply only in existing leased finalizers; synchronous
+requests keep their prior bound. C6 is clamped115s by the shared gateway, with
+one C7 fallback. No outer lifecycle, lease or request deadline changes; see
+[`EPISODE_DEADLINES.md`](../utils/conversations/EPISODE_DEADLINES.md).
+
+Meeting-context merges retain `participant_sources` alongside the legacy combined
+participant list. Shaped notes consume its separate `expected_calendar` and
+`observed_screen_listing` sets, including after context serialization. A name may
+appear in both sets; a screen-only name is never promoted to an expected invitee.
+Neither set establishes attendance. Legacy roster rendering remains unchanged.
 
 Approved meeting screenshots feed the same pass. The Mac adjudicates frames
 before it finalizes (admission accepts an in_progress/processing conversation
 once its transcript fixes a trusted content window), and the judge stores
 `visible_participant_names` and `screen_summary` on approved frame docs only.
-Under `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED`, tile names join the roster as
+Tile names join the roster as
 `screen_activity` participants where no better source named them and each frame
 adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
 `MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
@@ -1473,6 +1673,17 @@ the job is dead-lettered, and self-heal reports `dead_letter` rather than
 verifying a contradictory discard. The finalizer also carries the stored
 restore marker into relevance assessment, so a restored row never receives
 a discard decision.
+The sweep verification queue has a one-hour admission deadline. It releases
+expired queued jobs, expired leases, and completed jobs whose conversation
+never completed before scanning for new admissions in the same tick. A live
+lease remains protected. Legacy entries use job creation time; entries without
+a timestamp receive a fixed first-observation deadline. BYOK-blocked jobs
+never occupy verification slots. Expiry does not verify content, clear job
+ownership, or mint another recovery generation: the durable reconciler owns
+platform-key replay and the BYOK policy owns blocked jobs. Completed-job
+timeouts page once per tick with an aggregate critical alert; content shrinkage,
+job-binding and other completion refusals still page individually.
+
 Any other minimal result ends the job on its first occurrence instead of
 retrying the same content. That lease-fenced terminal write sets a still-bound
 conversation to completed and visible with its transcript retained; explicit
@@ -1512,12 +1723,10 @@ conflict atomically; a sweep cannot finalize an audio-bearing conversation
 that a live socket still owns.
 
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
-desktop kernel acknowledges its journal write, the materialization time. With
-`MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute
-finalization sweep re-drives receipts that are at least ten minutes old and
-still lack an intent ID. The same sweep pages through historical completed
-desktop meetings to seed missing receipts. The flag defaults off and is
-declared on both backend-listen and Cloud Run backend.
+desktop kernel acknowledges its journal write, the materialization time. The
+durable receipt projection remains on the finalization write path. The disabled
+historical receipt seeding reconciler has been removed from startup and the
+five-minute sweep.
 
 See [Listen finalization jobs](./listen_finalization_jobs.mdx) for configuration,
 replay, metrics, and the operational runbook.
@@ -1952,11 +2161,226 @@ A mapped legacy segment follows the existing v1 timestamp path, including the
 active gate's remap for non-passthrough providers; the mapping only attaches a
 private capture window for live speaker identification.
 
+`SONIOX_CAPTURE_AXIS_DIAGNOSTICS=false` is measurement only. When enabled,
+each actual Soniox socket retains queued/written PCM sample counts and two
+monotonic clock anchors, with no audio or transcript retention. It measures raw
+original final-token ends before preseconds subtraction, idle-reopen offset,
+VAD remap or managed leg rebase. `omi_soniox_capture_axis_delta_seconds` has
+bounded reference/phase/write_state/queue labels: token minus written/queued PCM,
+connection/first-write elapsed time, queued minus the compact managed ledger,
+and optional provider `total_audio_proc_ms`/`final_audio_proc_ms` minus written
+PCM. Those processing fields are measured as reported, without assigning them
+clock semantics. Each observation is one response with original final tokens
+(maximum final-token end), rather than a persisted segment or distinct ID.
+Processing-field observations can also occur on responses without tokens.
+Signed buckets are seconds; use bucket/count distributions, not rate of signed
+sums. `inflight` marks a wire write awaiting completion: only `settled` events
+can establish overshoot beyond successfully written PCM. Successful text
+keepalive/finalize/end and binary audio frames have bounded sibling event counts;
+control frames add zero samples. The sibling
+`omi_soniox_capture_axis_comparison_total` joins wire overshoot (greater than
+100 ms), exact queued/compact-ledger conservation, phase, write state and queue on the
+same response. `queue=drained|backlogged` compares written and queued samples exactly
+at response receipt. `settled` alone can still have backlog. Query
+`ledger="equal",queue="drained",write_state="settled"` on the joint counter for
+conserved, drained PCM; every delta histogram also has the queue discriminator.
+Histogram marginals do not additionally select ledger equality. The full static
+label Cartesian product is at most 1,150 series per process including `_created`:
+56 histogram children x 16 samples, 96 comparison children x 2, six event children
+x 2 and 25 validation-detail children x 2. The 100 ms threshold is diagnostic only. Numeric overshoot
+samples log at most four times per socket and once per minute per process;
+no audio, text or identity is logged. Missing ledgers and diagnostic errors count
+separately. Constructor, binding, queue/write accounting, response, getter, metric
+and log failures disable diagnostics for that actual socket and attempt one bounded
+`diagnostic_error` increment without changing connection, PCM or parsing. If the
+error collector itself fails, transport still proceeds. All four new families
+(including HELP/TYPE) are hidden from scrapes while the switch is OFF, even after
+an ON observation; existing families keep their registration and data. Admission
+remains pinned at socket construction; runtime OFF hides old samples immediately
+but new socket construction/restart is needed to remove existing socket state.
+Initial and idle-reopened transports have separate phase labels;
+reopened ledger references subtract the exact configured provider resume offset.
+Elapsed-axis `on` deliberately reports the compact ledger as unavailable.
+
+The same switch adds `omi_audio_timeline_elapsed_validation_detail_total` with
+`map_refused|no_gate|invalid_interval|vad_uncovered|classified`, leaving the old
+validation metric unchanged. `map_refused` includes outside-send, discontinuity
+and collapsed candidates; `vad_uncovered` includes decisions evicted from the
+2048-chunk retention. This decomposition cannot retrospectively explain the
+supplied production `unknown` aggregate. None of these metrics changes capture
+placement or enables the elapsed hypothesis.
+
+`SONIOX_WIRE_LEDGER` defaults to `false` in code. Production listen and pusher
+declarations are enabled; other services and dev stay off. New
+managed Soniox transports snapshot it. ON carries receiver-observed capture
+spans through the VAD output, replay and idle-onset queues, and registers them
+only after the actual binary WebSocket write succeeds. Every emitted sample
+consumes compact provider time; missing, malformed, partly unknown or
+out-of-receiver capture spans reserve an unplaceable provider interval. A
+prefix emitted before binding is also unplaceable. Later known sends cannot
+slide backward across that interval. Failed writes grant no capture proof.
+Repeated manual finalization advances Soniox's processed-audio axis without
+wire PCM. Synthetic probes at the production 16 kHz configuration measured
+strict advancement to the next 120 ms boundary, including a further 120 ms for
+an exact-boundary or no-audio finalize. The base wire ledger uses reported
+positions; the separately gated ordered-finalize path below verifies the measured
+quantum. ON sends every audio and control frame exactly as OFF does,
+including VAD-pause finalize, keepalive, terminal end and planned idle drain.
+No acknowledgment wait, altered pacing or transcription latency policy is added.
+
+The provider cursor is separate from the emitted-PCM ledger. With
+`SONIOX_ORDERED_FINALIZE=false`, only a final
+`<fin>` response to the sole outstanding finalize, received before any subsequent
+audio write begins, may anchor the cursor. Both `total_audio_proc_ms` and
+`final_audio_proc_ms` must report the same nonnegative integer position, exactly
+representable at the configured rate and no earlier than the cursor. The delta
+reserves a provider-only hole with no capture or ownership proof. Token endpoints
+and ordinary progress responses never authorize padding. A write begun before
+acknowledgment, even if it completes afterward, is unplaceable; subsequent PCM
+remains unplaceable until a later uncontested finalize establishes an anchor.
+A single valid acknowledgement racing PCM preserves control association and
+may recover at a later uncontested checkpoint. Duplicate or unsolicited `<fin>`,
+combined `<fin>`s, overlapping controls whose identity is unprovable, malformed
+progress or a contradictory/regressing/repeated position permanently lose
+association on that socket. A repeated exact position cannot distinguish a
+duplicate from a new zero-padding control; it is conservatively refused.
+After loss, no number of sole-pending, PCM-conserving reports can grant capture.
+Only a fresh transport with a new local clock (including idle reopen) recovers;
+the wire carries no independently verifiable control IDs. On reported-only
+clocks, legacy reported-hole/display-origin bookkeeping continues after loss
+so visible timing and idle rebase match main. That cursor is never capture
+proof: uncertainty stays latched and all later sends carry no capture spans.
+Every successful binary write still counts as emitted PCM regardless of origin.
+The switch selects the compact-with-reported-holes axis over the experimental
+elapsed axis and retains strict observed-send containment. Unknown text persists
+without an audio window. OFF retains the admission-time ledger exactly.
+
+`SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
+with the wire ledger, production Soniox endpoint/model (`stt-rt-v5`) and mono
+pcm_s16le at 16 kHz. Controlled synthetic probes covered sub-boundary offsets,
+back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
+reports and 18 post-finalize speech starts matched the ordered padding model.
+For local provider cursor P, sending a finalize reserves the provider-only hole
+through `(floor(P / 1920) + 1) * 1920`, including another full quantum at an
+exact boundary. PCM/control bytes, FIFO ordering, pacing and finalize policy
+stay unchanged. No transport or transcript wait is introduced.
+
+A queue of at most 64 predictions matches each subsequent single `<fin>` to its
+own sent control. Both integer progress fields must equal that predicted
+position; current PCM count at acknowledgement time is irrelevant. Capture maps
+for subsequent successful writes use the predicted origin, but intervals after
+the earliest unverified checkpoint remain unplaced until verification. This
+prevents persisting a speculative window before a later mismatch. Tokens already
+emitted while unverified retain text without a window; no historical repair is
+attempted. A mismatch discards the mapped suffix starting at that checkpoint,
+including coalesced-span tails, and permanently refuses subsequent sends on
+that socket. PCM conservation and a sole pending control cannot prove identity
+after association loss. No reported-only recovery or model reanchor is allowed
+on that transport, including a clean-looking report below a rejected prediction.
+Missing acknowledgements, failed writes, queue overflow, duplicate/unsolicited
+acknowledgements and multi-`<fin>` responses also fail closed; the latter cannot
+associate multiple controls with a single shared progress position. Ordinary
+progress frames and token times never authorize padding. Teardown invalidates
+pending capture maps before flushing tokens; idle reopen uses a fresh clock.
+
+`omi_soniox_ordered_finalize_checkpoints_total{outcome="verified|mismatch|unverified"}`
+is registered only when the new switch is effective. Every outcome now counts
+one successfully written control, including controls sent after loss: verified
+counts matched FIFO reports; mismatch settles the entire queue cleared by an
+unassociable report; unverified settles each discarded prediction at overflow
+(64 queued controls plus the overflow control), teardown, or later writes on a
+locked transport. Failed writes do not count as sent or settled. It mirrors the
+ordered-mode settlements of the complete gate below; it is not a frame counter.
+The existing clean/raced/missing-ack family still describes wire ordering;
+a raced checkpoint can now be verified and produce known windows. Positive holes
+are reserved at send time on this path, so their existing counters include
+predictions (which may subsequently be disproven); they are never PCM or capture.
+Both switches OFF retain exact main behavior and metric deltas. With the wire
+ledger ON and ordered OFF, the correctness repair only removes unsafe capture
+grants; new gate metrics describe that conservative change.
+
+`other_refused` counts refused translator candidates outside retained raced-PCM
+attribution, not a single causal cohort. It includes nonnumeric/nonfinite and
+zero/reversed intervals, missing/unknown send origins, padding holes or outside
+accepted sends (including early token-edge jitter), provider/capture or wall gaps,
+collapsed intervals and compacted/evicted proof. Historical races outside the
+bounded diagnostic history also land here. On the new path, unverified predictions
+can temporarily land here. Existing capture-window attribution and outside-send
+geometry counters further describe these reasons; this aggregate alone cannot
+split a production count into causes. A whole continuous capture window across
+a hole/gap, or without receiver evidence, is not provable. Race verification can
+recover some candidates even when this label obscured their race attribution;
+zero-duration source text does not prove an audio duration in clock-only mode.
+
+Idle reopen freezes its provider offset after the old writer and receiver drain,
+including any acknowledged provider-only padding. The replacement transport starts
+a fresh local clock. Its diagnostic origin uses emitted PCM independently;
+provider padding is never called queued, written or ledger PCM. The diagnostic
+ledger reference includes emitted samples with unknown capture origins.
+Idle callbacks preserve the full rebased native token interval for capture
+translation. The previous socket's visible endpoint can exceed an uncertain
+reopen origin; clipping against that endpoint must never shorten the interval
+tested for containment. Clock-only translation applies the identical OFF/ON
+visible monotonic clamp afterward, including for refused tokens. Projected mode
+keeps its own wall projection. Private visible-time metadata is consumed before
+the receiver sees the result; a cross-gap token remains without a capture window.
+Pusher carries an inert mirror declaration; managed Soniox sockets run in listen.
+
+Wire-ledger rollout uses ON-only bounded counters, independent of the existing
+capture-axis diagnostics gate. OFF creates no collectors and changes no values
+even if a previous ON socket registered them in the same process:
+
+| Counter | Semantics |
+| --- | --- |
+| `omi_soniox_wire_ledger_finalize_checkpoints_total{outcome="clean\|raced\|missing_ack"}` | Each begun finalize control settles once. `clean` is a sole, uncontested, exact nonregressing position, including zero padding; `raced` includes subsequent/in-flight audio, overlapping controls and invalid/missing positions on a received `<fin>`; `missing_ack` settles outstanding controls when the receive loop ends, including timeout/cancellation. Unsolicited/duplicate acknowledgments settle no controls. |
+| `omi_soniox_wire_ledger_provider_holes_total` | Positive reported holes actually registered on the bound logical epoch, including pre-binding padding registered once at bind. |
+| `omi_soniox_wire_ledger_provider_hole_samples_total` | Total registered hole samples; convert with the configured wire rate, independently of emitted PCM. |
+| `omi_soniox_wire_ledger_intervals_total{outcome="known\|unplaceable_by_race\|other_refused"}` | One outcome per translator candidate, before persistence/merging. `known` grants an observed-send window. A refused native interval overlapping PCM emitted while the finalize clock was uncertain is `unplaceable_by_race`; unknown origins, provider padding, capture gaps and other refusals are `other_refused` unless they also overlap that uncertainty. |
+
+Race attribution retains at most 4096 coalesced provider intervals per epoch.
+Checkpoint telemetry settlement never resets pending provider controls or
+anchors later queued audio. Finalizes begun after receive termination count
+as missing acknowledgments immediately; repeated teardown counts nothing twice.
+It cannot authorize a window. Late refusals beyond this attribution history
+fall into `other_refused`; the capture map still fails closed independently.
+Unbound emitted prefixes remain unknown-origin refusals. New socket clocks
+start fresh after idle reopen; prior logical-epoch race history stays available
+for delayed intervals. These are local evidence cohorts, not provider-confirmed
+source-word boundaries or counts of distinct persisted segments.
+
+The complete rollout gate is active on both reported and ordered wire clocks,
+with fixed `mode="reported|ordered"` labels only:
+
+| Metric | Unit and settlement |
+| --- | --- |
+| `omi_soniox_wire_ledger_controls_total{mode,outcome="sent\|verified\|mismatch\|unverified"}` | `sent` counts successful finalize WebSocket writes. Each settles exactly once: verified identity/position, mismatch on loss (entire cleared queue), or unverified on a normal PCM race, overflow, teardown or a later control on a locked transport. Acks inside a send await defer settlement until that write succeeds; failed writes count neither sent nor settled. At drained transport closure, sent equals the sum of the three settled outcomes. During operation their difference is pending successful controls, never a failure fraction. |
+| `omi_soniox_wire_ledger_association_lost_total{mode}` | One irreversible association-loss event per socket, including ambiguous acks, queue overflow or failed transport writes; never one per later ack. Ordinary teardown with missing acks is unverified, not a new loss event. |
+| `omi_soniox_wire_ledger_sockets{mode,state="placeable\|pending\|uncertain\|association_lost"}` | Active socket occupancy. Pending is the ordered suffix fence awaiting verification; uncertain is a reported PCM race; association_lost is locked until a fresh transport. Close releases occupancy exactly once; late queued writes cannot re-enter it. Integrate pending/uncertain/lost occupancy over time for socket-seconds of refused coverage. |
+| `omi_soniox_wire_ledger_recoveries_total{mode}` | Ordered pending queue fully verified, or reported uncertainty recovered with intact association. Association-lost sockets have no same-socket recovery. Fresh clocks start placeable; inspect idle/reconnect counts separately. |
+
+Stop rollout on **any mismatch or association-lost delta > 0 pending diagnosis**,
+any false known window, or unexplained missing-ack/overflow cohort growth. There
+is zero tolerated mismatch percentage. Compare sent and settled units for both
+modes over intervals including drain; use the old clean/raced/missing_ack cohorts
+to distinguish ordering from verification. Conserving actual PCM, candidate
+refusals/known fraction, distinct and committed coverage, fallback occupancy and
+independently inspected known placements are all required together. A lower
+refusal rate alone is never success. Prior proven prefix windows stay valid;
+new PCM on a locked socket loses known coverage through its remaining lifetime,
+and pending ordered suffixes are discarded. Text and wire bytes remain intact.
+The anomaly frequency and fleet coverage cost require these new cohorts; no
+production-data reads or fleet-rate estimate are implied by synthetic tests.
+There is no expected reduction in `wire=past` or
+`total_audio_proc_ms` minus written PCM: ON retains every finalize frame and
+provider-only padding. R12's finalize-suppression drift-collapse criterion is
+superseded. No production cohort or enablement is established by local tests.
+
 `SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
 keeps the compact send axis for all placement and speaker windows, exactly as
 `off` does. A separate elapsed-axis map supplies metrics only; it never gates
 window attachment, changes provider PCM, or changes transcript fields. `on`
-allows elapsed-axis placement only after a live timing probe and validation;
+selects the unverified elapsed axis; operators must require a live timing probe
+and validation before selecting it;
 `off` disables the candidate map. Each Soniox candidate and mapped Modulate
 control segment increments `omi_audio_timeline_elapsed_validation_total` by
 `provider` and `outcome=on_speech|on_silence|partial|unknown`. The comparison
@@ -2507,6 +2931,33 @@ and
 each stage outcome down by `legacy|capture_span|sync|v2|mixed|cached|none`
 or the first refusal reason.
 
+With the consumer ON, clip selection is strictly additive: compute the exact
+legacy midpoint-chunk clip first from the invocation's generation-pinned decoded
+cache. If it contains at least one second of verified PCM, embed those same bytes
+with the existing cuts, duration and cache key. A cache miss cannot replace that
+evidence with a longer clip. Only otherwise try adjacent-chunk assembly from the
+same cache. Recovery cuts inward on each half-open sample grid, snaps only
+floating arithmetic roundoff, and caps all pieces together at 240,000 samples
+(15 seconds at 16 kHz). Only a leading or trailing missing edge of at most the
+existing 1 ms coverage tolerance may be trimmed; at least one second of PCM
+must remain. Assembly refuses internal gaps beyond 1 microsecond wall-axis
+roundoff, without padding or interpolation. A gap outside an embeddable base
+subclip does not withdraw that subclip. Live, sync and v2 placements share this
+policy after inventory admission; consumer OFF retains legacy midpoint clips.
+Existing embedding/cache formats, keys and download/time/embedding caps stay intact.
+
+For `outcome="no_embeddings"`, `reason` is exactly one of `all_short`, `no_eligible`,
+`chunk_boundary`, `clip_too_short`, `embed_failed`, `budget`, `max_embeddings`,
+`invalid_vector`, `missing_vector`, or `no_clip`. Primary precedence is no eligible
+IDs/speakers, all short eligible speech, invalid vectors, budget/cap, embedding
+failures, chunk boundary, short clip, missing keyed vector, then no clip. The existing
+one-per-run anonymous log includes `reason`, `stop`, `embeddable`, `pending`,
+`cache_hits`, `new_embeddings`, `valid_vectors`, `clip_skips`, `embed_failures`, and
+numeric eligible/short/speech/ID/speaker/attempt/vector/stale counts for mixed causes.
+No transcript, path, cache key, provider error body or user identifier is logged.
+Reason labels measure processing outcomes, not unique conversations or voice accuracy.
+Invalid cached vectors are counted but retain the existing cache policy.
+
 Rollback is safe in both directions. Turning the consumer flag back off after
 a resolution has written `capture-span:` cache keys does not silently re-embed
 those segments at legacy coordinates: on decode, any key with that prefix
@@ -2573,8 +3024,19 @@ recording, not just one buffer length). Flipping it mid-session can mismatch
 the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
-Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs;
-owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
+Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
+The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
+`window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
+`omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
+every successful persist, including the free-tier terminal stores. Sync intake's completed status is
+not a prior observation: the first enrichment counts, and a later pass counts only when that row had
+not already been enriched or terminally stored. Reprocessing an already enriched conversation does not
+increment again. Live accepts, rejects, ambiguous owner claims, and still-accumulating evidence increment
+`omi_speaker_id_live_decisions_total{target,decision}`, and the `speaker_id_decision` line carries
+`session` and `conversation`. A same-stream rollover counts mapped speakers on
+`omi_live_speaker_rollover_total{carried,target}` before the matcher clears them; automatic mappings
+are `carried=none` because only manual receipt decisions are copied.
+Owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
 Automatic non-owner naming (voiceprints and introductions) requires `named_speaker_prompts_allowed`.
 Live checks once per conversation (upgrade/downgrade observed at rotation/reconnect); sync/shadow
 reuse one batch snapshot, even with zero prints. Processing/history check once per request.
@@ -2922,7 +3384,92 @@ provider outages. The existing `omi-journey-capture-fail` alert
 uses the durable terminal projection; inspect the current alert manifest for
 its 30-minute denominator and dwell rather than adding a raw-count page.
 
+### Soniox idle transport
+
+`SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
+values preserve the existing adapter and keepalive wire behavior). Prod listen
+sets `45` after a 3h51m canary; every other service leaves it unset. Positive
+values below `20` seconds clamp to `20`, with
+one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
+and cannot be set below `60`: after a successful reopen, the socket stays
+connected for at least that interval even if VAD flaps. Non-finite or invalid
+rearm values use `60`. `SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned
+closes per logical session in a rolling monotonic hour; invalid or non-positive
+values use `12`. Both legacy and managed connectors retain one receiver-owned
+budget through provider leg rotation/recovery. When either limit blocks a close, the transport stays open and
+continues normal audio/keepalive handling. Expired hourly slots rearm naturally
+without resetting the silence timer. Only active VAD on a Soniox leg participates; shadow,
+VAD-off, Modulate and Deepgram continue their existing paths.
+
+The first raw VAD silence decision starts a monotonic timer. After the threshold
+and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
+queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
+final tokens for at most two seconds, then close/abort the paid transport. The
+logical leg stays alive and owns its pending text through that drain; this is
+neither a provider death nor a recovery episode or router health observation.
+
+On the next onset, VAD returns its retained original PCM pre-roll followed by the
+onset chunk. The serving send boundary holds that packet until the old receive
+loop has finished, opens the same captured endpoint/config, then admits those
+bytes once in that order. Dial time adds transcript onset latency; capture keeps
+its original positions. Provider timestamps restart at zero on the new socket;
+its callback rebases onto the next accepted provider position in the existing
+capture send ledger (including the elapsed-axis mode), or cumulative admitted
+audio when that ledger is absent. WallTimeMapper / the capture ledger then
+projects wall and capture positions. A socket epoch also resets local speaker
+IDs so a restarted provider ID cannot impersonate an earlier speaker. A
+failed dial enters the ordinary failover boundary; its retained admitted onset
+packet bypasses re-scoring on the replacement and queues behind any recovery
+tail. Only capture spans already proven admitted by replay are removed, so
+pre-roll survives without duplicate delivery. Account/config rejections remain
+real failures even if they arrive during the planned drain.
+Shutdown while closed never opens a socket just to finalize the session.
+
+The `omi_soniox_idle_*` close/reopen/failure counters, reopen latency histogram
+and estimated connected-seconds avoided counter register only for flag-on
+Soniox transports. Avoided seconds measure the actual closed interval, excluding
+the close drain. These are estimated connection savings, not vendor invoices.
+The fake-mode local soak establishes byte preservation and lifecycle behavior;
+it does not measure real provider handshake latency or acoustic quality.
+
+### Accepted replay sends and translator coverage
+
+`LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` defaults to `false` in code, the runtime
+env overlays and listen/pusher Helm values. ON records successful raw replay
+prefix sends before both the paced recovery pump and the legacy cross-provider
+rebuild adopt a live-tail wrapper. Managed legs already account for replay and
+are excluded from this extra wrapper. The prefix's compact provider axis begins
+at zero and continues into tail sends; original capture sample references are
+retained. No provider elapsed-axis selection or guessed callback offset is added.
+The existing unpaced same-provider reconnect already wraps its prefix.
+
+ON also registers a managed leg's accepted PCM immediately after `raw.send`
+returns exactly `True`, before a subsequent `finalize` can fail. That failure
+still fails the send boundary and follows the existing recovery policy. False,
+raised and unobserved sends grant no new proof. Repaired epochs require complete
+provider sample coverage and a strict wall projection; tolerance-sized overshoot,
+VAD holes, wall hiatuses and compacted anchors remain unplaced with text kept.
+Stored/public schemas, STT selection, transport pacing and audio storage stay
+unchanged. OFF preserves the previous ordering and replay send path. The shared
+send mapper always treats an exact exclusive end as belonging to the preceding
+send and refuses capture gaps, duplicates or reorders within a window; this
+correctness repair also applies with the switch OFF. Turning the
+switch off prevents new repair registrations; accepted evidence already recorded
+in an epoch is retained until that epoch ends.
+
 ### Live capture-window attribution
+
+`omi_audio_timeline_outside_sends_total{provider,send_path,subreason}` adds bounded
+geometry to `translator_outside_accepted_sends`: `empty_map`, `before_first_send`,
+`after_last_send`, `interior_hole`, or `evicted`. These describe the retained send
+ledger, not an inferred provider fault. Empty maps can indicate missing replay
+registration; after-last refusals can be either an omitted prefix or actual
+overshoot. Existing refusal, past-send, and stored-segment counters keep their
+names, labels and counting semantics. This sibling counter counts outside-send
+rejected segment translations, independently of persisted rows. A callback with
+N refused segments increments it N times; retries recount. It stores no session
+identifiers.
+
 
 `omi_live_audio_capture_windows_total` keeps its existing labels and committed-version
 semantics. The additive `omi_live_audio_capture_attribution_total{population,reason}`
@@ -2954,6 +3501,52 @@ new limits. Ownership history, audio format, embedding cache keys and resolution
 status policy do not change. This flag cannot repair unknown merged text or fill
 VAD gaps; measure first-commit attribution before promoting it.
 
+### Half-open capture-window projection
+
+`LIVE_CAPTURE_WINDOW_STRICT_PROJECTION` is independent of retention and defaults
+**off** in code and every runtime declaration. ON projects legacy windows as
+half-open sample intervals: an exclusive end exactly at a wall anchor uses the
+preceding interval, and an interval crossing any positive observed wall
+discontinuity refuses its capture window (`translator_discontinuous_interval`).
+Compacted anchors still refuse. This applies within the original 64-anchor horizon
+as well as old retained anchors. OFF preserves the former endpoint projection,
+including its hiatus weakness. V2 translation always uses the same strict helper;
+`AUDIO_TIMELINE_V2` stays off. Transcript text survives refusals; no gap is filled.
+
+### Receiver-proven live merge unions
+
+`LIVE_CAPTURE_WINDOW_MERGE_UNION` defaults **off** in code and every deployment
+surface. With ON, each translated known piece can carry a private fixed-size
+snapshot of its provider epoch, strict half-open window and contiguous accepted
+send run. Accepted runs coalesce only when both provider and capture sample axes
+are adjacent; strict wall anchors split the run. A positive-gap text union is
+known only if both pieces have matching window proofs from the same epoch and
+one snapshot covers the entire union. Received silence counts as audio; failed
+or missing sends, VAD skips, wall hiatuses, compacted anchors and epoch changes
+cannot be bridged. Legacy endpoint projection is not upgraded by this switch.
+
+The transcript processor retains only one proven mutable tail per conversation,
+up to 32 recent conversations, for this session. Each transaction validates its
+snapshot window against that sidecar before merging. Successful writes return
+the new tail proof separately from storage. Restarts, older tails, changed
+transaction windows and uncertain write acknowledgements can reduce recovery;
+no provider connection or raw audio is retained, and no epoch identifier or proof
+enters stored transcripts, client projections or inbound diagnostic cassettes.
+The receiver omits the proof from the copy sent to diagnostic capture while keeping
+it on live transport. OFF preserves legacy text/window payloads and counters.
+
+ON never changes row count, text, order, speakers or timing. It only retains the
+union capture window when two known windows merge across a positive gap fully
+covered by the receiver's accepted-send proof. Every merge involving an unknown
+side keeps legacy absorption and clearing, regardless of punctuation, titles,
+callback boundaries or row size. No row splitting or sentence-boundary heuristic
+is introduced by this switch. Partial cross-speaker redistribution still clears
+both windows because it lacks per-word proof. Manual protection, speaker scopes
+and durable replay receipts retain precedence. Recovered unions
+use the existing `known_window` attribution; there is no new metric label.
+Capture placement and conversation-wide resolution still require stored-audio
+span validation. The preservation and retention switches remain independent.
+
 ### Preserve original live provider pieces
 
 `LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` is an independent default-off gate in the
@@ -2970,3 +3563,258 @@ unknown survivors and preserves windows during partial repairs, but cannot recov
 proof for already merged unknown text. A provider interval crossing a VAD gap still
 refuses in the translator. The resolver must still validate every candidate against
 stored span-bearing audio; field availability alone is not a resolved conversation.
+
+
+Completed conversations retain meeting-treatment audit receipts and notes on the
+conversation surface. Finalization, reprocessing, and receipt backfill do not post
+capture or meeting-note cards into Chat; rich conversation links remain available
+in agent replies to a user message.
+
+Malformed allocation values encountered by the configured live-STT chain's
+hard-permission pass produce `ProviderChainUnavailable` with a bounded five-second
+retry in ON, SHADOW and OFF modes. No provider is dialed and no provider-failure
+vote is written when permission cannot be established. The selection seam emits
+`router_error` and `config_incomplete` diagnostics without the raw configuration
+value. The kill switch retains the same permission checks.
+
+### Internal voice-match score snapshots
+
+`SPEAKER_MATCH_SCORES_ENABLED` defaults on for `OMI_ENV_STAGE=dev|local|offline`
+and off otherwise. Production explicitly pins it true at merge+deploy on
+backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
+backend-integration (the main image also serves developer processing there).
+Rollback: set the flag false on all six hosts. Explicit `true|1|on|yes` enables
+it on any host. Capture,
+sync and conversation resolution snapshot existing cosine comparisons without
+new model calls, audio reads or Firestore operations. Jev does not consume them.
+
+Python-mode segment dumps carry transient `speaker_match_scores`; existing
+conversation writes fold them into a conversation-level blob and remove them
+from stored segments. The blob retains at most 16 speaker/scope keys per stage
+(48 rows total), rounded to three decimals. The encoded field, including
+compression and encryption, is capped at 8 KiB; stage-order tail rows
+are omitted when needed. Its maximum Firestore field growth is 8,214 bytes
+(8,192-byte value plus field name and string terminator), and protobuf field
+growth is at most 8,224 bytes. Encoding failures
+omit scores while committing content, with shared fallback telemetry. Partial
+trims report `scores_trimmed`; only complete omission reports `scores_omitted`.
+Score exceptions also cannot interrupt model construction or speaker assignment.
+Diagnostics import shared telemetry only at call time, preserving package-stub
+import isolation. Invalid decoded shapes are discarded before model validation.
+Every Conversation entry point also drops raw or invalid optional score values
+before typed validation. Manual assignment returns scores through the validated
+UID-aware decode path, so committed assignment/rejection edits cannot fail their
+response because of a stored score blob.
+Capacity guards on existing documents delete an old score blob to reclaim space.
+Partial text edits, assignments and translation materialization use the same
+already-read document for that guard.
+Processing transactions merge the current stored capture/sync rows ahead of stale
+snapshot rows, while replacing resolution rows with a fresh result. A successful
+resolution with no comparisons clears the old stage; an explicit empty snapshot
+survives encoding so the processing transaction cannot restore stale rows. Sync bridges
+aggregate decoded donor score lists before the existing encoding/write; manual
+and smart merges do the same. Unscoped donor keys receive their source conversation
+scope so equal speaker IDs do not collapse. Identity-merged resolution rows sum
+constituent evidence, use minimum constituent distances, and record merged/scored
+cluster counts and aggregation tags; the margin remains the representative decision. Manual
+capture decisions retain the already computed comparison with the manual outcome,
+including `manual_rejected` with no accepted identity. Existing
+write snapshots also omit scores above the 900 KiB document budget, avoiding
+new reads or score-triggered size-limit failures. Protection migration deletes
+old optional scores if re-encryption fails rather than retaining plaintext.
+Keys are stage-local; resolution
+IDs must not be joined to capture/sync IDs without segment provenance. Margin
+is nearest vs runner-up, and null denotes missing/non-finite evidence. Resolution
+seconds count actual embedded PCM durations saved alongside the existing encrypted
+embedding cache; older caches lack that duration and report null, without replay.
+
+Unlike the coarse plaintext `speaker_resolution` status, these distances and
+person references are biometric-adjacent evidence. They use the existing compressed
+JSON codec and per-user encryption for enhanced protection, including protection
+level migrations. Standard protection stores compressed JSON. Both segment and
+conversation fields are excluded from OpenAPI, JSON responses, list/detail dict
+views and integration/webhook payloads; backend Python
+models retain the evidence before relevance and for offline reads. No backfill runs.
+
+### Automatic owner continuity
+
+A same-provider-stream rollover retains an accepted automatic owner match only
+when its provider scope and loaded owner voiceprint remain unchanged. Donor
+locks, deletion, manual decisions and owner rejection prevent adoption. This
+state stays in the listen matcher; it never creates a manual receipt or
+training authorization. After the donor/profile awaits, restore evidence and
+recompare every current centroid against the completed profile roster and jointly
+arbitrate all voices, withdrawing any automatic owner published during those awaits
+when it is now contended or the completed roster rejects identity (including an
+ordinary margin rejection). Transcript projection clears previously emitted
+automatic live labels on both `ambiguous` and `no_match`, in the delivered
+correction and persisted transcript; manual, carried and channel labels retain
+their authority. A current receipt read
+and generation/scope fences precede synchronous publication. Reconnects and provider stream reconstructions start a
+new scope and must establish acoustic evidence again.
+
+Live identity consumes positioned provider fragments, accumulating distinct
+intervals in the existing ring before embedding. Overlaps and repeats count
+once; successful extraction reserves its intervals. Account for the clip that
+the three-entry evidence deque will evict before gating the next extraction.
+A rejected voice can then reach another five-second decision on later clean audio.
+
+Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
+runner-up gap of at least `0.10` stay `unknown` / `pending` while additional
+fresh audio or the finished-conversation pass can resolve them. This is an
+evidence-state distinction: rejected voices already retry, and the band adds
+no model calls, acceptance, or identity authority. Owner contention remains
+`ambiguous`; insufficient runner-up margin and distances at or above `0.70`
+remain `no_match`. A pending revalidation withdraws earlier automatic labels
+on every segment, preserving manual, carried and channel authority. Optional
+capture score snapshots also record `unknown` / `pending`; live decision logs
+include the explicit `decision` kind. Acceptance stays
+strictly below `0.65`, conversation matching stays at `0.50`, and owner
+recognition remains free on every plan. Held-out calibration found no safe
+acceptance lift from wider thresholds; the pending band must not be interpreted
+as a measured recall improvement.
+
+
+Each socket admits at most 128 voice ids, with at most 128 pending intervals per
+voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
+Failures consume attempts; quotas survive conversation/profile refresh. All
+associated automatic voice state shares admission. Rollover prunes idle locks;
+held/waited locks retire only after their last user finishes. Generation checks
+prevent old work from publishing. Live unknown/ambiguous remains an abstention
+when capacity is exhausted. The five-second decision floor, physical 0.5-second
+floor and verification thresholds remain unchanged, as does WAL eligibility.
+
+### Finished capture identity
+
+Span resolution can use a verified subset of segments while other segments
+lack placement. Unplaced segments abstain; inconsistent inventories, overlaps,
+known coverage holes and raced blobs still refuse globally. Identity eligibility
+uses actual distinct embedded duration independently of optional score logging.
+Version-1 caches remain readable for grouping; entries without duration metadata
+claim no owner evidence until verified audio supplies it.
+
+New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
+under the same encrypted, deletion-owned audio prefix. New readers prefer it,
+then fall back to `speaker-embeddings.v1.enc`. Legacy objects stay untouched and
+readable. Old pusher reads only the legacy filename: it cannot consume a new
+short-evidence vector, or overwrite the new cache during reprocessing. This
+is cache-policy isolation, not a retrofit of the old image's independent matching
+behavior; old pusher still lacks the partial/late repair improvements.
+
+After pusher finishes its private-cloud uploads, process-wide admission allows
+at most two submitted/running late batches, without a waiting queue. Each scans
+at most 128 conversation snapshots and selects at most eight eligible rows.
+Selection follows eligibility, so ineligible early rows do not consume the eight
+passes. The snapshot is reused for the revision CAS. Each pass has a five-second
+advisory elapsed budget and at most 24 model attempts, including failures; no
+late pass repairs enrollment audio. Cancellation of an async waiter cannot free
+admission while its storage thread is still running. SDK/network timeouts are
+not a hard five-second deadline. Admission refusal/shutdown can lose this retry.
+It changes only transcript identity and speaker resolution on completed,
+unlocked pendant/WAL rows. The commit compares the read document revision and
+reapplies manual authority; intervening edits defeat it. It performs no notes,
+task or lifecycle replay, and desktop/phone channel paths remain excluded.
+
+`capture_evidence.reason=missing_source_position` refers to absent/unusable
+client source-frame receipts, not absence of backend capture windows. Flutter's
+`CAPTURE_EVIDENCE_V1_DARK_WRITE` compile-time define defaults off; source-frame
+receipts require an app build with that define and supported WAL frames. Listen
+and pusher must not synthesize client capture roots or frame ordinals. The
+existing `AUDIO_TIMELINE_SPANS` producer and `LIVE_SPEAKER_SPAN_RESOLUTION`
+consumer flags permit identity placement independently of that dark receipt.
+
+Owner acquisition is plan-independent and shared by listen, sync/backfill and
+finished-conversation resolution. Validate vectors before comparison; failures
+reading names, entitlements or paid people cannot erase a loaded owner. Legacy
+enrollment-audio recovery publishes only while the existing owner timestamp
+and missing vector remain unchanged, with account deletion fenced in the same
+transaction. It never learns from an automatic recognition decision. Live
+requests that explicitly exclude a profile, onboarding and channel-authored
+capture remain excluded. Eligible sockets retain the bounded matcher loop so
+a later confirmed profile can be observed on rotation or a bounded load retry.
+Failed acquisition checks its monotonic deadline on both dequeue and idle paths.
+Per socket, at most eight failed loads and seven owner-only retries are allowed,
+with 30/60/120/240/480-second capped backoff; enrollment-audio repair has a separate
+three-attempt ceiling and 30/120/480-second backoff. Owner retries never reload
+paid people or entitlement. These counters survive rollover. A newly acquired
+owner rechecks retained verified evidence against current prints and receipts,
+without requesting more embeddings when the voice quota is already spent.
+
+Short-fragment inheritance is bound to `(speaker_id_scope, speaker_id)`.
+Acoustically contradicted provider voices cannot assign an unembedded short
+reply by majority; automatic identity on such a reply is withdrawn. Manual
+receipt authority still wins. A short distinct provider voice without its own
+compatible scoped votes stays unknown, even beside a known owner in the same
+scope; temporal proximity never supplies identity evidence. Manual merge reallocates automatic-only sources through the
+existing allocator, retaining absolute capture positions. Sources containing
+manual authority retain their numeric ids; full cross-source receipt migration
+remains outside this patch and is a merge residual.
+
+Free-desktop deterministic minimum paths still emit no managed calls. This
+patch does not add a diarizer pass before those admission exits; unmatched free
+desktop captures and budget-skipped custom-STT captures remain a residual.
+
+Rollover rechecks the donor after profile loading and reevaluates the retained centroid
+against the current eligible prints. Late manual rejection, deletion, lock, or a new
+competing print defeats automatic carry; distinct covered audio remains reserved.
+
+The late-audio identity transaction also reads the account deletion marker before
+writing. Its placement coverage index is initialized even when no segment is long
+enough to embed, so short-only conversations abstain without an unbound index.
+
+Late identity persistence lives in `database/speaker_resolution_updates.py` so
+unrelated conversation database reads do not import its deletion-marker graph.
+New v1 cache writes record the already-supported optional evidence duration even
+when score instrumentation is off. Historical entries keep their grouping and
+PCM semantics; a missing duration cannot support a new positive or negative.
+
+Missing owner-vector publication is isolated in `database/owner_profile_updates.py`.
+Both new identity persistence helpers pin the customer data plane and read its
+account-deletion marker in the same transaction; no compute-plane fallback is used.
+
+The late-audio retry excludes both `phone` and `phone_call`, as well as desktop,
+to preserve channel-authored identity and the free-desktop processing boundary.
+
+Participant grouping marked `resolved` does not by itself suppress the late
+identity retry: only a resolved row already containing an owner label is skipped.
+A completed owner miss can therefore use newly available audio/profile evidence.
+
+`omi_owner_identity_repair_total{outcome}` counts only successful late identity
+CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+observe ordinary finalization again. The existing conversation counter/share
+remain first-finalization snapshots. Metric failure cannot change a committed
+repair into a reported storage failure.
+
+Owner work has lifetime socket bounds: seven retry owner reads, at most three
+recovery-state reads, three two-document repair transactions, three lost-CAS
+owner rereads, and seven retained-evidence receipt reads. This is at most 26
+additional logical document reads per socket, or 50 when every repair transaction
+uses all five Firestore transaction attempts. Normal per-conversation profile,
+people/projection, entitlement and name reads are separate. The bounded owner
+work does not replenish after a session-hour. Live audio adds at most 256 model
+attempts plus three owner-enrollment repairs per socket (existing paid-person
+repair is separate). Late audio adds at most 192 model attempts per admitted
+batch and zero enrollment repairs, with at most two batches per process.
+
+### Relevance decision analytics
+
+After successful processing persistence, the final relevance decision is enqueued
+through the shared backend PostHog helper as `Relevance Decision Recorded`.
+Properties are only `conversation_id`, enum-like `reason`, optional `arm`, and
+boolean `discarded`; no transcript or user content is emitted. Deferred desktop,
+deterministic minimum, and enriched processing each emit once per stored decision,
+after the persistence fence. Capture failures never fail processing. This bridge
+supports per-conversation joins to opens going forward (EXP-004 closure); it does
+not backfill the stopped keep-all sample or change intake, promotion, or relevance.
+
+Recovery verification fingerprints the original stored transcript and audio ids.
+Both kept and explicitly discarded recovery results preserve those capture fields
+and their speaker metadata transactionally. Model normalization must not rewrite
+the raw encoding or replace audio appended after the processing snapshot; only
+structured enrichment and lifecycle fields belong to the recovery result.
+
+Verification refusals still page critically for content shrinkage, job-binding
+mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
+those pages; observers that lose the same cursor generation cannot multiply a
+single refusal into a fleet-wide alarm burst. Standalone verification pages
+immediately. Recovery never regenerates admitted audio from old chunk snapshots.

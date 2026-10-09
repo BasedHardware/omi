@@ -7,11 +7,16 @@ Inference must never create or replace these explicit user decisions.
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Any, Mapping, Optional
 import uuid
+import math
 
 from pydantic import BaseModel, Field, StrictStr
 
 from config.live_capture import capture_window_reason
-from config.audio_timeline import live_capture_window_merge_preservation_enabled
+from config.audio_timeline import (
+    live_capture_window_merge_preservation_enabled,
+    live_capture_window_merge_union_enabled,
+)
+from models.capture_window_proof import CaptureWindowProof
 from database.read_boundary import parse_payload_strict
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
@@ -137,7 +142,7 @@ def manual_rejected_speakers(receipt: Mapping) -> dict:
             continue
         decisions.setdefault(speaker_id, []).append(entry)
     for entry in _receipt_section(receipt, 'segments').values():
-        if isinstance(entry, dict) and isinstance(entry.get('speaker_id'), int):
+        if isinstance(entry, dict) and not entry.get('segment_only') and isinstance(entry.get('speaker_id'), int):
             decisions.setdefault(entry['speaker_id'], []).append(entry)
     rejected: dict = {}
     for speaker_id, entries in decisions.items():
@@ -210,8 +215,27 @@ def normalize_rejection(rejection: Optional[dict]) -> Optional[dict]:
     return {'kind': kind, 'person_id': person_id}
 
 
+def validate_assignment_range(time_range: Optional[tuple[float, float]]) -> None:
+    if time_range is not None:
+        start, end = time_range
+        if not math.isfinite(start) or not math.isfinite(end) or not 0 <= start < end:
+            raise ValueError('Speaker assignment range must be finite with 0 <= start < end')
+
+
+def segment_in_assignment_range(segment: dict, time_range: tuple[float, float]) -> bool:
+    """Only complete segments within [start, end), in conversation-offset seconds."""
+    start, end = time_range
+    return start <= segment.get('start', 0) < end and segment.get('end', 0) <= end
+
+
 def donor_selected_ids(
-    source_segments: list, *, segment_ids=None, speaker_id=None, segment_index=None, strict_speaker=False
+    source_segments: list,
+    *,
+    segment_ids=None,
+    speaker_id=None,
+    segment_index=None,
+    strict_speaker=False,
+    time_range=None,
 ) -> list:
     """Translate ids targeted at a merged-away donor into surviving segment ids.
 
@@ -231,6 +255,8 @@ def donor_selected_ids(
         selected = source_segments[segment_index : segment_index + 1]
     else:
         selected = [s for s in source_segments if s.get('speaker_id') == speaker_id]
+    if time_range is not None:
+        selected = [s for s in selected if segment_in_assignment_range(s, time_range)]
     return [s['id'] for s in selected if s.get('id')]
 
 
@@ -244,8 +270,11 @@ def manual_assignment(
     segment_index: Optional[int] = None,
     use_for_speech_training: bool = True,
     rejection: Optional[dict] = None,
+    time_range: Optional[tuple[float, float]] = None,
+    segment_only: bool = False,
 ) -> tuple[list[dict], dict, list[str], set[str]]:
     rejection = normalize_rejection(rejection)
+    validate_assignment_range(time_range)
     segments = [dict(segment) for segment in conversation.get('transcript_segments', [])]
 
     for index, segment in enumerate(segments):
@@ -275,6 +304,8 @@ def manual_assignment(
             raise ValueError('Unable to resolve transcript segment assignment target(s): ' + ', '.join(unresolved))
         if speaker_id is not None and any(segments[i].get('speaker_id') != speaker_id for i in indices):
             raise ValueError('Selected segments do not belong to the requested speaker')
+    if time_range is not None:
+        indices = [i for i in indices if segment_in_assignment_range(segments[i], time_range)]
     if not indices:
         raise LookupError('Segment not found')
     receipt = dict(conversation.get('manual_speaker_assignments') or {})
@@ -296,13 +327,15 @@ def manual_assignment(
         if not segment.get('id'):
             segment['id'] = str(uuid.uuid4())
         resolved.append(segment['id'])
-        if speaker_id is None or segment_ids:
+        if speaker_id is None or segment_ids or time_range is not None:
             entry = dict(identity)
+            if time_range is not None or segment_only:
+                entry['segment_only'] = True
             entry['speaker_id'] = segment.get('speaker_id')
             if segment.get('speaker_id_scope') is not None:
                 entry['speaker_id_scope'] = segment['speaker_id_scope']
             receipt['segments'][segment['id']] = entry
-    if speaker_id is not None and not segment_ids:
+    if speaker_id is not None and not segment_ids and time_range is None:
         entry = dict(identity)
         scopes = {segments[i].get('speaker_id_scope') for i in indices}
         if len(scopes) == 1 and next(iter(scopes)) is not None:
@@ -373,6 +406,7 @@ class LiveTranscriptMerge:
     absorbed_into: dict[str, str]
     capture_reasons: dict[str, str] = field(default_factory=dict)
     created_ids: set[str] = field(default_factory=set)
+    capture_proofs: dict[str, CaptureWindowProof] = field(default_factory=dict)
 
     def with_segments(self, segments: list[dict]) -> 'LiveTranscriptMerge':
         return replace(self, segments=segments)
@@ -389,6 +423,7 @@ def merge_live_segments(
     *,
     absorbed_ids: Optional[list[str]] = None,
     capture_reasons: Optional[dict[str, str]] = None,
+    capture_proofs: Optional[dict[str, CaptureWindowProof]] = None,
 ) -> LiveTranscriptMerge:
     """Plan only the mutable tail and fresh batch against the transaction's receipt.
 
@@ -422,6 +457,11 @@ def merge_live_segments(
             segment.capture_window_reason = 'inherited_unknown'
     for segment in incoming:
         segment.capture_window_reason = capture_window_reason((capture_reasons or {}).get(str(segment.id)))
+    if live_capture_window_merge_union_enabled():
+        for segment in [*tail, *incoming]:
+            proof = (capture_proofs or {}).get(str(segment.id))
+            if proof and proof.matches(segment.capture_window_bounds()):
+                segment.capture_merge_proof = proof
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(_receipt_section(receipt, 'segments'))
@@ -451,4 +491,9 @@ def merge_live_segments(
         combined.absorbed_into,
         {str(s.id): s.capture_window_reason for s in combined.joined if s.id},
         {str(s.id) for s in combined.segments if s.id and str(s.id) not in prior_ids},
+        {
+            str(s.id): s.capture_merge_proof
+            for s in combined.segments
+            if result and s.id == result[-1].get('id') and s.capture_merge_proof is not None
+        },
     )

@@ -52,6 +52,7 @@ from scripts.runtime_env_validation.common import (
     _validate_forbidden_env_entries,
     data_plane_project,
     validate_mentor_pipeline,
+    validate_proactivity_v2_posthog_token,
 )
 
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
@@ -246,28 +247,30 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 f'secret {forbidden_secret} belongs only on memory-maintenance-job',
             )
         )
-    notifications_flex_capable = (
-        (_manifest_literal_env_value(notifications_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
-    )
-    if notifications_flex_capable != 'true':
+    x_sync_scope = f'{env}/cloud_run/jobs/x-connector-sync-job'
+    x_sync_job = _as_config_dict(jobs.get('x-connector-sync-job')) or {}
+    x_sync_env = _as_config_dict(x_sync_job.get('env')) or {}
+    x_sync_secrets = _as_config_dict(x_sync_job.get('secrets')) or {}
+    x_sync_flex_capable = (_manifest_literal_env_value(x_sync_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
+    if x_sync_flex_capable != 'true':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_BACKGROUND_FLEX_CAPABLE must be true so the shared live flag covers scheduled X extraction',
             )
         )
-    notifications_gateway_url = _as_config_dict(notifications_env.get('OMI_LLM_GATEWAY_URL'))
-    if notifications_gateway_url is None or notifications_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+    x_sync_gateway_url = _as_config_dict(x_sync_env.get('OMI_LLM_GATEWAY_URL'))
+    if x_sync_gateway_url is None or x_sync_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint for scheduled X Flex',
             )
         )
-    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications_secrets:
+    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in x_sync_secrets:
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
             )
         )
@@ -630,11 +633,7 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
-            if (
-                scope == f'{env}/gke/backend-listen'
-                and env_name == 'STT_SERVICE_MODELS'
-                and _manifest_literal_env_value(env_map, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
-            ):
+            if scope == f'{env}/gke/backend-listen' and env_name == 'STT_SERVICE_MODELS':
                 models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
                 if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
                     continue
@@ -721,6 +720,38 @@ def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDic
     return errors
 
 
+def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Every feed/mentor host and gateway admission executor needs the dedicated token."""
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    hosts = [(f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher')]
+    hosts.extend((f'cloud_run/{name}', host) for name, host in services.items())
+    hosts.extend((name, env_config.get(name)) for name in ('llm_gateway', 'desktop_backend'))
+    errors: list[ValidationError] = []
+    for name, host in hosts:
+        env_map = _as_config_dict((_as_config_dict(host) or {}).get('env')) or {}
+        errors.extend(validate_proactivity_v2_posthog_token(scope=f'{env}/{name}', env_entries=env_map, required=True))
+
+    # Gateway has its own manifest section, outside _validate_gke's service loop.
+    gateway = _as_config_dict(env_config.get('llm_gateway')) or {}
+    gateway_env = _as_config_dict(gateway.get('env')) or {}
+    values = _load_yaml(ROOT / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
+    errors.extend(
+        _validate_env_entries(
+            scope=f'{env}/llm_gateway',
+            expected={
+                name: gateway_env[name]
+                for name in ('PROACTIVITY_V2_POSTHOG_TOKEN', 'PROACTIVITY_V2_POSTHOG_HOST')
+                if name in gateway_env
+            },
+            actual=_env_entries_by_name(values.get('env', [])),
+            strict_provisional=True,
+        )
+    )
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -740,6 +771,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
+    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     for service, service_config in (_as_config_dict(env_config.get('gke')) or {}).items():
         values_file = (_as_config_dict(service_config) or {}).get('values_file')

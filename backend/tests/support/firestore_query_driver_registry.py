@@ -36,7 +36,8 @@ from tests.support.firestore_conversation_profiles import (
     SCAN_PROFILES,
     WITHOUT_PHOTOS_PROFILES,
 )
-from tests.support import firestore_outside_query_drivers as outside_drivers
+from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
+from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -136,6 +137,7 @@ BODY_DIGEST = {
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
+    'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -1443,7 +1445,7 @@ def _seed_mcp_refresh_replay(client, combo, trial):
         'resource': 'res-1',
         'grant_id': 'grant-1',
         'scopes': [],
-        'used_at': T0,
+        'used_at': T0 - timedelta(minutes=10),
         'expires_at': T1,
     }
 
@@ -1478,6 +1480,7 @@ _add(
         'database.mcp_oauth.rotate_refresh_token',
         base={'refresh_token': 'token-1', 'client_id': 'client-1', 'resource': 'res-1'},
         domains={'scope': [None, 'scope-1']},
+        neutrals={'on_outcome': _NOOP},
         setup=_seed_mcp_refresh_replay,
         patchers=_MCP_NOOP_CACHE,
     )
@@ -1906,7 +1909,39 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
-        neutrals={'limit': _LIMIT},
+        domains={'discarded': [False, True], 'transaction': [None, ref_transaction()]},
+        neutrals={'limit': _LIMIT_OPT},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.smart_merge.absorb_conversation',
+        covered_by=(
+            'database.smart_merge.find_preceding_conversations',
+            'database.smart_merge.has_intervening_discarded',
+        ),
+        reason='the discarded-barrier scan runs inside absorb_attempt through '
+        'has_intervening_discarded/find_preceding_conversations, so the terminal '
+        'stream records under those callees, never under absorb_conversation',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
+    )
+)
+_add(
+    DriverEntry(
+        'database.smart_merge.has_intervening_discarded',
+        base={
+            'uid': UID,
+            'survivor': {'id': 'conv-p', 'finished_at': T0},
+            'donor': {
+                'id': 'conv-n',
+                'source': 'omi',
+                'client_device_id': 'pendant-1',
+                'started_at': T0 + timedelta(minutes=5),
+                'created_at': T0 + timedelta(minutes=5),
+            },
+        },
+        domains={'transaction': [None, ref_transaction()]},
     )
 )
 _add(
@@ -2275,8 +2310,16 @@ _add(
         },
     )
 )
-_add(DriverEntry('database.users.get_people', base={'uid': UID}))
-_add(DriverEntry('database.users.get_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
+_add(
+    DriverEntry(
+        'database.person_aliases.list_people',
+        base={'uid': UID},
+        neutrals={
+            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
+        },
+    )
+)
+_add(DriverEntry('database.person_aliases.find_person_by_name', base={'uid': UID, 'name': 'shape-name'}))
 _add(DriverEntry('database.users.get_task_integrations', base={'uid': UID}))
 _add(DriverEntry('database.users.get_user_by_stripe_customer_id', base={'customer_id': 'cus_1'}))
 _add(DriverEntry('database.users.resolve_deletion_wipe_job_id', base={'wipe_job_id': 'job-1'}))
@@ -2431,7 +2474,14 @@ _add(
     )
 )
 
-for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+for entry in (
+    *outside_drivers.DRIVERS.values(),
+    *outside_drivers.COVERED_BY.values(),
+    *outside_drivers.SKIPS.values(),
+    *dream_drivers.DRIVERS.values(),
+    *dream_drivers.COVERED_BY.values(),
+    *dream_drivers.SKIPS.values(),
+):
     _add(entry)
 
 

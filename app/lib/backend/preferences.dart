@@ -634,6 +634,10 @@ class SharedPreferencesUtil {
 
   set deviceName(String value) => saveString('deviceName', value);
 
+  String get customBackendUrl => getString('customBackendUrl');
+
+  set customBackendUrl(String value) => saveString('customBackendUrl', value);
+
   String get deviceName => getString('deviceName');
 
   bool get deviceIsV2 => getBool('deviceIsV2');
@@ -706,6 +710,12 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  /// sttConfigId of the on-device config the paywall's "switch to free" saved, or ''.
+  /// Lets a later paid plan release exactly that pin and never a user's own Custom STT.
+  String get paywallOnDeviceSttConfigId => getString('paywallOnDeviceSttConfigId');
+
+  set paywallOnDeviceSttConfigId(String value) => saveString('paywallOnDeviceSttConfigId', value);
 
   // Whether offline recordings auto-sync to Omi when the device connects.
   // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
@@ -797,6 +807,9 @@ class SharedPreferencesUtil {
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
 
+  bool get showCaptureLiveActivity => getBool('showCaptureLiveActivity', defaultValue: true);
+  Future<bool> setShowCaptureLiveActivity(bool value) => saveBool('showCaptureLiveActivity', value);
+
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
   set taskCategoryOrder(Map<String, List<String>> value) {
@@ -877,11 +890,12 @@ class SharedPreferencesUtil {
   set conversationSilenceDuration(int value) => saveInt('conversationSilenceDuration', value);
 
   String get transcriptionModel => getString('transcriptionModel3', defaultValue: 'soniox');
-
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
-  bool get onboardingCompleted => getBool('onboardingCompleted');
+  bool get firstSummaryRatingPending => getBool('firstSummaryRatingPending'); // set at onboarding end
+  set firstSummaryRatingPending(bool value) => saveBool('firstSummaryRatingPending', value);
 
+  bool get onboardingCompleted => getBool('onboardingCompleted');
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
   bool get permissionsCompleted => getBool('permissionsCompleted');
@@ -1121,11 +1135,17 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  List<ServerMessage> get cachedMessages {
+    // Older caches discarded journal provenance, so automatic cards cannot be
+    // distinguished from rich replies. Rehydrate those from canonical history.
+    if (getInt('cachedMessagesSchema') != 1) return [];
+    return _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
+  }
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+    saveInt('cachedMessagesSchema', 1);
   }
 
   /// Last owner-scoped memory projection used for offline/restart rendering.

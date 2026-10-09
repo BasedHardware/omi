@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -18,6 +19,7 @@ import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/capture/capture_system_surface.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
@@ -100,6 +102,15 @@ CaptureDependencies _deps({
     telemetry:
         telemetry ?? RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
+}
+
+class _NoCard implements CaptureSystemSurfaceSink {
+  @override
+  Future<void> start(Future<Map<String, Object?>> Function(Map<String, Object?>) action) async {}
+  @override
+  Future<void> publish(Map<String, Object?> snapshot) async {}
+  @override
+  Future<void> close() async {}
 }
 
 class _InertWal implements IWalService {
@@ -191,18 +202,19 @@ void main() {
     CaptureWedgeMonitor.instance = monitor;
     const id = 'synthetic-device';
     void report(bool exhausted) => bridge.onCaptureHealth(
-        id,
-        jsonEncode({
-          'phase': exhausted ? 'actionRequired' : 'recovering',
-          'generation': 'android-gatt',
-          'reason': CaptureIngressHealth.cccdRecoveryReason,
-          'valid_until_ms': 0,
-          'subscription_confirmed': false,
-          'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
-          'recovery_outcome': exhausted ? 'failed' : 'none',
-          'recovery_spent': exhausted,
-          'reconnect_spent': exhausted,
-        }));
+          id,
+          jsonEncode({
+            'phase': exhausted ? 'actionRequired' : 'recovering',
+            'generation': 'android-gatt',
+            'reason': CaptureIngressHealth.cccdRecoveryReason,
+            'valid_until_ms': 0,
+            'subscription_confirmed': false,
+            'unverified_since_ms': world.clock.now().millisecondsSinceEpoch,
+            'recovery_outcome': exhausted ? 'failed' : 'none',
+            'recovery_spent': exhausted,
+            'reconnect_spent': exhausted,
+          }),
+        );
     try {
       world.disposeController();
       world.deviceConnection = ScriptedDeviceConnection();
@@ -268,15 +280,17 @@ void main() {
     try {
       world.disposeController();
       world.deviceConnection = ScriptedDeviceConnection();
-      final p = composeCaptureProvider(_deps(
-        world: world,
-        ble: ble,
-        telemetry: RecordingLifecycleTelemetry(
-          emitter: (event, _) => events.add(event),
-          clock: world.clock.now,
-          idFactory: () => 'ingress',
+      final p = composeCaptureProvider(
+        _deps(
+          world: world,
+          ble: ble,
+          telemetry: RecordingLifecycleTelemetry(
+            emitter: (event, _) => events.add(event),
+            clock: world.clock.now,
+            idFactory: () => 'ingress',
+          ),
         ),
-      ));
+      );
       addTearDown(p.dispose);
       final device = BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50);
       await p.streamDeviceRecording(device: device);
@@ -324,6 +338,70 @@ void main() {
       expect(p.liveCaptureStartedAt, isNull);
       await p.pauseCapture();
       expect(ble.authorizations.last, isFalse);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('the Live Activity card claims neither Listening nor a time until pendant audio is verified', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-ingress-card-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final ble = _IngressBle();
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final p = composeCaptureProvider(_deps(world: world, ble: ble));
+      addTearDown(p.dispose);
+      final card = CaptureSystemSurface(p, _NoCard(), now: world.clock.now);
+      await p.streamDeviceRecording(
+        device: BtDevice(id: 'synthetic-device', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      );
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(card.snapshot['status'], 'unverified');
+      expect(card.snapshot['canPause'], isTrue, reason: 'Pause stays on the card, as in the app');
+      // Audio takes a while to arrive; that wait is not capture time.
+      world.clock.advanceTo(world.clock.now().add(const Duration(seconds: 12)));
+      expect(card.snapshot['status'], 'unverified');
+
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(card.snapshot['status'], isNot('unverified'));
+      expect(card.snapshot['paused'], isFalse);
+      expect(card.snapshot['elapsed'], 0, reason: 'waiting for audio was not capture time');
+
+      final verifiedAt = world.clock.now();
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 20)));
+      expect(card.snapshot['elapsed'], 20);
+
+      // A lapse hides the claim again and stops the clock until audio is verified again.
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(card.snapshot['status'], 'unverified');
+      expect(card.snapshot['paused'], isTrue);
+      expect(card.snapshot['elapsed'], 35);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 50)));
+      expect(card.snapshot['elapsed'], 35);
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(card.snapshot['paused'], isFalse);
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 55)));
+      expect(card.snapshot['elapsed'], 40);
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);
@@ -596,6 +674,57 @@ void main() {
     }
   });
 
+  test('websocket close 4005 (account deletion in progress) ends the session instead of reconnecting', () async {
+    final dir = await Directory.systemTemp.createTemp('c1-auth-deleted-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      var refreshes = 0;
+      var expirations = 0;
+      var opens = 0;
+      final deps = _deps(
+        world: world,
+        auth: CaptureAuthBoundary(
+          isSignedIn: () => true,
+          refreshIdToken: () async {
+            refreshes++;
+            return null;
+          },
+          expireDeletedAccountSession: () async => expirations++,
+        ),
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          return null;
+        },
+      );
+      final p = composeCaptureProvider(deps);
+      p.updateRecordingState(RecordingState.systemAudioRecord);
+      p.onClosed(accountDeletionWebSocketCloseCode);
+      await pumpEventQueue();
+      expect(expirations, 1);
+      expect(refreshes, 0, reason: 'a deleted account is not a stale token');
+      // The same close twice (primary and secondary sockets) still asks the
+      // idempotent AuthService.expireSession; nothing else fires.
+      p.onClosed(accountDeletionWebSocketCloseCode);
+      await pumpEventQueue();
+      expect(expirations, 2);
+      expect(opens, 0);
+      p.dispose();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('pending auth refresh cannot reconnect after capture generation changes', () async {
     final dir = await Directory.systemTemp.createTemp('c1-auth-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
@@ -811,8 +940,13 @@ void main() {
         }) async {
           final transport = ScriptedPureSocket();
           transports.add(transport);
-          final socket =
-              TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport, source: source);
+          final socket = TranscriptSegmentSocketService.withSocket(
+            sampleRate,
+            codec,
+            language,
+            transport,
+            source: source,
+          );
           await socket.start();
           return socket;
         },

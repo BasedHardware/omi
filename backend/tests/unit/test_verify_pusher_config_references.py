@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import re
 import runpy
 import shutil
 import subprocess
@@ -21,6 +22,12 @@ CLASSIFICATION = SCRIPT.parents[2] / "config" / "deployment-setting-classificati
 @pytest.fixture
 def preflight() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+
+
+@pytest.fixture(scope="module")
+def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
+    module = SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+    return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
 def deployment(refs: list[dict]) -> list[dict]:
@@ -175,6 +182,8 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
 def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("dev")
     expected, literals, clear_historical_secret = preflight.dev_pusher_binding_contract()
+    swift = (SCRIPT.parents[2] / "desktop/macos/Desktop/Sources/PostHogManager.swift").read_text(encoding="utf-8")
+    public_token = re.search(r'apiKey = "(phc_[^"]+)"', swift)[1]
 
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
@@ -183,9 +192,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
-        "MENTOR_GATE_DEBOUNCE_ENABLED": "true",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
-        "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
@@ -194,6 +201,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
+        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
+        "OMI_SHAPED_AGENT_MODE": "on",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
@@ -210,12 +219,16 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "LIVE_CAPTURE_WINDOW_RETENTION": "false",
+        "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
+        "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
+        "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
+        "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
+        "SONIOX_WIRE_LEDGER": "false",
+        "SONIOX_ORDERED_FINALIZE": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
-        "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
-        "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED": "true",
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
@@ -226,6 +239,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
         "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
         "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
+        "PROACTIVITY_V2_POSTHOG_TOKEN": public_token,
+        "PROACTIVITY_V2_POSTHOG_HOST": "https://us.posthog.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,soniox,dg-nova-3,parakeet",
         "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
@@ -238,17 +253,52 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
 
 
+@pytest.mark.parametrize("env_name", ["PROACTIVITY_V2_POSTHOG_TOKEN", "PROACTIVITY_V2_POSTHOG_HOST"])
+@pytest.mark.parametrize("mutation", ["missing", "changed", "secret"])
+def test_dev_pusher_dedicated_posthog_literals_reject_rendered_drift(
+    monkeypatch,
+    preflight: SimpleNamespace,
+    dev_pusher_contract_baseline: tuple[dict, tuple],
+    env_name: str,
+    mutation: str,
+):
+    deployment = copy.deepcopy(dev_pusher_contract_baseline[0])
+    monkeypatch.setitem(
+        preflight.validate_dev_pusher_binding_contract.__globals__,
+        "dev_pusher_binding_contract",
+        lambda: dev_pusher_contract_baseline[1],
+    )
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    entry = next(item for item in env if item["name"] == env_name)
+    if mutation == "missing":
+        env.remove(entry)
+    elif mutation == "changed":
+        entry["value"] = "disabled"
+    else:
+        del entry["value"]
+        entry["valueFrom"] = {"secretKeyRef": {"name": "dev-omi-backend-secrets", "key": env_name}}
+
+    failures = preflight.validate_dev_pusher_binding_contract(deployment)
+    if mutation == "changed":
+        assert any(f"literal contract mismatch for {env_name}:" in failure for failure in failures)
+    else:
+        assert f"dev pusher literal contract missing rendered value for {env_name}" in failures
+    if mutation == "secret":
+        assert f"dev pusher binding contract has unclassified rendered binding for {env_name}" in failures
+
+
 def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("prod")
     bindings = preflight.direct_pusher_bindings(deployment)
     literals = preflight.literal_pusher_values(deployment)
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
     assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "2"
+    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "0"
     assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "10"
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"

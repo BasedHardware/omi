@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import datetime
 import hashlib
 import io
@@ -515,6 +516,7 @@ def get_syncing_file_temporal_url(file_path: str):
     return _blob_public_url(blob, syncing_local_bucket, file_path)
 
 
+@sync_phase('gcs')
 def get_syncing_file_temporal_signed_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
@@ -527,6 +529,7 @@ def get_syncing_file_temporal_signed_url(file_path: str):
     return _get_signed_url(blob, 15)
 
 
+@sync_phase('gcs')
 def delete_syncing_temporal_file(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
@@ -559,6 +562,7 @@ def schedule_syncing_temporal_file_deletion(
     _syncing_temporal_deleter.schedule(file_path, delay_seconds)
 
 
+@sync_phase('gcs')
 def upload_syncing_temporal_file(file_path: str):
     """Stage a local file in the syncing bucket (blob name = local relative path)."""
     bucket = _get_storage_client().bucket(syncing_local_bucket)
@@ -571,6 +575,7 @@ def upload_syncing_temporal_file(file_path: str):
         blob.upload_from_filename(file_path)
 
 
+@sync_phase('gcs')
 def download_syncing_temporal_file(file_path: str) -> bool:
     """Download a staged blob back to its local relative path.
 
@@ -594,6 +599,7 @@ def download_syncing_temporal_file(file_path: str) -> bool:
 # ************************************************
 
 
+@sync_phase('gcs')
 def upload_audio_chunk(
     chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: Optional[str] = None
 ) -> str:
@@ -1407,6 +1413,34 @@ def download_speaker_embedding_cache(uid: str, conversation_id: str) -> Optional
 
 def upload_speaker_embedding_cache(uid: str, conversation_id: str, data: bytes) -> None:
     blob = _speaker_embedding_cache_blob(uid, conversation_id)
+    with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
+        blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
+
+
+# The v1 framing stays readable. Evidence-policy results use a separate object:
+# old pusher ignores actual evidence seconds and must never consume these vectors.
+# Keep legacy objects untouched/readable; account/conversation audio deletion
+# purges both names under the same owner-encrypted audio prefix.
+OWNER_EVIDENCE_CACHE_NAME = 'speaker-embeddings.owner-evidence.v1.enc'
+
+
+def _owner_evidence_cache_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'audio/{uid}/{conversation_id}/{OWNER_EVIDENCE_CACHE_NAME}')
+
+
+def download_owner_evidence_cache(uid: str, conversation_id: str) -> Optional[bytes]:
+    try:
+        encrypted = _owner_evidence_cache_blob(uid, conversation_id).download_as_bytes()
+    except BlobNotFound:
+        # No mass v1 invalidation: new consumers can still group legacy vectors,
+        # with zero identity evidence when physical duration is absent.
+        return download_speaker_embedding_cache(uid, conversation_id)
+    return encryption.decrypt_audio_file(encrypted, uid)
+
+
+def upload_owner_evidence_cache(uid: str, conversation_id: str, data: bytes) -> None:
+    blob = _owner_evidence_cache_blob(uid, conversation_id)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
         blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
 

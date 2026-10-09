@@ -195,6 +195,11 @@ _LEDGER_SERVICE = _ledger_service_name()
 _LEDGER_LOCK = threading.Lock()
 _ledger_day: str | None = None
 _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
+# Cumulative billed reads per request-owner tier (firestore_tier_context
+# values: plan tiers plus 'unattributed' and 'other'). Filled on first
+# observation; the value set is bounded by TIER_VALUES, so cardinality is
+# the plan catalog, not the user base. Keys absent until first seen.
+_ledger_tier_counts: dict[str, int] = {}
 _ledger_unscoped = 0
 _ledger_seq = 0
 _ledger_last_emit = 0.0
@@ -205,7 +210,7 @@ def _ledger_emit_locked(day: str) -> None:
     _ledger_seq += 1
     payload = {
         'event': 'firestore_read_ledger',
-        'schema': 1,
+        'schema': 2,
         'service': _LEDGER_SERVICE,
         'epoch': _LEDGER_EPOCH,
         'seq': _ledger_seq,
@@ -213,6 +218,7 @@ def _ledger_emit_locked(day: str) -> None:
         'lookup': _ledger_counts['lookup'],
         'not_found': _ledger_counts['not_found'],
         'query': _ledger_counts['query'],
+        'tier_counts': dict(sorted(_ledger_tier_counts.items())),
         'unscoped': _ledger_unscoped,
     }
     try:
@@ -222,8 +228,8 @@ def _ledger_emit_locked(day: str) -> None:
     _ledger_last_emit = time.monotonic()
 
 
-def _ledger_record(amount: float, kind: str, project: str | None) -> None:
-    global _ledger_day, _ledger_counts, _ledger_unscoped
+def _ledger_record(amount: float, kind: str, project: str | None, tier: str = 'unattributed') -> None:
+    global _ledger_day, _ledger_counts, _ledger_tier_counts, _ledger_unscoped
     if not _LEDGER_ENABLED:
         return
     try:
@@ -236,11 +242,13 @@ def _ledger_record(amount: float, kind: str, project: str | None) -> None:
                 _ledger_emit_locked(_ledger_day)
                 _ledger_day = today
                 _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
+                _ledger_tier_counts = {}
             if project is not None and project != 'based-hardware':
                 return
             if project is None:
                 _ledger_unscoped = 1
             _ledger_counts[kind if kind in _ledger_counts else 'query'] += int(amount)
+            _ledger_tier_counts[tier] = _ledger_tier_counts.get(tier, 0) + int(amount)
             if now - _ledger_last_emit >= 60:
                 _ledger_emit_locked(_ledger_day)
     except Exception:
@@ -465,10 +473,10 @@ def _record(
         kind = 'not_found' if outcome == 'miss' else 'lookup'
     if caller is None:
         caller = 'unattributed'
-    if _LEDGER_ENABLED:
-        _ledger_record(amount, kind, _sdk_project(sdk_object))
-    pattern = collection_pattern(path_parts)
     tier = current_tier()
+    if _LEDGER_ENABLED:
+        _ledger_record(amount, kind, _sdk_project(sdk_object), tier)
+    pattern = collection_pattern(path_parts)
     try:
         FIRESTORE_DOCUMENT_READS.labels(collection=pattern, outcome=outcome, tier=tier).inc(amount)
     except Exception:

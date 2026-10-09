@@ -15,6 +15,7 @@ from utils.stt import speaker_identity  # noqa: F401 - retain allocator across l
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 
 import asyncio
 import json
@@ -1299,11 +1300,17 @@ def _install_sync_observability_stubs():
     fallback_mod.record_fallback = MagicMock()
     transcription_mod = types.ModuleType('utils.observability.transcription')
     transcription_mod.record_sync_transcription_outcome = MagicMock()
+    transcription_mod.record_sync_intake_outcome = MagicMock()
+    journeys_mod = types.ModuleType('utils.observability.journeys')
+    journeys_mod.record_client_journey_accepted = MagicMock()
+    journeys_mod.record_client_journey_terminal = MagicMock()
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
+    sys.modules['utils.observability.journeys'] = journeys_mod
     obs_pkg.fallback = fallback_mod
     obs_pkg.transcription = transcription_mod
+    obs_pkg.journeys = journeys_mod
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
     return fallback_mod
 
@@ -1409,6 +1416,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -1416,6 +1424,10 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
 
         # The speaker entitlement must be a visible, fixed contract, not a truthy
         # MagicMock: sync identification consults it when building the person
@@ -3419,6 +3431,7 @@ class TestV2EndpointExecution:
             'utils.speaker_identification',
             'utils.speaker_learning_jobs',
             'utils.stt.speaker_embedding',
+            'utils.stt.owner_profile',
             'python_multipart',
             'python_multipart.multipart',
         ]
@@ -3426,6 +3439,10 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # Dispatch tests supply their own cache and do not acquire voiceprints.
+        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
 
         # The speaker entitlement must be a visible, fixed contract, not a truthy
         # MagicMock: sync identification consults it when building the person
@@ -3971,12 +3988,12 @@ class TestConversationFinalizerExecutor:
     def test_process_conversation_uses_postprocess_bulkhead(self):
         source = self._read_finalizer_source()
         assert 'postprocess_executor' in source
-        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
+        assert re.search(
+            r'run_blocking\(\s+postprocess_executor,\s+process_with_episode_budget,\s+process_conversation', source
+        )
 
 
-# ---------------------------------------------------------------------------
 # 14. Bulkhead executor infrastructure tests
-# ---------------------------------------------------------------------------
 
 
 class TestBulkheadExecutors:

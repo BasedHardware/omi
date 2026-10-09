@@ -63,6 +63,7 @@ from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService
 from utils.stt.vad_gate import GatedSTTSocket
+from utils.stt.replay_delivery import ReplayTailSocket
 from utils.transcribe_store import get_user_name as transcribe_get_user_name
 from utils.transcribe_store import user_db
 
@@ -147,10 +148,14 @@ def _fake_extract_embedding(wav_bytes: bytes, name: str):
     with wave.open(io.BytesIO(wav_bytes), 'rb') as handle:
         pcm = handle.readframes(handle.getnframes())
     samples = np.frombuffer(pcm, dtype='<i2').astype(np.float64)
-    index = np.arange(len(samples))
-    mags = np.abs(
-        np.asarray([np.dot(samples, np.exp(-2j * np.pi * freq * index / RATE)) for freq in _FAKE_FREQS])
-    ).astype(np.float32)
+    if not len(samples):
+        return np.zeros((1, len(_FAKE_FREQS)), dtype=np.float32)
+    # These fixture tones occupy exact FFT bins at the captured durations.
+    # A single transform keeps the deterministic spectral match without four
+    # large complex exponentials in every recognition attempt.
+    spectrum = np.fft.rfft(samples)
+    bins = np.rint(np.asarray(_FAKE_FREQS) * len(samples) / RATE).astype(int)
+    mags = np.abs(spectrum[bins]).astype(np.float32)
     norm = float(np.linalg.norm(mags))
     vector = mags / norm if norm else mags
     return vector.reshape(1, -1)
@@ -282,6 +287,9 @@ def _provider_segment(segment_id, start, end, text):
 # ---------------------------------------------------------------------------
 class FailoverStack:
     def __init__(self, monkeypatch, *, v2: bool, create_speakers: bool = False, owner_name: str = 'Alice'):
+        # The legacy connector remains live for BYOK sessions; these tests
+        # pin its capture and speaker behavior across provider failover.
+        monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
         self.clock = {'wall': T0, 'mono': 0.0}
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
         self.v2 = v2
@@ -475,6 +483,11 @@ class FailoverStack:
         self.websocket.feed(frames)
         self.websocket.queue.put_nowait({'_ack': ack})
         await ack.wait()
+        # Capture acceptance is independent of paced provider delivery after
+        # recovery. Emit fake provider text only after its audio has arrived.
+        tail_task = getattr(self.receiver.stt_socket, '_task', None)
+        if tail_task is not None:
+            await asyncio.wait_for(asyncio.shield(tail_task), timeout=30)
         return self.websocket
 
     def provider(self, index):
@@ -539,8 +552,15 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
 
         # ---- Phase 1: one minute of silence ages the ring buffer, then the
         # owner speaks once (provider time 60-63) and the provider dies.
-        pre_audio = _silence(60.0) + _owner(3.0) + _silence(7.0)
-        websocket1 = await stack.run_receive(_frames_for(pre_audio))
+        # The minute of silence ages the real capture ring, but batching only
+        # that silent stretch avoids repeated per-packet work in this test.
+        # Keep the owner's speech on the original one-second frame cadence.
+        pre_frames = (
+            _frames_for(_silence(60.0), seconds_per_frame=10.0)
+            + _frames_for(_owner(3.0))
+            + _frames_for(_silence(7.0), seconds_per_frame=7.0)
+        )
+        websocket1 = await stack.run_receive(pre_frames)
         stack.provider(0)['callback']([_provider_segment('seg-pre', 60.0, 63.0, 'owner line before the failover')])
         # The owner's first clip accumulates evidence but cannot decide alone.
         await _wait_for(
@@ -557,7 +577,8 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
         assert len(stack.created_sockets) >= 2
         failover_index = len(stack.created_sockets) - 1
         socket2 = stack.receiver.stt_socket
-        assert socket2 is not socket1 and isinstance(socket2, GatedSTTSocket)
+        assert socket2 is not socket1 and isinstance(socket2, ReplayTailSocket)
+        assert isinstance(socket2.connection, GatedSTTSocket)
         assert socket2._send_tracker is not None, 'the rebuild must install send_tracker=epoch'
         assert socket2._send_tracker is not socket1._send_tracker, 'each epoch owns its own translator'
 
@@ -707,7 +728,8 @@ async def test_initialize_stt_installs_epoch_tracked_gated_socket(monkeypatch, c
         socket._conn.mark_dead()
         assert await stack.receiver._failover_stt_socket()
         rebuilt = stack.receiver.stt_socket
-        assert rebuilt is not socket and isinstance(rebuilt, GatedSTTSocket)
+        assert rebuilt is not socket and isinstance(rebuilt, ReplayTailSocket)
+        assert isinstance(rebuilt.connection, GatedSTTSocket)
         assert rebuilt._send_tracker is not None and rebuilt._send_tracker is not socket._send_tracker
     finally:
         stack.state.active = False

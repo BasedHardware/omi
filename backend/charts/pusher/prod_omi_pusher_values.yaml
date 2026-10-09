@@ -115,6 +115,15 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: DREAM_AGENT_MODE
+    value: 'shadow'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: PROACTIVITY_REDIS_HOST
@@ -138,12 +147,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: POSTHOG_PROJECT_API_KEY
-  - name: MENTOR_GATE_DEBOUNCE_ENABLED
-    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
@@ -190,8 +199,20 @@ env:
     value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'true'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_WIRE_LEDGER
+    value: "true"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "true"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
   - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
@@ -216,15 +237,13 @@ env:
     value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
-  - name: CONVERSATION_NOTES_V2_ENABLED
+  - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"
@@ -250,11 +269,13 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "2"
+    value: "0"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
-    value: "10"
+    value: "100"
+  - name: NOTES_TIER_ESCALATION_ENABLED
+    value: 'true'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP

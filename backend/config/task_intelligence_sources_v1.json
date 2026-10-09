@@ -60,7 +60,6 @@
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
-        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
@@ -73,11 +72,6 @@
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
-        {
-          "path": "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
-          "symbol": "client.createTask",
-          "discover": true
-        },
         {
           "path": "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
           "symbol": "client.createActionItem",
@@ -429,7 +423,10 @@
         "backend/database/candidates.py",
         "backend/database/task_recommendations.py",
         "backend/routers/candidates.py",
-        "backend/utils/task_intelligence/candidate_service.py"
+        "backend/utils/task_intelligence/candidate_service.py",
+        "backend/utils/task_intelligence/summary_tasks.py",
+        "backend/database/summary_task_links.py",
+        "desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationSummaryTaskPromoter.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [

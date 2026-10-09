@@ -345,13 +345,6 @@ export function chatFirstMaterializationDeferrals(
   });
 }
 
-class ChatFirstMaterializationError extends Error {
-  constructor(readonly code: "invalid_intent" | "identity_conflict" | "kernel_materialization_failed", message: string) {
-    super(message);
-    this.name = "ChatFirstMaterializationError";
-  }
-}
-
 export function chatFirstWireRejectionMessage(error: unknown): string {
   return (error instanceof Error ? error.message : "Unknown chat-first materialization failure").slice(0, 300);
 }
@@ -1459,153 +1452,16 @@ export function recordQuestionInteractionReply(
  * retry to acknowledge the exact committed assistant row after a crash.
  */
 function materializeChatFirstIntentInTransaction(
-  store: AgentStore,
-  input: MaterializeChatFirstIntentInput,
+  _store: AgentStore,
+  _input: MaterializeChatFirstIntentInput,
 ): ChatFirstIntentMaterializationResult {
-  const now = input.nowMs ?? Date.now();
-  const intentId = nonEmpty(input.intentId, "chat-first intent ID");
-  const continuityKey = nonEmpty(input.continuityKey, "chat-first intent continuity key");
-  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
-    throw new ChatFirstMaterializationError(
-      "kernel_materialization_failed",
-      "Chat-first materialization requires a valid control generation",
-    );
-  }
-  if (![
-    "daily_opener",
-    "capture_arrival",
-    "deferral_reraise",
-    "agent_judgment",
-    "cold_start_rich",
-    "cold_start_sparse",
-  ].includes(input.source)) {
-    throw new Error("Chat-first materialization source is invalid");
-  }
-  let blocks: ConversationContentBlock[];
-  try {
-    blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
-  } catch (error) {
-    throw new ChatFirstMaterializationError(
-      "invalid_intent",
-      error instanceof Error ? error.message : "Chat-first intent is invalid",
-    );
-  }
-  const turnId = stableChatFirstIntentTurnID(intentId);
-  const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
-
-  assertConversationOwner(store, input.conversationId, input.ownerId);
-  const existingReceipt = store.getOptionalRow(
-    `SELECT owner_id, conversation_id, control_generation, receipt_id, turn_id
-     FROM chat_first_materialization_receipts WHERE intent_id = ?`,
-    [intentId],
-  );
-  if (existingReceipt) {
-    if (
-      String(existingReceipt.owner_id) !== input.ownerId
-      || String(existingReceipt.conversation_id) !== input.conversationId
-      || Number(existingReceipt.control_generation) !== input.controlGeneration
-      || String(existingReceipt.receipt_id) !== receiptId
-      || String(existingReceipt.turn_id) !== turnId
-    ) {
-      throw new ChatFirstMaterializationError(
-        "identity_conflict", "Chat-first intent ID was reused with different receipt identity",
-      );
-    }
-    return {
-      accepted: true,
-      duplicate: true,
-      rejected: false,
-      rejectionCode: null,
-      rejectionMessage: null,
-      suppressedByTailQuestion: false,
-      suppressedByStreamingTail: false,
-      turn: requireJournalTurn(store, input.conversationId, turnId),
-      receipt: { intentId, receiptId },
-    };
-  }
-
-  // Chat-first identity is the stable turn ID, not the importing client's
-  // origin or producer. A second device may already have committed this turn
-  // and the backend reconciler may have imported it before its receipt landed.
-  // Adopt that canonical row without weakening ordinary producer/payload
-  // collision checks in recordJournalTurn.
-  const existingTurn = findJournalTurnById(store, turnId);
-  if (existingTurn) {
-    if (existingTurn.conversationId !== input.conversationId) {
-      throw new ChatFirstMaterializationError(
-        "identity_conflict", "Chat-first stable turn ID belongs to a different conversation",
-      );
-    }
-    store.execute(
-      `INSERT INTO chat_first_materialization_receipts(
-         intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
-    );
-    return {
-      accepted: true,
-      duplicate: true,
-      rejected: false,
-      rejectionCode: null,
-      rejectionMessage: null,
-      suppressedByTailQuestion: false,
-      suppressedByStreamingTail: false,
-      turn: existingTurn,
-      receipt: { intentId, receiptId },
-    };
-  }
-
-  const tail = materializationTailState(store, input.conversationId);
-  if (tail.unansweredQuestion || tail.streaming) {
-    return {
-      accepted: false,
-      duplicate: false,
-      rejected: false,
-      rejectionCode: null,
-      rejectionMessage: null,
-      suppressedByTailQuestion: tail.unansweredQuestion,
-      suppressedByStreamingTail: tail.streaming,
-      turn: null,
-      receipt: null,
-    };
-  }
-
-  const recorded = recordJournalTurn(store, {
-      ownerId: input.ownerId,
-      conversationId: input.conversationId,
-      turnId,
-      producerId: `chat-first-intent:${intentId}`,
-      role: "assistant",
-      surfaceKind: "main_chat",
-      origin: "typed_chat",
-      status: "completed",
-      // Rich blocks are the visible content. Keep this empty rather than
-      // inventing an assistant sentence that could become a "Done." filler.
-      content: "",
-      contentBlocks: blocks,
-      metadataJson: JSON.stringify({
-        continuityKey,
-        chatFirstIntentId: intentId,
-        chatFirstIntentSource: input.source,
-      }),
-      createdAtMs: now,
-  });
-  store.execute(
-    `INSERT INTO chat_first_materialization_receipts(
-       intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
-  );
+  // Retained wire operation for existing callers; never creates a journal row.
   return {
-    accepted: true,
-    duplicate: recorded.duplicate,
-    rejected: false,
-    rejectionCode: null,
-    rejectionMessage: null,
-    suppressedByTailQuestion: false,
-    suppressedByStreamingTail: false,
-    turn: recorded.turn,
-    receipt: { intentId, receiptId },
+    accepted: false, duplicate: false, rejected: true,
+    rejectionCode: "invalid_intent",
+    rejectionMessage: "Automatic Chat entries are no longer supported",
+    suppressedByTailQuestion: false, suppressedByStreamingTail: false,
+    turn: null, receipt: null,
   };
 }
 
@@ -1623,39 +1479,7 @@ export function materializeChatFirstIntents(
   if (inputs.length < 1 || inputs.length > 8) {
     throw new Error("Chat-first materialization batch requires one to eight intents");
   }
-  const results: ChatFirstIntentMaterializationResult[] = [];
-  for (const input of inputs) {
-    let result: ChatFirstIntentMaterializationResult;
-    try {
-      result = store.withTransaction(() => materializeChatFirstIntentInTransaction(store, input));
-    } catch (error) {
-      const message = chatFirstWireRejectionMessage(error);
-      result = {
-        accepted: false,
-        duplicate: false,
-        rejected: true,
-        rejectionCode: error instanceof ChatFirstMaterializationError
-          ? error.code
-          : "kernel_materialization_failed",
-        rejectionMessage: message,
-        suppressedByTailQuestion: false,
-        suppressedByStreamingTail: false,
-        turn: null,
-        receipt: null,
-      };
-    }
-    results.push(result);
-    // Rejections are parked independently and never stop later items. A real
-    // transcript tail remains an intentional batch deferral.
-    if (
-      result.suppressedByTailQuestion
-      || result.suppressedByStreamingTail
-      || (result.accepted && materializationTailState(store, input.conversationId).unansweredQuestion)
-    ) {
-      return { results, stoppedByTail: true };
-    }
-  }
-  return { results, stoppedByTail: false };
+  return { results: inputs.map(input => materializeChatFirstIntentInTransaction(store, input)), stoppedByTail: false };
 }
 
 /** Receipts remain pending locally until Swift receives a successful server acknowledgement. */
@@ -2128,160 +1952,8 @@ export function terminalizeJournalTurn(
     if (input.disposition === "discard") {
       markDiscardedBackendProjection(store, input.turnId, now);
     }
-    if (input.disposition === "accept" && terminalized.status === "completed") {
-      appendNextColdStartSequenceQuestion(store, input.ownerId, terminalized, now);
-    }
     return terminalized;
   });
-}
-
-/**
- * Advance the fixed sparse sequence only from the selected option's ordinary
- * assistant continuation after that continuation reaches a successful
- * terminal state. The same SQLite transaction commits both facts, making a
- * crash retry replay-safe without a separate sequence-completed flag.
- */
-function appendNextColdStartSequenceQuestion(
-  store: AgentStore,
-  ownerId: string,
-  terminalized: ConversationTurn,
-  nowMs: number,
-): void {
-  const metadata = parseObjectJson(terminalized.metadataJson) as Record<string, unknown>;
-  const descriptor = localColdStartSequenceDescriptor(metadata.coldStartSequence);
-  const continuityKey = typeof metadata.continuityKey === "string" ? metadata.continuityKey : null;
-  if (!descriptor || !continuityKey) return;
-  const tail = canonicalConversationTail(store, terminalized.conversationId);
-  if (!tail || tail.turnId !== terminalized.turnId) return;
-  if (!selectedColdStartParentMatchesContinuation(store, ownerId, terminalized, descriptor, continuityKey)) return;
-
-  if (descriptor.step === 3) {
-    recordColdStartSequenceTerminalReceipt(store, {
-      ownerId,
-      conversationId: terminalized.conversationId,
-      sequenceId: descriptor.sequenceId,
-      terminalState: "completed",
-      terminalTurnId: terminalized.turnId,
-      nowMs,
-    });
-    return;
-  }
-
-  const nextStep = (descriptor.step + 1) as 2 | 3;
-  const nextQuestion = coldStartSequenceQuestion(descriptor.sequenceId, nextStep);
-  const turnId = stableColdStartSequenceTurnID(descriptor.sequenceId, nextStep);
-  recordJournalTurn(store, {
-    ownerId,
-    conversationId: terminalized.conversationId,
-    turnId,
-    producerId: `cold-start-sequence:${descriptor.sequenceId}:step:${nextStep}`,
-    role: "assistant",
-    surfaceKind: "main_chat",
-    origin: "typed_chat",
-    status: "completed",
-    content: "",
-    contentBlocks: [nextQuestion],
-    metadataJson: JSON.stringify({ coldStartSequence: { sequenceId: descriptor.sequenceId, step: nextStep } }),
-    createdAtMs: nowMs + 1,
-  });
-}
-
-function localColdStartSequenceDescriptor(
-  value: unknown,
-): { sequenceId: string; step: 1 | 2 | 3 } | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const sequenceId = typeof record.sequenceId === "string" ? record.sequenceId : "";
-  const step = record.step;
-  if (!sequenceId || (step !== 1 && step !== 2 && step !== 3)) return null;
-  return { sequenceId, step };
-}
-
-function selectedColdStartParentMatchesContinuation(
-  store: AgentStore,
-  ownerId: string,
-  terminalized: ConversationTurn,
-  descriptor: { sequenceId: string; step: 1 | 2 | 3 },
-  continuityKey: string,
-): boolean {
-  const rows = store.allRows(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? AND role = 'assistant' AND turn_seq < ?
-     ORDER BY turn_seq DESC`,
-    [terminalized.conversationId, terminalized.turnSeq],
-  );
-  for (const row of rows) {
-    const turn = requireJournalTurn(store, terminalized.conversationId, String(row.turn_id));
-    for (const block of turn.contentBlocks) {
-      if (
-        block.type !== "questionCard"
-        || block.selectedOptionId === undefined
-        || block.coldStartSequence?.retired === true
-        || block.coldStartSequence?.sequenceId !== descriptor.sequenceId
-        || block.coldStartSequence?.step !== descriptor.step
-      ) continue;
-      if (
-        questionInteractionContinuityKey(
-          ownerId,
-          terminalized.conversationId,
-          block.questionId,
-          block.selectedOptionId,
-        ) === continuityKey
-      ) return true;
-    }
-  }
-  return false;
-}
-
-function coldStartSequenceQuestion(
-  sequenceId: string,
-  step: 2 | 3,
-): Extract<ConversationContentBlock, { type: "questionCard" }> {
-  const questionId = `${sequenceId}:step:${step}`;
-  const options = step === 2
-    ? [
-      {
-        optionId: `${sequenceId}:goal:create`,
-        label: "Yes, create a goal",
-        preparedAnswer: "Yes, turn that into a goal for me.",
-      },
-      {
-        optionId: `${sequenceId}:goal:not-yet`,
-        label: "Not yet",
-        preparedAnswer: "Not yet. I want to keep thinking about it first.",
-      },
-    ]
-    : [
-      {
-        optionId: `${sequenceId}:tasks:draft`,
-        label: "Yes, draft tasks",
-        preparedAnswer: "Yes, draft a few first tasks for me.",
-      },
-      {
-        optionId: `${sequenceId}:tasks:not-yet`,
-        label: "I will add them later",
-        preparedAnswer: "I will add tasks later.",
-      },
-    ];
-  return {
-    type: "questionCard",
-    id: stableColdStartSequenceBlockID(sequenceId, step),
-    questionId,
-    text: step === 2
-      ? "Would you like me to turn that into a goal?"
-      : "Want me to draft a few first tasks?",
-    subject: { kind: "cold_start", id: sequenceId },
-    options,
-    coldStartSequence: { sequenceId, step },
-  };
-}
-
-function stableColdStartSequenceTurnID(sequenceId: string, step: 2 | 3): string {
-  return `turn_cfs_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 24)}`;
-}
-
-function stableColdStartSequenceBlockID(sequenceId: string, step: 2 | 3): string {
-  return `cfs_block_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 20)}`;
 }
 
 function recordColdStartSequenceTerminalReceipt(
@@ -4170,26 +3842,6 @@ function stableChatFirstMaterializationReceiptID(intentId: string, continuityKey
     .slice(0, 24)}`;
 }
 
-/** Any unanswered question or streaming assistant tail blocks proactive arrival. */
-function materializationTailState(
-  store: AgentStore,
-  conversationId: string,
-): { unansweredQuestion: boolean; streaming: boolean } {
-  const turn = canonicalConversationTail(store, conversationId);
-  if (!turn) return { unansweredQuestion: false, streaming: false };
-  const assistant = turn.role === "assistant";
-  return {
-    unansweredQuestion: assistant
-      && turn.status === "completed"
-      && turn.contentBlocks.some((block) => (
-        block.type === "questionCard"
-        && block.selectedOptionId === undefined
-        && block.coldStartSequence?.retired !== true
-      )),
-    streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
-  };
-}
-
 /**
  * Return the user-visible conversation tail by immutable creation order.
  *
@@ -4216,124 +3868,6 @@ function canonicalConversationTail(
   return row ? requireJournalTurn(store, conversationId, String(row.turn_id)) : null;
 }
 
-/**
- * Proactive intents are server contracts with snake_case fields; normalize and
- * bound them once before they become kernel-owned persisted blocks. This keeps
- * Swift a transport/projection layer instead of another block writer.
- */
-function chatFirstIntentBlocks(
-  intentId: string,
-  controlGeneration: number,
-  source: MaterializeChatFirstIntentInput["source"],
-  rawBlocks: readonly unknown[],
-): ConversationContentBlock[] {
-  if (rawBlocks.length < 1 || rawBlocks.length > 8) {
-    throw new Error("Chat-first intent requires one to eight blocks");
-  }
-  return rawBlocks.map((raw, index) => {
-    const block = recordValue(raw, "chat-first intent block");
-    const type = nonEmptyString(block.type, "chat-first intent block type");
-    const id = `cfi_block_${createHash("sha256")
-      .update(`${intentId}\u0000${index}\u0000${type}`)
-      .digest("hex")
-      .slice(0, 20)}`;
-    switch (type) {
-      case "questionCard": {
-        const subject = recordValue(block.subject, "chat-first question subject");
-        const subjectKind = chatFirstSubjectKind(subject.kind);
-        const subjectId = nonEmptyString(subject.id, "chat-first question subject ID");
-        const coldStartSequence = block.cold_start_sequence === undefined
-          ? undefined
-          : coldStartSequenceValue(block.cold_start_sequence);
-        const isColdStart = subjectKind === "cold_start";
-        if (isColdStart !== (coldStartSequence !== undefined)) {
-          throw new Error("chat-first cold-start question descriptor is invalid");
-        }
-        if (coldStartSequence) {
-          if (
-            source !== "cold_start_sparse"
-            || coldStartSequence.step !== 1
-            || coldStartSequence.sequenceId !== subjectId
-            || subjectId !== `cold-start:${controlGeneration}`
-          ) {
-            throw new Error("chat-first cold-start question is invalid");
-          }
-        }
-        const options = arrayValue(block.options, "chat-first question options").map((rawOption) => {
-          const option = recordValue(rawOption, "chat-first question option");
-          const defer = option.defer === undefined ? undefined : booleanValue(option.defer, "chat-first question defer");
-          return {
-            optionId: nonEmptyString(option.option_id, "chat-first question option ID"),
-            label: nonEmptyString(option.label, "chat-first question option label"),
-            preparedAnswer: nonEmptyString(option.prepared_answer, "chat-first question prepared answer"),
-            ...(defer === true ? { defer: true } : {}),
-          };
-        });
-        return {
-          type,
-          id,
-          questionId: nonEmptyString(block.question_id, "chat-first question ID"),
-          text: nonEmptyString(block.text, "chat-first question text"),
-          subject: {
-            kind: subjectKind,
-            id: subjectId,
-          },
-          options,
-          ...(coldStartSequence ? { coldStartSequence } : {}),
-        };
-      }
-      case "taskCard":
-        return { type, id, taskId: nonEmptyString(block.task_id, "chat-first task ID") };
-      case "goalLink":
-        return {
-          type,
-          id,
-          goalId: nonEmptyString(block.goal_id, "chat-first goal ID"),
-          summary: nonEmptyString(block.summary, "chat-first goal summary"),
-        };
-      case "captureLink": {
-        const rawMoment = block.moment_timestamp_ms;
-        const momentTimestampMs = rawMoment === undefined || rawMoment === null
-          ? undefined
-          : safeNonNegativeInteger(rawMoment, "chat-first capture moment");
-        return {
-          type,
-          id,
-          conversationId: nonEmptyString(block.conversation_id, "chat-first capture ID"),
-          ...(momentTimestampMs === undefined ? {} : { momentTimestampMs }),
-          summary: nonEmptyString(block.summary, "chat-first capture summary"),
-        };
-      }
-      case "conversationLink": {
-        const recommendedActionItems = block.recommended_action_items === undefined
-          ? []
-          : arrayValue(block.recommended_action_items, "chat-first recommended action items").map((rawItem) => {
-            const item = recordValue(rawItem, "chat-first recommended action item");
-            const taskId = item.task_id === undefined || item.task_id === null
-              ? undefined
-              : nonEmptyString(item.task_id, "chat-first recommended action item task ID");
-            return {
-              description: nonEmptyString(
-                item.description,
-                "chat-first recommended action item description",
-              ),
-              ...(taskId === undefined ? {} : { taskId }),
-            };
-          });
-        return {
-          type,
-          id,
-          conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
-          summary: nonEmptyString(block.summary, "chat-first conversation summary"),
-          recommendedActionItems,
-        };
-      }
-      default:
-        throw new Error("Chat-first intent block type is invalid");
-    }
-  });
-}
-
 function recordValue(value: unknown, name: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${name} is invalid`);
   return value as Record<string, unknown>;
@@ -4354,26 +3888,11 @@ function booleanValue(value: unknown, name: string): boolean {
   return value;
 }
 
-function coldStartSequenceValue(value: unknown): { sequenceId: string; step: 1 | 2 | 3 } {
-  const sequence = recordValue(value, "chat-first cold-start sequence");
-  const step = safeNonNegativeInteger(sequence.step, "chat-first cold-start sequence step");
-  if (step < 1 || step > 3) throw new Error("chat-first cold-start sequence step is invalid");
-  return {
-    sequenceId: nonEmptyString(sequence.sequence_id, "chat-first cold-start sequence ID"),
-    step: step as 1 | 2 | 3,
-  };
-}
-
 function safeNonNegativeInteger(value: unknown, name: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${name} is invalid`);
   }
   return value;
-}
-
-function chatFirstSubjectKind(value: unknown): "task" | "goal" | "capture" | "cold_start" {
-  if (value === "task" || value === "goal" || value === "capture" || value === "cold_start") return value;
-  throw new Error("chat-first question subject kind is invalid");
 }
 
 function findSelectedQuestionBlock(

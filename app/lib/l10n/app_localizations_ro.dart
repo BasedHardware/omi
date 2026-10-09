@@ -9969,11 +9969,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Neînregistrat ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profilul vocal al lui $name';
   }
@@ -12467,4 +12462,256 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dismiss => 'Ascunde';
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Acest cont este în curs de ștergere. Conectează-te cu alt cont sau așteaptă câteva minute și încearcă din nou.';
+
+  @override
+  String get onboardingSetupTitle => 'Se configurează Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Dă-i lui Omi un moment să se personalizeze';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Se pregătește spațiul tău de lucru';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Se ajustează transcrierea pentru limba ta';
+
+  @override
+  String get onboardingSetupStepMemory => 'Se configurează memoria ta';
+
+  @override
+  String get onboardingSetupStepDevices => 'Se conectează dispozitivele tale';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Se personalizează experiența ta';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Îți place Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Da';
+
+  @override
+  String get onboardingRatingPromptNo => 'Nu';
+
+  @override
+  String get partialRecording => 'Înregistrare parțială';
+
+  @override
+  String get importTranscriptFiles => 'Fișiere de transcriere';
+
+  @override
+  String get importTranscriptFilesDescription => 'Selectează transcrieri SRT, VTT sau TXT ori o arhivă ZIP cu ele';
+
+  @override
+  String get importTooManyAttempts => 'Prea multe importuri în acest moment. Încearcă din nou mai târziu.';
+
+  @override
+  String get importFileTooLarge => 'Acest fișier este prea mare pentru a fi importat.';
+
+  @override
+  String get importUnsupportedFileType => 'Acest tip de fișier nu poate fi importat.';
+
+  @override
+  String get reviewTitle => 'Revizuire';
+
+  @override
+  String get reviewEntryTitle => 'Întrebări pentru tine';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Mai sunt $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Cine a spus asta?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Aceeași persoană cu „$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Cum se scrie asta?';
+
+  @override
+  String get reviewPlayClip => 'Redă clipul';
+
+  @override
+  String get reviewStopClip => 'Oprește clipul';
+
+  @override
+  String get reviewOpenDetailsHint => 'Deschide detaliile';
+
+  @override
+  String get reviewAnswerMe => 'Eu';
+
+  @override
+  String get reviewAnswerOther => 'Altcineva';
+
+  @override
+  String get reviewAddTask => 'Adaugă sarcina';
+
+  @override
+  String get reviewAnswerFailed => 'Răspunsul tău nu a putut fi salvat. Încearcă din nou.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Acest răspuns etichetează $count conversații';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Vorbitor necunoscut';
+
+  @override
+  String get reviewNewPersonName => 'Numele lui';
+
+  @override
+  String get reviewSomeoneElse => 'Altcineva…';
+
+  @override
+  String get reviewConfirm => 'Confirmă';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Confirmă $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Nu sunt sigur';
+
+  @override
+  String get reviewOpenConversation => 'Conversație';
+
+  @override
+  String get reviewTaskField => 'Sarcină';
+
+  @override
+  String get reviewDue => 'Termen';
+
+  @override
+  String get reviewNoDate => 'Niciunul';
+
+  @override
+  String get reviewProject => 'Proiect';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Deja făcută';
+
+  @override
+  String get reviewReasonNotMine => 'Nu e a mea';
+
+  @override
+  String get reviewReasonNotUseful => 'Nu e utilă';
+
+  @override
+  String get reviewYesMerge => 'Da, îmbină';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Conversații: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Scrie-l';
+
+  @override
+  String get reviewLoadFailed => 'Întrebările tale nu au putut fi încărcate.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nimic de răspuns';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi te va întreba aici doar când are nevoie de tine.';
+
+  @override
+  String get reviewRecentChanges => 'Modificări recente';
+
+  @override
+  String get reviewChangesIntro => 'Ce a schimbat Omi singur în ultimele 30 de zile. Anulează orice pare greșit.';
+
+  @override
+  String get reviewChangeUndone => 'Anulat. Omi nu va mai face asta singur.';
+
+  @override
+  String get reviewChangeFailed => 'Modificarea nu a putut fi actualizată. Încearcă din nou.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Modificările recente nu au putut fi încărcate.';
+
+  @override
+  String get reviewNoChangesTitle => 'Nicio modificare încă';
+
+  @override
+  String get reviewNoChangesBody => 'Când Omi îți ordonează notițele, modificările apar aici.';
+
+  @override
+  String get reviewShowMore => 'Arată mai multe';
+
+  @override
+  String get entityKeptCurrent => 'Menținut la zi de Omi';
+
+  @override
+  String get entityNotRight => 'Nu e corect?';
+
+  @override
+  String get entityCorrectionTitle => 'Ce nu e corect?';
+
+  @override
+  String get entityCorrectionHint => 'Spune-i lui Omi ce să corecteze';
+
+  @override
+  String get entityCorrectionSaved => 'Mulțumim. Omi va corecta.';
+
+  @override
+  String get entityCorrectionFailed => 'Corectarea nu a putut fi trimisă. Încearcă din nou.';
+
+  @override
+  String get entityLoadFailed => 'Această pagină nu a putut fi încărcată.';
+
+  @override
+  String get entityProject => 'Proiect';
+
+  @override
+  String get entityProjects => 'Proiecte';
+
+  @override
+  String get entityDecisions => 'Decizii';
+
+  @override
+  String get entityOpenTasks => 'Sarcini deschise';
+
+  @override
+  String get entityOpenThreads => 'Subiecte deschise';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Se așteaptă $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Termen: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Ce știe Omi';
+
+  @override
+  String get entityRecentConversations => 'Conversații recente';
+
+  @override
+  String get tasksNoProject => 'Fără proiect';
+
+  @override
+  String get tasksGroupByProject => 'Grupează după proiect';
+
+  @override
+  String get tasksGroupByDate => 'Grupează după dată';
 }

@@ -34,6 +34,7 @@ SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
 SMART_MERGE_UID_ALLOWLIST_ENV = 'CONVERSATION_SMART_MERGE_UID_ALLOWLIST'
 SMART_MERGE_AUDIT_ENV = 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'
 SMART_MERGE_FLATTEN_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'
+SMART_MERGE_WALLCLOCK_GAP_MODE_ENV = 'CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -41,6 +42,12 @@ class SmartMergeMode(str, Enum):
     OFF = 'off'  # byte-identical to no feature
     SHADOW = 'shadow'  # decide and record, never merge
     MERGE = 'merge'  # decide, record, and fold the conversation into its predecessor
+
+
+class SmartMergeWallclockGapMode(str, Enum):
+    OFF = 'off'
+    SHADOW = 'shadow'
+    ON = 'on'
 
 
 DEFAULT_SMART_MERGE_MODE = SmartMergeMode.MERGE
@@ -59,6 +66,17 @@ def smart_merge_mode() -> SmartMergeMode:
         return SmartMergeMode(raw)
     except ValueError:
         return SmartMergeMode.OFF
+
+
+def smart_merge_wallclock_gap_mode() -> SmartMergeWallclockGapMode:
+    """Unset, blank or unrecognized is ``off``: the corrected policy is opt-in."""
+    raw = os.getenv(SMART_MERGE_WALLCLOCK_GAP_MODE_ENV, '').strip().lower()
+    if not raw:
+        return SmartMergeWallclockGapMode.OFF
+    try:
+        return SmartMergeWallclockGapMode(raw)
+    except ValueError:
+        return SmartMergeWallclockGapMode.OFF
 
 
 def smart_merge_uid_allowed(uid: str) -> bool:

@@ -129,7 +129,7 @@ def test_recovery_resumes_each_partial_apply_and_dispatches_once(monkeypatch, in
         interrupt('kick')
         return True
 
-    monkeypatch.setattr(sync_jobs, 'get_raw_sync_job', get_job)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', get_job)
     monkeypatch.setattr(sync_jobs, 'create_sync_job', create_job)
     monkeypatch.setattr(sync_ledger, 'claim_sync_content', claim)
     monkeypatch.setattr(sync_backfill_sequencer, 'is_registered', lambda uid, job_id: state['registered'])
@@ -155,7 +155,7 @@ def test_recovery_rejects_existing_job_with_wrong_identity_or_terminal_status(mo
         'created_stage': 'prod',
         'status': 'queued',
     }
-    monkeypatch.setattr(sync_jobs, 'get_raw_sync_job', lambda _job_id: existing)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _job_id: existing)
     assert recovery._requeue(row, old_job) == 'recovery_job_mismatch'
     existing['job_id'] = str(
         recovery.uuid.uuid5(recovery.uuid.NAMESPACE_URL, f"omi:dev-failed-backfill:{row['job_id']}")
@@ -172,11 +172,11 @@ def test_dev_sync_job_and_run_lock_keys_cannot_see_prod(monkeypatch):
     token = sync_jobs.try_acquire_job_run_lock('shared-id')
     assert token
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    assert sync_jobs.get_raw_sync_job('shared-id') is None
+    assert sync_jobs.get_sync_job('shared-id') is None
     assert not sync_jobs.sync_job_run_lock_present('shared-id')
     assert sync_jobs.try_acquire_job_run_lock('shared-id')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    assert sync_jobs.get_raw_sync_job('shared-id')['uid'] == 'u'
+    assert sync_jobs.get_sync_job('shared-id')['uid'] == 'u'
     assert sync_jobs.sync_job_run_lock_present('shared-id')
 
 

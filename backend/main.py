@@ -29,6 +29,9 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    dream_cohort,
+    dream_sweep,
+    review,
     proactivity,
     chat,
     firmware,
@@ -43,6 +46,7 @@ from routers import (
     people,
     agents,
     users,
+    support,
     trends,
     sync,
     apps,
@@ -129,6 +133,7 @@ from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -144,7 +149,6 @@ from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
-from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
@@ -212,6 +216,8 @@ app.add_middleware(
 )
 
 app.include_router(proactivity.router)
+app.include_router(dream_cohort.router)
+app.include_router(dream_sweep.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)
@@ -245,6 +251,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
@@ -313,6 +320,7 @@ app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
+app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
 
 
@@ -329,6 +337,7 @@ methods_timeout = {
 # lock TTL (1800s) so a lock can never expire under a live run.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
@@ -384,10 +393,6 @@ async def startup_event():
     start_background_task(
         run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
         name='startup_byok_abandonment_reconcile',
-    )
-    start_background_task(
-        run_blocking(db_executor, _drain_meeting_receipts),
-        name='startup_meeting_receipt_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
     start_background_task(
@@ -462,16 +467,6 @@ def _drain_abandoned_byok_finalization_jobs():
         logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
 
 
-def _drain_meeting_receipts():
-    """Best-effort repair of missing meeting receipt intents and historical receipts."""
-    try:
-        result = reconcile_meeting_receipts()
-        if result.get('repaired') or result.get('backfilled'):
-            logger.info(f"Startup meeting-receipt reconciliation: {result}")
-    except Exception as e:
-        logger.error(f"Startup meeting-receipt reconciliation failed: {e}")
-
-
 def _listen_finalization_reconcile_interval_seconds() -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
     try:
@@ -512,12 +507,6 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
         except Exception as e:
             logger.error(f"Periodic byok-abandonment reconciliation failed: {e}")
         try:
-            receipt_result = await run_blocking(db_executor, reconcile_meeting_receipts)
-            if receipt_result.get('repaired') or receipt_result.get('backfilled'):
-                logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
-        except Exception as e:
-            logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
-        try:
             await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
         except Exception as e:
             logger.error(f"Periodic durable-queue age publish failed: {e}")
@@ -528,6 +517,7 @@ async def shutdown_event():
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()
+    await shutdown_sync_metrics()
     await close_all_clients()
     close_posthog_control_plane()
     close_free_tier_control_plane()

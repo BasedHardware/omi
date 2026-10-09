@@ -176,7 +176,7 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     # (#19069) so Soniox backs Modulate; the guard that matters is that the
     # windowed TDT leg stays on a reviewed step of the approved ramp
     # (David, 2026-09-29), and the chart agrees with the prod runtime overlay.
-    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') is None
     prod_allocation = _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT')
     assert prod_allocation in {'0', '1', '2', '5', '25', '50', '100'}
     overlay = yaml.safe_load(
@@ -191,7 +191,7 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
         == 'prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local'
     )
     assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '3'
-    assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') is None
     assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '1'
     assert (
         _env_value(dev, 'PARAKEET_BATCH_PRESSURE_POOL_HOST')

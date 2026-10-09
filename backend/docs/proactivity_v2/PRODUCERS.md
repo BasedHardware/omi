@@ -1,19 +1,46 @@
 # Mentor and commitment producers
 
-`MENTOR_PIPELINE=legacy` remains the default. `cohort` selects one pipeline per
-user through the same server-side `proactivity_v2` resolver and cached PostHog client
-as v2 admission: true selects v2; false, unknown or flag errors select unchanged
-legacy. Mentor hosts and gateway admission use the same selector. Set cohort on
-both sides for a per-user rollout; host-wide `v2` otherwise suppresses unflagged
-mentor users. Selection is exclusive per evaluation; v2 failure never invokes legacy.
-`v2` exclusively dispatches the
-conversation mentor through the v2 ledger and reserved gateway calls; invalid
-values invoke neither path, and a v2 failure never invokes legacy. Existing
-buffering, rate checks and debounce have a shared admission helper. Legacy code
-remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
-paid-only admission helper and default-on debounce; its former EXP-005 transcript
-shadow was removed before merge. V2 additionally enforces strict spine admission,
-with draft usefulness measured only by its own budgeted shadow judge.
+`MENTOR_PIPELINE=cohort` is the only valid mode: the legacy mentor pipeline was
+deleted once v2 reached 100% of eligible users. `cohort` selects per user
+through the same server-side `proactivity_v2` resolver and cached PostHog client
+as v2 admission: true selects v2; false, unknown or flag errors dispatch
+nothing (fail closed) — there is no legacy lane to fall back to. Mentor hosts
+and gateway admission use the same selector. Any other env value invokes
+neither path and fails the runtime env validator. Selection is exclusive per
+evaluation; a v2 failure never invokes a second lane. Existing buffering, rate
+checks and debounce have a shared admission helper that v2 rides unchanged.
+Merged PR #20434 supplies the shared paid-only admission helper and
+default-on debounce; its former EXP-005 transcript shadow was removed before
+merge. V2 additionally enforces strict spine admission, with draft usefulness
+measured only by its own budgeted shadow judge.
+
+All v2 model steps bound the serialized provider request to the producer registry's
+byte ceiling before sending it. Gate, draft and critic retain the prompt template
+and response schema, reduce optional history/facts first, and retain the newest
+conversation tail when dialogue alone exceeds the ceiling. Messages, goals, facts
+and history are trimmed as whole entries in source priority order. Only a single
+oversized entry is trimmed within its text, with `[Context truncated]` marking it.
+Jev prefilter, dedupe and usefulness requests obey the same ceiling, including
+JSON escaping and UTF-8 bytes; follow-up copy obeys its smaller 8 KiB ceiling.
+Luna calls explicitly send `stream=false` and `max_completion_tokens` (mentor 2048,
+follow-up 512). Fixed instructions/schema that cannot fit still fail closed.
+The gateway's byte, output, attribution, call and dollar checks remain authoritative.
+`tests/unit/test_proactivity_v2_request_contract.py` drives the real producers,
+gateway client, HTTP authentication/correlation, validators, executors and budget
+reserve/settle with synthetic storage and only the provider HTTP transport faked
+within the model-call path. It covers all six mentor steps, follow-up copy,
+oversized Unicode/escaped context, pre-reservation rejection and retained unknown
+spend without retry.
+
+Gateway terminal warnings include `rejection_reason` for invalid requests, using
+a closed vocabulary capped at 64 characters. Every proactivity budget rejection
+has a stable code; admission codes include the bounded denial reason. Validator
+parameters emit only recognized field roots, discarding dynamic question names
+and unsupported keys. Exception messages, request content and credentials never
+enter this diagnostic field. Validation before route selection uses the same
+diagnostic on `llm_gateway_request_rejected`. Deploy the gateway as well as pusher
+to receive these diagnostics.
+
 Shared legacy formatting/admission and Cloud Tasks enqueue/OIDC helpers expose
 public Python APIs. In-tree callers migrate together; their implementation and
 legacy dispatch behavior are unchanged.

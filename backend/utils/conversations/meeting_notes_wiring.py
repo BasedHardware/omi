@@ -11,16 +11,13 @@ from __future__ import annotations
 
 import logging
 import os
+from importlib import import_module
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from models.calendar_context import CalendarMeetingContext
-from utils.conversations.meeting_context_pack import (
-    gather_meeting_context_pack,
-    load_people_documents,
-    render_meeting_context_pack,
-    resolve_owner_identity,
-    should_gather_meeting_context,
-)
+
+from utils.conversations.meeting_context_gate import should_gather_meeting_context
+from utils.conversations.meeting_context_render import render_meeting_context_pack
 from utils.conversations.meeting_participants import MeetingRoster, normalize_meeting_participants
 from utils.conversations.screen_frame_evidence import (
     NotesFrameImage,
@@ -38,6 +35,11 @@ from utils.conversations.screen_frame_evidence import (
 logger = logging.getLogger(__name__)
 
 
+def meeting_context_sources() -> Any:
+    """The rich retrieval backend is optional; flag-off hot imports must stay cheap."""
+    return import_module('utils.conversations.meeting_context_pack')
+
+
 def _flag_enabled(name: str, *, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -46,11 +48,13 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
 
 
 def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_text_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED')
+    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
+    return True
 
 
 def meeting_notes_screen_frames_context_enabled() -> bool:
@@ -59,10 +63,7 @@ def meeting_notes_screen_frames_context_enabled() -> bool:
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Frame names and summaries are screen text: they ride the screen-text flag.
-    # Images need the same docs, so either flag loads them.
-    if not (meeting_notes_screen_text_context_enabled() or meeting_notes_screen_frames_context_enabled()):
-        return ()
+    # Screen text is always available; images still have their own gate.
     return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
 
 
@@ -106,8 +107,8 @@ def _rich_meeting_roster(
                 started_at=frame_evidence_started_at(conversation),
                 duration_minutes=frame_evidence_duration_minutes(conversation),
             )
-        people_docs = load_people_documents(uid)
-        owner_name, owner_emails = resolve_owner_identity(uid)
+        people_docs = meeting_context_sources().load_people_documents(uid)
+        owner_name, owner_emails = meeting_context_sources().resolve_owner_identity(uid)
         roster = normalize_meeting_participants(
             calendar_context,
             getattr(conversation, 'source', None),
@@ -137,7 +138,7 @@ def _rich_meeting_context_block(
     pack comes back empty. Called only at the notes call site — memory and app
     prompts share the roster but never gather background."""
     try:
-        pack = gather_meeting_context_pack(
+        pack = meeting_context_sources().gather_meeting_context_pack(
             uid,
             conversation,
             roster,
@@ -177,7 +178,11 @@ def rich_notes_inputs(
     include_screen_text: bool,
 ) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
     """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
-    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(uid, conversation, calendar_context)
+    roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
+        uid,
+        conversation,
+        calendar_context,
+    )
     if roster is None or not include_background:
         return roster, None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)

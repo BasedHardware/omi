@@ -9946,11 +9946,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Tidak dirakam ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profil Suara $name';
   }
@@ -12443,4 +12438,257 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dismiss => 'Tutup';
+
+  @override
+  String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Akaun ini sedang dipadamkan. Log masuk dengan akaun lain, atau tunggu beberapa minit dan cuba lagi.';
+
+  @override
+  String get onboardingSetupTitle => 'Menyediakan Omi anda';
+
+  @override
+  String get onboardingSetupSubtitle => 'Beri Omi sedikit masa untuk memperibadikan';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Menyediakan ruang kerja anda';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Menala transkripsi mengikut bahasa anda';
+
+  @override
+  String get onboardingSetupStepMemory => 'Menyediakan memori anda';
+
+  @override
+  String get onboardingSetupStepDevices => 'Menyambungkan peranti anda';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Memperibadikan pengalaman anda';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Adakah anda menikmati Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Ya';
+
+  @override
+  String get onboardingRatingPromptNo => 'Tidak';
+
+  @override
+  String get partialRecording => 'Rakaman separa';
+
+  @override
+  String get importTranscriptFiles => 'Fail transkrip';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pilih transkrip SRT, VTT atau TXT, atau ZIP yang mengandunginya';
+
+  @override
+  String get importTooManyAttempts => 'Terlalu banyak import sekarang. Cuba lagi kemudian.';
+
+  @override
+  String get importFileTooLarge => 'Fail ini terlalu besar untuk diimport.';
+
+  @override
+  String get importUnsupportedFileType => 'Jenis fail ini tidak boleh diimport.';
+
+  @override
+  String get reviewTitle => 'Semakan';
+
+  @override
+  String get reviewEntryTitle => 'Soalan untuk anda';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count lagi';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Siapa yang berkata ini?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Orang yang sama dengan “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Bagaimana ejaannya?';
+
+  @override
+  String get reviewPlayClip => 'Main klip';
+
+  @override
+  String get reviewStopClip => 'Henti klip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Membuka butiran';
+
+  @override
+  String get reviewAnswerMe => 'Saya';
+
+  @override
+  String get reviewAnswerOther => 'Lain-lain';
+
+  @override
+  String get reviewAddTask => 'Tambah Tugasan';
+
+  @override
+  String get reviewAnswerFailed => 'Jawapan anda tidak dapat disimpan. Cuba lagi.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Jawapan ini melabel $count perbualan';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Penutur tidak dikenali';
+
+  @override
+  String get reviewNewPersonName => 'Nama mereka';
+
+  @override
+  String get reviewSomeoneElse => 'Orang lain…';
+
+  @override
+  String get reviewConfirm => 'Sahkan';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Sahkan $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Tidak pasti';
+
+  @override
+  String get reviewOpenConversation => 'Perbualan';
+
+  @override
+  String get reviewTaskField => 'Tugasan';
+
+  @override
+  String get reviewDue => 'Tarikh akhir';
+
+  @override
+  String get reviewNoDate => 'Tiada';
+
+  @override
+  String get reviewProject => 'Projek';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Sudah selesai';
+
+  @override
+  String get reviewReasonNotMine => 'Bukan milik saya';
+
+  @override
+  String get reviewReasonNotUseful => 'Tidak berguna';
+
+  @override
+  String get reviewYesMerge => 'Ya, gabungkan';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Perbualan: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Taip sendiri';
+
+  @override
+  String get reviewLoadFailed => 'Soalan anda tidak dapat dimuatkan.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Tiada apa untuk dijawab';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi hanya akan bertanya di sini apabila memerlukan anda.';
+
+  @override
+  String get reviewRecentChanges => 'Perubahan Terkini';
+
+  @override
+  String get reviewChangesIntro =>
+      'Apa yang Omi ubah sendiri dalam 30 hari lepas. Buat asal apa-apa yang nampak salah.';
+
+  @override
+  String get reviewChangeUndone => 'Dibuat asal. Omi tidak akan mengulanginya sendiri.';
+
+  @override
+  String get reviewChangeFailed => 'Perubahan ini tidak dapat dikemas kini. Cuba lagi.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Perubahan terkini tidak dapat dimuatkan.';
+
+  @override
+  String get reviewNoChangesTitle => 'Belum ada perubahan';
+
+  @override
+  String get reviewNoChangesBody => 'Apabila Omi mengemas nota anda, perubahan akan muncul di sini.';
+
+  @override
+  String get reviewShowMore => 'Tunjuk Lagi';
+
+  @override
+  String get entityKeptCurrent => 'Dikemas kini oleh Omi';
+
+  @override
+  String get entityNotRight => 'Tidak betul?';
+
+  @override
+  String get entityCorrectionTitle => 'Apa yang tidak betul?';
+
+  @override
+  String get entityCorrectionHint => 'Beritahu Omi apa yang perlu dibetulkan';
+
+  @override
+  String get entityCorrectionSaved => 'Terima kasih. Omi akan membetulkannya.';
+
+  @override
+  String get entityCorrectionFailed => 'Pembetulan anda tidak dapat dihantar. Cuba lagi.';
+
+  @override
+  String get entityLoadFailed => 'Halaman ini tidak dapat dimuatkan.';
+
+  @override
+  String get entityProject => 'Projek';
+
+  @override
+  String get entityProjects => 'Projek';
+
+  @override
+  String get entityDecisions => 'Keputusan';
+
+  @override
+  String get entityOpenTasks => 'Tugasan terbuka';
+
+  @override
+  String get entityOpenThreads => 'Topik terbuka';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Menunggu $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Tarikh akhir $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Apa yang Omi tahu';
+
+  @override
+  String get entityRecentConversations => 'Perbualan terkini';
+
+  @override
+  String get tasksNoProject => 'Tiada projek';
+
+  @override
+  String get tasksGroupByProject => 'Kumpulkan mengikut Projek';
+
+  @override
+  String get tasksGroupByDate => 'Kumpulkan mengikut Tarikh';
 }

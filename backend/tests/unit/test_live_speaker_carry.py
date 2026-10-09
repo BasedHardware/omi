@@ -653,3 +653,13 @@ async def test_rollover_never_carries_from_a_torn_previous_row(monkeypatch, flag
     controller = harness.connect(_stamped_epoch())
     await controller.create_new_in_progress_conversation(rollover=True)
     assert 'manual_speaker_assignments' not in harness.rows[harness.pointer]
+
+
+def test_range_assignment_never_promotes_to_rollover_voice():
+    receipt = {
+        'generation': 4,
+        'segments': {
+            's0': {'generation': 4, 'person_id': 'p1', 'is_user': False, 'speaker_id': 0, 'segment_only': True},
+        },
+    }
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}

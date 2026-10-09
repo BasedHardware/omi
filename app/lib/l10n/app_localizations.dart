@@ -18459,12 +18459,6 @@ abstract class AppLocalizations {
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
 
-  /// Header for the calendar capture-gap group in the conversations list
-  ///
-  /// In en, this message translates to:
-  /// **'Not captured ({count})'**
-  String conversationsNotCapturedCount(int count);
-
   /// Title shown on the speech profile page when the user already has a speech profile set up
   ///
   /// In en, this message translates to:
@@ -22220,6 +22214,480 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dismiss'**
   String get dismiss;
+
+  /// Setting for recording Live Activities on the lock screen and Dynamic Island
+  ///
+  /// In en, this message translates to:
+  /// **'Show on Lock Screen'**
+  String get showOnLockScreen;
+
+  /// Shown on the sign-in screen after the backend refused every request because the account's deletion is still in progress
+  ///
+  /// In en, this message translates to:
+  /// **'This account is being deleted. Sign in with another account, or wait a few minutes and try again.'**
+  String get accountDeletionInProgressSignInAgain;
+
+  /// Onboarding setup page title
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up your Omi'**
+  String get onboardingSetupTitle;
+
+  /// Onboarding setup page subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Give Omi a moment to personalize'**
+  String get onboardingSetupSubtitle;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing your workspace'**
+  String get onboardingSetupStepWorkspace;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Tuning transcription to your language'**
+  String get onboardingSetupStepLanguage;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up your memory'**
+  String get onboardingSetupStepMemory;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting your devices'**
+  String get onboardingSetupStepDevices;
+
+  /// Onboarding setup checklist step
+  ///
+  /// In en, this message translates to:
+  /// **'Personalizing your experience'**
+  String get onboardingSetupStepPersonalize;
+
+  /// Store rating pre-prompt title shown on the onboarding setup page
+  ///
+  /// In en, this message translates to:
+  /// **'Are you enjoying Omi?'**
+  String get onboardingRatingPromptTitle;
+
+  /// Store rating pre-prompt: open the store review sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get onboardingRatingPromptYes;
+
+  /// Store rating pre-prompt: decline
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get onboardingRatingPromptNo;
+
+  /// Conversation detail badge shown when capture evidence says the recording is incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial recording'**
+  String get partialRecording;
+
+  /// Import source card title for SRT, VTT or TXT transcripts exported from other apps
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript files'**
+  String get importTranscriptFiles;
+
+  /// Subtitle on the transcript-files import card
+  ///
+  /// In en, this message translates to:
+  /// **'Select SRT, VTT or TXT transcripts, or a ZIP of them'**
+  String get importTranscriptFilesDescription;
+
+  /// Error when an import is refused because the user started too many imports in a short time (HTTP 429)
+  ///
+  /// In en, this message translates to:
+  /// **'Too many imports right now. Try again later.'**
+  String get importTooManyAttempts;
+
+  /// Error when the selected import file is over the upload size limit
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large to import.'**
+  String get importFileTooLarge;
+
+  /// Error when the file picked for an import has an extension the importer does not accept
+  ///
+  /// In en, this message translates to:
+  /// **'This file type can\'t be imported.'**
+  String get importUnsupportedFileType;
+
+  /// Title of the Review page: a few questions the app asks the user to answer
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get reviewTitle;
+
+  /// Home card that opens Review; a count badge sits beside it
+  ///
+  /// In en, this message translates to:
+  /// **'Questions for you'**
+  String get reviewEntryTitle;
+
+  /// Header counter: questions left to answer today
+  ///
+  /// In en, this message translates to:
+  /// **'{count} left'**
+  String reviewRemaining(int count);
+
+  /// Question card: identify the speaker of a short voice clip
+  ///
+  /// In en, this message translates to:
+  /// **'Who said this?'**
+  String get reviewQuestionSpeaker;
+
+  /// Question card: are two contact profiles the same person
+  ///
+  /// In en, this message translates to:
+  /// **'Same person as “{name}”?'**
+  String reviewQuestionSamePerson(String name);
+
+  /// Question card: confirm the spelling of a name or term
+  ///
+  /// In en, this message translates to:
+  /// **'How is this spelled?'**
+  String get reviewQuestionSpelling;
+
+  /// Accessibility label of the play button for a voice clip
+  ///
+  /// In en, this message translates to:
+  /// **'Play clip'**
+  String get reviewPlayClip;
+
+  /// Accessibility label of the stop button for a voice clip
+  ///
+  /// In en, this message translates to:
+  /// **'Stop clip'**
+  String get reviewStopClip;
+
+  /// Accessibility hint: tapping the card opens more context
+  ///
+  /// In en, this message translates to:
+  /// **'Opens details'**
+  String get reviewOpenDetailsHint;
+
+  /// Answer: the speaker is the user themself
+  ///
+  /// In en, this message translates to:
+  /// **'Me'**
+  String get reviewAnswerMe;
+
+  /// Answer chip that opens the full list of choices
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get reviewAnswerOther;
+
+  /// Button: accept a suggested task (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Add Task'**
+  String get reviewAddTask;
+
+  /// Error toast
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t save your answer. Try again.'**
+  String get reviewAnswerFailed;
+
+  /// Shown only when count is 2 or more
+  ///
+  /// In en, this message translates to:
+  /// **'This answer labels {count} conversations'**
+  String reviewAnswersConversations(int count);
+
+  /// Label for the speaker being asked about
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown speaker'**
+  String get reviewUnknownSpeaker;
+
+  /// Text field label to name a new person
+  ///
+  /// In en, this message translates to:
+  /// **'Their name'**
+  String get reviewNewPersonName;
+
+  /// Button: the speaker is someone not listed (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Someone Else…'**
+  String get reviewSomeoneElse;
+
+  /// Button
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get reviewConfirm;
+
+  /// Button: confirm the chosen person
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm {name}'**
+  String reviewConfirmPerson(String name);
+
+  /// Button (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Not Sure'**
+  String get reviewNotSure;
+
+  /// Chip that opens the source conversation when it has no title
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get reviewOpenConversation;
+
+  /// Text field label for the task text
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get reviewTaskField;
+
+  /// Row label: due date
+  ///
+  /// In en, this message translates to:
+  /// **'Due'**
+  String get reviewDue;
+
+  /// Value when a task has no due date
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get reviewNoDate;
+
+  /// Row label: the project a task belongs to
+  ///
+  /// In en, this message translates to:
+  /// **'Project'**
+  String get reviewProject;
+
+  /// Dismiss reason chip (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Already Done'**
+  String get reviewReasonAlreadyDone;
+
+  /// Dismiss reason chip (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Not Mine'**
+  String get reviewReasonNotMine;
+
+  /// Dismiss reason chip (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Not Useful'**
+  String get reviewReasonNotUseful;
+
+  /// Button: merge two profiles into one person (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, Merge'**
+  String get reviewYesMerge;
+
+  /// How many conversations a profile appears in
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations: {count}'**
+  String reviewConversationCount(int count);
+
+  /// Text field label to type a different spelling
+  ///
+  /// In en, this message translates to:
+  /// **'Type it'**
+  String get reviewSpellingCustom;
+
+  /// Error state
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t load your questions.'**
+  String get reviewLoadFailed;
+
+  /// Empty state title
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to answer'**
+  String get reviewCaughtUpTitle;
+
+  /// Empty state body
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will ask here only when it needs you.'**
+  String get reviewCaughtUpBody;
+
+  /// Link and page title: changes the app made on its own (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Changes'**
+  String get reviewRecentChanges;
+
+  /// Intro line on Recent Changes
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi changed on its own in the last 30 days. Undo anything that looks wrong.'**
+  String get reviewChangesIntro;
+
+  /// Shown under a change the user undid
+  ///
+  /// In en, this message translates to:
+  /// **'Undone. Omi won’t redo this on its own.'**
+  String get reviewChangeUndone;
+
+  /// Error toast
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t update this change. Try again.'**
+  String get reviewChangeFailed;
+
+  /// Error state
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t load recent changes.'**
+  String get reviewChangesLoadFailed;
+
+  /// Empty state title
+  ///
+  /// In en, this message translates to:
+  /// **'No changes yet'**
+  String get reviewNoChangesTitle;
+
+  /// Empty state body
+  ///
+  /// In en, this message translates to:
+  /// **'When Omi tidies your notes, the changes appear here.'**
+  String get reviewNoChangesBody;
+
+  /// Button (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Show More'**
+  String get reviewShowMore;
+
+  /// Footnote under a summary the app maintains
+  ///
+  /// In en, this message translates to:
+  /// **'Kept current by Omi'**
+  String get entityKeptCurrent;
+
+  /// Button that opens a correction form
+  ///
+  /// In en, this message translates to:
+  /// **'Not right?'**
+  String get entityNotRight;
+
+  /// Sheet title for correcting a person, organization or project page
+  ///
+  /// In en, this message translates to:
+  /// **'What’s not right?'**
+  String get entityCorrectionTitle;
+
+  /// Text field hint
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi what to fix'**
+  String get entityCorrectionHint;
+
+  /// Confirmation toast
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks. Omi will fix it.'**
+  String get entityCorrectionSaved;
+
+  /// Error toast
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t send your correction. Try again.'**
+  String get entityCorrectionFailed;
+
+  /// Error state
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t load this page.'**
+  String get entityLoadFailed;
+
+  /// Label above a project page title
+  ///
+  /// In en, this message translates to:
+  /// **'Project'**
+  String get entityProject;
+
+  /// Section label
+  ///
+  /// In en, this message translates to:
+  /// **'Projects'**
+  String get entityProjects;
+
+  /// Section label: decisions made in a project
+  ///
+  /// In en, this message translates to:
+  /// **'Decisions'**
+  String get entityDecisions;
+
+  /// Section label
+  ///
+  /// In en, this message translates to:
+  /// **'Open tasks'**
+  String get entityOpenTasks;
+
+  /// Section label: unresolved items involving this person or organization
+  ///
+  /// In en, this message translates to:
+  /// **'Open threads'**
+  String get entityOpenThreads;
+
+  /// A task blocked on someone
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on {name}'**
+  String entityWaitingOn(String name);
+
+  /// Task due date
+  ///
+  /// In en, this message translates to:
+  /// **'Due {date}'**
+  String entityDue(String date);
+
+  /// Section label: facts with their sources
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi knows'**
+  String get entityWhatOmiKnows;
+
+  /// Section label
+  ///
+  /// In en, this message translates to:
+  /// **'Recent conversations'**
+  String get entityRecentConversations;
+
+  /// Group header for tasks without a project
+  ///
+  /// In en, this message translates to:
+  /// **'No project'**
+  String get tasksNoProject;
+
+  /// Menu item (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Group by Project'**
+  String get tasksGroupByProject;
+
+  /// Menu item (Title Case)
+  ///
+  /// In en, this message translates to:
+  /// **'Group by Date'**
+  String get tasksGroupByDate;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

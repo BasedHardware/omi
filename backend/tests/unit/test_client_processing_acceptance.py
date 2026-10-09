@@ -74,6 +74,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.run_transactional = lambda client, operation: operation(client.transaction())
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
     add('database._client', client_mod)
+    tombstones = add('database.conversation_tombstones', AutoMockModule('database.conversation_tombstones'))
+    tombstones.is_deleted = MagicMock(return_value=False)
 
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
@@ -140,12 +142,9 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
@@ -273,7 +272,7 @@ def stack():
             os.path.join(str(_BACKEND), 'routers', 'developer.py'),
         )
         dev.resolve_geolocation = lambda g: g
-        dev.record_and_persist_finalized_meeting_receipt = lambda *_args, **_kwargs: None
+        dev.record_finalized_meeting_receipt = lambda *_args, **_kwargs: None
         yield pc, dev
 
 

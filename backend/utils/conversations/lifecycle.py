@@ -8,12 +8,14 @@ lifecycle fields directly.
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase
+
 import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
@@ -131,6 +133,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return created
 
 
+@sync_phase('firestore')
 def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
     """Admit a retained deterministic sync row and atomically append later chunks.
 
@@ -147,6 +150,7 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
+@sync_phase('firestore')
 def persist_processed_conversation(
     uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
 ) -> bool:
@@ -450,9 +454,20 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict[str, Any]) -> bool:
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
     """A relevance verdict reached after the fact; never overrides a restore."""
-    return conversations_db.discard_by_relevance(uid, conversation_id, relevance_decision)
+    return conversations_db.discard_by_relevance(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
 
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:

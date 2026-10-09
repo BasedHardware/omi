@@ -138,3 +138,48 @@ async def test_preserve_provider_pieces_instead_of_discarding_known_windows(monk
         assert stored[-1]['audio_capture_end'] == pytest.approx(T0 + (11.9 if loss == 'gap' else 7.9))
     else:
         assert all('audio_capture_start' not in s for s in stored)
+
+
+@pytest.mark.parametrize('enabled,frames', [(False, 2), (True, 70)])
+@pytest.mark.parametrize('strict', [False, True])
+@pytest.mark.parametrize('start,end', [(0.9, 1.1), (0.9, 1.0), (1.0, 1.1)])
+async def test_half_open_hiatus_window_receiver_persistence(monkeypatch, enabled, frames, strict, start, end):
+    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'true' if strict else 'false')
+    receiver, callback, epoch, sender = setup(monkeypatch, enabled, 'modulate')
+    pcm = b'\0\0' * RATE
+    for index in range(frames):
+        first, _, _ = receiver.capture_timeline.accept(pcm, T0 + index * 4 + 1, index * 4 + 1)
+        assert sender.send(pcm, start_sample=first)
+    callback([dict(id='boundary', text='Observed audio.', start=start, end=end, speaker='SPEAKER_00', is_user=False)])
+    (stored,) = await drain(monkeypatch, receiver)
+    if strict and start < 1 < end:
+        assert 'audio_capture_start' not in stored and 'audio_capture_end' not in stored
+    else:
+        expected_start = T0 + (start if start < 1 else start + 3)
+        expected_end = T0 + (end if end < 1 or (strict and end == 1) else end + 3)
+        assert stored['audio_capture_start'] == pytest.approx(expected_start, rel=0, abs=1e-6)
+        assert stored['audio_capture_end'] == pytest.approx(expected_end, rel=0, abs=1e-6)
+
+
+@pytest.mark.parametrize('enabled,frames', [(False, 2), (True, 70)])
+@pytest.mark.parametrize('start,end', [(0.9, 1.1), (0.9, 1.0), (1.0, 1.1)])
+async def test_v2_receiver_half_open_projection_even_legacy_switch_off(monkeypatch, enabled, frames, start, end):
+    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
+    receiver, _, _, _ = setup(monkeypatch, enabled, 'modulate')
+    receiver.capture_timeline_v2 = True  # Synthetic admitted row; deployment flag stays OFF.
+    _, callback, epoch = build_stt_callbacks(receiver)
+    sender = _RecordingSTTSocket(SimpleNamespace(send=lambda *a, **kw: True), epoch)
+    pcm = b'\0\0' * RATE
+    for index in range(frames):
+        first, last, _ = receiver.capture_timeline.accept(pcm, T0 + index * 4 + 1, index * 4 + 1)
+        receiver._note_accepted_frame(first, last)
+        assert sender.send(pcm, start_sample=first)
+    callback([dict(id='v2', text='Observed audio.', start=start, end=end, speaker='SPEAKER_00', is_user=False)])
+    (raw,) = receiver.collected
+    if start < 1 < end:
+        assert raw['audio_alignment'] == 'unplaced'
+        assert 'audio_capture_run' not in raw
+    else:
+        assert raw.get('audio_alignment') != 'unplaced'
+        assert raw['start'] == pytest.approx(T0 + (start if start < 1 else start + 3), rel=0, abs=1e-6)
+        assert raw['end'] == pytest.approx(T0 + (end if end <= 1 else end + 3), rel=0, abs=1e-6)

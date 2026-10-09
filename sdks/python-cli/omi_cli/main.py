@@ -28,7 +28,9 @@ from omi_cli import config as cfg
 from omi_cli.auth.api_key import validate_api_key_format
 from omi_cli.client import OmiClient
 from omi_cli.commands import action_item as action_item_cmd
+from omi_cli.commands import app as app_cmd
 from omi_cli.commands import auth as auth_cmd
+from omi_cli.commands import chat as chat_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
@@ -205,6 +207,18 @@ def ask(
                 typer.echo(line)
 
 
+@app.command(help="Chat with Omi in your terminal, with streaming replies and shared history.")
+def chat(
+    typer_ctx: typer.Context,
+    prompt: Optional[str] = typer.Argument(None, help="One message to send; omit for interactive chat."),
+    history: bool = typer.Option(False, "--history", help="Show recent shared chat messages."),
+    clear: bool = typer.Option(False, "--clear", help="Clear shared chat history across clients."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Confirm --clear without a prompt."),
+    limit: int = typer.Option(20, "--limit", min=1, max=1000, help="Messages shown by --history or /history."),
+) -> None:
+    chat_cmd.run(typer_ctx.obj, prompt=prompt, history=history, clear=clear, yes=yes, limit=limit)
+
+
 # ---------------------------------------------------------------------------
 # Sub-command registration
 # ---------------------------------------------------------------------------
@@ -216,6 +230,7 @@ app.add_typer(conversation_cmd.app, name="conversation", help="Conversations —
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
 app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
+app.add_typer(app_cmd.app, name="app", help="Build and test Omi apps: webhook events, samples, local receiver.")
 
 
 # ---------------------------------------------------------------------------
