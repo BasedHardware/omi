@@ -14,13 +14,19 @@ controls and materials. Reading content stays opaque and text uses the system ty
 Shared presentation rules live in Swift only and use snapshot copy alone: `NativeMetrics` (card
 radius matching inset-grouped cells, block radius, 44 pt rows, system-blue accent for selection
 marks and tags), centred `NativeEmptyState` (ContentUnavailableView on iOS 17+), one
-`NativeSectionHeader` style for Home's titled sections, and `NativeBadge` for a subtitle that is
-a short all-caps tag. Transcript speakers get a stable `NativeSpeakerTint` hue from their label (never
-purple, INV-UI-1). Round controls (composer, player, bottom bars, Home footer) are 44 pt
-`NativeCircleButtonStyle` circles; a screen's one primary action (Send, play/pause, a stage's
-Continue, Copy) is the neutral accent with inverse ink, and plain glass while it cannot act.
-Switches use the system on-state green, because a white track hides the white knob. Toasts and the
-activity HUD tint their glass with their own background so text keeps its contrast over any page.
+`NativeSectionHeader` with a View All action for Home's titled sections (one recap fills the row;
+several page as a carousel), and `NativeBadge` for a subtitle that is a short all-caps tag. Rich
+text uses a heading ramp, secondary list markers, a quote bar and translucent code/table blocks.
+Transcript speakers get a stable `NativeSpeakerTint` hue from their label (never purple, INV-UI-1).
+Round controls (composer, player, bottom bars, Home footer) are 44 pt `NativeCircleButtonStyle`
+circles; a screen's one primary action (Send, play/pause, a stage's Continue, Copy) is the neutral
+accent with inverse ink, and plain glass while it cannot act. The chat composer follows Messages
+order (attachment menu, a 44 pt capsule field that grows to six lines, Send); the reader player has a
+56 pt play/pause. On iOS 26 both sit in `safeAreaBar`, so content gets the system scroll-edge effect.
+Modal sheets place Cancel and Save with `.cancellationAction`/`.confirmationAction`. Switches use the
+system on-state green, because a white track hides the white knob. Toasts and the activity HUD tint
+their glass with their own background so text keeps its contrast over any page; graph labels keep
+a faded backing and a 10 pt floor.
 
 Home is one SwiftUI screen: device/header actions, authoritative capture status and controls,
 recovery notices, recaps, recordings, dated conversations and the bottom controls share the
@@ -33,22 +39,45 @@ Pushed details cover the root bar and return to the selected tab. Explicit Home/
 navigation and deep links select the corresponding root tab without adding another Home
 route. The bar uses the existing account-scoped command bridge, with no separate data owner.
 
-| Area | Native presentation | Existing feature surfaces retained |
+| Area | Native presentation | Stays classic or owned elsewhere |
 |---|---|---|
-| Main navigation | System tab bar, localized labels, selected state and lazy retained root screens | Existing pushed routes and backend/provider owners |
-| Home and library | Home, dated lists, local recording entry points, gaps, processing, paging, recap browsing, full rich summary/transcript detail, playback/timeline following, guarded title/summary/transcript/speaker editors, calendar/recording sheets and lazy photo zoom/paging/share | Specialized feedback/review sheets and bulk selection |
-| Search and People | Recent searches, folders, starred items, scoped results, People search/filters/pinning/confidence/voice samples/cleanup, create/edit/move/delete folder sheets | Advanced search result selection |
-| Tasks and Memories | Lists, dated Tasks, search, completion, menus, create/edit forms with explicit Save and discard guard; memory categories, belief collection, device filter and bulk management | List selection, hierarchy/reorder and Mind Map |
-| Apps | Catalog, app detail, owner add/edit/confirmation, gallery, Markdown/MCP setup, filters, declared permission disclosures, enable/disable/subscribe actions and guarded review editor | Secure API-key creation/reveal, AI generator and specialized payout screens |
-| Settings | Navigation, profile, display/notifications, language, privacy, permissions, recording groups, device settings, plan selection/management, integrations, Apple Health, vocabulary, JSON transcription editor, developer/webhook forms, export progress/cancel, fair-use status, detailed usage/periods/quotas/share, import history/actions, custom transcription setup, phone/cloud storage settings, Offline Sync and task service configuration (Asana/ClickUp/Todoist/Google Tasks) | Existing checkout/OAuth owners, secure developer credentials, wrapped, Shortcuts setup, recording-file detail/storage management and device-specific controls |
-| Diagnostics | Connection summaries, live signal and battery charts, day/week choice, disconnect history, export | Same Bluetooth polling and export owners |
-| Chat | Transcript/composer, send/retry, follow-up, scoped context, voice waveform/Stop/Send/Retry/Discard, attachment picker/removal/previews and app picker | Structured interactive message inspector and non-image attachment viewers |
-| First run | Sign-in actions, consent, name, primary language, acquisition survey, permission rows, guided voice prompts/waveform/review/edit/save receipts, step navigation and completion | Device discovery, interactive pendant setup and knowledge graph |
-| Calls | Setup disclosure, country/phone entry, verification status/retry, caller-ID management, contacts/search/permissions, dialer/DTMF, active-call transcript/controls and audio output | Physical call/audio-route verification |
-| Confirmations | System alerts, action menus, guarded native input/opt-out sheets | Specialized dialog widgets that have not yet adopted the shared presentation API |
+| Main navigation | System tab bar, localized labels, selected state and lazy retained root screens | |
+| Home and capture | Home, capture card, live capture and processing pages, record options/listening and problem sheets, recaps with journey, memories-learned review and stats | Static map images with explicit Maps hand-off (no MapKit tiles); upstream's Review entry and its Review/Recent changes pages |
+| Library and search | Dated lists, paging, bulk select/merge/delete/move, row menus, day list, folders, Places map and cluster chooser, recent/starred, scoped search with People and date filter | |
+| Conversations | Full summary/transcript reader, playback/timeline following, editors, speaker review and earlier voice matches, feedback/template/visibility/share sheets, test prompt, calendar/recording sheets, photo zoom/paging/share, recording-file detail and local recording sheet | Upstream entity pages |
+| People | Search, filters, pinning, confidence, voice samples, cleanup, create/edit/move/delete sheets | |
+| Tasks and Goals | Dated Tasks, project grouping, cascade selection with bulk delete/export, indent, reorder, due-date moves, collapsible sections, swipe complete/delete, guarded forms, Goals page/form, accept shared tasks | |
+| Memories | Lists with review/use/revert, filters, bulk management, Mind Map card, Memory Graph page with selection/share | |
+| Chat | Transcript/composer, voice, attachments, app picker, rich AI replies (Markdown, structured blocks, citations, charts, activity timeline, memory review), feedback and options sheets | Viewers for historical non-image attachments (no stored copy in Flutter or the backend) |
+| Apps | Catalog, detail, reviews with star filter/owner reply, app options, capability/category pages, owner add/edit, one-time API keys, AI app generator, payouts and Stripe Connect setup | App web home (WKWebView), Stripe onboarding in the browser |
+| Settings | Navigation, profile/name, appearance, notifications, language, privacy with the App Shortcuts link, permissions, assistant voice, conversation timeout, transcription tools/import, usage, plans and leave flows, developer API/MCP keys and debug logs, Wrapped 2025, integrations, task services, Apple Health | Checkout/customer-portal web view, referral web page, dormant training-data opt-in |
+| Devices | Discovery/pairing (Apple Watch, Ray-Ban Meta, guides, Bluetooth guidance), device settings with level controls, diagnostics/support, firmware update/OTA/flash, Offline Sync pages, storage sheets and confirmations, synced conversations | |
+| First run and prompts | Auth, consent, name, language, acquisition, permissions, guided voice, knowledge graph step, interactive device tutorial, announcements, feature screens, What's New, upgrade/rating prompts, language sheet | Signed-out welcome video |
+| Calls | Setup disclosure, phone entry/verification, caller ID, contacts, dialer/DTMF, active-call transcript/controls and audio output | |
+| Feedback | System alerts, action menus, input sheets, blocking activity HUD, toasts | Crash and startup-failure screens |
 
-These retained surfaces are explicit parity work, not a completed full-app migration. Keep them
-available while moving them screen by screen; removing access to a feature is not a migration.
+The last column lists what stays classic on purpose: web content and checkout whose navigation
+and cookies stay with their WKWebView owners, a branded video, crash/startup fallbacks that must
+not depend on the bridge, and system UIs (share sheet, Maps, Intercom, StoreKit review, Shortcuts).
+Decorative animations (tutorial demos, Wrapped story paging, shimmer, scanning ripple) are not
+reproduced; native screens present the same data and actions, and the animated versions remain in
+each classic fallback. Screens merged from upstream after the migration batches (the October 8
+Review entry, Review questions, Recent changes and entity pages) still use Flutter, and native Home
+does not show the Review entry yet.
+
+## Fallback
+
+- Flag off, Android or iOS below 16: the complete classic app. `isSupported` is checked before a
+  native view is constructed, and `NativeFeedbackHost.active` stays false, so feedback stays Flutter.
+- A row that fails Dart validation, or a snapshot Swift's decoder rejects (`invalid_native_snapshot`),
+  shows the entire classic Flutter screen for that page's lifetime, never a blank or half-native page.
+  Unknown controls and invalid legacy picker values do the same.
+- `showIosNativeModal` returns null for invalid rows or an unsupported host and the caller shows its
+  Flutter dialog; a cancel is a non-null result without an action. `showOmiSheet` keeps the Flutter
+  body beside its `nativeBuilder`. A toast, activity or secret sheet the host does not present falls
+  back to the Flutter snackbar, spinner or classic sheet.
+- Capability rows appear only when the host reports them (`shortcuts_link`); inputs over a bounded
+  native editor (JSON above 262,144 text units) keep the complete classic editor.
 
 ## Ownership and bridge
 
@@ -67,7 +96,7 @@ containment. Both Runner targets compile the same renderer.
   reports that reason in place of Swift's reply.
 - `com.omi.native_ui/home/<view id>`: localized Home/read snapshots and existing read/navigation
   callbacks (`detail`, `open`, `browse`, `refresh`, `loadMore`, capture and chrome actions).
-- `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`/bounded explicit `captureImage`
+- `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat, charts and graphs; `update`/`invalidate`/bounded explicit `captureImage`
   and a whitelisted `action` command. Callbacks stay in Dart with their existing owner.
 - Native code receives no app-auth tokens and adds no backend client, database, recording coordinator or
   persistent conversation cache. Auth/Firebase, HTTP, BLE, microphone, recovery, subscription
@@ -114,8 +143,8 @@ containment. Both Runner targets compile the same renderer.
   temporary sandbox file. Native UIScrollView owns pinch/pan/double-tap zoom; the existing share owner retains its
   file handoff. Session changes and disposal delete temporary presentation images, including late loader completions.
 - App-owner metadata/prompts/pricing keep the mounted original forms and validators. Native edits update their existing
-  controllers; submit/update occurs only after explicit confirmation. Secure key creation/reveal stays with its existing
-  credential owner. Export cancellation completes the original abort signal and cleanup; developer URL edits keep the
+  controllers; submit/update occurs only after explicit confirmation. Key creation stays with its existing credential
+  owner, which shows the new key once through the secret sheet. Export cancellation completes the original abort signal and cleanup; developer URL edits keep the
   original explicit Save/discard semantics, while existing switches retain immediate persistence.
 - Custom transcription keeps the current provider/configuration owner and explicit Save/import/export.
   A replacement key starts in a blank native SecureField; routine snapshots omit the saved key.
@@ -136,6 +165,35 @@ containment. Both Runner targets compile the same renderer.
   optimistically until a newer snapshot or a refusal. Swipes repeat context-menu options; collapsing is presentation
   only. Owners exit their selection mode when their route pops or is disposed; native code only drops its
   optimistic state on invalidation.
+- Toasts: `OmiFeedback` (and `AppSnackbar` through it) sends confirm/info/error/undo/progress requests
+  over config `toast` with the same kinds, timings and outcomes. `NativeToastPresenter` shows one at a
+  time in a window above sheets and the activity HUD, so Undo stays tappable while other taps reach the
+  page. Undo resolves true only for its action; replaced, timed-out, swiped and invalidated toasts do not
+  undo. A session change dismisses the toast.
+- One-time secrets: `showIosNativeSecretSheet` shows a newly created developer, MCP or app-owner key once,
+  in a non-dismissible `sensitive` surface with a single `secret` row (printable ASCII, at most 4,096)
+  whose only command is Copy. Sensitive surfaces refuse `captureImage` and modals refuse secret rows; the
+  key is never logged, cached or used in an id. Done or a session change closes the sheet.
+- Rich chat: `message_ai` rows carry the same rich blocks as `rich_text` (at most 2,000). A link opens
+  only when its URL is one of the row's options, which Dart builds from that reply's Markdown and opens
+  through the existing URL owner; other URLs are dropped. `chart` rows with `chartStyle` `bar` or `line`
+  draw categorical points (index x, finite y, labels up to 64) with thinned axis labels; Usage keeps its
+  time-series chart.
+- `NativeGraph` (`native_graph.dart`) projects the knowledge graph as a `graph` row: 1-1,024 typed nodes,
+  at most 4,096 edges and one fixed user node, as an inert `card` preview or one interactive `fill`
+  stage per screen. A SwiftUI Canvas reproduces the Flutter projection, rotation and zoom; selection
+  returns a current node id. `captureImage(target:)` renders only a current graph row for the existing
+  share owner.
+- Capabilities: config `capabilities` reports `shortcuts_link` only from builds compiled with
+  `#if compiler(>=6.4)` and AppIntents on iOS 16+. Dart emits the `ShortcutsLink` row only then; without
+  it, Data & Privacy keeps its classic page whenever the Shortcuts card applies.
+- `level` rows are labelled stepped controls (LED brightness, mic gain, goal progress). Bounds and step
+  (at most 1,000 steps) are validated on both sides, the trailing value is Dart's localized label, a drag
+  commits once on release (VoiceOver per increment) and a refused value reverts. Playback keeps `slider`.
+- Migrated screens keep their owners: recording detail reuses the sync player and sends only waveform
+  levels; pairing, firmware and OTA keep their BLE/DFU owners; leave flows keep their typed confirmation
+  and billing owners; maps stay Dart-fetched static images. Bundled artwork crosses only as
+  `nativeAssetImageUri` copies of `assets/images/` files, never user data.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and
@@ -160,11 +218,18 @@ xcodebuild -project ios/test/native_ui_preview/Preview.xcodeproj -scheme Preview
   -derivedDataPath ~/Library/Developer/Xcode/DerivedData/omi-native-ui-preview test
 ```
 
+Each migrated area also has its own host target, `integration_test/native_<area>_host_test.dart`
+(21 targets), run with the same driver and defines; their projection and owner tests live in
+`test/mobile/native_ui/`.
+
 The standalone fixture compiles the production SwiftUI sources and tests native navigation,
 locked rows, retry/empty states, session invalidation, large text, reachable Home controls,
-rapid editing, chat submission, system confirmations, explicit modal Save, dirty cancellation
-and session dismissal. It is a Simulator-only fixture; it has no live account or
-backend. The integration test also exercises the actual Flutter platform view and containment.
+rapid editing, chat submission, system confirmations, explicit modal Save, dirty cancellation,
+session dismissal, toasts, activity, secret reveal, list selection/reorder/indent/swipe, rich
+replies, charts, graphs and level controls (83 UI tests). It launches with `-ui-test-no-animations`
+except for the cases that need animation, and saves review captures in light, dark, right-to-left
+and large text. It is a Simulator-only fixture; it has no live account or backend.
+The integration test also exercises the actual Flutter platform view and containment.
 `NATIVE_UI_EVIDENCE_DIR` selects the host screenshot directory for the integration driver.
 The host test opens the actual Settings route, retaining NEW/BETA copy and native navigation,
 then checks rendered Dark/Light/System screenshots rather than only snapshot values.

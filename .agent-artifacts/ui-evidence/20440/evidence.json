@@ -2,32 +2,88 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-conversation-partial-recording.png",
+      "file": "001-mobile-ios-home.png",
       "platform": "mobile-ios",
-      "description": "Native conversation detail with the partial-recording badge",
+      "description": "Native Home on iOS 26+ Liquid Glass: capture card, Daily Recaps and Conversations headers, footer controls (SwiftUI Preview fixture, iOS Simulator)",
       "captured_by": "agent",
-      "source": "screencapture"
+      "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-native-home.png",
+      "file": "002-mobile-ios-conversation-summary.png",
       "platform": "mobile-ios",
-      "description": "Native Home inside the Flutter host",
+      "description": "Conversation detail Summary tab with the rich summary and glass toolbar (SwiftUI Preview fixture, iOS Simulator)",
       "captured_by": "agent",
-      "source": "screencapture"
+      "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-native-settings.png",
+      "file": "003-mobile-ios-conversation-transcript.png",
       "platform": "mobile-ios",
-      "description": "Native Settings root",
+      "description": "Conversation detail Transcript tab with stable per-speaker tints (SwiftUI Preview fixture, iOS Simulator)",
       "captured_by": "agent",
-      "source": "screencapture"
+      "source": "visual-audit"
     },
     {
-      "file": "004-mobile-ios-offline-sync.png",
+      "file": "004-mobile-ios-reader-player.png",
       "platform": "mobile-ios",
-      "description": "Native Offline Sync status",
+      "description": "Transcript reader following playback with rounded waveform, 56 pt play/pause and search (SwiftUI Preview fixture, iOS Simulator)",
       "captured_by": "agent",
-      "source": "screencapture"
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-chat-rich-reply.png",
+      "platform": "mobile-ios",
+      "description": "Chat with a rich AI reply (heading, lists, quote, code, table) and the Try again retry (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-settings-root.png",
+      "platform": "mobile-ios",
+      "description": "Settings root in dark mode with NEW/BETA badges (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-list-selection.png",
+      "platform": "mobile-ios",
+      "description": "Conversation list in selection mode with accent checkmarks and the bottom action bar (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-modal-sheet.png",
+      "platform": "mobile-ios",
+      "description": "Native Edit Person input sheet with Cancel and Save toolbar placements (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-toast-confirm.png",
+      "platform": "mobile-ios",
+      "description": "Native confirm toast over a light page (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-knowledge-graph.png",
+      "platform": "mobile-ios",
+      "description": "Memory Graph fill stage with a selected node and the prominent Continue action (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-empty-state.png",
+      "platform": "mobile-ios",
+      "description": "Centred native empty state for an empty task list (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-secret-reveal.png",
+      "platform": "mobile-ios",
+      "description": "One-time API key reveal with the full-width Copy action (SwiftUI Preview fixture, iOS Simulator)",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
