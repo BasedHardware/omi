@@ -1,18 +1,41 @@
 """Channel provenance retention; desktop source alone never asserts ownership."""
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
 from database import conversations as db
+from models.conversation import Conversation, Structured
 from models.transcript_segment import TranscriptSegment
 from routers.listen import receiver as receiver_module
 from routers.listen.contracts import ListenRequest
-from routers.listen.receiver import ListenReceiver
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import speaker_resolution as processing_stage
 from utils.stt.streaming import STTService
+
+
+def post_process(segments, monkeypatch):
+    now = datetime(2026, 10, 9, tzinfo=timezone.utc)
+    conversation = Conversation(
+        id='desktop',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        source='desktop',
+        structured=Structured(),
+        transcript_segments=segments,
+        private_cloud_sync_enabled=True,
+    )
+    # Exercise the stage called before finalization, with no enrolled embedding
+    # service/evidence. Capture labels must survive and source alone adds none.
+    monkeypatch.setattr(processing_stage, 'resolution_enabled', lambda: True)
+    monkeypatch.setattr(processing_stage, 'speaker_embedding_configured', lambda: False)
+    monkeypatch.setattr(processing_stage.conversations_db, 'get_manual_speaker_receipt', lambda uid, cid: {})
+    assert processing_stage.resolve_speakers_for_processing('u', conversation)
+    assert conversation.speaker_resolution.status == 'capture'
+    return conversation
 
 
 @pytest.mark.asyncio
@@ -43,6 +66,10 @@ async def test_two_channel_desktop_callbacks_survive_transcript_persistence(monk
     segments = [TranscriptSegment(**s).model_dump(mode='python') for s in queued]
     assert [s['is_user'] for s in segments] == [True, False]
     assert [s['speaker_identity_status'] for s in segments] == ['user', 'not_user']
+    finalized = post_process(segments, monkeypatch)
+    assert [s.is_user for s in finalized.transcript_segments] == [True, False]
+    assert [s.speaker_identity_status for s in finalized.transcript_segments] == ['user', 'not_user']
+    segments = [s.model_dump(mode='python') for s in finalized.transcript_segments]
     store = StrictFirestore()
     path = ('users', 'u', 'conversations', 'desktop')
     store.rows[path] = dict(id='desktop', status='completed', source='desktop', transcript_segments=[])
@@ -54,7 +81,7 @@ async def test_two_channel_desktop_callbacks_survive_transcript_persistence(monk
     assert [s['speaker_id'] for s in persisted] == [0, 1]
 
 
-def test_mono_desktop_has_no_channel_owner_labels():
+def test_mono_desktop_has_no_channel_owner_labels(monkeypatch):
     runtime = ListenSessionRuntime(
         ListenRequest(
             websocket=SimpleNamespace(headers={}), uid='u', source='desktop', channels=1, codec='pcm', sample_rate=16000
@@ -64,3 +91,7 @@ def test_mono_desktop_has_no_channel_owner_labels():
     assert not runtime.is_multi_channel and runtime.receiver.channel_configs == []
     segment = TranscriptSegment(text='Synthetic mono export', speaker_id=0, start=0, end=6, is_user=False)
     assert not segment.is_user and segment.speaker_identity_status == 'unknown'
+
+    finalized = post_process([segment], monkeypatch)
+    assert not finalized.transcript_segments[0].is_user
+    assert finalized.transcript_segments[0].speaker_identity_status == 'unknown'
