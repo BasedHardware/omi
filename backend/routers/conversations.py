@@ -1439,13 +1439,19 @@ def set_action_item_status(
             new_completed_status = data.values[i]
 
             for ai in description_to_items.get(action_item.description, []):
-                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                if not action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status)):
+                    continue
+                updated_item = action_items_db.get_action_item(uid, ai['id'])
+                if not updated_item:
+                    continue
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=ai['id'],
-                    description=ai.get('description', ''),
-                    completed=bool(new_completed_status),
-                    due_at=ai.get('due_at'),
+                    description=updated_item.get('description', ''),
+                    completed=bool(updated_item.get('completed')),
+                    due_at=updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
     except Exception as e:
         # Don't break conversation route if mirrored update fails

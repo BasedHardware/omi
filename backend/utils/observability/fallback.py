@@ -147,6 +147,8 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'auth_error',
+        'connection_error',
         'first_text_deadline',
         'empty_streak',
         'allocation_rejected',
@@ -339,4 +341,17 @@ def initialize_live_stt_exhausted_children() -> None:
             )
 
 
+def initialize_cache_write_fail_open_children() -> None:
+    """Expose zero before the first Redis cache-write fail-open so increase() can see it."""
+    for reason in ('capacity_full', 'auth_error', 'connection_error', 'timeout'):
+        OMI_FALLBACK_TOTAL.labels(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+        )
+
+
 initialize_live_stt_exhausted_children()
+initialize_cache_write_fail_open_children()

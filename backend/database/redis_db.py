@@ -430,16 +430,47 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
+# Most specific first. AuthenticationError subclasses ConnectionError, and some
+# redis-py versions also subclass TimeoutError from ConnectionError. A later
+# parent match would collapse those into connection_error.
+_CACHE_WRITE_FAIL_OPEN: tuple[tuple[str, str], ...] = (
+    ('OutOfMemoryError', 'capacity_full'),
+    ('AuthenticationError', 'auth_error'),
+    ('TimeoutError', 'timeout'),
+    ('ConnectionError', 'connection_error'),
+)
+
+
+def _cache_write_fail_open_reason(exc: BaseException) -> Optional[str]:
+    """Bounded fail-open reason, or None when the caller must raise.
+
+    Match the redis-py class when it can be resolved. Fall back to the class
+    name only when that class is absent (redis-py typing drift). A same-named
+    exception from another module, including the builtin ``TimeoutError``, still
+    raises. ConnectionError subclasses other than the more specific rows above,
+    such as BusyLoadingError, map to connection_error.
+    """
+    exceptions = getattr(redis, 'exceptions', None)
+    name = type(exc).__name__
+    for class_name, reason in _CACHE_WRITE_FAIL_OPEN:
+        cls = getattr(exceptions, class_name, None) if exceptions is not None else None
+        if cls is not None and isinstance(exc, cls):
+            return reason
+        if cls is None and name == class_name:
+            return reason
+    return None
+
+
 def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
-    """Best-effort cache write. Redis maxmemory must not 500 product requests."""
+    """Best-effort cache write. Redis maxmemory and connection-class faults must not 500 product requests."""
     try:
         r.set(key, value, ex=ttl)
     except Exception as exc:
-        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
-        if type(exc).__name__ != 'OutOfMemoryError':
+        reason = _cache_write_fail_open_reason(exc)
+        if reason is None:
             raise
         prefix = key.split(':', 1)[0]
-        logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
+        logger.warning('redis cache write skipped reason=%s prefix=%s', reason, prefix)
         try:
             from utils.observability.fallback import record_fallback
 
@@ -447,7 +478,7 @@ def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
                 component='other',
                 from_mode='cache_write',
                 to_mode='skip',
-                reason='capacity_full',
+                reason=reason,
                 outcome='degraded',
                 log=logger,
             )
@@ -557,10 +588,12 @@ def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 3
     # Best-effort pointer written AFTER the authoritative Firestore create of the
     # in-progress conversation. Every reader falls back to Firestore
     # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
-    # key is absent, so a Redis capacity failure must skip the write instead of
-    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
-    # lifetime task and tore down live sessions (supervisor `crash`), and the
-    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    # key is absent, so a Redis capacity or connection-class failure must skip
+    # the write instead of raising: under prod maxmemory the raise crashed the
+    # listen `lifecycle` lifetime task and tore down live sessions (supervisor
+    # `crash`), and the same raise inside prepare() surfaced as the ASGI
+    # WebSocket traceback. AuthenticationError did the same to every listen
+    # accept during the 2026-10-08 dev credential drift.
     _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
@@ -581,8 +614,8 @@ def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int 
     # is an enrichment pointer (meeting-context attribution during processing,
     # utils/conversations/process_conversation.py), written after the durable
     # conversation create. Its absence degrades enrichment to the calendar
-    # overlap path, so a Redis capacity failure skips the write rather than
-    # raising out of the listen session bootstrap.
+    # overlap path, so a Redis capacity or connection-class failure skips the
+    # write rather than raising out of the listen session bootstrap.
     _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 

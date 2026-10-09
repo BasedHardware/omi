@@ -33,6 +33,7 @@ boundary, not at call sites.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -132,7 +133,7 @@ def test_set_in_progress_conversation_id_fail_open_records_fallback(
 def test_set_in_progress_conversation_id_non_oom_error_still_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Only capacity failures degrade; real faults stay loud."""
+    """Unrelated exception types stay loud. Connection-class faults are covered separately."""
 
     class _ConnectionDropped(Exception):
         pass
@@ -209,3 +210,117 @@ def test_set_conversation_meeting_id_non_oom_error_still_raises(
 
 def test_get_conversation_meeting_id_absent_returns_none(fake_redis: _FakeRedis) -> None:
     assert redis_db.get_conversation_meeting_id('conv-1') is None
+
+
+def _raising_redis(exc: BaseException) -> Any:
+    class _RaisingRedis(_FakeRedis):
+        def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
+            raise exc
+
+    return _RaisingRedis()
+
+
+def _record(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    recorded: list[dict[str, Any]] = []
+
+    def _record_fallback(**kwargs: Any) -> None:
+        recorded.append(kwargs)
+
+    monkeypatch.setattr('utils.observability.fallback.record_fallback', _record_fallback)
+    return recorded
+
+
+@pytest.mark.parametrize(
+    ('exc_type', 'reason'),
+    [
+        (redis_db.redis.exceptions.AuthenticationError, 'auth_error'),
+        (redis_db.redis.exceptions.ConnectionError, 'connection_error'),
+        (redis_db.redis.exceptions.TimeoutError, 'timeout'),
+        (redis_db.redis.exceptions.OutOfMemoryError, 'capacity_full'),
+        (redis_db.redis.exceptions.BusyLoadingError, 'connection_error'),
+    ],
+)
+def test_cache_set_fail_open_on_redis_connection_class(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    exc_type: type[BaseException],
+    reason: str,
+) -> None:
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('redis unavailable')))
+    recorded = _record(monkeypatch)
+    with caplog.at_level(logging.WARNING):
+        redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')
+    assert len(recorded) == 1
+    assert recorded[0]['component'] == 'other'
+    assert recorded[0]['from_mode'] == 'cache_write'
+    assert recorded[0]['to_mode'] == 'skip'
+    assert recorded[0]['reason'] == reason
+    assert recorded[0]['outcome'] == 'degraded'
+    assert f'redis cache write skipped reason={reason} prefix=users' in caplog.text
+
+
+@pytest.mark.parametrize(
+    ('class_name', 'reason'),
+    [
+        ('AuthenticationError', 'auth_error'),
+        ('ConnectionError', 'connection_error'),
+        ('TimeoutError', 'timeout'),
+        ('OutOfMemoryError', 'capacity_full'),
+    ],
+)
+def test_cache_set_fail_open_name_fallback_when_redis_class_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+    class_name: str,
+    reason: str,
+) -> None:
+    """Name match is only the typing-drift path, used when redis-py does not expose the class."""
+    monkeypatch.setattr(redis_db.redis, 'exceptions', None, raising=False)
+    exc_type = type(class_name, (Exception,), {})
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('typed as any')))
+    recorded = _record(monkeypatch)
+    redis_db.cache_user_geolocation('uid-1', {'latitude': 1.0, 'longitude': 2.0})
+    assert recorded[0]['reason'] == reason
+    assert recorded[0]['from_mode'] == 'cache_write'
+
+
+@pytest.mark.parametrize(
+    'exc_type',
+    [
+        type('AuthenticationError', (Exception,), {}),
+        type('ConnectionError', (Exception,), {}),
+        type('TimeoutError', (Exception,), {}),
+        type('OutOfMemoryError', (Exception,), {}),
+        TimeoutError,
+    ],
+)
+def test_cache_set_fail_open_same_name_from_another_module_still_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    exc_type: type[BaseException],
+) -> None:
+    """redis-py's own classes are present, so a lookalike or builtin TimeoutError stays loud."""
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('not redis-py')))
+    with pytest.raises(exc_type):
+        redis_db.cache_user_name('uid-1', 'Ada')
+
+
+@pytest.mark.parametrize('exc_type', [TypeError, KeyError])
+def test_cache_set_fail_open_programming_errors_still_raise(
+    monkeypatch: pytest.MonkeyPatch,
+    exc_type: type[BaseException],
+) -> None:
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(exc_type('caller bug')))
+    with pytest.raises(exc_type):
+        redis_db.cache_user_name('uid-1', 'Ada')
+
+
+def test_cache_set_fail_open_response_error_still_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, 'r', _raising_redis(redis_db.redis.exceptions.ResponseError('ERR syntax')))
+    with pytest.raises(redis_db.redis.exceptions.ResponseError):
+        redis_db.set_conversation_meeting_id('conv-1', 'meeting-9')
+
+
+def test_cache_write_fail_open_reasons_stay_distinct_metric_labels() -> None:
+    from utils.observability.fallback import bucket_reason
+
+    for reason in ('auth_error', 'connection_error', 'timeout', 'capacity_full'):
+        assert bucket_reason(reason) == reason

@@ -175,6 +175,9 @@ class TaskFirestore:
         self.events.append(('transaction',))
         return _Batch(immediate=True, events=self.events)
 
+    def get_all(self, refs):
+        return [ref.get() for ref in refs]
+
     def tasks(self, conversation_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         prefix = f'users/{UID}/action_items/'
         return {

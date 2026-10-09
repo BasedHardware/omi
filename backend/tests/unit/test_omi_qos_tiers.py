@@ -1067,6 +1067,24 @@ class TestRuntimeProviderRouting:
         assert byok_factory.call_args.args[:3] == ('gemini-3.5-flash-lite', 'gemini', 'user-gemini-key')
         gateway.assert_not_called()
 
+    def test_openai_byok_chat_agent_avoids_luna(self, monkeypatch):
+        """An enrolled OpenAI key must get a model it can actually call, not gpt-6-luna."""
+        mod = get_llm.__globals__
+
+        monkeypatch.delenv('OMI_LLM_GATEWAY_FEATURE_MODE', raising=False)
+        monkeypatch.setitem(mod, 'get_byok_key', lambda provider: 'user-openai-key' if provider == 'openai' else None)
+        user_client = MagicMock()
+        byok_factory = MagicMock(return_value=user_client)
+        gateway = MagicMock(side_effect=AssertionError('OpenAI BYOK must stay on its direct route'))
+        monkeypatch.setitem(mod, '_create_byok_client', byok_factory)
+        monkeypatch.setitem(mod, 'get_or_create_omi_gateway_llm', gateway)
+
+        result = get_llm('chat_agent')
+
+        assert result is user_client
+        assert byok_factory.call_args.args[:3] == ('gpt-4o-mini', 'openai', 'user-openai-key')
+        gateway.assert_not_called()
+
     def test_openglass_routes_to_openai(self):
         """openglass (vision) should route to OpenAI Luna."""
         llm = get_llm('openglass')
@@ -1199,13 +1217,28 @@ class TestBYOKProfile:
         expected = {
             LUNA_MODEL,
             'gpt-5-nano',
+            'gpt-4o-mini',
             'gemini-3.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct == expected
+        assert _byok_fallback_model('openai') == 'gpt-4o-mini'
         assert _byok_fallback_model('gemini') == 'gemini-3.5-flash-lite'
         assert _byok_fallback_model('openrouter') == 'gemini-2.5-flash-lite'
+
+    def test_byok_chat_features_avoid_luna(self):
+        """BYOK OpenAI must never send gpt-6-luna — a user's own key can't call it."""
+        bk = MODEL_QOS_PROFILES['byok']
+        for feature in (
+            'chat_agent',
+            'chat_responses',
+            'chat_extraction',
+            'chat_graph',
+            'file_chat_vision',
+            'file_chat_documents',
+        ):
+            assert bk[feature] == ('gpt-4o-mini', 'openai'), f'byok {feature} should avoid Luna, got {bk[feature]}'
 
     def test_byok_has_same_features_as_premium(self):
         """BYOK profile must cover the same feature set as premium."""
