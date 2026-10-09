@@ -16,7 +16,7 @@ from typing import Any, Callable, Mapping, Optional
 from prometheus_client import REGISTRY, Counter, Histogram
 
 from models.conversation_enums import ConversationSource, ConversationStatus
-from models.transcript_segment import legacy_conversation_segment_id
+from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import structured_is_rich
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
@@ -129,20 +129,24 @@ def record_owner_identity_repair(before: Mapping[str, Any], after: Mapping[str, 
     """Observe readable transaction snapshots after CAS; unchanged identities emit nothing."""
 
     def identities(record):
-        return {
-            s.get('id')
-            or legacy_conversation_segment_id(record['id'], i): (
-                bool(s.get('is_user')),
-                s.get('person_id'),
-                s.get('speaker_id'),
-                s.get('speaker'),
-                s.get('speaker_id_scope'),
-                s.get('speaker_identity_status') or ('user' if s.get('is_user') else 'unknown'),
-                s.get('speaker_match_source'),
-                s.get('speaker_label_source'),
+        result = {}
+        for i, raw in enumerate(record.get('transcript_segments') or []):
+            # Both sides must use the client model's defaults and provenance
+            # projection. Materializing an absent legacy field is not a repair.
+            # Set the stable legacy id before construction to avoid UUID defaults.
+            sid = raw.get('id') or legacy_conversation_segment_id(record['id'], i)
+            s = TranscriptSegment(**{**raw, 'id': sid}).model_dump()
+            result[sid] = (
+                s['is_user'],
+                s['person_id'],
+                s['speaker_id'],
+                s['speaker'],
+                s['speaker_id_scope'],
+                s['speaker_identity_status'],
+                s['speaker_match_source'],
+                s['speaker_label_source'],
             )
-            for i, s in enumerate(record.get('transcript_segments') or [])
-        }
+        return result
 
     old, new = identities(before), identities(after)
     if old == new:

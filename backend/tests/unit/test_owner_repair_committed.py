@@ -19,7 +19,7 @@ def _counter(outcome):
     return metrics.OWNER_IDENTITY_REPAIR.labels(outcome=outcome)._value.get()
 
 
-def _commit_store(monkeypatch, conversation, level, *, receipt=None, omit_ids=False):
+def _commit_store(monkeypatch, conversation, level, *, receipt=None, omit_ids=False, omit_identity_fields=()):
     store = StrictFirestore()
     at = conversation.created_at
     monkeypatch.setattr(StrictFirestoreSnapshot, 'update_time', property(lambda s: at), raising=False)
@@ -30,6 +30,9 @@ def _commit_store(monkeypatch, conversation, level, *, receipt=None, omit_ids=Fa
     if omit_ids:
         for segment in raw['transcript_segments']:
             segment.pop('id', None)
+    for segment in raw['transcript_segments']:
+        for field in omit_identity_fields:
+            segment.pop(field, None)
     if receipt:
         raw['manual_speaker_assignments'] = receipt
     path = ('users', 'u1', 'conversations', 'c1')
