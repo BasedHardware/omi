@@ -587,6 +587,84 @@ void main() {
     });
   });
 
+  group('connected no bytes', () {
+    test('five minutes with zero ingress bytes declares connected_no_bytes once', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor, deviceId: 'pendant-9');
+
+      now = now.add(const Duration(minutes: 4, seconds: 59));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+
+      now = now.add(const Duration(seconds: 1));
+      monitor.runConnectedWatchdog();
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, ['pendant-9']);
+      final detected = forEvent('Capture Wedge Detected');
+      expect(detected, hasLength(1));
+      expect(detected.single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      expect(detected.single['seconds_since_last_ingress_byte'], 300);
+      expect(detected.single['ingress_bytes'], 0);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
+      monitor.dispose();
+    });
+
+    test('ingress bytes resuming before five minutes do not declare', () async {
+      final monitor = makeMonitor(withRetry: true);
+      connectedSession(monitor);
+
+      now = now.add(const Duration(minutes: 4, seconds: 30));
+      monitor.onBleIngressBytes('dev-a', 40);
+      now = now.add(const Duration(minutes: 4, seconds: 59));
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      expect(retriedDevices, isEmpty);
+      expect(monitor.visiblePrompt, isNull);
+      monitor.dispose();
+    });
+
+    test('a native-owned silent link still retries the session device', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.setNativeIngressOwner('pendant-9', true);
+      connectedSession(monitor, deviceId: 'pendant-9');
+      now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, ['pendant-9']);
+      expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+      monitor.dispose();
+    });
+
+    test('an in-progress CCCD recovery is not declared again', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'recovering',
+          generation: 'android',
+          reason: CaptureIngressHealth.cccdRecoveryReason,
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 1,
+        ),
+      );
+      connectedSession(monitor);
+      now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(retriedDevices, isEmpty);
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      monitor.dispose();
+    });
+  });
+
   group('upload silence', () {
     test('two-hour local backlog tracks and wakes transfer without a prompt', () async {
       var transferRetries = 0;
