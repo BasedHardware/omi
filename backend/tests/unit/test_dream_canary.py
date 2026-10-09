@@ -91,7 +91,7 @@ def test_canary_failures_identify_stage_and_reset_streak(store, monkeypatch, sta
         raise RuntimeError('private provider body')
 
     if stage == 'enqueue':
-        monkeypatch.setattr(storage, 'write_record', broken)
+        monkeypatch.setattr(dream_canary.lifecycle, 'create_completed_conversation', broken)
     elif stage == 'admit':
         monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: None)
     elif stage == 'model':

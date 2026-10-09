@@ -1,13 +1,9 @@
 """Only the reserved synthetic account may receive canary records."""
 
-from datetime import datetime, timezone
-
 from google.cloud import firestore
 
 from config.dream_agent import canary_uid
-from database import conversations
 from database._client import get_firestore_client
-from database.dream_dirty import canary_writing
 
 RECORD_ID = 'dream-canary-conversation'
 
@@ -27,38 +23,6 @@ def ensure_synthetic_owner(uid, *, firestore_client=None):
             tx.set(owner, {'dream_canary': True})
 
     ensure(database.transaction())
-
-
-def write_record(uid, conversation_data):
-    conversations.upsert_conversation_with_lifecycle(uid, conversation_data)
-
-
-def seed(uid):
-    ensure_synthetic_owner(uid)
-    token = canary_writing.set(True)
-    try:
-        write_record(
-            uid,
-            {
-                'id': RECORD_ID,
-                'created_at': datetime.now(timezone.utc),
-                'status': 'completed',
-                'discarded': False,
-                'has_photos': False,
-                'data_protection_level': 'enhanced',
-                'structured': {'title': 'Synthetic dream check', 'overview': 'A spelling check for an invented robot.'},
-                'transcript_segments': [
-                    {
-                        'text': 'Robot Qorbi is spelled Qorbi. The notes incorrectly spell it Qorby.',
-                        'speaker': 'SPEAKER_00',
-                        'start': 0,
-                        'end': 5,
-                    }
-                ],
-            },
-        )
-    finally:
-        canary_writing.reset(token)
 
 
 def record_result(passed, *, firestore_client=None):

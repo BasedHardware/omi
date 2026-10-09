@@ -3,9 +3,12 @@
 import asyncio
 import logging
 from dataclasses import replace
+from datetime import datetime, timezone
 
 from config.dream_agent import Caps, canary_uid, mode
 from database import dream_canary, dream_store, review_store
+from database.dream_dirty import canary_writing
+from utils.conversations import lifecycle
 from utils import dream_agent, dream_transport
 from utils.executors import db_executor, run_blocking
 from utils.dream_metrics import CANARY
@@ -16,6 +19,34 @@ DEADLINE_SECONDS = 85
 
 class CanaryFailure(Exception):
     pass
+
+
+def seed(uid):
+    dream_canary.ensure_synthetic_owner(uid)
+    token = canary_writing.set(True)
+    try:
+        lifecycle.create_completed_conversation(
+            uid,
+            {
+                'id': dream_canary.RECORD_ID,
+                'created_at': datetime.now(timezone.utc),
+                'status': 'completed',
+                'discarded': False,
+                'has_photos': False,
+                'data_protection_level': 'enhanced',
+                'structured': {'title': 'Synthetic dream check', 'overview': 'A spelling check for an invented robot.'},
+                'transcript_segments': [
+                    {
+                        'text': 'Robot Qorbi is spelled Qorbi. The notes incorrectly spell it Qorby.',
+                        'speaker': 'SPEAKER_00',
+                        'start': 0,
+                        'end': 5,
+                    }
+                ],
+            },
+        )
+    finally:
+        canary_writing.reset(token)
 
 
 async def check():
@@ -29,7 +60,7 @@ async def check():
         async with asyncio.timeout(DEADLINE_SECONDS):
             if not uid or mode() == 'off':
                 raise CanaryFailure('disabled')
-            await run_blocking(db_executor, dream_canary.seed, uid)
+            await run_blocking(db_executor, seed, uid)
             if not await run_blocking(db_executor, dream_store.dirty_count, uid):
                 raise CanaryFailure('not_enqueued')
             stage = 'admit'
