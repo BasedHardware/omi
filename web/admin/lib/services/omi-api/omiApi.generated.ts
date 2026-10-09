@@ -2135,8 +2135,7 @@ export interface DreamRun {
   vocabulary?: Array<DreamReportTerm>;
 }
 
-export interface DreamRunRequest {
-}
+export type DreamRunRequest = Record<string, never>;
 
 export interface DreamRunsResponse {
   manual_runs_limit: number;

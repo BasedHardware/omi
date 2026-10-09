@@ -143,6 +143,29 @@ def test_typescript_generator_emits_type_for_object_unions():
     assert re.search(r'export type CandidateRecord = \{[\s\S]*?\} \| \{', generated)
 
 
+def test_typescript_generator_preserves_empty_object_additional_property_policy():
+    spec = {
+        'components': {
+            'schemas': {
+                'ClosedRequest': {'type': 'object', 'properties': {}, 'additionalProperties': False},
+                'ClosedWithoutProperties': {'type': 'object', 'additionalProperties': False},
+                'OpenRequest': {'type': 'object', 'properties': {}},
+                'ExplicitOpenRequest': {'type': 'object', 'properties': {}, 'additionalProperties': True},
+                'NumberMap': {'type': 'object', 'properties': {}, 'additionalProperties': {'type': 'number'}},
+            }
+        },
+        'paths': {},
+    }
+
+    generated = generate_ts_openapi_types.generate(spec, 'test-openapi.json')
+
+    assert 'export type ClosedRequest = Record<string, never>;' in generated
+    assert 'export type ClosedWithoutProperties = Record<string, never>;' in generated
+    assert 'export type OpenRequest = Record<string, unknown>;' in generated
+    assert 'export type ExplicitOpenRequest = Record<string, unknown>;' in generated
+    assert 'export type NumberMap = Record<string, number>;' in generated
+
+
 def test_typescript_source_label_is_stable_for_windows_paths():
     root = PureWindowsPath('C:/src/omi')
     spec_path = root / 'docs' / 'api-reference' / 'app-client-openapi.json'
