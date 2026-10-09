@@ -53,6 +53,7 @@ from utils.llm.meeting_notes_validation import (
     validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
+from utils.llm.episode_writer import bind_episode_effort
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.shaped_notes_transport import isolated_notes_model
@@ -270,6 +271,37 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
+# Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
+_NOTES_TIER_MIN_WORDS = 1500
+_NOTES_TIER_MIN_SCREEN_FRAMES = 5
+
+
+def _notes_tier_escalation_enabled() -> bool:
+    """Default off. Unset, blank, and unknown values stay off."""
+    return os.getenv('NOTES_TIER_ESCALATION_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _shaped_notes_tier(words: int, screen_count: int) -> tuple[bool, str]:
+    if (
+        _notes_tier_escalation_enabled()
+        and words >= _NOTES_TIER_MIN_WORDS
+        and screen_count >= _NOTES_TIER_MIN_SCREEN_FRAMES
+    ):
+        return True, 'screen_volume'
+    return False, 'below_threshold'
+
+
+def _record_shaped_notes_tier(escalated: bool, reason: str, words: int, screen_count: int) -> None:
+    run = current_run()
+    if run is None:
+        return
+    run.escalated = escalated
+    run.escalation_reason = reason
+    run.words = words
+    run.screen_count = screen_count
+    if escalated:
+        run.requested_effort = 'xhigh'
+        run.effort = 'xhigh'
 
 
 def notes_mount() -> Mount:
@@ -296,13 +328,18 @@ def get_conversation_notes(
     return _get_shaped_conversation_notes(prefix, **kwargs)
 
 
+@observe_notes
 def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
-    frames = kwargs.get('screen_frames', ())
+    frames = kwargs.get('screen_frames') or ()
+    # Never reuse the old prefix metadata: it may already have bound a roster.
+    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    words = _word_count(context)
+    screen_count = len(frames)
+    escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
+    _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
     if not prefix.has_usable_content and not frames:
         return Structured()
     mount = notes_mount()
-    # Never reuse the old prefix metadata: it may already have bound a roster.
-    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     evidence = [
         {
             'role': 'user',
@@ -335,9 +372,12 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
+            # After isolation so the cloner still sees the notes model. Unsupported
+            # models stay unbound and keep their own options.
+            call_model = bind_episode_effort(isolated_model, 'xhigh') if escalated else isolated_model
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-                response = await isolated_model.ainvoke(messages)
+                response = await call_model.ainvoke(messages)
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
