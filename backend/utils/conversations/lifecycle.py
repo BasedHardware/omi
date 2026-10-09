@@ -15,7 +15,7 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
@@ -454,9 +454,20 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict[str, Any]) -> bool:
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
     """A relevance verdict reached after the fact; never overrides a restore."""
-    return conversations_db.discard_by_relevance(uid, conversation_id, relevance_decision)
+    return conversations_db.discard_by_relevance(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
 
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:

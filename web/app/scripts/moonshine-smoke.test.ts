@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { GET as searchApps } from '../src/app/api/apps/search/route';
 import { GET as proxy } from '../src/app/api/proxy/[...path]/route';
 import { GET as robots } from '../src/app/robots.txt/route';
-import { buildPublicEnvironment, deriveWebSocketBaseUrl } from './copy-moonshine-assets';
+import {
+  BUN_REQUEST_TIMEOUT_SECONDS,
+  buildPublicEnvironment,
+  deriveWebSocketBaseUrl,
+} from './copy-moonshine-assets';
 
 describe('Moonshine web routes', () => {
   test('returns an empty result for a blank app search', async () => {
@@ -49,6 +53,26 @@ describe('Moonshine web routes', () => {
         else process.env[name] = value;
       }
     }
+  });
+
+  test('arms the bun request timeout before the handler can block on the upstream', async () => {
+    expect(BUN_REQUEST_TIMEOUT_SECONDS).toBeGreaterThan(10);
+    expect(BUN_REQUEST_TIMEOUT_SECONDS).toBeLessThanOrEqual(255);
+    const source = await Bun.file(
+      new URL('./copy-moonshine-assets.ts', import.meta.url),
+    ).text();
+    const fetchStart = source.indexOf('const fetch = async (request) => {');
+    const armed = source.indexOf(
+      'server.timeout(request, ${BUN_REQUEST_TIMEOUT_SECONDS});',
+      fetchStart,
+    );
+    const handlerAwait = source.indexOf(
+      'const response = await handler(request);',
+      fetchStart,
+    );
+    expect(fetchStart).toBeGreaterThan(-1);
+    expect(armed).toBeGreaterThan(fetchStart);
+    expect(handlerAwait).toBeGreaterThan(armed);
   });
 
   test('derives recording WebSockets from the selected API environment', () => {

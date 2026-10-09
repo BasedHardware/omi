@@ -48,6 +48,7 @@ from utils.metrics import (
 )
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
+import config.speaker_match_scores as match_scores
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
 from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
@@ -591,10 +592,30 @@ class TranscriptProcessor:
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
         for segment in segments:
+            try:
+                if match_scores.enabled():
+                    segment.speaker_match_scores = next(
+                        (
+                            row
+                            for row in getattr(speaker, 'match_scores', [])
+                            if row['speaker_id'] == segment.speaker_id
+                            and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
+                        ),
+                        None,
+                    )
+            except Exception:
+                match_scores.record_failure(logger, reason='malformed_doc')
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
                 person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]
             if person_id is not None:
+                if segment.speaker_label_source == 'auto' or (
+                    segment.speaker_label_source is None and segment.speaker_match_source == 'live_embedding'
+                ):
+                    # Correct an earlier automatic accept after the full print
+                    # roster or owner arbitration changes its identity.
+                    segment.is_user = is_user_self_match(person_id)
+                    segment.person_id = None if segment.is_user else person_id
                 segment.speaker_identity_status = (
                     SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
                 )
@@ -611,12 +632,14 @@ class TranscriptProcessor:
             if candidates is not None and not segment.is_user and not segment.person_id:
                 segment.voice_candidates = candidates
             if status is not None:
-                if status == SpeakerIdentityStatus.ambiguous:
+                if status not in (SpeakerIdentityStatus.user, SpeakerIdentityStatus.not_user):
                     # Clear an earlier automatic accept on *every* segment of
-                    # this voice. Manual receipts are re-applied by the writer.
-                    if segment.speaker_match_source == 'live_embedding' or (
-                        not segment.is_user and not segment.person_id
-                    ):
+                    # this voice, retaining manual/carried and channel labels.
+                    automatic_live = segment.speaker_label_source in (None, 'auto') and (
+                        segment.speaker_match_source == 'live_embedding'
+                    )
+                    unlabeled = not segment.is_user and not segment.person_id
+                    if segment.speaker_label_source not in ('manual', 'carried') and (automatic_live or unlabeled):
                         segment.is_user = False
                         segment.person_id = None
                         segment.speaker_match_source = 'live_embedding'
@@ -1319,6 +1342,12 @@ class TranscriptProcessor:
         matcher's covered-audio subtraction dedupes overlapping re-sends).
         """
         speaker = self.host.speakers
+        observer = getattr(speaker, 'observe_segment', None)
+        if observer is not None:
+            observed = queue_from_raw if queue_from_raw is not None else [s.model_dump() for s in segments]
+            for raw in observed:
+                if raw.get('speaker_id') is not None:
+                    observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
         for segment in segments:
             segment_id = cast(str, segment.id)
             if should_skip_speaker_detection(

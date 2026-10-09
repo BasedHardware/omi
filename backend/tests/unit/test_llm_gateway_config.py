@@ -73,8 +73,8 @@ def test_retired_desktop_proactive_lanes_are_absent():
 def test_translation_uses_the_gateway_translation_capability():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('translation') == 'gemini-2.5-flash-lite'
-    assert get_provider('translation') == 'gemini'
+    assert get_model('translation') == LUNA_MODEL
+    assert get_provider('translation') == 'openai'
     lane = config.lanes['omi:auto:translation']
     assert lane.capabilities.translation is True
     assert lane.capabilities.structured_output.value == 'json_schema'

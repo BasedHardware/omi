@@ -12,6 +12,7 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
+from database.account_deletion_policy import deletion_billing_error_is_already_gone
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -46,7 +47,8 @@ from models.other import Person
 import logging
 
 logger = logging.getLogger(__name__)
-DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+# Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
+DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
 # A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
 # re-selected by every reconciler tick on every pod. Without a delay that is one claim
 # transaction per pod per tick, forever, against a record that cannot make progress. The
@@ -388,6 +390,24 @@ def mark_user_deletion_wipe_running(uid: str):
 
 
 @transactional
+def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref) -> None:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists and (snapshot.to_dict() or {}).get('wipe_status') == 'running':
+        transaction.update(doc_ref, {'wipe_running_at': datetime.now(timezone.utc)})
+
+
+def heartbeat_user_deletion_wipe(uid: str) -> None:
+    """Refresh a live wipe without resurrecting a failed/completed marker."""
+    client = account_deletion_firestore_client()
+    _heartbeat_user_deletion_wipe_txn(client.transaction(), account_deletion_document(uid, firestore_client=client))
+
+
+def mark_user_deletion_auth_deleted(uid: str) -> None:
+    """Keep retries fenced once Firebase Auth deletion has succeeded."""
+    account_deletion_document(uid).set({'wipe_auth_deleted_at': datetime.now(timezone.utc)}, merge=True)
+
+
+@transactional
 def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> DeletionWipeIntent:
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
@@ -591,8 +611,8 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
 def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
-        status = (snapshot.to_dict() or {}).get('wipe_status')
-        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+        data = snapshot.to_dict() or {}
+        if data.get('wipe_status') in ('cancelled', 'completed') or data.get('wipe_auth_deleted_at'):
             return False
 
     transaction.set(
@@ -611,8 +631,8 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
 def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
     """Record that account deletion is blocked on Stripe cancellation.
 
-    Never clobbers an actionable or terminal wipe state. A billing failure can
-    only block deletion before a destructive wipe has been queued or started.
+    The worker must first verify Firebase Auth still exists. Started wipes may
+    park here before Auth deletion; a post-Auth or terminal marker stays fenced.
     """
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
@@ -654,7 +674,9 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed, stale ``pending`` records
+    Queries ``failed`` records whose per-attempt backoff has elapsed,
+    ``billing_failed`` records with historical already-gone billing errors,
+    stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
     (intent written but never transitioned to ``pending`` — usually a crash
     after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
@@ -691,6 +713,15 @@ def get_pending_deletion_wipes(
         if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
             continue
         result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        billing_docs = account_deletion_collection().where('wipe_status', '==', 'billing_failed').stream()
+        for doc in billing_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            if deletion_billing_error_is_already_gone(data.get('billing_error')):
+                result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -760,7 +791,8 @@ def _claim_deletion_wipe_txn(
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
-    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    Transitions ``wipe_status`` from ``failed``, already-gone ``billing_failed``,
+    stale ``pending``, stale
     ``deleting_auth`` (auth user verified gone by caller), stale ``running``
     (worker crashed mid-execution), or stale ``retrying`` to ``retrying`` so
     concurrent workers cannot re-enqueue the same wipe. Fresh ``pending``,
@@ -775,6 +807,11 @@ def _claim_deletion_wipe_txn(
     data = snapshot.to_dict()
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
+    if status == 'billing_failed':
+        if not deletion_billing_error_is_already_gone(data.get('billing_error')):
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -865,7 +902,9 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         if running_at and running_at >= now - running_stale_after:
             return 'running'
 
-    if status in ('pending', 'retrying', 'failed', 'running'):
+    # A queued task retries transient pre-Auth billing failures. The reconciler
+    # only recovers historical already-gone billing errors, never an outage.
+    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed'):
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
@@ -1368,7 +1407,7 @@ def delete_user_data(uid: str):
     # Firestore permits immediate children to survive a parent deletion; an
     # early "User not found" return would falsely mark the deletion complete.
     # This picks up
-    # everything the user has written (conversations, memories, action_items,
+    # everything the user has written (conversations, deleted_conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
     # messages, and any future additions).

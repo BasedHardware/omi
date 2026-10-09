@@ -10,7 +10,8 @@ import wave
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
+import config.speaker_match_scores as match_scores
+import utils.stt.speaker_match as match_policy
 
 from config.speaker_prior import pinned_speaker_prior_enabled
 from database import users as users_db
@@ -23,6 +24,7 @@ from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.speaker_match import arbitrate_owner_matches, mean_embedding, select_speaker_match, voice_candidates
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
+from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.voiceprints import usable_person_voiceprint
 
 logger = logging.getLogger(__name__)
@@ -81,21 +83,32 @@ def build_person_embeddings_cache(
         named_allowed = False
     cache = PersonEmbeddingsCache(named_allowed)
 
-    # Load user's own speaker embedding
-    embedding_list = users_db.get_user_speaker_embedding(uid)
-    if embedding_list:
-        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': get_user_name(uid)}
+    try:
+        owner = load_owner_embedding(uid, users=users_db)
+        if owner is not None:
+            try:
+                name = get_user_name(uid) or 'The User'
+            except Exception:
+                name = 'The User'
+            cache[USER_SELF_PERSON_ID] = {'embedding': owner, 'name': name}
+    except Exception as error:
+        logger.warning('sync owner profile read failed type=%s', type(error).__name__)
 
     if not cache.named_allowed:
         return cache
     # Load paid non-owner candidates only after resolving the batch entitlement.
-    people = users_db.get_people(uid)
+    try:
+        people = users_db.get_people(uid)
+    except Exception as error:
+        logger.warning('sync person profile read failed type=%s', type(error).__name__)
+        return cache
     for person in people or []:
         emb = usable_person_voiceprint(person)
-        if emb and person.get('id'):
+        vector = validated_embedding(emb)
+        owner = cache.get(USER_SELF_PERSON_ID)
+        if vector is not None and person.get('id') and (owner is None or vector.size == owner['embedding'].size):
             cache[person['id']] = {
-                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                'embedding': vector,
                 'name': person.get('name') or 'Unknown',
                 'pinned': person.get('pinned') is True,
             }
@@ -240,6 +253,24 @@ def identify_speakers_for_segments(
                 if decision.owner_contended
                 else 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
             )
+            try:
+                if match_scores.enabled():
+                    row = match_scores.summarize(
+                        speaker_id,
+                        voice_distances[speaker_id],
+                        decision,
+                        evidence_seconds,
+                        'sync',
+                        threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                        margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                        scope=best_seg.speaker_id_scope or '',
+                        outcome=outcome,
+                        accepted=accepted,
+                    )
+                    for segment in segments:
+                        segment.speaker_match_scores = row
+            except Exception:
+                match_scores.record_failure(logger)
             for segment in segments:
                 if segment.speaker_match_source == 'sync_embedding':
                     # Reprocessing may revisit our own earlier automatic accept.

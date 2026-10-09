@@ -11,7 +11,9 @@ from starlette.websockets import WebSocketState
 
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt import streaming as st
+from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_metrics import MANAGED_LEGS_OPEN
@@ -24,6 +26,8 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.audio_timeline import soniox_wire_ledger_enabled
+from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
 from config.live_stt_replay import ReplayLimits
 from config.audio_timeline import live_capture_window_translator_sends_enabled
@@ -88,7 +92,7 @@ class LiveChainSession:
         language = host.stt_language
         uid = host.request.uid
         models = [m.strip() for m in st.stt_service_models]
-        keywords: list[str] = host.vocabulary[:100] if host.vocabulary else []
+        keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
         window_eligible = (
             window_allocation(uid)
@@ -445,6 +449,12 @@ class LiveLegSocket(STTSocket):
         # Audio-timeline v2: the provider epoch translator that records
         # accepted sends and maps provider times to the capture timeline.
         self._send_tracker = send_tracker
+        self._soniox_wire_ledger = service == st.STTService.soniox and soniox_wire_ledger_enabled()
+        if self._soniox_wire_ledger and send_tracker is not None:
+            bind_wire = getattr(raw, 'set_wire_ledger', None)
+            if not callable(bind_wire):
+                raise RuntimeError('Managed Soniox transport has no wire ledger')
+            cast(Callable[[Any], None], bind_wire)(send_tracker)
         try:
             if service == st.STTService.soniox and send_tracker is not None and capture_axis_diagnostics_enabled():
                 bind = getattr(raw, 'set_capture_axis_ledger', None)
@@ -453,7 +463,11 @@ class LiveLegSocket(STTSocket):
                         lambda: (
                             None
                             if send_tracker.soniox_elapsed_mode == 'on'
-                            else (send_tracker.send_map.last_provider_sample or 0)
+                            else (
+                                send_tracker.wire_audio_samples
+                                if self._soniox_wire_ledger
+                                else (send_tracker.send_map.last_provider_sample or 0)
+                            )
                         )
                     )
         except Exception:
@@ -472,6 +486,7 @@ class LiveLegSocket(STTSocket):
         self._transcript_outcome: str | None = None
         target = connecting_target.get()
         self._routing_target_entry = target
+        self._routing_cohort = current_routing_cohort.get()
         self.routing_target = (
             target.id
             if target
@@ -860,7 +875,12 @@ class LiveLegSocket(STTSocket):
                     self._expire_rescue()
                     return False
                 try:
-                    sent = self.raw.send(audio)
+                    token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
+                    try:
+                        sent = self.raw.send(audio)
+                    finally:
+                        if token is not None:
+                            capture_spans.reset(token)
                 except Exception:
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
@@ -880,9 +900,11 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
+                    self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:
                     self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
-            if record_before_finalize and self._send_tracker is not None:
+            if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
                 note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
@@ -895,7 +917,12 @@ class LiveLegSocket(STTSocket):
             self._finish_transport()
             return False
         self._idle_send_spans = sent_spans
-        if sent_spans and self._send_tracker is not None and not record_before_finalize:
+        if (
+            sent_spans
+            and self._send_tracker is not None
+            and not record_before_finalize
+            and not self._soniox_wire_ledger
+        ):
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
@@ -973,7 +1000,11 @@ class LiveLegSocket(STTSocket):
     async def complete_send(self) -> bool:
         offset = getattr(self.raw, 'set_resume_provider_offset', None)
         if self._send_tracker is not None and callable(offset):
-            offset(self._send_tracker.last_send_provider_start)
+            offset(
+                self._send_tracker.wire_provider_samples or 0
+                if self._soniox_wire_ledger
+                else self._send_tracker.last_send_provider_start
+            )
         complete = getattr(self.raw, 'complete_send', None)
         completed = (
             await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
@@ -994,9 +1025,17 @@ class LiveLegSocket(STTSocket):
         if not data:
             return True
         self._idle_send_spans = spans
-        accepted = self.raw.send(data)
+        token = capture_spans.set(tuple(spans)) if self._soniox_wire_ledger else None
+        try:
+            accepted = self.raw.send(data)
+        finally:
+            if token is not None:
+                capture_spans.reset(token)
+        if accepted and self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
+            self._routing_cohort.paid_audio(self.service.value, len(data) / (self.sample_rate * 2))
         if accepted and self._send_tracker is not None and spans:
-            self._send_tracker.note_accepted_spans(spans)
+            if not self._soniox_wire_ledger:
+                self._send_tracker.note_accepted_spans(spans)
             self._note_replay_capture(data, spans[0][0])
         return accepted
 

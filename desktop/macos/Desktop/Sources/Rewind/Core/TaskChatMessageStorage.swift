@@ -124,39 +124,19 @@ struct TaskChatLegacyMessagePage {
 /// Actor-based storage for task chat messages with local-first persistence
 actor TaskChatMessageStorage {
   static let shared = TaskChatMessageStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  private let repository = RewindRepository(owner: "TaskChatMessageStorage")
 
   private init() {}
 
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("TaskChatMessageStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw TaskChatMessageStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   /// Read-only compatibility source for the one-time kernel import. Every SQL

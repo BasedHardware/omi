@@ -129,7 +129,12 @@ def test_randomized_base_embedding_is_byte_identical(env, verified_audio, base_s
     stage.resolve_speakers_for_processing('offline', conversation)
     assert len(candidate.clips) == len(diarizer.clips)
     assert all(a == b for a, b in zip(candidate.clips, diarizer.clips))
-    assert env[0] == store  # durations, vectors, bare/span keys and format
+    # Evidence duration was already an optional v1 header field. It now serves
+    # identity policy even with score instrumentation off; all embedding bytes,
+    # durations, keys and cache version must remain identical to the base.
+    assert {key: stage.encode_cache(stage.decode_cache(value)) for key, value in env[0].items()} == {
+        key: base_stage.encode_cache(base_stage.decode_cache(value)) for key, value in store.items()
+    }
     assert conversation.model_dump() == old.model_dump()
 
 
@@ -162,13 +167,24 @@ def test_base_resolved_identity_survives_cache_hit_and_miss(
     cached = old.model_copy(deep=True)
     stage.resolve_speakers_for_processing('offline', cached)
     assert not candidate.clips
-    assert cached.model_dump() == old.model_dump()
+    expected_cached = old.model_copy(deep=True)
+    if extents[-1][1] == 12:
+        # A bare historical cache cannot claim enough owner seconds for a new
+        # negative either. Grouping, transcript attribution and capture proof
+        # remain byte-for-byte unchanged; only confidence becomes unknown.
+        expected_cached.transcript_segments[0].speaker_identity_status = 'unknown'
+    assert cached.model_dump() == expected_cached.model_dump()
     env[0].clear()  # download returns no bytes: ordinary miss, no invalidation
     stage.resolve_speakers_for_processing('offline', cached)
     assert len(candidate.clips) == len(diarizer.clips)
     assert all(a == b for a, b in zip(candidate.clips, diarizer.clips))
     assert cached.model_dump() == old.model_dump()
-    assert env[0] == store
+    # Evidence duration was already an optional v1 header field. It now serves
+    # identity policy even with score instrumentation off; all embedding bytes,
+    # durations, keys and cache version must remain identical to the base.
+    assert {key: stage.encode_cache(stage.decode_cache(value)) for key, value in env[0].items()} == {
+        key: base_stage.encode_cache(base_stage.decode_cache(value)) for key, value in store.items()
+    }
 
 
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])

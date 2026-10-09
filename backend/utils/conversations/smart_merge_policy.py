@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+import config.speaker_match_scores as match_scores
 from config.conversation_smart_merge import (
     ELIGIBLE_SOURCES,
     LEDGER_OVERVIEW_CHARS,
@@ -81,6 +82,7 @@ class SkipReason:
     FLATTEN_CONTENT_CHANGED = 'flatten_content_changed'
     WALLCLOCK_GAP_NEGATIVE = 'wallclock_gap_negative'
     WALLCLOCK_TIME_INVALID = 'wallclock_time_invalid'
+    INTERVENING_DISCARDED = 'intervening_discarded'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -521,6 +523,9 @@ def absorb_payloads(
         'sync_merged_from': sorted({*(survivor.get('sync_merged_from') or []), str(donor['id'])}),
         SMART_MERGE_FIELD: state,
     }
+    score_union = match_scores.aggregate([survivor, donor])
+    if score_union is not None:
+        survivor_update[match_scores.FIELD] = score_union
     # The processor's existing transcript fence is sync_content_revision. Stamp
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.

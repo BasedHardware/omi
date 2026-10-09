@@ -28,6 +28,7 @@ import math
 import time
 import uuid
 from dataclasses import dataclass, field
+from collections import deque
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
@@ -425,6 +426,12 @@ class SendMap:
             self._spans.pop(0)
             self.evicted_spans += 1
 
+    def discard_provider_from(self, first: int) -> None:
+        """Remove a disproven suffix, including the tail of a coalesced span."""
+        self._spans = [
+            [start, capture, min(length, first - start)] for start, capture, length in self._spans if start < first
+        ]
+
     def add_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
         """Record consecutive pieces that the provider receives back-to-back."""
         for capture_first_sample, length_samples in spans:
@@ -616,6 +623,20 @@ class ProviderEpochTranslator:
         # capture positions instead.
         self.replay_origin_sample: Optional[int] = None
         self.require_observed_send_mapping = False
+        self.wire_audio_samples: Optional[int] = None
+        self.wire_provider_samples: Optional[int] = None
+        self._wire_race_intervals: Optional[deque[Tuple[int, int]]] = None
+        self.wire_pending_from: Optional[int] = None
+
+    def invalidate_wire_from(self, first: int) -> None:
+        """Discard unverified maps; delayed tokens cannot regain this suffix."""
+        self.send_map.discard_provider_from(first)
+        self._send_owners = [(a, min(b, first), owner) for a, b, owner in self._send_owners if a < first]
+        end = self.wire_provider_samples or first
+        if end > first:
+            if self._wire_race_intervals is None:
+                self._wire_race_intervals = deque(maxlen=MAX_SEND_SPANS)
+            self._wire_race_intervals.append((first, end))
 
     def capture_merge_proof(self, first: int, end: int) -> Optional[CaptureWindowProof]:
         """Snapshot one accepted run, split at strict half-open wall hiatuses.
@@ -669,12 +690,43 @@ class ProviderEpochTranslator:
         """Whether translate() rewrites start/end onto the capture wall axis."""
         return self._project_times
 
-    def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
+    def note_wire_audio(
+        self, length: int, spans: Sequence[Tuple[int, int]], *, unplaceable_by_race: bool = False
+    ) -> None:
+        """Consume actual emitted PCM; holes carry no capture or owner proof."""
+        start = self.wire_provider_samples or 0
+        self.wire_provider_samples = start + length
+        self.wire_audio_samples = (self.wire_audio_samples or 0) + length
+        self.require_observed_send_mapping = True
+        self.send_path = 'managed_chain'
+        if unplaceable_by_race and length > 0:
+            # Attribution only; this bounded history never grants placement.
+            if self._wire_race_intervals is None:
+                self._wire_race_intervals = deque(maxlen=MAX_SEND_SPANS)
+            if self._wire_race_intervals and self._wire_race_intervals[-1][1] == start:
+                first, _ = self._wire_race_intervals.pop()
+                self._wire_race_intervals.append((first, start + length))
+            else:
+                self._wire_race_intervals.append((start, start + length))
+        if spans:
+            self.note_accepted_spans(spans, provider_start=start)
+
+    def note_provider_hole(self, length: int) -> None:
+        """Advance only the provider axis; internal padding is never wire PCM."""
+        if length > 0:
+            self.wire_provider_samples = (self.wire_provider_samples or 0) + length
+            from utils.stt.soniox_wire_metrics import wire_metrics
+
+            metrics = wire_metrics()
+            metrics.holes.inc()
+            metrics.hole_samples.inc(length)
+
+    def note_accepted_spans(self, spans: Sequence[Tuple[int, int]], *, provider_start: Optional[int] = None) -> None:
         first_span = True
         for capture_start, length in spans:
             if length <= 0:
                 continue
-            start = self.send_map.last_provider_sample or 0
+            start = provider_start if provider_start is not None else (self.send_map.last_provider_sample or 0)
             if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
                 start = self._note_elapsed_span(capture_start, length)
             if first_span:
@@ -682,6 +734,8 @@ class ProviderEpochTranslator:
                 first_span = False
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
+            if provider_start is not None:
+                provider_start = end
             owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
             if self._only_send_owner is None and not self._send_owner_ambiguous:
                 self._only_send_owner = owner
@@ -790,6 +844,15 @@ class ProviderEpochTranslator:
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            if self.wire_pending_from is not None and max(first_sample, last_sample) > self.wire_pending_from:
+                # Prediction is a send-time cursor, not capture evidence until
+                # its own FIFO acknowledgment verifies it. No transport wait.
+                self._reject(segment, 'outside_accepted_sends')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
+                else:
+                    translated.append(segment)
+                continue
             if self._on_validation is not None:
                 is_shadow = self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'shadow'
                 validation_map = (
@@ -901,11 +964,22 @@ class ProviderEpochTranslator:
             if self._project_times:
                 segment['audio_capture_run'] = self.send_map.capture_run_start(first_sample)
             translated.append(segment)
+            if self.wire_audio_samples is not None:
+                from utils.stt.soniox_wire_metrics import wire_metrics
+
+                wire_metrics().intervals.labels(outcome='known').inc()
             if self._on_mapped is not None:
                 try:
                     self._on_mapped()
                 except Exception:
                     pass
+        for segment in translated:
+            visible_times = segment.pop('_provider_visible_times', None)
+            if visible_times is not None and not self._project_times:
+                # Idle reopen keeps native coordinates until capture admission.
+                # Clock-only persistence still exposes the exact legacy clamp;
+                # projected mode owns its visible wall axis independently.
+                segment['start'], segment['end'] = visible_times
         return translated
 
     def _append_unplaced(self, translated: List[Dict], segment: Dict) -> None:
@@ -923,6 +997,20 @@ class ProviderEpochTranslator:
         translated.append(segment)
 
     def _reject(self, segment: Dict, reason: str) -> None:
+        if self.wire_audio_samples is not None:
+            from utils.stt.soniox_wire_metrics import wire_metrics
+
+            raced = False
+            try:
+                first = float(segment['start']) * self.provider_sample_rate
+                end = float(segment['end']) * self.provider_sample_rate
+                raced = any(
+                    (a <= first < b if first == end else first < b and end > a)
+                    for a, b in self._wire_race_intervals or ()
+                )
+            except (TypeError, ValueError, KeyError):
+                pass
+            wire_metrics().intervals.labels(outcome='unplaceable_by_race' if raced else 'other_refused').inc()
         # Transient metadata only; the legacy refusal metric and text stay unchanged.
         attribution = 'anchor_compacted' if reason == 'evicted_interval' else 'translator_' + reason
         if reason == 'outside_accepted_sends':

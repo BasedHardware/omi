@@ -21,6 +21,7 @@ from utils.conversations.relevance import (
     find_neighbor,
 )
 from utils.conversations.wake_word import find_wake_word_matches
+from utils.integration_telemetry import emit_posthog_event
 from utils.metrics import record_conversation_relevance
 from utils.release_probe import is_release_probe_uid
 
@@ -95,3 +96,22 @@ def apply_relevance(conversation: Any, payload: dict[str, Any], decision: Releva
     payload['discarded'] = decision.discard
     payload[RELEVANCE_DECISION_FIELD] = decision.as_record()
     record_decision(decision)
+
+
+def emit_recorded_decision(uid: str, conversation_id: str, decision: RelevanceDecision) -> None:
+    """Enqueue one content-free event after a final decision is successfully stored.
+
+    The shared PostHog helper uses the SDK's background capture queue. Optional
+    analytics must never fail conversation processing, even if capture raises.
+    """
+    try:
+        properties: dict[str, Any] = {
+            'conversation_id': str(conversation_id),
+            'reason': decision.reason,
+            'discarded': decision.discard,
+        }
+        if decision.arm is not None:
+            properties['arm'] = decision.arm
+        emit_posthog_event(uid, 'Relevance Decision Recorded', properties)
+    except Exception as error:
+        logger.warning('relevance analytics capture failed error=%s', type(error).__name__)

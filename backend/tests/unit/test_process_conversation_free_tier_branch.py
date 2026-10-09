@@ -123,12 +123,9 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
     ):

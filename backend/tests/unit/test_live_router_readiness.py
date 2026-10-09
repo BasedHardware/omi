@@ -397,3 +397,42 @@ def test_malformed_routing_percent_keeps_legacy_failover_alive(monkeypatch):
     # malformed percent must fall back to the managed router-off cap of 3,
     # which this receiver has already exhausted.
     assert live_recovery.select_live_replacement(receiver, 'modulate', select, managed=True) == (None, None, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'on'])
+@pytest.mark.parametrize('allocation', ['private-malformed-value', '-1', '101', 'nan', 'inf'])
+async def test_invalid_hard_permission_is_bounded_chain_unavailability(monkeypatch, isolated, mode, allocation):
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', allocation)
+    connect = AsyncMock()
+    fallback = Mock()
+    monkeypatch.setattr(live_chain, 'record_fallback', fallback)
+    before = live_chain.COST_FAIL_OPEN.labels(reason='router_error')._value.get()
+    failed = set()
+    failed_targets = set()
+    with pytest.raises(live_chain.ProviderChainUnavailable) as caught:
+        await live_chain.connect_configured_chain(
+            primary_service=STTService.parakeet,
+            connect_primary=connect,
+            callbacks={STTService.soniox: connect},
+            failed=failed,
+            failed_targets=failed_targets,
+            models=['parakeet-window', 'soniox'],
+            routing_uid='synthetic',
+            routing_language='en',
+            routing_models={'parakeet': 'parakeet-window', 'soniox': 'soniox'},
+        )
+    assert caught.value.retry_after == 5
+    assert allocation not in str(caught.value)
+    connect.assert_not_awaited()
+    assert failed == failed_targets == set()
+    assert live_chain.COST_FAIL_OPEN.labels(reason='router_error')._value.get() == before + 1
+    fallback.assert_called_once_with(
+        component='stt_selection',
+        from_mode='parakeet',
+        to_mode='parakeet',
+        reason='config_incomplete',
+        outcome='degraded',
+    )

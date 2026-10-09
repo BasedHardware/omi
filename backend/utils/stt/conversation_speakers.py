@@ -29,6 +29,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
+import config.speaker_match_scores as match_scores
+
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
@@ -84,6 +86,8 @@ class SpeakerResolution:
     coverage: float
     """Share of embeddable speech that voice evidence or a manual label placed."""
     stats: Dict[str, Any] = field(default_factory=dict)
+    contradicted_segment_ids: Set[str] = field(default_factory=set)
+    match_scores: List[dict] = field(default_factory=list)
     voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
     """Evidence states for automatic voices only; manual receipts remain authoritative."""
 
@@ -130,6 +134,7 @@ def resolve_conversation_speakers(
     manual_speakers: Optional[Mapping[int, Identity]] = None,
     voiceprints: Optional[Mapping[str, Any]] = None,
     abstained_segment_ids: Optional[Set[str]] = None,
+    embedding_seconds: Optional[Mapping[str, float]] = None,
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.
 
@@ -274,10 +279,27 @@ def resolve_conversation_speakers(
     voice_identity: Dict[int, Identity] = {}
     distances = {}
     decisions = {}
+    score_seconds: Dict[int, Optional[float]] = {}
     for index, cluster in enumerate(clusters):
+        evidence_ids = [_seg(s, 'id') for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors]
+        try:
+            if embedding_seconds is not None and all(sid in embedding_seconds for sid in evidence_ids):
+                seconds = [float(embedding_seconds[sid]) for sid in evidence_ids]
+                if any(not np.isfinite(value) or value < 0 for value in seconds):
+                    raise ValueError('Invalid embedded audio duration')
+                score_seconds[index] = sum(seconds)
+            else:
+                score_seconds[index] = None
+        except Exception:
+            score_seconds[index] = None
+            match_scores.record_failure(None, reason='malformed_doc')
         if identities_of(cluster):
             continue
-        evidence = sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
+        evidence = (
+            (score_seconds[index] or 0.0)
+            if embedding_seconds is not None
+            else sum(_duration(s) for i in cluster.members for s in unit_segments[i] if _seg(s, 'id') in vectors)
+        )
         vector = centroid(cluster)
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue
@@ -306,12 +328,14 @@ def resolve_conversation_speakers(
 
     merged: Dict[str, int] = {}
     keep: List[int] = []
+    score_members = {index: [index] for index in range(len(clusters))}
     for index in range(len(clusters)):
         token = cluster_token(index)
         if token is None:
             keep.append(index)
         elif token in merged:
             clusters[merged[token]].extend(clusters[index])
+            score_members[merged[token]].extend(score_members[index])
         else:
             merged[token] = index
             keep.append(index)
@@ -335,33 +359,33 @@ def resolve_conversation_speakers(
             for segment in unit_segments[i]:
                 cluster_of_segment[_seg(segment, 'id')] = position
 
-    by_old_id: Dict[int, Dict[int, float]] = {}
+    by_old_id: Dict[Tuple[str, int], Dict[int, float]] = {}
+    contradicted = set()
+
+    def capture_key(segment):
+        return (_seg(segment, 'speaker_id_scope') or '', int(_seg(segment, 'speaker_id')))
+
     for segment in eligible:
         position = cluster_of_segment.get(_seg(segment, 'id'))
         if position is not None:
-            votes = by_old_id.setdefault(int(_seg(segment, 'speaker_id')), {})
+            votes = by_old_id.setdefault(capture_key(segment), {})
             votes[position] = votes.get(position, 0.0) + max(_duration(segment), 1e-3)
-    placed = sorted(
-        (
-            (float(_seg(s, 'start', 0.0) or 0.0) + float(_seg(s, 'end', 0.0) or 0.0)) / 2.0,
-            cluster_of_segment[_seg(s, 'id')],
-        )
-        for s in eligible
-        if _seg(s, 'id') in cluster_of_segment
-    )
-    centers = np.array([center for center, _ in placed])
     for segment in eligible:
         segment_id = _seg(segment, 'id')
         if segment_id in cluster_of_segment:
             continue
-        votes = by_old_id.get(int(_seg(segment, 'speaker_id')))
+        votes = by_old_id.get(capture_key(segment))
         if votes:
-            # Capture's own label is the best evidence for a clip that was not embedded.
-            cluster_of_segment[segment_id] = max(votes.items(), key=lambda item: (item[1], -item[0]))[0]
-        elif placed and _duration(segment) < MIN_EMBED_SECONDS:
-            # Too short to ever embed: the voice speaking around it.
-            center = (float(_seg(segment, 'start', 0.0) or 0.0) + float(_seg(segment, 'end', 0.0) or 0.0)) / 2.0
-            cluster_of_segment[segment_id] = placed[int(np.argmin(np.abs(centers - center)))][1]
+            if len(votes) == 1:
+                cluster_of_segment[segment_id] = next(iter(votes))
+            else:
+                # Acoustic contradiction within this provider voice: no majority
+                # can establish which person uttered an unembedded short reply.
+                contradicted.add(segment_id)
+        elif _duration(segment) < MIN_EMBED_SECONDS:
+            # A distinct provider voice has no compatible acoustic vote. Temporal
+            # proximity cannot promote it to its neighbour's owner/person identity.
+            contradicted.add(segment_id)
         # Otherwise it was embeddable but not embedded yet (budget, missing audio):
         # it keeps capture's id rather than borrowing a neighbour's voice.
 
@@ -422,7 +446,39 @@ def resolve_conversation_speakers(
         or identities_of(clusters[position])
         or position in final_identity
     )
+    score_rows = []
+    try:
+        if match_scores.enabled():
+            for position, root in enumerate(keep):
+                parts = [i for i in score_members[root] if i in decisions]
+                if position not in new_id_of or not parts:
+                    continue
+                combined_distances = {
+                    pid: min(distances[i][pid] for i in parts if pid in distances[i])
+                    for pid in {pid for i in parts for pid in distances[i]}
+                }
+                representative = root if root in decisions else parts[0]
+                known_seconds = [seconds for i in score_members[root] if (seconds := score_seconds[i]) is not None]
+                combined_seconds = sum(known_seconds) if len(known_seconds) == len(score_members[root]) else None
+                row = match_scores.summarize(
+                    new_id_of[position],
+                    combined_distances,
+                    decisions[representative],
+                    combined_seconds,
+                    'resolution',
+                    threshold=VOICE_MATCH_THRESHOLD,
+                    margin_threshold=SPEAKER_MATCH_MARGIN,
+                )
+                row['merged_cluster_count'] = len(score_members[root])
+                row['scored_cluster_count'] = len(parts)
+                row['distance_aggregation'] = 'min_constituent_v1'
+                row['margin_aggregation'] = 'representative_v1'
+                score_rows.append(row)
+            score_rows = match_scores.merge(None, score_rows)
+    except Exception:
+        match_scores.record_failure(None)
     return SpeakerResolution(
+        contradicted_segment_ids=contradicted,
         speaker_ids=speaker_ids,
         significant_speaker_ids=significant,
         voice_identities={
@@ -431,6 +487,7 @@ def resolve_conversation_speakers(
         voice_identity_statuses={
             new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
         },
+        match_scores=score_rows,
         embedded_segments=len(vectors),
         input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in all_eligible}),
         coverage=_coverage(all_eligible, vectors, manual_speakers, abstained),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_core_platform_interface/test.dart';
@@ -13,6 +15,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
@@ -38,6 +43,9 @@ class _RecordingAdapter implements AnalyticsAdapter {
 
 class _CaptureIntent extends ChangeNotifier implements CaptureProvider {
   int cleared = 0;
+  int chargeStarts = 0;
+  @override
+  void onChargingStarted() => chargeStarts++;
   @override
   void updateRecordingDevice(BtDevice? device) {
     if (device == null) cleared++;
@@ -45,6 +53,28 @@ class _CaptureIntent extends ChangeNotifier implements CaptureProvider {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _ChargingTransport implements DeviceTransport {
+  List<int> value = [1];
+  bool failRead = false;
+  final notifications = StreamController<List<int>>.broadcast(sync: true);
+
+  @override
+  Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
+
+  @override
+  Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
+    expect(characteristicUuid, OmiDeviceConnection.settingsChargingStatusCharacteristicUuid);
+    if (failRead) throw StateError('GATT read failed');
+    return value;
+  }
+
+  @override
+  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) => notifications.stream;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _NoConnectivityPlatform extends ConnectivityPlatform {
@@ -133,6 +163,139 @@ void main() {
   });
 
   tearDown(AnalyticsManager.resetForTesting);
+
+  for (final emptyRead in [false, true]) {
+    for (final recoverViaNotify in [false, true]) {
+      test('unknown charging read preserves edge history (empty=$emptyRead, notify=$recoverViaNotify)', () async {
+        final transport = _ChargingTransport();
+        final device = _device('charging-device');
+        final connection = OmiDeviceConnection(device, transport);
+        final capture = _CaptureIntent();
+        final provider = DeviceProvider(chargingConnectionLoader: (_) async => connection);
+        addTearDown(transport.notifications.close);
+        addTearDown(provider.dispose);
+        addTearDown(capture.dispose);
+        provider.captureProvider = capture;
+        provider.connectedDevice = device;
+
+        // Seed a successful charging observation before the session is paused.
+        await provider.initiateChargingStatusListener(allowCaptureResume: false);
+        expect(provider.isCharging, true);
+        expect(capture.chargeStarts, 0);
+
+        transport.failRead = !emptyRead;
+        transport.value = [];
+        await provider.initiateChargingStatusListener();
+        expect(provider.isCharging, true, reason: 'unknown does not replace the last known UI state');
+        expect(capture.chargeStarts, 0);
+
+        if (recoverViaNotify) {
+          transport.notifications.add([]);
+          transport.notifications.add([1]);
+        } else {
+          transport.failRead = false;
+          transport.value = [1];
+          await provider.initiateChargingStatusListener();
+        }
+        expect(capture.chargeStarts, 0, reason: 'a failed read must not fabricate an unplug/replug edge');
+      });
+    }
+  }
+
+  test('authorized first charging notification retains its edge during a later sync scope', () async {
+    final transport = _ChargingTransport()..failRead = true;
+    final device = _device('later-sync-charge');
+    final connection = OmiDeviceConnection(device, transport);
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(chargingConnectionLoader: (_) async => connection)
+      ..connectedDevice = device
+      ..captureProvider = capture;
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    await provider.initiateChargingStatusListener(allowCaptureResume: true);
+    await SyncWakeScope.run(() async {
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 1);
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 1);
+      transport.notifications.add([0]);
+      transport.notifications.add([1]);
+      expect(capture.chargeStarts, 2);
+    });
+  });
+
+  for (final origin in ['gated connect', 'sync notify', 'notify after sync', 'ordinary connect']) {
+    for (final firstCharging in [false, true]) {
+      test('first notify after failed read respects $origin gate (charging=$firstCharging)', () async {
+        final transport = _ChargingTransport()..failRead = true;
+        final device = _device('charging-notify-device');
+        final connection = OmiDeviceConnection(device, transport);
+        final capture = _CaptureIntent();
+        final provider = DeviceProvider(chargingConnectionLoader: (_) async => connection);
+        addTearDown(transport.notifications.close);
+        addTearDown(provider.dispose);
+        addTearDown(capture.dispose);
+        provider.captureProvider = capture;
+        provider.connectedDevice = device;
+
+        void notifyInitial() {
+          transport.notifications.add([]); // No observation yet.
+          transport.notifications.add([firstCharging ? 1 : 0]);
+          expect(provider.isCharging, firstCharging);
+          expect(capture.chargeStarts, origin == 'ordinary connect' && firstCharging ? 1 : 0);
+          // Repeated snapshots must not create another edge.
+          transport.notifications.add([firstCharging ? 1 : 0]);
+        }
+
+        if (origin == 'sync notify' || origin == 'notify after sync') {
+          await SyncWakeScope.run(() async {
+            await provider.initiateChargingStatusListener();
+            if (origin == 'sync notify') notifyInitial();
+          });
+          if (origin == 'notify after sync') notifyInitial();
+        } else {
+          await provider.initiateChargingStatusListener(allowCaptureResume: origin == 'ordinary connect');
+          notifyInitial();
+        }
+        final started = capture.chargeStarts;
+        transport.notifications.add([0]);
+        transport.notifications.add([1]);
+        expect(capture.chargeStarts, started + 1, reason: 'later genuine charge-start still resumes');
+        transport.notifications.add([1]);
+        expect(capture.chargeStarts, started + 1);
+      });
+    }
+  }
+
+  test('first charging sample resumes once, clean reconnect and steady samples do not', () async {
+    final transport = _ChargingTransport();
+    final device = _device('charging-device');
+    final connection = OmiDeviceConnection(device, transport);
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(
+      chargingConnectionLoader: (_) async => connection,
+      bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'),
+    );
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    provider.captureProvider = capture;
+    provider.connectedDevice = device;
+    await provider.initiateChargingStatusListener();
+    expect(capture.chargeStarts, 1);
+    transport.notifications.add([1]);
+    expect(capture.chargeStarts, 1);
+
+    provider.onDeviceDisconnected();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    provider.connectedDevice = device;
+    await provider.initiateChargingStatusListener();
+    expect(capture.chargeStarts, 1, reason: 'clean link loss does not forget a successful observation');
+    transport.notifications.add([0]);
+    transport.notifications.add([1]);
+    expect(capture.chargeStarts, 2, reason: 'a real unplug and replug remains a resume trigger');
+  });
 
   test('disconnect emits Device Disconnected Detailed from the freshest persisted event', () async {
     final analytics = _RecordingAdapter();

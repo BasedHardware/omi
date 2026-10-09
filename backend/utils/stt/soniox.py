@@ -25,6 +25,8 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
+from config.audio_timeline import soniox_wire_ledger_enabled, soniox_ordered_finalize_enabled
+from utils.stt.soniox_wire_ledger import SonioxProviderClock, OrderedSonioxProviderClock, capture_spans, observed_audio
 from utils.stt.soniox_capture_axis import (
     CaptureAxisDiagnostics,
     diagnostic_error,
@@ -192,6 +194,21 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
+        self._wire_ledger_enabled = soniox_wire_ledger_enabled()
+        self._wire_epoch: Any = None
+        self._wire_samples = 0
+        self._provider_clock: SonioxProviderClock | None = None
+        self._wire_provider_origin = 0
+        if (
+            self._wire_ledger_enabled
+            and soniox_ordered_finalize_enabled()
+            and sample_rate == 16000
+            and SONIOX_MODEL == 'stt-rt-v5'
+            and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
+        ):
+            self._provider_clock = OrderedSonioxProviderClock(sample_rate)
+        elif self._wire_ledger_enabled:
+            self._provider_clock = SonioxProviderClock(sample_rate)
         self._capture_axis: CaptureAxisDiagnostics | None = None
         self._capture_axis_failed = False
         try:
@@ -257,6 +274,7 @@ class SafeSonioxSocket(STTSocket):
                 return False
             if not data:
                 return True
+            had_odd_byte = bool(self._pending_odd_byte)
             aligned = self._pending_odd_byte + data
             self._pending_odd_byte = aligned[-1:] if len(aligned) % 2 else b''
             if self._pending_odd_byte:
@@ -274,6 +292,9 @@ class SafeSonioxSocket(STTSocket):
             return False
 
         try:
+            if self._wire_ledger_enabled and self._wire_epoch is not None:
+                spans = () if had_odd_byte or len(data) % 2 else capture_spans.get()
+                aligned = observed_audio(aligned, self._wire_epoch, spans)
             self._send_queue.put_nowait(aligned)
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
@@ -388,12 +409,84 @@ class SafeSonioxSocket(STTSocket):
     ) -> None:
         self._diagnostic(lambda diagnostic: diagnostic.bind(ledger, origin, phase))
 
+    def set_wire_ledger(self, epoch: Any) -> None:
+        if not self._wire_ledger_enabled:
+            return
+        if self._wire_epoch is not None:
+            if self._wire_epoch is not epoch:
+                raise RuntimeError('Soniox transport already owns a different ledger')
+            return
+        self._wire_epoch = epoch
+        # This switch uses the compact axis verified by the controlled probe.
+        epoch.soniox_elapsed_mode = 'off'
+        if epoch.wire_audio_samples is None:
+            epoch.wire_audio_samples = epoch.send_map.last_provider_sample or 0
+        if epoch.wire_provider_samples is None:
+            epoch.wire_provider_samples = epoch.wire_audio_samples
+        self._wire_provider_origin = epoch.wire_provider_samples
+        if self._wire_samples:
+            epoch.note_wire_audio(self._wire_samples, ())
+        if self._provider_clock is not None:
+            epoch.note_provider_hole(self._provider_clock.samples - self._wire_samples)
+        self._sync_ordered_clock()
+
+    def _sync_ordered_clock(self) -> None:
+        clock = self._provider_clock
+        if isinstance(clock, OrderedSonioxProviderClock) and self._wire_epoch is not None:
+            origin = self._wire_provider_origin
+            if clock.invalid_from is not None:
+                self._wire_epoch.invalidate_wire_from(origin + clock.invalid_from)
+                clock.invalid_from = None
+            if clock.reanchor is not None:
+                self._wire_epoch.wire_provider_samples = origin + clock.reanchor
+                clock.reanchor = None
+            pending = clock.pending_from
+            self._wire_epoch.wire_pending_from = None if pending is None else origin + pending
+
     async def _write(self, data: bytes | str) -> None:
         self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', True))
+        provider_clock = self._provider_clock
+        placeable = True
+        finalize = False
+        # Fence before the websocket await: receive can run inside send(), and
+        # acknowledgment before audio completion is already an ordering race.
+        if provider_clock is not None:
+            if isinstance(data, bytes):
+                placeable = provider_clock.begin_audio()
+            elif data:
+                try:
+                    control = json.loads(data)
+                except (ValueError, TypeError):
+                    control = None
+                if isinstance(control, dict) and control.get('type') == 'finalize':
+                    finalize = True
+                    hole = provider_clock.begin_finalize()
+                    if self._wire_epoch is not None:
+                        self._wire_epoch.note_provider_hole(hole)
+                    self._sync_ordered_clock()
+        written = False
         try:
             await self._ws.send(data)
+            written = True
+            if provider_clock is not None and finalize:
+                provider_clock.finalize_written()
+            if provider_clock is not None and isinstance(data, bytes):
+                length = len(data) // 2
+                self._wire_samples += length
+                provider_clock.end_audio(length)
+                if self._wire_epoch is not None:
+                    # An ambiguous ack may arrive inside this audio send await.
+                    placeable = placeable and provider_clock.placeable
+                    self._wire_epoch.note_wire_audio(
+                        length, getattr(data, 'spans', ()) if placeable else (), unplaceable_by_race=not placeable
+                    )
             self._diagnostic(lambda diagnostic: diagnostic.sent(data))
         finally:
+            if not written and provider_clock is not None and isinstance(data, bytes):
+                provider_clock.end_audio(0)
+            if not written and provider_clock is not None:
+                provider_clock.write_failed()
+                self._sync_ordered_clock()
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'inflight', False))
 
     async def _send_loop(self) -> None:
@@ -513,6 +606,11 @@ class SafeSonioxSocket(STTSocket):
                     self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
 
+                if self._provider_clock is not None:
+                    hole = self._provider_clock.response(msg)
+                    if self._wire_epoch is not None:
+                        self._wire_epoch.note_provider_hole(hole)
+                    self._sync_ordered_clock()
                 self._diagnostic(lambda diagnostic: diagnostic.response(msg))
                 tokens: List[Any] = msg.get('tokens') or []
                 if tokens:
@@ -532,6 +630,9 @@ class SafeSonioxSocket(STTSocket):
                 f'ws recv error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
             )
         finally:
+            if self._provider_clock is not None:
+                self._provider_clock.close()
+                self._sync_ordered_clock()
             try:
                 self._flush_pending()
             finally:

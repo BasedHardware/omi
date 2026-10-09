@@ -125,8 +125,8 @@ surfaces:
   - utils/llm/chat.py::feature:chat_extraction
   - utils/llm/conversation_folder.py::feature:conv_folder
   - utils/llm/conversation_processing.py::feature:conv_discard
-  - utils/llm/conversation_processing.py::feature:conv_action_items
   - utils/llm/conversation_processing.py::feature:conv_structure
+  - utils/llm/episode_writer.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result
   - utils/llm/conversation_processing.py::feature:conv_app_select
   - utils/llm/conversation_processing.py::feature:daily_summary

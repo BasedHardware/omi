@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from database.dream_dirty import after_write
 
 try:
     from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
@@ -155,11 +156,6 @@ def get_memory_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     database = _get_db(firestore_client)
     coll = database.collection(users_collection).document(uid).collection(memories_collection)
     return [doc.id for doc in coll.select([]).stream()]
-
-
-# *********************************
-# ******* ENCRYPTION HELPERS ******
-# *********************************
 
 
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
@@ -732,6 +728,7 @@ def get_non_filtered_memories(
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -759,6 +756,7 @@ def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = Non
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
 def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     if not data:
         return
@@ -950,6 +948,7 @@ def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_
     memory_ref.update({'visibility': value})
 
 
+@after_write('memories')
 def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:

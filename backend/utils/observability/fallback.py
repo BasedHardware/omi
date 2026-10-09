@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,10 @@ def record_fallback(
         ).inc()
     except Exception:
         pass
+
+    cohort = current_routing_cohort.get()
+    if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
+        cohort.exhausted = True
 
     emit_log = log or logger
     try:

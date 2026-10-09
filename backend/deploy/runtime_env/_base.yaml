@@ -20,6 +20,7 @@ environment_shared:
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -91,9 +92,6 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
-        OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-          value: 'true'
-          category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
           value: gateway
           category: rollout
@@ -104,9 +102,6 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
-        STT_CONNECT_ORDER_FROM_CONFIG:
-          value: 'false'
-          category: rollout
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
@@ -195,14 +190,8 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: CONVERSATION_SUMMARIZED_APP_IDS
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
-          category: rollout
-        MEETING_RECEIPT_RECONCILER_ENABLED:
-          value: 'false'
           category: rollout
         LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
           value: 'true'
@@ -210,12 +199,6 @@ environment_shared:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -345,6 +328,7 @@ environment_shared:
         LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
         SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -365,18 +349,9 @@ environment_shared:
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -472,6 +447,10 @@ environment_shared:
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
+      FIRESTORE_READ_LEDGER:
+        value: '1'
+      FIRESTORE_READ_LEDGER_SERVICE:
+        value: desktop-backend
     secrets:
       GEMINI_API_KEY:
         secret: GEMINI_API_KEY
@@ -531,6 +510,7 @@ environment_shared:
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -567,24 +547,12 @@ environment_shared:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
-            category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -709,6 +677,7 @@ environment_shared:
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -815,18 +784,9 @@ environment_shared:
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
             category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -870,6 +830,7 @@ environment_shared:
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -1016,6 +977,7 @@ environment_shared:
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'false', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED: {value: 'true', category: ops_kill}
@@ -1136,6 +1098,53 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+      x-connector-sync-job:
+        flags:
+          --task-timeout: 3600s
+        secrets:
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+          OPENAI_API_KEY:
+            secret: OPENAI_API_KEY
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          PINECONE_API_KEY:
+            secret: PINECONE_API_KEY
+            version: latest
+          X_OAUTH_CLIENT_SECRET:
+            secret: X_OAUTH_CLIENT_SECRET
+            version: latest
+          RAPID_API_KEY:
+            secret: RAPID_API_KEY
+            version: latest
+        env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
+            category: memory_rollout
+          PINECONE_INDEX_NAME:
+            category: integrations
+          X_OAUTH_CLIENT_ID:
+            env_var: X_OAUTH_CLIENT_ID
+            category: oauth_metadata
+          X_OAUTH_REDIRECT_URI:
+            env_var: X_OAUTH_REDIRECT_URI
+            category: oauth_metadata
+          RAPID_API_HOST:
+            env_var: RAPID_API_HOST
+            category: integrations
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
       memory-maintenance-job:
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
@@ -1195,9 +1204,6 @@ environment_shared:
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
             category: memory_rollout
             value: 'true'
-          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-            category: memory_rollout
-            value: 'false'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

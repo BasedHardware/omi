@@ -123,8 +123,6 @@ env:
     value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
-  - name: MENTOR_GATE_DEBOUNCE_ENABLED
-    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
@@ -204,6 +202,10 @@ env:
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "false"
+  - name: SONIOX_WIRE_LEDGER
+    value: "false"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
@@ -224,15 +226,11 @@ env:
     value: "on"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"

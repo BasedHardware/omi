@@ -4,6 +4,8 @@ Tests the Firestore helpers (set/get_user_speaker_embedding), the speech profile
 upload extraction path, and the transcribe.py Firestore loading path.
 """
 
+from database import owner_profile_updates as recovery_db
+
 import asyncio
 import logging
 import sys
@@ -325,7 +327,8 @@ def live_owner_profile(monkeypatch):
     monkeypatch.setattr(runtime_module, 'get_user_has_speech_profile', world.blob)
     monkeypatch.setattr(speakers_module, 'get_profile_audio_if_exists', world.audio)
     monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', world.extract)
-    monkeypatch.setattr(speakers_module.user_db, 'set_user_speaker_embedding', world.store)
+    monkeypatch.setattr(recovery_db, 'get_user_speaker_embedding_recovery_state', lambda uid: (None, None))
+    monkeypatch.setattr(recovery_db, 'recover_user_speaker_embedding', world.store)
     monkeypatch.setattr(speakers_module.user_db, 'get_people', world.people)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', lambda *a, **kw: ('test-stt', 'en', 'test'))
@@ -403,7 +406,7 @@ class TestTranscribeFirestoreLoading:
             runtime = asyncio.run(world.start(private_sync=private_sync))
 
         assert not runtime.has_speech_profile
-        assert runtime.state.speaker_id_enabled is private_sync
+        assert runtime.state.speaker_id_enabled is True
         assert not runtime.speakers.person_embeddings
         assert not _owner_segment_can_queue(runtime)
         messages = [r.getMessage() for r in caplog.records if 'Speaker ID owner profile skipped' in r.getMessage()]
@@ -429,7 +432,9 @@ class TestTranscribeFirestoreLoading:
             runtime.speakers.person_embeddings[USER_SELF_PERSON_ID]['embedding'], world.extract.return_value
         )
         world.extract.assert_called_once_with(b'synthetic-profile-audio', 'speech_profile.wav')
-        world.store.assert_called_once_with(runtime.request.uid, world.extract.return_value.flatten().tolist())
+        world.store.assert_called_once_with(
+            runtime.request.uid, world.extract.return_value.flatten().tolist(), expected_updated_at=None
+        )
 
     def test_blob_disappearing_after_bootstrap_logs_skip(self, live_owner_profile, caplog):
         world = live_owner_profile

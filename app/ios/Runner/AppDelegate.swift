@@ -123,10 +123,61 @@ final class QuickActionsIconPatcher: NSObject {
   private var nextExpectedChunkIndex: Int = 0
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
+  private static let periodicSyncIdentifier = "com.omi.recording-sync.refresh"
+  private var periodicSyncChannel: FlutterMethodChannel?
+  private var periodicSyncReady = false
+
+  private func schedulePeriodicSync() {
+    let request = BGAppRefreshTaskRequest(identifier: Self.periodicSyncIdentifier)
+    // Earliest eligibility only. iOS decides whether and when to grant a window.
+    request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+    do {
+      try BGTaskScheduler.shared.submit(request)
+    } catch {
+      NSLog("[PeriodicSync] scheduling unavailable: %@", String(describing: error))
+    }
+  }
+
+  private func runPeriodicSync(_ task: BGTask) {
+    schedulePeriodicSync()
+    guard periodicSyncReady, let channel = periodicSyncChannel else {
+      // TODO(astra): WAL recovery is configured by the UI-isolate SyncProvider. (#5491)
+      // There is no isolated headless WAL/account bootstrap. Do not boot the
+      // ordinary app entrypoint here: it can start capture. Suspended-engine
+      // refresh is supported; a cold-process grant safely waits for foreground.
+      task.setTaskCompleted(success: false)
+      return
+    }
+    var completed = false
+    func finish(_ success: Bool) {
+      guard !completed else { return }
+      completed = true
+      task.expirationHandler = nil
+      task.setTaskCompleted(success: success)
+    }
+    task.expirationHandler = {
+      DispatchQueue.main.async {
+        guard !completed else { return }
+        channel.invokeMethod("expire", arguments: nil)
+        finish(false)
+      }
+    }
+    channel.invokeMethod("wake", arguments: nil) { result in
+      finish((result as? Bool) == true)
+    }
+  }
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.periodicSyncIdentifier, using: .main) { [weak self] task in
+      guard let self = self else {
+        task.setTaskCompleted(success: false)
+        return
+      }
+      self.runPeriodicSync(task)
+    }
     QuickActionsIconPatcher.shared.startObserving()
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
@@ -148,6 +199,17 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
+    periodicSyncChannel = syncChannel
+    syncChannel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "schedule", let self = self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self.periodicSyncReady = true
+      self.schedulePeriodicSync()
+      result(nil)
+    }
     SiriBridge.shared.attach(messenger: messenger)
     if #available(iOS 16.1, *) {
       liveActivityManager = LiveActivityManager(messenger: messenger)
@@ -386,6 +448,31 @@ final class QuickActionsIconPatcher: NSObject {
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
+    }
+
+    // Snapshot only: no battery observer or background work. Restore monitoring
+    // so this telemetry read cannot leave UIDevice battery monitoring enabled.
+    let phoneBatteryChannel = FlutterMethodChannel(name: "com.omi/phone_battery", binaryMessenger: messenger)
+    phoneBatteryChannel.setMethodCallHandler { call, result in
+        guard call.method == "read" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        device.isBatteryMonitoringEnabled = true
+        defer { device.isBatteryMonitoringEnabled = wasMonitoring }
+        let level = device.batteryLevel
+        let state = device.batteryState
+        guard level >= 0, level <= 1, state != .unknown else {
+            result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
+            return
+        }
+        result([
+            "battery_level": Int((level * 100).rounded()),
+            "battery_charging": state == .charging || state == .full,
+            "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
+        ])
     }
 
     // TestFlight environment detection
