@@ -779,7 +779,8 @@ def test_dropping_a_pin_that_is_absent_is_not_an_error():
     assert module._drop_pinned_revision_name({}) is None
 
 
-def test_job_sidecar_preserves_task_settings_and_is_idempotent():
+@pytest.mark.parametrize('existing_startup_probe', [False, True])
+def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_probes(existing_startup_probe):
     module = _load_module()
     job = {
         'apiVersion': 'run.googleapis.com/v1',
@@ -807,6 +808,13 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent():
             }
         },
     }
+    if existing_startup_probe:
+        job['spec']['template']['spec']['template']['spec']['containers'][0]['startupProbe'] = {
+            'tcpSocket': {'port': 9090},
+            'periodSeconds': 1,
+            'timeoutSeconds': 1,
+            'failureThreshold': 240,
+        }
     kwargs = dict(project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7')
     patched = module.patch_job(job, **kwargs)
     assert module.patch_job(patched, **kwargs) == patched
@@ -814,6 +822,7 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent():
     assert task['spec']['timeoutSeconds'] == '600'
     assert task['spec']['serviceAccountName'] == 'runtime'
     app, collector = task['spec']['containers']
+    assert all('startupProbe' not in container for container in task['spec']['containers'])
     assert {'name': 'FLAG', 'value': 'on'} in app['env']
     assert {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'} in app['env']
     assert collector['image'] == module.SIDECAR_IMAGE

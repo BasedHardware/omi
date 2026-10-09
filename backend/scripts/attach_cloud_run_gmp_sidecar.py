@@ -532,12 +532,9 @@ def patch_job(
         {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'},
         {'name': 'PROMETHEUS_SIDECAR_DONE_FILE', 'value': JOB_DONE_FILE},
     ]
-    app['startupProbe'] = {
-        'tcpSocket': {'port': 9090},
-        'periodSeconds': 1,
-        'timeoutSeconds': 1,
-        'failureThreshold': 240,
-    }
+    # Job probes cannot reach the loopback metrics listener. Also remove any
+    # probe retained from an earlier attachment so it cannot terminate the task.
+    app.pop('startupProbe', None)
     app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
     app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
     # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.

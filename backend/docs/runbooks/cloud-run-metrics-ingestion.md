@@ -239,7 +239,10 @@ A shared in-memory completion marker bounds its lifetime: the application
 keeps 127.0.0.1:9090 alive for 45 seconds after marking completion, and the
 collector waits 35 seconds (at least one 30-second scrape) before SIGTERM and
 flush. This avoids leaving a successful Job waiting on an infinite collector.
-The application startup probe gates collector startup on the metrics listener.
+Job executions carry no startup probe: probes cannot reach the loopback metrics
+listener. The collector shares the instance network namespace and can scrape
+127.0.0.1:9090. The task timeout and 480-second cohort budget remain the stop
+conditions for cohort work.
 Check execution completion as well as collector export errors after rollout.
 
 Dispatch the notifications job and production metrics-egress workflows after
