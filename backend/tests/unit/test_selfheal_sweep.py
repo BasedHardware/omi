@@ -836,3 +836,17 @@ def test_old_completed_job_still_checks_content_and_pages(caplog):
 
     assert counters['refused'] == 1 and counters['expired'] == 0
     assert any(r.levelname == 'CRITICAL' and 'verify_content_mismatch' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize('dry_run, advances', [(False, False), (True, True)])
+def test_timeout_alert_only_pages_after_successful_cursor_reclamation(dry_run, advances, caplog):
+    state, kwargs = _harness([], mode='heal', dry_run=dry_run)
+    _pending_completed_job(state)
+    state['cursor']['pending_verifications'][0]['admitted_at'] = ANCIENT
+    state['conversations']['c1'] = {'status': 'processing'}
+    kwargs['cursor_advancer'] = lambda *a, **kw: advances
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['expired'] == 1 and counters['verification_timeouts'] == 1
+    assert not any(r.levelname == 'CRITICAL' for r in caplog.records)

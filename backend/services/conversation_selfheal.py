@@ -131,7 +131,6 @@ def _verify_pending_attempts(
     second recovery generation. Durable job reconciliation owns replay.
     """
     remaining: list[dict[str, Any]] = []
-    completed_timeouts = 0
     for entry in pending:
         entry = dict(entry)
         uid = entry['uid']
@@ -188,7 +187,7 @@ def _verify_pending_attempts(
                 _log_action('skipped', reason='verify_not_completed', uid=uid, conversation_id=conversation_id)
                 counters['skipped'] += 1
             else:
-                completed_timeouts += 1
+                counters['verification_timeouts'] += 1
             continue
         if str(conversation.get('finalization_job_id') or '') != job_id:
             _refuse_verification(entry, 'verify_job_binding', counters)
@@ -207,12 +206,6 @@ def _verify_pending_attempts(
             counters['verified'] += 1
         else:
             _refuse_verification(entry, 'verify_content_mismatch' if not preserved else 'verify_not_rich', counters)
-    if completed_timeouts:
-        logger.critical(
-            'selfheal verification timed out for %d completed jobs with non-completed conversations; '
-            'verification slots released, job ownership preserved; audit selfheal_action timeout events',
-            completed_timeouts,
-        )
     return remaining
 
 
@@ -336,6 +329,7 @@ def run_selfheal_tick(
         'nudged': 0,
         'undeliverable': 0,
         'expired': 0,
+        'verification_timeouts': 0,
     }
     exhausted = False
 
@@ -401,6 +395,14 @@ def run_selfheal_tick(
                             )
                         else:
                             logger.warning('selfheal sweep cursor CAS lost; another tick advanced it')
+                    elif counters['verification_timeouts']:
+                        # Only the writer that actually released the slots pages;
+                        # startup ticks on other replicas can read the same backlog.
+                        logger.critical(
+                            'selfheal verification timed out for %d completed jobs with non-completed conversations; '
+                            'verification slots released, job ownership preserved; audit selfheal_action timeout events',
+                            counters['verification_timeouts'],
+                        )
                 except Exception as error:
                     counters['errors'] += 1
                     logger.error('selfheal sweep cursor advance failed type=%s', type(error).__name__)
