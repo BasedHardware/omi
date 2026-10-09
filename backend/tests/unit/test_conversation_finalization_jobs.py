@@ -1860,3 +1860,13 @@ def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
     assert result is True
     assert transaction.sets[0][1]['generation'] == 1
     assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'
+
+
+def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': _now()}
+    ref = _Ref('in_progress_content_sweep', {'pending_verifications': [entry]})
+    client = SimpleNamespace(collection=lambda name: _Collection({'in_progress_content_sweep': ref}))
+
+    cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
+
+    assert cursor['pending_verifications'] == [entry]
