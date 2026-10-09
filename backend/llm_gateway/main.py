@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
+from llm_gateway.gateway.vertex_diagnostics import request_id_context
 from llm_gateway.gateway.metrics import observe_gateway_config_identity
 from llm_gateway.gateway.accounting_sink import drain_accounting_persistence_tasks
 from llm_gateway.routers import anthropic_messages, embeddings, health, metrics, openai_compatible, systemone
@@ -65,7 +66,11 @@ async def request_correlation(
 ) -> Response:
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
     request.state.request_id = request_id
-    response = await call_next(request)
+    token = request_id_context.set(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_context.reset(token)
     response.headers[REQUEST_ID_HEADER] = request_id
     return response
 
