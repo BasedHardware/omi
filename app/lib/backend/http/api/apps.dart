@@ -724,7 +724,8 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId/keys', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    log('listApiKeysServer: ${response.body}');
+    // The key schema carries an optional `secret`; never echo the body into logs.
+    Logger.debug('listApiKeysServer: ${response.statusCode}');
     return (jsonDecode(response.body) as List)
         .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
         .map(AppApiKey.fromGenerated)
@@ -742,7 +743,8 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to create apps API key');
     }
-    log('createApiKeyServer: ${response.body}');
+    // The body holds the newly generated key secret; log only the status.
+    Logger.debug('createApiKeyServer: ${response.statusCode}');
     return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -805,7 +807,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
   );
   try {
     if (response == null) return null;
-    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    // The body can carry an OAuth `auth_url` with its state token; log only the status.
+    Logger.debug('addMcpServer: ${response.statusCode}');
     if (response.statusCode == 200) {
       return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }
