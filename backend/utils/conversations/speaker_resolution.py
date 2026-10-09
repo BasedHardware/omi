@@ -956,16 +956,8 @@ def refresh_completed_speaker_identity(uid: str, conversation_id: str, *, candid
             return False
         payload = conversation.model_dump()
         committed = identity_updates_db.persist_speaker_resolution_if_current(
-            uid, payload, expected_updated_at=raw['updated_at']
+            uid, payload, expected_updated_at=raw['updated_at'], on_committed_identity=record_owner_identity_repair
         )
-        if committed:
-            try:
-                record_owner_identity_repair(raw, payload)
-            except Exception as error:
-                # Observability cannot turn an authoritative commit into a failure.
-                logger.warning(
-                    'event=owner_identity_repair_metrics outcome=failed exception_type=%s', type(error).__name__
-                )
         return committed
     except Exception as error:
         logger.warning('event=speaker_identity_refresh outcome=failed exception_type=%s', type(error).__name__)
@@ -1218,7 +1210,12 @@ def _resolve(
         placement = placements.get(sid)
         placeable = placement is not None and placement.window is not None
         if placeable:
-            return not cache_hit(keys[sid])
+            key = keys[sid]
+            # Legacy v1 vectors remain useful for grouping, but their nominal
+            # transcript duration is not measured owner evidence. Verified PCM
+            # must get a bounded fresh embedding before that vector can identify.
+            measured = clip_seconds.get(key, 0.0)
+            return not cache_hit(key) or not math.isfinite(measured) or measured <= 0.0
         if segment.audio_capture_start is not None or segment.audio_capture_end is not None:
             return True
         scope = segment.speaker_id_scope or ''

@@ -67,3 +67,38 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
         0.24
     )
     assert dream_store.acquire(uid, Caps(), firestore_client=database) is None
+    runs = dream_store.own_runs(uid, limit=20, firestore_client=database)
+    assert len(runs) >= 3
+    assert [row['created_at'] for _, row in runs] == sorted((row['created_at'] for _, row in runs), reverse=True)
+
+
+def test_manual_admission_race_uses_shared_lease(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    database.collection('users').document(uid).set({})
+    dream_store.mark_dirty(uid, [('conversations', 'race')], firestore_client=database)
+    barrier = Barrier(2)
+
+    def acquire(trigger):
+        barrier.wait()
+        try:
+            return dream_store.acquire(uid, Caps(), trigger=trigger, firestore_client=database)
+        except dream_store.AdmissionDenied as exc:
+            assert exc.reason == 'dream_run_in_progress'
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scheduled = pool.submit(acquire, 'schedule')
+        manual = pool.submit(acquire, 'manual')
+        results = [scheduled.result(), manual.result()]
+    assert sum(row is not None for row in results) == 1
+    state = dream_store.own_state(uid, firestore_client=database)
+    assert state['passes'] + state['manual_runs'] == 1

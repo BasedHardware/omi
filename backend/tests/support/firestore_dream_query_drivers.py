@@ -23,9 +23,26 @@ def finish_state(client, args, trial):
     client.documents['dream_users/' + UID] = {'lease': {'run_id': 'shape-run'}, 'score': 1}
 
 
+def admission_state(client, args, trial):
+    client.documents['dream_users/' + UID] = {'score': 1}
+
+
 def entries():
     return (
         DriverEntry('database.dream_store.candidates', domains={'limit': [1, 100]}),
+        DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
+        DriverEntry(
+            'database.dream_store.acquire',
+            base={'uid': UID},
+            domains={'trigger': ['schedule', 'manual']},
+            neutrals={
+                'caps': (Caps(), 'admission policy only'),
+                'canary': (False, 'cohort gate only'),
+                'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
+            },
+            setup=admission_state,
+            patchers=(producer_mode,),
+        ),
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
@@ -35,6 +52,7 @@ def entries():
             'database.dream_store.mark_dirty',
             base={'uid': UID},
             domains={'refs': [[('conversations', 'one')], [('people', 'person'), ('conversations', 'two')]]},
+            neutrals={'canary': (False, 'cohort gate only; admitted canary uses the identical queue builders')},
             patchers=(producer_mode,),
         ),
         DriverEntry('database.dream_store.trim_dirty', base={'uid': UID}, patchers=(trim_overflow,)),

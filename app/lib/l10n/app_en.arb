@@ -15182,5 +15182,174 @@
     "tasksGroupByDate": "Group by Date",
     "@tasksGroupByDate": {
         "description": "Menu item (Title Case)"
+    },
+    "dreamReportTitle": "Dream Report",
+    "@dreamReportTitle": {
+        "description": "Title of the dogfood screen showing what the background 'Dream' agent looked at and proposed. 'Dream' is a product name; keep it untranslated."
+    },
+    "dreamReportShadowBanner": "Preview mode: Dream shows what it would change, but nothing in your account changes yet.",
+    "@dreamReportShadowBanner": {
+        "description": "Banner when the agent runs in shadow mode. Keep 'Dream' untranslated."
+    },
+    "dreamReportLiveBanner": "Dream applies these changes on its own. Undo any of them in Recent Changes.",
+    "@dreamReportLiveBanner": {
+        "description": "Banner when the agent applies edits. 'Recent Changes' is the name of another screen."
+    },
+    "dreamReportRunNow": "Run Now",
+    "@dreamReportRunNow": {
+        "description": "Button that starts an agent pass immediately. Title Case."
+    },
+    "dreamReportRunLimit": "No manual runs left today",
+    "@dreamReportRunLimit": {
+        "description": "Shown when the daily manual-run allowance is used up."
+    },
+    "dreamReportRunInProgress": "A pass is already running. Try again in a minute.",
+    "@dreamReportRunInProgress": {
+        "description": "Error when a run is already in progress."
+    },
+    "dreamReportRunFailed": "Couldn't run Dream. Try again.",
+    "@dreamReportRunFailed": {
+        "description": "Generic error when starting a run fails. Keep 'Dream' untranslated."
+    },
+    "dreamReportIdle": "Nothing new to look at yet.",
+    "@dreamReportIdle": {
+        "description": "Toast when a manual run finds no changed items."
+    },
+    "dreamReportLoadFailed": "Couldn't load the Dream report.",
+    "@dreamReportLoadFailed": {
+        "description": "Error state when the report cannot be loaded."
+    },
+    "dreamReportEmptyTitle": "No passes yet",
+    "@dreamReportEmptyTitle": {
+        "description": "Empty state title when the agent has not run yet."
+    },
+    "dreamReportEmptyBody": "Dream looks at what changed in your account about once an hour.",
+    "@dreamReportEmptyBody": {
+        "description": "Empty state body."
+    },
+    "dreamReportScheduled": "Scheduled",
+    "@dreamReportScheduled": {
+        "description": "Label for a run started by the hourly schedule."
+    },
+    "dreamReportManual": "Manual",
+    "@dreamReportManual": {
+        "description": "Label for a run the user started with Run Now."
+    },
+    "dreamReportFailed": "Failed ({error})",
+    "@dreamReportFailed": {
+        "description": "Run summary when the pass failed; error is a technical error type name.",
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "dreamReportTimedOut": "Stopped at its time limit",
+    "@dreamReportTimedOut": {
+        "description": "Run summary when the pass hit its time limit."
+    },
+    "dreamReportNothingFound": "Nothing to fix",
+    "@dreamReportNothingFound": {
+        "description": "Run summary when the pass found nothing to change."
+    },
+    "dreamReportStats": "Read {records} items · {tokens} tokens",
+    "@dreamReportStats": {
+        "description": "Technical stats for a run: items read and model tokens used.",
+        "placeholders": {
+            "records": {
+                "type": "int"
+            },
+            "tokens": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportWouldFix": "Would fix",
+    "@dreamReportWouldFix": {
+        "description": "Section label for edits proposed in preview mode."
+    },
+    "dreamReportFixed": "Fixed",
+    "@dreamReportFixed": {
+        "description": "Section label for edits that were applied."
+    },
+    "dreamReportWouldAsk": "Would ask you",
+    "@dreamReportWouldAsk": {
+        "description": "Section label for questions the agent would ask the user."
+    },
+    "dreamReportWouldSuggestTasks": "Would suggest tasks",
+    "@dreamReportWouldSuggestTasks": {
+        "description": "Section label for tasks the agent would suggest."
+    },
+    "dreamReportLearnedWords": "Words it learned",
+    "@dreamReportLearnedWords": {
+        "description": "Section label for names and terms the agent added to the user's vocabulary."
+    },
+    "dreamReportFeedback": "Reported to the Omi team",
+    "@dreamReportFeedback": {
+        "description": "Section label for anonymous diagnostics sent to developers. 'Omi' is a product name."
+    },
+    "dreamReportDeletedItem": "Deleted item",
+    "@dreamReportDeletedItem": {
+        "description": "Label for an edit whose target no longer exists."
+    },
+    "dreamReportPasses": "{count} of {limit} passes today",
+    "@dreamReportPasses": {
+        "description": "How many scheduled agent passes ran today out of the daily limit.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportQueued": "{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}",
+    "@dreamReportQueued": {
+        "description": "How many changed items are queued for the agent to look at.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportRunsLeft": "{count, plural, =1{1 manual run left today} other{{count} manual runs left today}}",
+    "@dreamReportRunsLeft": {
+        "description": "Remaining manual runs today.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportFound": "{fixes, plural, =1{1 fix} other{{fixes} fixes}} · {asks, plural, =1{1 suggestion} other{{asks} suggestions}}",
+    "@dreamReportFound": {
+        "description": "Run summary: number of proposed fixes and of questions/tasks it would suggest.",
+        "placeholders": {
+            "fixes": {
+                "type": "int"
+            },
+            "asks": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportDropped": "{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}",
+    "@dreamReportDropped": {
+        "description": "How many old queued changes were dropped because the queue was full.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}",
+    "@dreamReportPrivacyHeld": {
+        "description": "Diagnostics the privacy filter refused to send.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

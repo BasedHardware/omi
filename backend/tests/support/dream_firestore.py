@@ -61,7 +61,7 @@ class Query:
         return Document(self.database, (*self.path, key))
 
     def order_by(self, field, direction='ASCENDING'):
-        assert field == 'last_changed_at'
+        assert field in {'last_changed_at', 'created_at'}
         return Query(self.database, self.path, order=field, descending=direction == 'DESCENDING', bound=self.bound)
 
     def limit(self, count):

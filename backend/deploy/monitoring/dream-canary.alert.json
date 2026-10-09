@@ -1,0 +1,21 @@
+{
+  "displayName": "Dream synthetic loop: two consecutive failures",
+  "enabled": true,
+  "combiner": "OR",
+  "notificationChannels": [],
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "The synthetic dream loop failed at least twice consecutively. Inspect counts-only Dream canary stage/error_type logs on backend-sync. See backend/docs/runbooks/dream-agent.md. Bind the environment's approved notification channels before applying. This declaration does not create resources. Firestore health-write failures cannot advance the durable streak; also alert on absent canary success for 65 minutes."
+  },
+  "conditions": [{
+    "displayName": "Consecutive synthetic failures",
+    "conditionThreshold": {
+      "filter": "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/dream_canary_consecutive_failures\"",
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 0,
+      "duration": "0s",
+      "aggregations": [{"alignmentPeriod": "1800s", "perSeriesAligner": "ALIGN_SUM"}],
+      "trigger": {"count": 1}
+    }
+  }]
+}

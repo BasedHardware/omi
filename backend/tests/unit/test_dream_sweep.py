@@ -279,17 +279,32 @@ def test_prod_scheduler_and_writer_env_contract():
         assert 'DREAM_AGENT_TESTFLIGHT_ENABLED' not in service['env']
         assert not any(
             key.startswith('DREAM_AGENT_')
-            and key not in {'DREAM_AGENT_MODE', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_AGENT_PASSES_PER_DAY'}
+            and key
+            not in {
+                'DREAM_AGENT_MODE',
+                'DREAM_AGENT_UID_ALLOWLIST',
+                'DREAM_AGENT_PASSES_PER_DAY',
+                'DREAM_AGENT_CANARY_UID',
+            }
             for key in service['env']
         )
-    # Only the sweep host admits passes; the dogfood cohort gets four per day there and defaults elsewhere.
-    sync_env = prod['cloud_run']['services']['backend-sync']['env']
-    assert sync_env['DREAM_AGENT_PASSES_PER_DAY']['value'] == '4'
+    services = prod['cloud_run']['services']
+    # The sweep host and the report host present the same daily allowance; no other host declares one.
+    for name in ('backend-sync', 'backend'):
+        assert services[name]['env']['DREAM_AGENT_PASSES_PER_DAY']['value'] == '4'
     assert all(
         'DREAM_AGENT_PASSES_PER_DAY' not in service['env']
-        for name, service in prod['cloud_run']['services'].items()
-        if name != 'backend-sync'
+        for name, service in services.items()
+        if name not in {'backend-sync', 'backend'}
     )
+    # Owner reports/Run Now are served by backend only; the synthetic canary runs on the sweep host only,
+    # in the reserved namespace, and never through the user allowlist.
+    assert [n for n, s in services.items() if 'DREAM_SELF_REPORT_MODE' in s['env']] == ['backend']
+    assert services['backend']['env']['DREAM_SELF_REPORT_MODE']['value'] == 'on'
+    canary_hosts = [n for n, s in services.items() if 'DREAM_AGENT_CANARY_UID' in s['env']]
+    assert canary_hosts == ['backend-sync']
+    canary = services['backend-sync']['env']['DREAM_AGENT_CANARY_UID']['value']
+    assert canary.startswith('dream-canary-') and canary not in allowlist.split(',')
     chart = load_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     env = {entry['name']: entry.get('value') for entry in chart['env']}
     assert env['DREAM_AGENT_MODE'] == 'shadow'

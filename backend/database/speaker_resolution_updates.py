@@ -1,6 +1,8 @@
 """Revision-fenced identity-only persistence after late capture audio arrives."""
 
 import copy
+import logging
+from typing import Callable, Optional
 from google.cloud import firestore
 import config.speaker_match_scores as match_scores
 from database import conversations
@@ -8,8 +10,16 @@ from database._client import get_data_plane_firestore_client as get_firestore_cl
 from database.account_deletion_marker import account_deletion_document
 from database.conversation_revisions import firestore_revision_datetime
 
+logger = logging.getLogger(__name__)
 
-def persist_speaker_resolution_if_current(uid: str, conversation_data: dict, *, expected_updated_at) -> bool:
+
+def persist_speaker_resolution_if_current(
+    uid: str,
+    conversation_data: dict,
+    *,
+    expected_updated_at,
+    on_committed_identity: Optional[Callable[[dict, dict], None]] = None,
+) -> bool:
     """Identity-only commit: refuse every intervening write, including manual edits.
 
     No lifecycle, summary, task, or processing admission is owned by this path.
@@ -49,12 +59,35 @@ def persist_speaker_resolution_if_current(uid: str, conversation_data: dict, *, 
         prepared = conversations.encode_conversation_for_write(
             uid, patch, current.get('data_protection_level') or 'standard'
         )
+        identities = None
+        if on_committed_identity is not None:
+            # Decode the actual transaction snapshots, including protection and
+            # the current manual receipt. Never observe the speculative payload.
+            def readable(data):
+                return {
+                    'id': conversation_data['id'],
+                    'transcript_segments': copy.deepcopy(
+                        conversations.decode_transcript_segments_verified(
+                            uid, data.get('transcript_segments', []), bool(data.get('transcript_segments_compressed'))
+                        )
+                    ),
+                }
+
+            identities = (readable(current), readable(prepared))
         transaction.update(ref, {key: prepared[key] for key in fields if key in prepared})
-        return True
+        return (identities,)
 
     written = persist(client.transaction())
     if written:
+        if on_committed_identity is not None:
+            try:
+                on_committed_identity(*written[0])
+            except Exception as error:
+                # Observability cannot turn an authoritative commit into failure.
+                logger.warning(
+                    'event=owner_identity_repair_metrics outcome=failed exception_type=%s', type(error).__name__
+                )
         conversations.invalidate_people_stats_cache(uid)
         # Typesense explicitly excludes transcript/identity fields. This update
         # changes none of its allow-listed projection inputs.
-    return written
+    return bool(written)
