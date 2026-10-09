@@ -1217,6 +1217,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A typed chain exhaustion on a mid-session rebuild
+(`LiveChainExhausted` from the managed dial) is classified evidence, not a
+crash: the rebuild arms log one
+`STT failover chain exhausted` ERROR line (FC-typed-failure-collapsed-to-generic)
+while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
+`stt_failed` client status carry the operational signal. Untyped dial faults
+keep the `STT failover connect raised` traceback for diagnosis.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure
