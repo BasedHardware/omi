@@ -87,6 +87,7 @@ async def test_exit_reasons_are_enumerated():
             'manual_decision',
             'voice_capacity',
             'embedding_budget',
+            'decided_voice',
         }
     )
 

@@ -54,7 +54,11 @@ logger = logging.getLogger(__name__)
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 MAX_SPEAKER_VOICES = 128
 MAX_VOICE_EMBEDDING_ATTEMPTS = 12
-MAX_SOCKET_EMBEDDING_ATTEMPTS = 256
+# A small initial burst plus wall-time refill: at most 16 + 240 = 256
+# attempts in the first socket-hour, then 240/hour in steady state. Client
+# timestamps, profile refresh and conversation churn cannot mint tokens.
+SOCKET_EMBEDDING_BURST = 16
+SOCKET_EMBEDDING_REFILL_PER_SECOND = 240 / 3600
 MAX_OWNER_FAILED_LOADS = 8
 MAX_OWNER_PROFILE_RETRIES = 7
 MAX_OWNER_AUDIO_REPAIRS = 3
@@ -70,12 +74,14 @@ MAX_OWNER_AUDIO_REPAIRS = 3
 # - no_fresh_audio: subtracting audio already embedded leaves nothing to embed.
 # - window_shorter_than_minimum: pooled fresh intervals or extracted PCM
 #   remain below the current extraction floor; later fragments may complete them.
-# - no_pcm: no buffered audio at all, or the extraction returned no PCM.
+# - no_pcm: no buffered audio at all, or no pooled interval returned PCM.
 # - stale_generation: the matcher's conversation/profile state moved on while
 #   this detection was queued, or the segment belongs to an earlier conversation.
 # - already_mapped: a decision exists for this diarized speaker (a race drop,
 #   not a loss).
 # - rejected: the manual receipt named this voice as nobody, so it emits nothing.
+# - decided_voice: sufficient evidence confidently rejected all loaded prints
+#   by the existing distance margin; retain evidence without more model calls.
 SPEAKER_ID_EXIT_REASONS = frozenset(
     {
         'window_outside_buffer',
@@ -89,6 +95,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'manual_decision',
         'voice_capacity',
         'embedding_budget',
+        'decided_voice',
     }
 )
 
@@ -132,7 +139,8 @@ class SpeakerMatcher:
         self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
         self._pending_audio: Dict[int, list[tuple[float, float]]] = {}
         self._embedding_attempts: Dict[int, int] = {}
-        self._socket_embedding_attempts = 0
+        self._socket_embedding_tokens = float(SOCKET_EMBEDDING_BURST)
+        self._socket_embedding_refilled_at = time.monotonic()
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
         self.tasks: set[asyncio.Task[Any]] = set()
@@ -206,9 +214,19 @@ class SpeakerMatcher:
                 # decision. It does not prove carry of the old automatic map.
                 carried = {voice for voice in carried if old_origins.get(voice) == 'manual'}
             count_rollover = self._profile_conversation_id is not None and carried is not None
+            # Preserve candidate carry attempts across the awaits too: a match
+            # may run while the profiles/donor are loading. Uncarried ids get
+            # a fresh per-conversation allowance after validation completes.
+            retained_attempts = {
+                voice: attempts
+                for voice, attempts in self._embedding_attempts.items()
+                if voice in candidates or voice in (carried or set())
+            }
             self.clear()
+            self._embedding_attempts.update(retained_attempts)
             self._profile_conversation_id = conversation_id
             carry_generation = self._generation
+            automatic_carry: set[int] = set()
             if self.host.state.speaker_id_enabled:
                 await self._load_profiles()
             if candidates:
@@ -294,10 +312,17 @@ class SpeakerMatcher:
                     voice_groups=self._provider_epoch_voice_groups(),
                 )
                 self._publish_decisions(decisions, rejected)
+                automatic_carry = {
+                    v for v in candidates if decisions.get(v) and decisions[v].person_id == USER_SELF_PERSON_ID
+                }
                 if carried is not None:
-                    carried.update(
-                        v for v in candidates if decisions.get(v) and decisions[v].person_id == USER_SELF_PERSON_ID
-                    )
+                    carried.update(automatic_carry)
+            if carry_generation == self._generation:
+                for voice, attempts in retained_attempts.items():
+                    if voice not in (carried or set()) and voice not in automatic_carry:
+                        self._embedding_attempts[voice] -= attempts
+                        if not self._embedding_attempts[voice] and voice not in self._speaker_locks:
+                            del self._embedding_attempts[voice]
             if count_rollover:
                 record_live_speaker_rollover(old_mappings, old_origins, carried)
 
@@ -595,6 +620,21 @@ class SpeakerMatcher:
         self._embedding_attempts.setdefault(speaker_id, 0)
         return self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
 
+    def _reserve_embedding(self, speaker_id: int) -> bool:
+        """Reserve synchronously before any await; failed requests spend tokens too."""
+        now = time.monotonic()
+        elapsed = max(0.0, now - self._socket_embedding_refilled_at)
+        self._socket_embedding_tokens = min(
+            SOCKET_EMBEDDING_BURST,
+            self._socket_embedding_tokens + elapsed * SOCKET_EMBEDDING_REFILL_PER_SECOND,
+        )
+        self._socket_embedding_refilled_at = max(now, self._socket_embedding_refilled_at)
+        if self._embedding_attempts[speaker_id] >= MAX_VOICE_EMBEDDING_ATTEMPTS or self._socket_embedding_tokens < 1:
+            return False
+        self._socket_embedding_tokens -= 1
+        self._embedding_attempts[speaker_id] += 1
+        return True
+
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
         conversation_id = self._profile_conversation_id
         if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
@@ -612,6 +652,18 @@ class SpeakerMatcher:
                     if drop_reason == 'already_mapped':
                         await self._drop_rejected_mapping(speaker_id, segment, generation, conversation_id)
                     self._record_exit(drop_reason, speaker_id)
+                    return
+                decision = self._voice_decisions.get(speaker_id)
+                if (
+                    decision is not None
+                    and not decision.accepted
+                    and not decision.owner_contended
+                    and decision.best_id is not None
+                    and np.isfinite(decision.best_distance)
+                    and decision.best_distance
+                    >= match_policy.SPEAKER_MATCH_THRESHOLD + match_policy.SPEAKER_MATCH_MARGIN
+                ):
+                    self._record_exit('decided_voice', speaker_id)
                     return
                 await self._match_unmapped(speaker_id, segment, generation, conversation_id)
         finally:
@@ -762,26 +814,21 @@ class SpeakerMatcher:
                     start, end = center - remaining_seconds / 2, center + remaining_seconds / 2
                 chunk = ring_buffer.extract(start, end)
                 if not chunk:
-                    self._record_exit('no_pcm', speaker_id)
-                    return
+                    continue
                 chunks.append(chunk)
                 selected.append((start, end))
                 remaining_seconds -= end - start
             pcm = b''.join(chunks)
+            if not pcm:
+                self._record_exit('no_pcm', speaker_id)
+                return
             clip_seconds = len(pcm) / (2 * self.host.request.sample_rate)
             if clip_seconds < needed:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
-            if (
-                self._embedding_attempts[speaker_id] >= MAX_VOICE_EMBEDDING_ATTEMPTS
-                or self._socket_embedding_attempts >= MAX_SOCKET_EMBEDDING_ATTEMPTS
-            ):
+            if not self._reserve_embedding(speaker_id):
                 self._record_exit('embedding_budget', speaker_id)
                 return
-            # Reserve before awaiting; failures consume a token too. Socket-wide
-            # counters survive conversation/profile refresh, preventing budget resets.
-            self._embedding_attempts[speaker_id] += 1
-            self._socket_embedding_attempts += 1
             samples = np.frombuffer(pcm, dtype=np.int16)
             buffer = io.BytesIO()
             container = av.open(buffer, mode='w', format='wav')
@@ -1084,6 +1131,7 @@ class SpeakerMatcher:
         }
         self._covered_audio.clear()
         self._pending_audio.clear()
+        self._embedding_attempts.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
         self._mapping_origin.clear()
