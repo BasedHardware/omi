@@ -53,19 +53,49 @@ Build firmware from source to customize your Omi device. If you just want to ins
     1. In the application panel, click **Add Build Configuration**
     2. Set the board target:
 
+    | Firmware | Board target | Build output |
+    |----------|--------------|--------------|
+    | Consumer (Omi) | `omi/nrf5340/cpuapp` | `dfu_application.zip` + `merged.hex` + `merged_CPUNET.hex` (sysbuild) |
+    | DevKit | `xiao_ble_sense` (XIAO nRF52840 Sense) | `zephyr.uf2` |
+
+    <Warning>
+    These targets are not interchangeable. The consumer CV1 is an nRF5340 image
+    built from `omi/firmware/omi` with **sysbuild** (MCUboot-signed
+    `dfu_application.zip` plus `merged.hex` and `merged_CPUNET.hex`, not a UF2).
+    The DevKit UF2 is built only from `omi/firmware/devkit`.
+
+    In nRF Connect, use the `OMI` preset in `omi/firmware/omi/CMakePresets.json`
+    and turn **sysbuild** on. The preset sets the board and `CONF_FILE=omi.conf`;
+    it does not enable sysbuild.
+
+    Or, from the west workspace `omi/firmware/v2.9.0`, after
+    `cp ../omi/omi.conf ../omi/prj.conf`:
+
+    ```bash
+    west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always -- -DBOARD_ROOT=..
     ```
-    xiao_ble/nrf52840/sense
-    ```
+    </Warning>
 
     3. Click **Build Configuration** to start the build
     4. A VS Code notification will show build progress
   </Step>
 
   <Step title="Locate the Firmware File" icon="file">
-    After a successful build, find `zephyr.uf2` in:
+    After a successful build, find the outputs:
 
-    ```
-    omi/firmware/<omi|devkit>/build/<your-preset>/zephyr/zephyr.uf2
+    ```text
+    DevKit (UF2, drag-and-drop):
+      omi/firmware/devkit/build/<your-preset>/zephyr/zephyr.uf2
+
+    Consumer CV1, nRF Connect preset OMI with sysbuild on:
+      omi/firmware/omi/build/omi/dfu_application.zip
+      omi/firmware/omi/build/omi/merged.hex
+      omi/firmware/omi/build/omi/merged_CPUNET.hex
+
+    Consumer CV1, west command above (-d build inside omi/firmware/v2.9.0):
+      omi/firmware/v2.9.0/build/dfu_application.zip
+      omi/firmware/v2.9.0/build/merged.hex
+      omi/firmware/v2.9.0/build/merged_CPUNET.hex
     ```
   </Step>
 

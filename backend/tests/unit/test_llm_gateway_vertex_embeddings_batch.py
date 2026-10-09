@@ -24,6 +24,36 @@ async def _access_token() -> str:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('inputs', ['text', ['text']])
+async def test_single_input_keeps_exact_wire_timeout_after_token_acquisition(monkeypatch, inputs):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    now = [100.0]
+    seen = []
+
+    async def token():
+        now[0] += 0.3
+        return 'test-token'
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={'predictions': [{'embeddings': {'values': [0.1]}}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await VertexGeminiProvider(
+            http_client=client, access_token_supplier=token, now=lambda: now[0]
+        ).create_embedding(
+            {'input': inputs},
+            provider_ref=ProviderRef(provider='gemini', model='gemini-embedding-001'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=60_000,
+        )
+    assert len(seen) == 1
+    assert seen[0].extensions['timeout'] == dict(connect=60.0, read=60.0, write=60.0, pool=60.0)
+    assert result.response['data'] == [{'object': 'embedding', 'embedding': [0.1], 'index': 0}]
+    assert result.accounting.usage is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('count', [2, 100])
 async def test_batch_obeys_vertex_single_input_limit_and_preserves_mapping(monkeypatch, count):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
