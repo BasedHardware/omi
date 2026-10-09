@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -296,3 +297,123 @@ async def test_completed_roster_rechecks_short_accept_even_without_rollover_cand
     assert not visible_owner(matcher, 1)
     assert not matcher.speaker_to_person, 'neither owner nor peer gets a two-second label after margin rejection'
     assert any(args[0] == 1 and args[1] == '' for args in emitted)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('first_seconds', [1, 2])
+async def test_failed_short_probe_falls_back_to_five_fresh_seconds(monkeypatch, redis, first_seconds):
+    await seed(monkeypatch)
+    noisy = np.array([[0.2, np.sqrt(1 - 0.2**2)]], dtype=np.float32)
+    queries = [noisy, noisy, OWNER] if first_seconds == 1 else [noisy, OWNER]
+    matcher, host, _ = await connect(monkeypatch, queries)
+    host.limits.speaker_id_min_audio = 1.0
+    await speak(matcher, 0, first_seconds)
+    assert not visible_owner(matcher, 0)
+    if first_seconds == 1:
+        assert 0 not in matcher._voice_decisions, 'one second remains pending, never a terminal rejection'
+        await speak(matcher, 0, 1, start=1)
+    assert matcher._voice_decisions[0].best_distance >= 0.75
+    assert not visible_owner(matcher, 0)
+    await speak(matcher, 0, 3, start=3)
+    assert sum(seconds for _, seconds in matcher.speaker_evidence[0]) == 5
+    assert visible_owner(matcher, 0), 'failed shortcut must resume ordinary five-second recognition'
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('withdrawal', ['manual', 'blocked', 'generation'])
+async def test_cancelled_publication_cannot_resurrect_a_later_withdrawal(monkeypatch, redis, withdrawal):
+    old = await seed(monkeypatch)
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    publish = cache.publish
+
+    def delayed(uid, device, token, payload, revision):
+        if payload is not None:
+            entered.set()
+            assert release.wait(5)
+        try:
+            publish(uid, device, token, payload, revision)
+        finally:
+            if payload is not None:
+                finished.set()
+
+    monkeypatch.setattr(cache, 'publish', delayed)
+    task = asyncio.create_task(old.continuity.update({}, force=True, generation=old._generation))
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        receipt = {}
+        if withdrawal == 'manual':
+            receipt = {'speakers': {'10': {'rejection': {'kind': 'not_me'}}}}
+        elif withdrawal == 'blocked':
+            old.host.request.owner_persistence_blocked = asyncio.Event()
+            old.host.request.owner_persistence_blocked.set()
+        else:
+            old.clear()
+        await old.continuity.update(receipt, force=True, generation=old._generation)
+        assert not redis.get(cache._keys('owner', DEVICE)[1])
+    finally:
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 5)
+    assert not redis.get(cache._keys('owner', DEVICE)[1]), 'late same-socket worker must lose to withdrawal'
+
+
+@pytest.mark.anyio
+async def test_unavailable_donor_authority_falls_back_to_normal_recognition(monkeypatch, redis):
+    await seed(monkeypatch)
+    matcher, host, _ = await connect(monkeypatch, [OWNER, OWNER])
+
+    async def read(fn, *args, **kwargs):
+        if fn is cache.donor_authority:
+            raise ConnectionError('offline')
+        return {}
+
+    host.persistence.call = read
+    await speak(matcher, 0, 2)
+    assert not visible_owner(matcher, 0)
+    assert matcher.continuity.donor is None
+    await speak(matcher, 0, 3, start=3)
+    assert visible_owner(matcher, 0)
+
+
+@pytest.mark.anyio
+async def test_retained_peer_cannot_publish_owner_or_seed_a_reconnect(monkeypatch, redis):
+    winner = np.array([[0.47, -np.sqrt(1 - 0.47**2)]], dtype=np.float32)
+    peer = np.array([[0.6, 0.8]], dtype=np.float32)
+    opposite = np.array([[-1.0, 0.0]], dtype=np.float32)
+    matcher, host, _ = await connect(
+        monkeypatch, [winner, peer, opposite, OWNER, OWNER], people={'peer': {'embedding': peer, 'name': 'Peer'}}
+    )
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope='same-scope'))
+    await speak(matcher, 0, 5, scope='same-scope')
+    await speak(matcher, 1, 5, start=6, scope='same-scope')
+    assert matcher.speaker_to_person == {0: ('user', 'Owner'), 1: ('peer', 'Peer')}
+
+    async def load():
+        matcher.person_embeddings = {'user': {'embedding': OWNER, 'name': 'Owner'}}
+
+    async def read(fn, *args, **kwargs):
+        return {'id': 'conversation'} if fn.__name__ == 'get_conversation' else {}
+
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence.call = read
+    await matcher.refresh_for_conversation(
+        'next', owner_carry_scope='same-scope', owner_carry_donor={'id': 'conversation'}
+    )
+    assert not visible_owner(matcher, 1)
+    await speak(matcher, 2, 5, start=20, scope='same-scope')
+    assert not visible_owner(matcher, 1)
+    assert not matcher.speaker_to_person
+    assert not redis.get(cache._keys('owner', DEVICE)[1]), 'retained peer cannot mint a donor capsule'
+    await matcher._reevaluate_loaded_owner()
+    assert not visible_owner(matcher, 1), 'profile recovery must preserve competition-only authority'
+    host.limits.speaker_id_min_audio = 1.0
+    await speak(matcher, 1, 1, start=30, scope='same-scope')
+    assert sum(seconds for _, seconds in matcher.speaker_evidence[1]) == 1
+    await matcher._reevaluate_loaded_owner()
+    assert matcher._voice_distances[1]['user'] == pytest.approx(0.4)
+    assert not visible_owner(matcher, 1), 'one fresh second cannot borrow old peer clips for a label'
+    await speak(matcher, 1, 4, start=31, scope='same-scope')
+    assert sum(seconds for _, seconds in matcher.speaker_evidence[1]) == 5
+    assert visible_owner(matcher, 1), 'five independent fresh seconds can authorize ordinary recognition'

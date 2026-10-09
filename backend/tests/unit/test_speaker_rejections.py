@@ -12,14 +12,17 @@ from datetime import datetime, timezone
 import os
 from types import SimpleNamespace
 
+import fakeredis
 import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from database import conversations as db
+from database import live_owner_continuity as continuity_cache
 from database import voice_profiles as voice_profiles_db
 from models.conversation import Conversation
+from tests.unit.test_owner_recognition_reconnect import connect, speak, visible_owner, OWNER, DEVICE
 from models.structured import Structured
 from routers import speaker_labels as speaker_labels_router
 from routers.listen import speakers as listen_speakers
@@ -92,7 +95,10 @@ def world(monkeypatch):
     app = FastAPI()
     app.include_router(speaker_labels_router.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: UID
-    return SimpleNamespace(store=store, path=path, segments=segments, client=TestClient(app))
+    client = TestClient(app)
+    # Initialize the ASGI/AnyIO transport during setup, outside route CPU guards.
+    assert client.get('/').status_code == 404
+    return SimpleNamespace(store=store, path=path, segments=segments, client=client)
 
 
 def receipt(world):
@@ -282,7 +288,7 @@ def _matcher_host(emitted):
 
     return SimpleNamespace(
         request=SimpleNamespace(uid=UID, sample_rate=16000),
-        state=SimpleNamespace(active=True, speaker_id_enabled=True),
+        state=SimpleNamespace(active=True, speaker_id_enabled=True, audio_ring_buffer=None),
         persistence=SimpleNamespace(call=_call),
         emit_speaker_suggestion=lambda *a, **k: emitted.append((a, k)),
         limits=SimpleNamespace(speaker_id_min_audio=1.0),
@@ -332,16 +338,21 @@ def test_matcher_drops_an_already_mapped_rejected_voice(world):
     assert emitted and all(kwargs.get('retracted') for _args, kwargs in emitted)
 
 
-def test_matcher_keeps_a_nonrejected_mapping(world):
+@pytest.mark.parametrize('buffered', [False, True])
+def test_matcher_keeps_a_nonrejected_mapping(world, buffered):
     db.assign_conversation_speaker(UID, CONV, speaker_id=4, rejection={'kind': 'not_me', 'person_id': None})
     emitted = []
     host = _matcher_host(emitted)
     matcher = listen_speakers.SpeakerMatcher(host)
     matcher._profile_conversation_id = CONV
     matcher.speaker_to_person[7] = ('p1', 'Sam')
+    matcher._voice_scopes[7] = 'mapped-scope'
+    if buffered:
+        host.state.audio_ring_buffer = SimpleNamespace(get_time_range=lambda: (0.0, 60.0))
 
     asyncio.run(matcher.match(7, {'id': 's2', 'conversation_id': CONV, 'duration': 10, 'abs_start': 11, 'abs_end': 15}))
     assert matcher.speaker_to_person[7] == ('p1', 'Sam')
+    assert bool(matcher.continuity.observed.get(('mapped-scope', 7))) == buffered
     assert not emitted
 
 
@@ -580,3 +591,45 @@ def test_rejected_voice_cannot_contend_the_owner(world, monkeypatch):
     assert matcher.voice_identity_status[5].value == 'user'
     assert matcher.voice_identity_status[4].value == 'no_match'
     assert any(args[0] == 5 and args[1] == 'user' for args, kwargs in emitted if not kwargs.get('retracted'))
+
+
+@pytest.mark.parametrize('after_consumption', [False, True, 'accepted'])
+def test_donor_correction_route_revokes_closed_socket_hint(world, monkeypatch, after_consumption):
+    client = fakeredis.FakeRedis()
+    monkeypatch.setattr(continuity_cache, '_client', lambda: client)
+    monkeypatch.setattr(continuity_cache, 'get_firestore_client', lambda: world.store)
+
+    async def run():
+        old, host, _ = await connect(monkeypatch, [OWNER], uid=UID)
+        old._profile_conversation_id = CONV
+
+        async def read(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        await speak(old, 4, 5, scope='old-socket')
+        assert visible_owner(old, 4)
+        assert continuity_cache.donor_authority(UID, CONV) == {}
+        old.clear()  # donor socket is gone; no continuity.update(corrected_receipt)
+        new = None
+        if after_consumption:
+            new, _, _ = await connect(monkeypatch, [OWNER, OWNER], uid=UID)
+            assert new.continuity.donor
+            new.host.persistence.call = read
+            assert await new.continuity.authorize(), 'uncorrected donor must genuinely authorize reuse'
+            if after_consumption == 'accepted':
+                await speak(new, 0, 2)
+                assert visible_owner(new, 0)
+        response = world.client.post(f'/v1/conversations/{CONV}/speakers/4/reject', json={'kind': 'not_me'})
+        assert response.status_code == 200
+        assert continuity_cache.donor_authority(UID, CONV)['generation'] == 1
+        if new is None:
+            new, _, _ = await connect(monkeypatch, [OWNER, OWNER], uid=UID)
+        new.host.persistence.call = read
+        await speak(new, 0, 2)
+        assert not visible_owner(new, 0), 'persisted donor correction revokes even a consumed capsule'
+        assert new.continuity.donor is None
+        await speak(new, 0, 3, start=3)
+        assert visible_owner(new, 0), 'independent five-second recognition still works'
+
+    asyncio.run(run())

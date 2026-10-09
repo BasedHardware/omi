@@ -23,6 +23,7 @@ meaning. These are the complete drop categories:
 | `no_scope` | The rollover caller has no active provider scope or no eligible donor to bind to it. |
 | `scope_changed` | The old voice belongs to another provider epoch, or the provider restarts while the donor/profile reads await. Diarizer integers cannot cross that boundary. |
 | `donor_unavailable` | No eligible previous row, a failed donor/receipt read, or the refreshed donor disappeared. |
+| `donor_authority` | A shortened live owner proof has lost its original donor receipt revision, enrollment or readable authority. |
 | `donor_ineligible` | The old conversation is deleted, discarded, or locked, initially or on the reread. |
 | `manual_override` | Owner reservation, a voice rejection, or a positive voice-wide manual decision in either donor/current receipt takes precedence. A copied manual owner can preserve identity even though the old automatic map counts `none`. |
 | `no_evidence` | A mapping has no accepted owner decision/centroid/evidence backing it. This now abstains instead of indexing missing state. |
@@ -57,7 +58,7 @@ The correction retains the entire eligible same-scope evidence roster through
 rollover, including non-owner/unknown competitors, then recalculates distances
 against the completed eligible print roster before joint arbitration, even when no old owner qualifies for carry. In
 particular, a paid-to-free transition cannot discard a previously named peer's
-acoustic competition. Retained peer evidence does not itself carry a person name.
+acoustic competition. Retained non-candidate voices remain competition-only across every later arbitration, profile revalidation and cache publication. Five fresh current-conversation seconds must authorize a new label; retained peer clips cannot satisfy that floor.
 
 ## Acoustic reconnect handoff
 
@@ -87,9 +88,11 @@ raw identity. A generation token (no voice data) expires after 24 hours; a socke
 older than that fails closed for publication. Redis calls have 250 ms connect/read
 bounds and run in the existing DB executor.
 
+Each capsule also includes encrypted donor conversation, voice/scope and manual receipt generation. Every shortened acquisition reads the donor's current eligible row and strict manual receipt; any committed receipt-generation change, missing/ineligible donor or failed authority read revokes the hint, including after consumption and after the donor socket closes. The existing assignment/rejection transaction supplies the durable version fence; no socket callback is required. Accepted short owners retain that proof for same-scope rollover beyond the capsule TTL, and recheck its profile and durable manual authority on mapped speech, profile revalidation and rollover.
+
 Opening a socket atomically consumes the previous capsule and advances the
 writer token. Concurrent opens consume at most one donor; late older sockets
-cannot republish or delete newer evidence. The hint can be consumed while the
+cannot republish or delete newer evidence. Per-socket monotonically ordered publication revisions persist across deletions and fence executor writes that finish after cancellation and a newer withdrawal. The hint can be consumed while the
 previous socket is still draining, without an unauthenticated continuity claim.
 
 A new voice can use **two fresh embedded seconds** only if it passes both:
@@ -100,7 +103,7 @@ A new voice can use **two fresh embedded seconds** only if it passes both:
 It must then pass the unchanged 0.10 joint voice margin and current manual
 receipt guards. The donor is never blended into the fresh query. Rejected short
 voices remain arbitration competitors and resume the normal five-second floor;
-non-owners cannot use the shortcut. Missing/corrupt/expired cache, changed profile,
+A failed one-second accumulation remains pending; a failed two-second shortcut resumes normal five-second evidence acquisition. Non-owners cannot use the shortcut. Missing/corrupt/expired cache, changed profile,
 or another account/device follows ordinary matching. Two seconds and 0.35 are
 conservative starting points requiring post-deploy false-accept/miss evaluation;
 no real-audio calibration or production validation was performed in this PR.
@@ -120,7 +123,7 @@ and long gaps remain unknown until normal evidence is available.
 cache lookups (including missing device); `attempted{reason="acoustic"}` counts
 actual shortened voice decisions. Use the acoustic attempts as the acceptance-rate
 denominator, not the lookup count. Rejections distinguish `no_device`, `absent`,
-`corrupt`, `unavailable`, `expired_or_profile`, `acoustic`, and `arbitration`.
+`corrupt`, `unavailable`, `expired_or_profile`, `donor_authority`, `acoustic`, and `arbitration`.
 Accepted decisions have `reason="accepted"`; later joint withdrawal remains
 visible through existing live decision/contention and final conversation metrics.
 No production metrics or account data were read for this implementation.

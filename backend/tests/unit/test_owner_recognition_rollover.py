@@ -260,8 +260,8 @@ async def test_rollover_keeps_competing_voice_when_paid_roster_becomes_owner_onl
 
     owner = np.array([[1.0, 0.0]], dtype=np.float32)
     winner = np.array([[0.47, -np.sqrt(1 - 0.47**2)]], dtype=np.float32)
-    peer = np.array([[0.4, np.sqrt(1 - 0.4**2)]], dtype=np.float32)
-    matcher, host, _ = _live_matcher(monkeypatch, [])
+    peer = np.array([[0.6, 0.8]], dtype=np.float32)
+    matcher, host, _ = _live_matcher(monkeypatch, [np.array([[-1.0, 0.0]], dtype=np.float32)])
     matcher._profile_conversation_id = 'old'
     matcher.person_embeddings = {
         'user': {'embedding': owner, 'name': 'Owner'},
@@ -270,7 +270,7 @@ async def test_rollover_keeps_competing_voice_when_paid_roster_becomes_owner_onl
     matcher.speaker_to_person = {0: ('user', 'Owner'), 1: ('peer', 'Peer')}
     matcher._mapping_origin = {0: 'automatic', 1: 'automatic'}
     matcher._voice_centroids = {0: winner, 1: peer}
-    matcher._voice_distances = {0: {'user': 0.53, 'peer': 1.0}, 1: {'user': 0.6, 'peer': 0.0}}
+    matcher._voice_distances = {0: {'user': 0.53, 'peer': 1.0}, 1: {'user': 0.4, 'peer': 0.0}}
     matcher._voice_decisions = {v: select_speaker_match(d) for v, d in matcher._voice_distances.items()}
     matcher._voice_scopes = {0: SCOPE, 1: SCOPE}
     matcher.speaker_evidence = {v: deque([(e, 5.0)], maxlen=3) for v, e in matcher._voice_centroids.items()}
@@ -290,8 +290,13 @@ async def test_rollover_keeps_competing_voice_when_paid_roster_becomes_owner_onl
     await matcher.refresh_for_conversation('next', owner_carry_scope=SCOPE, owner_carry_donor={'id': 'old'})
     assert matcher.speaker_to_person == {}
     assert matcher.voice_identity_status[0] == SpeakerIdentityStatus.ambiguous
-    assert matcher._voice_distances[1]['user'] == pytest.approx(0.6)
+    assert matcher._voice_distances[1]['user'] == pytest.approx(0.4)
+    assert matcher._voice_decisions[1].person_id is None
+    assert 1 in matcher._competition_only
     assert 'peer' not in matcher.person_embeddings
+    await matcher.match(2, dict(audio_segment('unrelated', 20, 5), speaker_id_scope=SCOPE))
+    assert not matcher.speaker_to_person, 'later arbitration must never promote retained peer evidence'
+    assert matcher._voice_decisions[1].person_id is None
 
 
 @pytest.mark.anyio

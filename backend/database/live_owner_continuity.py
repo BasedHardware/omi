@@ -10,6 +10,8 @@ import logging
 from functools import lru_cache
 from typing import Any, Optional
 
+from database._client import get_firestore_client
+from database.conversations import conversations_collection, decode_manual_speaker_assignments
 from database.redis_db import create_bounded_redis_client
 from utils.encryption import decrypt_audio_file, encrypt_audio_chunk
 
@@ -35,9 +37,11 @@ def begin(uid: str, device: str, token: str) -> tuple[Optional[dict[str, Any]], 
     try:
         raw = _client().eval(
             "local v=redis.call('GET',KEYS[2]); redis.call('DEL',KEYS[2]); "
-            "redis.call('SET',KEYS[1],ARGV[1],'EX',86400); return v",
-            2,
+            "redis.call('SET',KEYS[1],ARGV[1],'EX',86400); "
+            "redis.call('SET',KEYS[3],0,'EX',86400); return v",
+            3,
             *_keys(uid, device),
+            _keys(uid, device)[0] + ':revision',
             token,
         )
     except Exception as error:
@@ -56,7 +60,33 @@ def begin(uid: str, device: str, token: str) -> tuple[Optional[dict[str, Any]], 
         return None, 'corrupt'
 
 
-def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]]) -> None:
+def donor_authority(uid: str, conversation: str) -> Optional[dict]:
+    """Read durable receipt authority, failing closed on missing/ineligible donors."""
+    snapshot = (
+        get_firestore_client()
+        .collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation)
+        .get(
+            field_paths=[
+                'deleted',
+                'discarded',
+                'is_locked',
+                'manual_speaker_assignments',
+                'manual_speaker_assignments_compressed',
+            ]
+        )
+    )
+    data = snapshot.to_dict() if snapshot.exists else None
+    if data is None or any(data.get(key) for key in ('deleted', 'discarded', 'is_locked')):
+        return None
+    return decode_manual_speaker_assignments(
+        uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+    )
+
+
+def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]], revision: int) -> None:
     """CAS publication/withdrawal; late completion from an old socket loses."""
     try:
         encrypted = encrypt_audio_chunk(json.dumps(payload).encode(), uid) if payload is not None else b''
@@ -64,13 +94,17 @@ def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]]
             return
         _client().eval(
             "if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end; "
+            "if tonumber(redis.call('GET',KEYS[3]) or '0')>=tonumber(ARGV[4]) then return 0 end; "
+            "redis.call('SET',KEYS[3],ARGV[4],'EX',86400); "
             "if ARGV[2]=='' then redis.call('DEL',KEYS[2]) else "
             "redis.call('SET',KEYS[2],ARGV[2],'EX',ARGV[3]) end; return 1",
-            2,
+            3,
             *_keys(uid, device),
+            _keys(uid, device)[0] + ':revision',
             token,
             encrypted,
             GAP_SECONDS,
+            revision,
         )
     except Exception as error:
         logger.warning('owner_reconnect_cache_write_failed type=%s', type(error).__name__)

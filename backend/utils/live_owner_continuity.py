@@ -41,7 +41,9 @@ class OwnerContinuity:
         self._last_write = 0.0
         self._published = False
         self._published_observed_at = 0.0
+        self._revision = 0
         self.attempted: set[int] = set()
+        self.accepted: dict[tuple[str, int], dict[str, Any]] = {}
         self.observed: dict[tuple[str, int], float] = {}
 
     async def start(self) -> None:
@@ -93,6 +95,44 @@ class OwnerContinuity:
             and decision.person_id == 'user'
             and compare_embeddings(centroid, vector) < SESSION_DISTANCE
         )
+
+    def remember_accept(self, voice: int) -> None:
+        if self.donor is not None:
+            scope = self.matcher._voice_scopes.get(voice, '')
+            self.accepted[(scope, voice)] = dict(self.donor)
+            if len(self.accepted) > 128:
+                self.accepted.pop(next(iter(self.accepted)))
+
+    async def authorize(self, *, voice: Optional[int] = None) -> bool:
+        """A consumed capsule never supersedes the donor's durable manual revision.
+
+        Assignment/rejection transactions increment this generation, including
+        when the original socket is gone. Read it for each shortened acquisition;
+        do not cache authorization across sockets or attempts.
+        """
+        key = (self.matcher._voice_scopes.get(voice, ''), voice) if voice is not None else None
+        donor = self.accepted.get(key) if key is not None else self.donor
+        if donor is None or (voice is None and not self.available()):
+            return False
+        try:
+            receipt = await self.matcher.host.persistence.call(cache.donor_authority, self.uid, donor['conversation'])
+            owner = self.matcher.person_embeddings.get('user')
+            valid = (
+                receipt is not None
+                and owner is not None
+                and donor['profile'] == profile_digest(owner['embedding'])
+                and receipt.get('generation', 0) == donor['receipt_generation']
+                and not manual_owner_reserved(receipt)
+                and donor['voice'] not in manual_rejected_speakers(receipt)
+            )
+        except Exception:
+            valid = False
+        if not valid:
+            self.donor = None
+            if key is not None:
+                self.accepted.pop(key, None)
+            record_owner_reconnect('rejected', 'donor_authority')
+        return valid
 
     def observe(self, voice: int) -> None:
         scope = self.matcher._voice_scopes.get(voice)
@@ -155,12 +195,17 @@ class OwnerContinuity:
                 and matcher._manual_voice_decision(receipt, voice) is None
                 and sum(seconds for _, seconds in matcher.speaker_evidence.get(voice, ())) >= 5.0
                 and voice in matcher._voice_centroids
+                and voice not in matcher._competition_only
             ]
             payload: Optional[dict[str, Any]] = None
             if owner and len(voices) == 1 and not manual_owner_reserved(receipt) and not (blocked and blocked.is_set()):
                 voice = voices[0]
                 payload = {
                     'v': 1,
+                    'conversation': matcher._profile_conversation_id,
+                    'voice': voice,
+                    'scope': matcher._voice_scopes.get(voice),
+                    'receipt_generation': receipt.get('generation', 0),
                     'device': self.device,
                     'profile': profile_digest(owner['embedding']),
                     'centroid': matcher._voice_centroids[voice].reshape(-1).tolist(),
@@ -176,4 +221,7 @@ class OwnerContinuity:
                 return
             self._last_write, self._published = now, payload is not None
             self._published_observed_at = payload['observed_at'] if payload else 0.0
-            await run_blocking(db_executor, cache.publish, self.uid, self.device, self.token, payload)
+            # Cancellation does not stop executor workers. Ordered revisions
+            # fence a late write even after cancellation releases this lock.
+            self._revision += 1
+            await run_blocking(db_executor, cache.publish, self.uid, self.device, self.token, payload, self._revision)
