@@ -987,6 +987,7 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -2709,6 +2710,7 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}

@@ -737,6 +737,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware-dev, category: telemetry}

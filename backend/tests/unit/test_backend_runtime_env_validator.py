@@ -3478,6 +3478,22 @@ def test_mentor_pipeline_runtime_values(pipeline, kind):
     assert bool(validate_mentor_pipeline(scope='host', config=config)) == (pipeline != 'cohort')
 
 
+def test_shaped_notes_enabled_on_sync_backfill():
+    # Backfill reprocesses merged conversations through get_conversation_notes.
+    # Legacy notes are gone, so an unset flag fail-closes every kept conversation
+    # as the generic HTTP 500 at process_conversation._get_structured.
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    expected = {'value': 'on', 'category': 'rollout'}
+    for env_name in ('dev', 'prod'):
+        env_config = validator._get_env_config(manifest, env_name)
+        blocks = dict(_manifest_env_blocks(env_config))
+        assert blocks['cloud_run/backend-sync-backfill']['OMI_SHAPED_AGENT_MODE'] == expected
+        overlay = validator._load_yaml(ROOT / f'deploy/runtime_env/{env_name}.overlay.yaml')['overlay']
+        overlay_blocks = dict(_manifest_env_blocks(overlay))
+        assert overlay_blocks['cloud_run/backend-sync-backfill']['OMI_SHAPED_AGENT_MODE'] == expected
+
+
 def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():
     # main.py serves capture, sync, developer processing and reprocess on all
     # four Cloud Run copies. pusher runs the same finalizer; desktop_backend
