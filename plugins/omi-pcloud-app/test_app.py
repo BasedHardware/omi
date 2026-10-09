@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import sys
 import unittest
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,9 +25,40 @@ import main
 from models import ActionItem, Conversation, Structured, TranscriptSegment
 from pcloud_client import BackupUploadResult
 
+try:
+    from starlette.testclient import TestClient as _StarletteTestClient
+
+    _HAS_FASTAPI_APP = hasattr(main.app, "routes") and len(getattr(main.app, "routes", [])) > 0
+    _TEST_CLIENT = _StarletteTestClient(main.app) if _HAS_FASTAPI_APP else None
+except Exception:
+    _TEST_CLIENT = None
+
+
+def _get_auth_pcloud_callback_response(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Invokes /auth/pcloud/callback via TestClient when available, falling back to direct coroutine invocation."""
+    if _TEST_CLIENT is not None:
+        params = {}
+        if code is not None:
+            params["code"] = code
+        if state is not None:
+            params["state"] = state
+        if error is not None:
+            params["error"] = error
+        try:
+            return _TEST_CLIENT.get("/auth/pcloud/callback", params=params, follow_redirects=False)
+        except TypeError:
+            return _TEST_CLIENT.get("/auth/pcloud/callback", params=params, allow_redirects=False)
+    return asyncio.run(main.auth_pcloud_callback(code=code, state=state, error=error))
+
 
 def _get_body_text(response) -> str:
     """Extracts text content across Starlette Response (.body bytes) and fallback shim (.content/.body)."""
+    if hasattr(response, "text") and response.text is not None:
+        return response.text
     if hasattr(response, "body") and response.body is not None:
         if isinstance(response.body, bytes):
             return response.body.decode("utf-8", errors="replace")
@@ -136,7 +168,7 @@ class TestPCloudAppHermetic(unittest.TestCase):
         mock_post.return_value = mock_resp
         mock_get_user_info.return_value = ({"email": "oauth_user@example.com"}, None)
 
-        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="csrf_state_123", error=None))
+        res = _get_auth_pcloud_callback_response(code="auth_code_xyz", state="csrf_state_123")
         loc = _get_redirect_location(res)
         self.assertIn("/setup/pcloud?uid=user_callback&status=connected", loc)
 
@@ -151,39 +183,16 @@ class TestPCloudAppHermetic(unittest.TestCase):
 
     def test_auth_pcloud_callback_invalid_state(self):
         """OAuth callback rejects invalid or expired state with 400 Bad Request."""
-        res = asyncio.run(main.auth_pcloud_callback(code="auth_code_xyz", state="invalid_expired_state", error=None))
+        res = _get_auth_pcloud_callback_response(code="auth_code_xyz", state="invalid_expired_state")
         self.assertEqual(res.status_code, 400)
         self.assertIn("Invalid or Expired OAuth State", _get_body_text(res))
 
-    @patch("requests.post")
-    @patch.object(main.PCloudClient, "get_user_info")
-    def test_auth_pcloud_callback_direct_coroutine_sentinel_normalization(self, mock_get_user_info, mock_post):
-        """Direct coroutine invocation unwraps FastAPI Query default sentinel objects."""
-        db.store_oauth_state(state="csrf_state_sentinel", uid="user_sentinel", location_id=1)
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "result": 0,
-            "access_token": "secret_access_token_sentinel",
-            "userid": 112233,
-            "locationid": 1,
-        }
-        mock_post.return_value = mock_resp
-        mock_get_user_info.return_value = ({"email": "sentinel@example.com"}, None)
-
-        # Simulate FastAPI's declarative Query(None) sentinel where hasattr(sentinel, 'default') is True
-        query_sentinel = MagicMock()
-        query_sentinel.default = None
-
-        res = asyncio.run(
-            main.auth_pcloud_callback(
-                code="auth_code_sentinel",
-                state="csrf_state_sentinel",
-                error=query_sentinel,
-            )
-        )
-        loc = _get_redirect_location(res)
-        self.assertIn("/setup/pcloud?uid=user_sentinel&status=connected", loc)
+    def test_auth_pcloud_callback_error_param(self):
+        """OAuth callback rejects upstream error parameter with 400 Bad Request."""
+        res = _get_auth_pcloud_callback_response(error="access_denied")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("OAuth Failed", _get_body_text(res))
+        self.assertIn("access_denied", _get_body_text(res))
 
     @patch.object(main.PCloudClient, "logout")
     def test_disconnect(self, mock_logout):

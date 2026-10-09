@@ -4,5 +4,4 @@ python-dotenv==1.0.0
 python-multipart==0.0.6
 requests==2.31.0
 pydantic==2.5.3
-tenacity==8.2.3
 redis==5.0.1

@@ -382,14 +382,6 @@ async def auth_pcloud_callback(
     error: Optional[str] = Query(None),
 ):
     """Handles OAuth 2.0 callback, exchanges code for access token, and stores encrypted credentials."""
-    # Normalize FastAPI Query default objects if invoked directly as a coroutine
-    if hasattr(error, "default"):
-        error = error.default
-    if hasattr(code, "default"):
-        code = code.default
-    if hasattr(state, "default"):
-        state = state.default
-
     if error or not code or not state:
         return HTMLResponse(
             f"<h2>OAuth Failed</h2><p>{html.escape(error or 'Missing authorization code')}</p>",
