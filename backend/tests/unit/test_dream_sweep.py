@@ -234,7 +234,16 @@ def test_shadow_write_hooks_dirty_queue(collection, store):
     writer = dream_dirty.after_write(collection)(lambda uid, data: data['id'])
     writer(UID, {'id': 'synthetic-record'})
     assert store.rows[('dream_users', UID)]['score'] == 2
-    assert store.rows[('dream_users', UID, 'events', '2')]['refs'] == [[collection, 'synthetic-record']]
+    assert store.rows[('dream_users', UID, 'events', '2')]['refs'] == [
+        {'collection': collection, 'id': 'synthetic-record'}
+    ]
+
+
+def test_write_outside_cohort_reads_nothing(store, monkeypatch):
+    # Every product write for every user reaches mark_dirty; outside the cohort it must not read Firestore.
+    monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: pytest.fail('Firestore touched outside cohort'))
+    dream_dirty.after_write('conversations')(lambda uid, data: data['id'])('stranger', {'id': 'synthetic-record'})
+    assert ('dream_users', 'stranger') not in store.rows
 
 
 def test_prod_scheduler_and_writer_env_contract():

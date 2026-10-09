@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from config.dream_agent import Caps, eligible, mode
+from config.dream_agent import Caps, eligible, may_be_eligible, mode
 from config.plan_catalog import PAID_PLAN_IDS
 from database._client import get_firestore_client
 
@@ -34,6 +34,9 @@ def state_ref(database, uid):
 
 
 def mark_dirty(uid, refs, *, firestore_client=None):
+    # Every product write calls this; outside the cohort it must cost no Firestore read.
+    if not may_be_eligible(uid):
+        return
     database = client(firestore_client)
     user = database.collection('users').document(uid).get().to_dict() or {}
     if not eligible(uid, user):
@@ -54,7 +57,8 @@ def mark_dirty(uid, refs, *, firestore_client=None):
                 event,
                 {
                     'sequence': seq,
-                    'refs': [list(ref) for ref in refs[start : start + 5]],
+                    # Firestore rejects arrays nested directly in arrays.
+                    'refs': [{'collection': c, 'id': k} for c, k in refs[start : start + 5]],
                     'at': datetime.now(timezone.utc),
                 },
             )
