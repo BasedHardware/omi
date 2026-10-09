@@ -5,6 +5,7 @@ import pytest
 from utils.llm import model_config
 from utils.llm.gateway_client import is_auto_lane_id
 from utils.llm.model_config import (
+    LUNA_MODEL,
     AutoLaneRouteRef,
     ExplicitRouteRef,
     UnknownLLMFeature,
@@ -45,25 +46,19 @@ def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
 
     assert route_ref == ExplicitRouteRef(
         feature='fair_use',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         provider='openai',
         options={},
     )
-    assert get_model('fair_use') == 'gpt-5.6-luna'
+    assert get_model('fair_use') == LUNA_MODEL
     assert get_provider('fair_use') == 'openai'
 
 
-def test_route_ref_preserves_provider_route_options():
-    openrouter_ref = get_route_ref('wrapped_analysis')
-    gemini_ref = get_route_ref('followup')
-
-    assert isinstance(openrouter_ref, ExplicitRouteRef)
-    assert openrouter_ref.provider == 'openrouter'
-    assert openrouter_ref.options == {'temperature': 0.7}
-
-    assert isinstance(gemini_ref, ExplicitRouteRef)
-    assert gemini_ref.provider == 'gemini'
-    assert gemini_ref.options == {'thinking_budget': 0}
+def test_former_gemini_and_openrouter_features_resolve_to_luna():
+    for feature in ('wrapped_analysis', 'followup', 'translation', 'screen_frame_judge'):
+        route_ref = get_route_ref(feature)
+        assert isinstance(route_ref, ExplicitRouteRef)
+        assert (route_ref.model, route_ref.provider, route_ref.options) == (LUNA_MODEL, 'openai', {})
 
 
 @pytest.mark.parametrize(

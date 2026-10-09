@@ -527,7 +527,7 @@ actor APIClient {
   }
 
   /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
-  private func authorizedRetryRequest(
+  func authorizedRetryRequest(
     from request: URLRequest,
     retriedAuth: Bool,
     authPolicy: RequestAuthPolicy
@@ -624,10 +624,108 @@ actor APIClient {
     return (data, httpResponse)
   }
 
+  /// Streams a response body without first materializing it as one `Data` value.
+  ///
+  /// Authentication retry remains identical to `performAuthenticatedData`: a 401
+  /// is consumed, the Firebase header is refreshed once, and callers receive the
+  /// persistent response when their policy owns provider-boundary classification.
+  /// Successful bodies are delivered in bounded chunks; error bodies are retained
+  /// so endpoint-specific code can preserve its existing error mapping.
+  func performAuthenticatedStreamingData(
+    for request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false,
+    chunkSize: Int = 4 * 1024,
+    onChunk: @Sendable (Data) -> Void
+  ) async throws -> (Data, HTTPURLResponse) {
+    precondition(chunkSize > 0)
+    try validateExpectedOwner(authPolicy)
+    let endpoint = endpointLabel(for: request)
+    let (bytes, response) = try await session.bytes(for: request)
+    try validateExpectedOwner(authPolicy)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      let body = try await Self.collect(bytes: bytes)
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (body, httpResponse)
+      }
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
+      guard
+        let retryRequest = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: retriedAuth,
+          authPolicy: authPolicy
+        )
+      else {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
+        throw APIError.unauthorized
+      }
+      do {
+        let result = try await performAuthenticatedStreamingData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true,
+          chunkSize: chunkSize,
+          onChunk: onChunk
+        )
+        let outcome = (200...299).contains(result.1.statusCode) ? "succeeded" : "failed"
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
+        return result
+      } catch {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
+        throw error
+      }
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      return (try await Self.collect(bytes: bytes), httpResponse)
+    }
+
+    var chunk = Data()
+    chunk.reserveCapacity(chunkSize)
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      chunk.append(byte)
+      if chunk.count == chunkSize {
+        onChunk(chunk)
+        chunk.removeAll(keepingCapacity: true)
+      }
+    }
+    if !chunk.isEmpty {
+      onChunk(chunk)
+    }
+    try validateExpectedOwner(authPolicy)
+    return (Data(), httpResponse)
+  }
+
+  private nonisolated static func collect(bytes: URLSession.AsyncBytes) async throws -> Data {
+    var data = Data()
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      data.append(byte)
+    }
+    return data
+  }
+
   /// An owner-bound request may finish after the app has signed out or switched
   /// accounts. The authorization header still belongs to the original owner,
   /// so never let that response flow into the new owner's local state.
   nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    try ScreenTaskWorkAuthority.require()
     if let authorizationSnapshot = authPolicy.authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw AuthError.userChangedDuringRequest
@@ -865,6 +963,13 @@ extension APIClient {
     return response.conversation
   }
 
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
+  }
+
   /// Sets the visibility of a conversation for sharing
   /// - Parameters:
   ///   - id: The conversation ID
@@ -880,14 +985,31 @@ extension APIClient {
     try await performVoidRequest(request)
   }
 
-  /// Gets a shareable link for a conversation by setting it to shared visibility
-  /// - Parameter id: The conversation ID
-  /// - Returns: The shareable URL for the conversation
+  /// Gets a shareable link for a conversation by setting it to shared visibility.
+  ///
+  /// The visibility write is idempotent. When it fails, one read of the current
+  /// conversation decides the outcome: `shared` or `public` means the link
+  /// already exists, and any other state rethrows the original error.
   func getConversationShareLink(id: String) async throws -> String {
-    // Set visibility to shared
-    try await setConversationVisibility(id: id, visibility: "shared")
-    // Return the web URL for the shared conversation
+    do {
+      try await setConversationVisibility(id: id, visibility: "shared")
+    } catch {
+      guard await conversationVisibilityAlreadyShareable(id: id) else { throw error }
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "visibility_patch",
+        to: "existing_visibility",
+        reason: "local_heal",
+        outcome: .recovered)
+    }
     return DesktopBackendEnvironment.conversationShareURL(id: id)
+  }
+
+  /// Whether a failed share mutation left a link that already resolves.
+  /// A failed read is not evidence the conversation is shareable.
+  private func conversationVisibilityAlreadyShareable(id: String) async -> Bool {
+    guard let conversation = try? await getConversation(id: id) else { return false }
+    return conversation.visibility == "shared" || conversation.visibility == "public"
   }
 
   /// Calendar-detected people the meeting summary could be sent to (the other

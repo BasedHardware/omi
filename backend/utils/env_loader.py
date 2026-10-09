@@ -63,10 +63,19 @@ def firebase_admin_options(environ: dict[str, str] | None = None) -> dict[str, s
     """
 
     source = os.environ if environ is None else environ
-    project_id = source.get("FIREBASE_AUTH_PROJECT_ID", "").strip()
-    if not project_id:
-        return None
-    return {"projectId": project_id}
+    # A keyless deployment has no JSON ``project_id`` to fall back on, so the
+    # customer-data pin doubles as the auth project unless one is named.
+    project_id = (source.get("FIREBASE_AUTH_PROJECT_ID", "") or source.get("OMI_CUSTOMER_DATA_PROJECT", "")).strip()
+    # Custom tokens on a keyless identity are signed through IAM signBlob by
+    # this account; it must belong to the Firebase project (a dev-project
+    # runtime identity cannot sign for production Auth on its own behalf).
+    signer = source.get("FIREBASE_SIGNER_SERVICE_ACCOUNT", "").strip()
+    options: dict[str, str] = {}
+    if project_id:
+        options["projectId"] = project_id
+    if signer:
+        options["serviceAccountId"] = signer
+    return options or None
 
 
 def stage_from_env(environ: dict[str, str] | None = None) -> str | None:

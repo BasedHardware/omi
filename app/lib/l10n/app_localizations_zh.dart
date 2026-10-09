@@ -21,13 +21,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptTab => '文字记录';
 
   @override
-  String get actionItemsTab => '行动项';
+  String get actionItemsTab => '任务';
 
   @override
   String get deleteConversationTitle => '删除对话？';
 
   @override
-  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。此操作无法撤消。';
+  String get deleteConversationMessage => '这也将删除相关的记忆、任务和音频文件。';
 
   @override
   String get confirm => '确认';
@@ -111,10 +111,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remaining => '剩余';
 
   @override
-  String get loading => '加载中...';
+  String get loading => '加载中…';
 
   @override
-  String get loadingDuration => '加载持续时间...';
+  String get loadingDuration => '加载持续时间…';
 
   @override
   String secondsCount(int count) {
@@ -134,7 +134,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createPersonHint => '创建一个新人员并训练 Omi 识别他们的声音！';
 
   @override
-  String get speechProfile => '语音配置文件';
+  String get speechProfile => '语音档案';
 
   @override
   String sampleNumber(int number) {
@@ -151,7 +151,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectLanguage => '选择语言';
 
   @override
-  String get deleting => '删除中...';
+  String get deleting => '删除中…';
 
   @override
   String get pleaseCompleteAuthentication => '请在浏览器中完成身份验证。完成后返回应用程序。';
@@ -178,7 +178,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get disconnected => '已断开连接';
 
   @override
-  String get searching => '搜索中...';
+  String get searching => '搜索中';
 
   @override
   String get connectDevice => '连接设备';
@@ -238,7 +238,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get starConversationHint => '要加星标，请打开对话并点击顶部的星星图标。';
 
   @override
-  String get searchConversations => '搜索对话...';
+  String get searchConversations => '搜索对话';
 
   @override
   String selectedCount(int count) {
@@ -269,7 +269,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMessagesYet => '还没有消息！\n为什么不开始一段对话呢？';
 
   @override
-  String get deletingMessages => '正在从 Omi 的内存中删除您的消息...';
+  String get deletingMessages => '正在从 Omi 的内存中删除您的消息…';
 
   @override
   String get messageCopied => '✨ 消息已复制到剪贴板';
@@ -281,7 +281,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reportMessage => '举报消息';
 
   @override
-  String get reportMessageConfirm => '您确定要举报此消息吗？';
+  String get reportMessageConfirm => '举报这条消息？';
 
   @override
   String get messageReported => '消息举报成功。';
@@ -293,7 +293,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearChat => '清除聊天';
 
   @override
-  String get clearChatConfirm => '您确定要清除聊天记录吗？此操作无法撤消。';
+  String get clearChatConfirm => '此聊天中的所有消息都将被删除。此操作无法撤销。';
 
   @override
   String get maxFilesLimit => '您一次只能上传 4 个文件';
@@ -317,7 +317,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get buildAndShareApp => '构建并分享您自己的应用';
 
   @override
-  String get searchApps => '搜索应用...';
+  String get searchApps => '搜索应用';
 
   @override
   String get myApps => '我创建的';
@@ -356,10 +356,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cannotBeUndone => '此操作无法撤消。';
 
   @override
-  String get allDataErased => '您的所有记忆和对话将被永久删除。';
+  String get allDataErased => '你的回忆和对话将被清除。';
 
   @override
-  String get appsDisconnected => '您的应用和集成将立即断开连接。';
+  String get appsDisconnected => '你的应用和集成将被断开。';
 
   @override
   String get exportBeforeDelete => '您可以在删除账户前导出数据。一旦删除，将无法恢复。';
@@ -470,7 +470,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get privacyIntro => '在 Omi，我们致力于保护您的隐私。此页面允许您控制数据的保存和使用方式。';
 
   @override
-  String get learnMore => '了解更多...';
+  String get learnMore => '了解更多…';
 
   @override
   String get dataProtectionLevel => '数据保护级别';
@@ -650,7 +650,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get developerSettingsTitle => '开发者设置';
 
   @override
-  String get saving => '正在保存...';
+  String get saving => '正在保存…';
 
   @override
   String get beta => '测试版';
@@ -728,7 +728,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providing => '提供';
 
   @override
-  String get providingSubtitle => '自动捕获的任务和笔记。';
+  String get providingSubtitle => '任务和笔记，自动捕获。';
 
   @override
   String get remembering => '记忆';
@@ -829,7 +829,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get debugLogCleared => '调试日志已清除';
 
   @override
-  String get exportStarted => '导出已开始。这可能需要几秒钟...';
+  String get exportStarted => '导出已开始。这可能需要几秒钟…';
 
   @override
   String get exportAllData => '导出所有数据';
@@ -931,9 +931,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get claudeDesktop => 'Claude 桌面版';
-
-  @override
-  String get addToClaudeConfig => '添加到 claude_desktop_config.json';
 
   @override
   String get copyConfig => '复制配置';
@@ -1039,7 +1036,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return '您确定要断开 $appName 吗？您可以随时重新连接。';
+    return '您可以随时重新连接 $appName。';
   }
 
   @override
@@ -1612,7 +1609,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewTemplate => '查看模板';
 
   @override
-  String get trySomethingLike => '试试类似...';
+  String get trySomethingLike => '试试类似…';
 
   @override
   String get tryIt => '试一试';
@@ -1639,10 +1636,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get features => '功能';
 
   @override
-  String get creatingYourApp => '正在创建您的应用...';
+  String get creatingYourApp => '正在创建您的应用…';
 
   @override
-  String get generatingIcon => '正在生成图标...';
+  String get generatingIcon => '正在生成图标…';
 
   @override
   String get whatShouldWeMake => '我们应该做什么？';
@@ -1693,13 +1690,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get perMonthLabel => '/ 月';
 
   @override
-  String get creating => '创建中...';
+  String get creating => '创建中…';
 
   @override
   String get createApp => '创建应用';
 
   @override
-  String get searchingForDevices => '正在搜索设备...';
+  String get searchingForDevices => '正在搜索设备';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1739,25 +1736,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundActivity => '后台活动';
 
   @override
-  String get backgroundActivityDesc => '允许 Omi 在后台运行以获得更好的稳定性';
+  String get backgroundActivityDesc => '以便在屏幕关闭或切换应用时，Omi 仍能继续录制。';
 
   @override
   String get locationAccess => '位置权限';
 
   @override
-  String get locationAccessDesc => '启用后台位置以获得完整体验';
+  String get locationAccessDesc => '以便 Omi 记录你的对话发生在哪里。';
 
   @override
   String get notifications => '通知';
 
   @override
-  String get notificationsDesc => '启用通知以保持了解';
+  String get notificationsDesc => '以便 Omi 向你发送对话摘要、任务提醒和应用回复。';
 
   @override
   String get locationServiceDisabled => '位置服务已禁用';
 
   @override
-  String get locationServiceDisabledDesc => '请启用位置服务';
+  String get locationServiceDisabledDesc => '此设备的定位服务已关闭。请在设置中开启。';
 
   @override
   String get backgroundLocationDenied => '后台位置权限被拒绝';
@@ -1917,7 +1914,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalGrowthJourney => '您的个人成长之旅，AI 倾听您的每一句话。';
 
   @override
-  String get actionItemsTitle => '行动项';
+  String get actionItemsTitle => '任务';
 
   @override
   String get actionItemsDescription => '点击编辑 • 长按选择 •以此滑动';
@@ -1932,7 +1929,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tabOld => '旧的';
 
   @override
-  String get emptyTodoMessage => '🎉 全部完成！\n没有待办事项';
+  String get emptyTodoMessage => '🎉 全部完成！\n没有待处理的任务';
 
   @override
   String get emptyDoneMessage => '还没有已完成的项目';
@@ -1944,23 +1941,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noItems => '无项目';
 
   @override
-  String get actionItemMarkedIncomplete => '标记为未完成';
+  String get actionItemMarkedIncomplete => '任务已标记为未完成';
 
   @override
   String get actionItemCompleted => '任务已完成';
 
   @override
-  String get deleteActionItemTitle => '删除操作项';
+  String get deleteActionItemTitle => '删除任务';
 
   @override
-  String get deleteActionItemMessage => '您确定要删除此操作项吗？';
+  String get deleteActionItemMessage => '删除此任务？';
 
   @override
   String get deleteSelectedItemsTitle => '删除选中项';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '您确定要删除 $count 个选中任务吗？';
+    return '删除 $count 个选中的任务$s？';
   }
 
   @override
@@ -1970,7 +1967,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count 个任务已删除';
+    return '$count 个任务$s已删除';
   }
 
   @override
@@ -1983,10 +1980,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToDeleteSomeItems => '无法删除部分项目';
 
   @override
-  String get welcomeActionItemsTitle => '准备好行动';
+  String get welcomeActionItemsTitle => '准备好接收任务';
 
   @override
-  String get welcomeActionItemsDescription => '您的 AI 会自动提取任务。';
+  String get welcomeActionItemsDescription => '您的 AI 会自动从对话中提取任务。任务创建后将显示在这里。';
 
   @override
   String get autoExtractionFeature => '从对话中自动提取';
@@ -2006,10 +2003,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteSelected => '删除选中';
 
   @override
-  String get searchMemories => '搜索回忆...';
+  String get searchMemories => '搜索回忆';
 
   @override
-  String get memoryDeleted => '记忆已删除。';
+  String get memoryDeleted => '记忆已删除';
 
   @override
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
@@ -2027,7 +2024,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get undo => '撤销';
 
   @override
-  String get noMemoriesYet => '🧠 还没有回忆';
+  String get noMemoriesYet => '还没有回忆';
 
   @override
   String get noAutoMemories => '暂无自动记忆';
@@ -2039,7 +2036,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMemoriesInCategories => '此类目无记忆';
 
   @override
-  String get noMemoriesFound => '🔍 未找到回忆';
+  String get noMemoriesFound => '未找到回忆';
 
   @override
   String get addFirstMemory => '添加您的第一条记忆';
@@ -2048,7 +2045,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearMemoryTitle => '清除 Omi 记忆？';
 
   @override
-  String get clearMemoryMessage => '您确定要清除 Omi 的记忆吗？此操作无法撤消。';
+  String get clearMemoryMessage => '您的所有记忆都将被删除。此操作无法撤销。';
 
   @override
   String get clearMemoryButton => '清除记忆';
@@ -2116,7 +2113,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get alwaysInContext => '始终包含在上下文中';
 
   @override
-  String get memoryContentHint => '我喜欢冰淇淋...';
+  String get memoryContentHint => '我更喜欢在上午开会。';
 
   @override
   String get failedToSaveMemory => '保存失败。';
@@ -2128,28 +2125,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
-  String get createActionItem => '创建操作项';
+  String get createActionItem => '创建任务';
 
   @override
-  String get editActionItem => '编辑操作项';
+  String get editActionItem => '编辑任务';
 
   @override
   String get actionItemDescriptionHint => '有什么需要做的？';
 
   @override
-  String get actionItemDescriptionEmpty => '描述不能为空。';
+  String get actionItemDescriptionEmpty => '任务描述不能为空。';
 
   @override
   String get actionItemUpdated => '任务已更新';
 
   @override
-  String get failedToUpdateActionItem => '更新操作项失败';
+  String get failedToUpdateActionItem => '更新任务失败';
 
   @override
   String get actionItemCreated => '任务已创建';
 
   @override
-  String get failedToCreateActionItem => '创建操作项失败';
+  String get failedToCreateActionItem => '创建任务失败';
 
   @override
   String get dueDate => '截止日期';
@@ -2185,16 +2182,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get markComplete => '标记为已完成';
 
   @override
-  String get actionItemDeleted => '操作项已删除';
+  String get actionItemDeleted => '任务已删除';
 
   @override
-  String get failedToDeleteActionItem => '删除操作项失败';
+  String get failedToDeleteActionItem => '删除任务失败';
 
   @override
   String get deleteActionItemConfirmTitle => '删除任务';
 
   @override
-  String get deleteActionItemConfirmMessage => '您确定要删除此任务吗？';
+  String get deleteActionItemConfirmMessage => '删除此任务？';
 
   @override
   String get appLanguage => '应用语言';
@@ -2206,7 +2203,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechTranscriptionSectionTitle => '语音与转录';
 
   @override
-  String get languageSettingsHelperText => '应用语言更改菜单和按钮。语音语言影响录音的转录方式。';
+  String get languageSettingsHelperText => '应用语言更改菜单和按钮。主要语言影响录音的转录方式。';
 
   @override
   String get translationNotice => '翻译通知';
@@ -2221,7 +2218,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pleaseSelectReason => '请选择原因';
 
   @override
-  String get tellUsMoreWhatWentWrong => '告诉我们更多出了什么问题...';
+  String get tellUsMoreWhatWentWrong => '告诉我们更多出了什么问题…';
 
   @override
   String get selectText => '选择文本';
@@ -2280,7 +2277,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportButton => '导出';
 
   @override
-  String get actionItemsCopiedToClipboard => '行动项已复制到剪贴板';
+  String get actionItemsCopiedToClipboard => '任务已复制到剪贴板';
 
   @override
   String get summarize => '生成摘要';
@@ -2295,7 +2292,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteMemory => '删除记忆';
 
   @override
-  String get thisActionCannotBeUndone => '此操作无法撤消。';
+  String get thisActionCannotBeUndone => '此操作无法撤销。';
 
   @override
   String memoriesCount(int count) {
@@ -2426,7 +2423,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get helpsDiagnoseIssues => '帮助诊断问题';
 
   @override
-  String get exportStartedMessage => '导出已开始。这可能需要几秒钟...';
+  String get exportStartedMessage => '导出已开始。这可能需要几秒钟…';
 
   @override
   String get exportConversationsToJson => '将对话导出为 JSON 文件';
@@ -2443,13 +2440,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearAllNodesAndConnections => '清除所有节点和连接';
 
   @override
-  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
-
-  @override
-  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
   String get realTimeTranscript => '实时转录';
@@ -2464,12 +2455,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get detailedDiagnosticMessages => '详细诊断消息';
 
   @override
-  String get autoCreateSpeakers => '自动创建说话者';
-
-  @override
-  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
-
-  @override
   String get followUpQuestions => '后续问题';
 
   @override
@@ -2482,7 +2467,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => '在主页上跟踪您的个人目标';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
+  String get actionItemDescriptionCannotBeEmpty => '任务描述不能为空';
 
   @override
   String get saved => '已保存';
@@ -2563,7 +2548,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toggleControlBar => '切换控制栏';
 
   @override
-  String get pressKeys => '按下按键...';
+  String get pressKeys => '按下按键…';
 
   @override
   String get cmdRequired => '⌘ 必需';
@@ -2578,7 +2563,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get search => '搜索';
 
   @override
-  String get searchPlaceholder => '搜索...';
+  String get searchPlaceholder => '搜索';
 
   @override
   String get untitledConversation => '无标题对话';
@@ -2651,7 +2636,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchResults => '搜索结果';
 
   @override
-  String get actionItems => '待办事项';
+  String get actionItems => '任务';
 
   @override
   String get tasksToday => '今天';
@@ -2666,7 +2651,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksLater => '稍后';
 
   @override
-  String get loadingTasks => '正在加载任务...';
+  String get loadingTasks => '正在加载任务…';
 
   @override
   String get tasks => '任务';
@@ -2726,22 +2711,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get timeAM => '上午';
 
   @override
-  String get actionItemUpdatedSuccessfully => '操作项已成功更新';
+  String get actionItemUpdatedSuccessfully => '任务已成功更新';
 
   @override
-  String get actionItemCreatedSuccessfully => '操作项已成功创建';
+  String get actionItemCreatedSuccessfully => '任务已成功创建';
 
   @override
-  String get actionItemDeletedSuccessfully => '操作项已成功删除';
+  String get actionItemDeletedSuccessfully => '任务已成功删除';
 
   @override
-  String get deleteActionItem => '删除操作项';
+  String get deleteActionItem => '删除任务';
 
   @override
-  String get deleteActionItemConfirmation => '您确定要删除此操作项吗？此操作无法撤消。';
+  String get deleteActionItemConfirmation => '删除此任务？此操作无法撤销。';
 
   @override
-  String get enterActionItemDescription => '输入操作项描述...';
+  String get enterActionItemDescription => '输入任务描述';
 
   @override
   String get markAsCompleted => '标记为已完成';
@@ -2750,10 +2735,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setDueDateAndTime => '设置截止日期和时间';
 
   @override
-  String get reloadingApps => '正在重新加载应用...';
+  String get reloadingApps => '正在重新加载应用…';
 
   @override
-  String get loadingApps => '正在加载应用...';
+  String get loadingApps => '正在加载应用…';
 
   @override
   String get browseInstallCreateApps => '浏览、安装和创建应用';
@@ -2789,10 +2774,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get buildSubmitCustomOmiApp => '构建并提交您的自定义 Omi 应用';
 
   @override
-  String get submittingYourApp => '正在提交您的应用...';
+  String get submittingYourApp => '正在提交您的应用…';
 
   @override
-  String get preparingFormForYou => '正在为您准备表单...';
+  String get preparingFormForYou => '正在为您准备表单…';
 
   @override
   String get appDetails => '应用详情';
@@ -2813,13 +2798,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatPrompt => '聊天提示';
 
   @override
-  String get chatPromptPlaceholder => '您是一个很棒的应用程序，您的工作是回答用户查询并让他们感觉良好...';
+  String get chatPromptPlaceholder => '您是一个很棒的应用程序，您的工作是回答用户查询并让他们感觉良好…';
 
   @override
   String get conversationPrompt => '对话提示';
 
   @override
-  String get conversationPromptPlaceholder => '您是一个很棒的应用程序，您将获得对话的文字记录和摘要...';
+  String get conversationPromptPlaceholder => '您是一个很棒的应用程序，您将获得对话的文字记录和摘要…';
 
   @override
   String get notificationScopes => '通知范围';
@@ -2971,7 +2956,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pricingPaid => '付费';
 
   @override
-  String get loadingCapabilities => '正在加载功能...';
+  String get loadingCapabilities => '正在加载功能…';
 
   @override
   String get filterInstalled => '已安装';
@@ -3069,7 +3054,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ 消息举报成功';
 
   @override
-  String get confirmReportMessage => '您确定要举报此消息吗？';
+  String get confirmReportMessage => '举报这条消息？';
 
   @override
   String get selectChatAssistant => '选择聊天助手';
@@ -3084,7 +3069,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearChatTitle => '清除聊天？';
 
   @override
-  String get confirmClearChat => '您确定要清除聊天吗？此操作无法撤销。';
+  String get confirmClearChat => '清除此聊天？此操作无法撤销。';
 
   @override
   String get copy => '复制';
@@ -3110,7 +3095,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToTranscribeAudio => '音频转录失败';
 
   @override
-  String get transcribing => '正在转录...';
+  String get transcribing => '正在转录…';
 
   @override
   String get discardedConversation => '已丢弃的对话';
@@ -3122,7 +3107,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get from => '从';
 
   @override
-  String get copied => '已复制！';
+  String get copied => '已复制';
 
   @override
   String get copyLink => '复制链接';
@@ -3160,7 +3145,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToGenerateShareLink => '生成分享链接失败';
 
   @override
-  String get reloadingConversations => '重新加载对话...';
+  String get reloadingConversations => '重新加载对话…';
 
   @override
   String get user => '用户';
@@ -3219,7 +3204,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wearableAiCompanion => '可穿戴AI伴侣';
 
   @override
-  String get loadingMemories => '加载回忆中...';
+  String get loadingMemories => '加载回忆中…';
 
   @override
   String get allMemories => '所有回忆';
@@ -3231,7 +3216,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manual => '手动';
 
   @override
-  String get loadingYourMemories => '正在加载您的回忆...';
+  String get loadingYourMemories => '正在加载您的回忆…';
 
   @override
   String get createYourFirstMemory => '创建您的第一个回忆以开始';
@@ -3255,7 +3240,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createMemory => '创建记忆';
 
   @override
-  String get deleteMemoryConfirmation => '您确定要删除此记忆吗？此操作无法撤消。';
+  String get deleteMemoryConfirmation => '删除此记忆？此操作无法撤销。';
 
   @override
   String get makePrivate => '私密';
@@ -3292,7 +3277,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return '您确定要清除 Omi 的记忆吗？此操作无法撤消，将永久删除所有 $count 条记忆。';
+    return '全部 $count 条记忆都将被删除。此操作无法撤销。';
   }
 
   @override
@@ -3347,7 +3332,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => '选择您的首选语言以获得最佳 Omi 体验';
 
   @override
-  String get searchLanguages => '搜索语言...';
+  String get searchLanguages => '搜索语言';
 
   @override
   String get selectALanguage => '选择语言';
@@ -3400,13 +3385,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accessibilityDescription => 'Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。';
 
   @override
-  String get pleaseWait => '请稍候...';
+  String get pleaseWait => '请稍候…';
 
   @override
   String get joinTheCommunity => '加入社区！';
 
   @override
-  String get loadingProfile => '正在加载个人资料...';
+  String get loadingProfile => '正在加载个人资料…';
 
   @override
   String get profileSettings => '个人资料设置';
@@ -3531,7 +3516,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveSettings => '保存设置';
 
   @override
-  String get syncingDeveloperSettings => '正在同步开发者设置...';
+  String get syncingDeveloperSettings => '正在同步开发者设置…';
 
   @override
   String get summary => '摘要';
@@ -3577,13 +3562,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get letOmiChooseAutomatically => '让 Omi 自动选择最佳应用';
 
   @override
-  String get deleteConversationConfirmation => '您确定要删除此对话吗？此操作无法撤销。';
+  String get deleteConversationConfirmation => '删除此对话？此操作无法撤销。';
 
   @override
   String get conversationDeleted => '对话已删除';
 
   @override
-  String get generatingLink => '正在生成链接...';
+  String get generatingLink => '正在生成链接…';
 
   @override
   String get editConversation => '编辑对话';
@@ -3604,7 +3589,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTitle => '对话标题';
 
   @override
-  String get enterConversationTitle => '输入对话标题...';
+  String get enterConversationTitle => '输入对话标题…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => '对话标题更新成功';
@@ -3616,7 +3601,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errorUpdatingConversationTitle => '更新对话标题时出错';
 
   @override
-  String get settingUp => '设置中...';
+  String get settingUp => '设置中…';
 
   @override
   String get startYourFirstRecording => '开始您的第一次录音';
@@ -3625,7 +3610,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingSystemAudioCapture => '正在准备系统音频捕获';
 
   @override
-  String get reconnecting => '重新连接中...';
+  String get reconnecting => '重新连接中…';
 
   @override
   String get recordingPaused => '录音已暂停';
@@ -3638,14 +3623,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return '将在 $countdown 秒后恢复...';
+    return '将在 $countdown 秒后恢复…';
   }
 
   @override
   String get tapPlayToResume => '点击播放以恢复';
 
   @override
-  String get listeningForAudio => '正在监听音频...';
+  String get listeningForAudio => '正在监听音频…';
 
   @override
   String get preparingAudioCapture => '正在准备音频捕获';
@@ -3673,7 +3658,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paused => '已暂停';
 
   @override
-  String get initializing => '初始化中...';
+  String get initializing => '初始化中…';
 
   @override
   String get recording => '录音中';
@@ -3701,7 +3686,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => '由 omi 翻译';
+  String get translatedByOmi => '由 Omi 翻译';
 
   @override
   String get backToConversations => '返回对话';
@@ -3726,7 +3711,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectAudioInput => '选择音频输入';
 
   @override
-  String get loadingDevices => '正在加载设备...';
+  String get loadingDevices => '正在加载设备…';
 
   @override
   String get settingsHeader => '设置';
@@ -3756,7 +3741,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signOutQuestion => '退出登录？';
 
   @override
-  String get signOutConfirmation => '您确定要退出登录吗？';
+  String get signOutConfirmation => '你需要重新登录才能查看对话。已配对的设备和应用偏好设置会保留在这部手机上。';
 
   @override
   String get customVocabularyHeader => '自定义词汇';
@@ -3834,7 +3819,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportConversationsDescription => '将对话导出为 JSON';
 
   @override
-  String get exportingConversations => '正在导出对话...';
+  String get exportingConversations => '正在导出对话…';
 
   @override
   String get clearNodesDescription => '清除所有节点和连接';
@@ -3900,7 +3885,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateAppQuestion => '更新应用？';
 
   @override
-  String get updateAppConfirmation => '确定要更新您的应用吗？更改将在我们团队审核后生效。';
+  String get updateAppConfirmation => '更改将在我们团队审核后生效。';
 
   @override
   String get updateApp => '更新应用';
@@ -3922,9 +3907,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String publicAppsCount(String count) {
     return '公开应用 ($count)';
   }
-
-  @override
-  String get newVersionAvailable => '新版本可用  🎉';
 
   @override
   String get no => '否';
@@ -3966,13 +3948,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancelSubscriptionQuestion => '取消订阅？';
 
   @override
-  String get cancelSubscriptionConfirmation => '确定要取消订阅吗？您将继续享有访问权限直到当前计费周期结束。';
+  String get cancelSubscriptionConfirmation => '您将继续享有访问权限直到当前计费周期结束。';
 
   @override
   String get cancelSubscriptionButton => '取消订阅';
 
   @override
-  String get cancelling => '正在取消...';
+  String get cancelling => '正在取消…';
 
   @override
   String get betaTesterMessage => '您是此应用的测试用户。目前尚未公开。批准后将公开。';
@@ -4087,7 +4069,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return '正在添加到$serviceName...';
+    return '正在添加到$serviceName…';
   }
 
   @override
@@ -4123,7 +4105,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get omiApiKeys => 'Omi API密钥';
 
   @override
-  String get apiKeysDescription => 'API密钥用于在您的应用程序与OMI服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他OMI服务。';
+  String get apiKeysDescription => 'API密钥用于在您的应用程序与Omi服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他Omi服务。';
 
   @override
   String get aboutOmiApiKeys => '关于Omi API密钥';
@@ -4147,7 +4129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get revokeApiKeyQuestion => '撤销API密钥?';
 
   @override
-  String get revokeApiKeyWarning => '此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。';
+  String get revokeApiKeyWarning => '使用此密钥的应用将无法再访问 API。此操作无法撤销。';
 
   @override
   String get revoke => '撤销';
@@ -4204,7 +4186,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return '您确定要删除此$item吗？此操作无法撤消。';
+    return '删除此$item后无法撤销。';
   }
 
   @override
@@ -4212,7 +4194,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return '您确定要撤销密钥\"$keyName\"吗？此操作无法撤消。';
+    return '所有使用\"$keyName\"的地方都将失去访问权限。此操作无法撤销。';
   }
 
   @override
@@ -4382,7 +4364,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。您确定吗？';
+    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。';
   }
 
   @override
@@ -4473,7 +4455,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get askOmiAnything => '向Omi询问关于您生活的任何事情';
 
   @override
-  String get unlockOmiInfiniteMemory => '解锁Omi的无限记忆';
+  String get unlockOmiInfiniteMemory => '无限回忆';
 
   @override
   String get youreOnAnnualPlan => '您正在使用年度计划';
@@ -4485,7 +4467,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToLoadPlans => '无法加载计划';
 
   @override
-  String get checkConnectionTryAgain => '请检查连接并重试';
+  String get checkConnectionTryAgain => '请检查网络连接后重试。';
 
   @override
   String get useFreePlan => '使用免费计划';
@@ -4588,7 +4570,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => '知识图谱已成功删除';
 
   @override
-  String get exportStartedMayTakeFewSeconds => '导出已开始。这可能需要几秒钟...';
+  String get exportStartedMayTakeFewSeconds => '导出已开始。这可能需要几秒钟…';
 
   @override
   String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
@@ -4661,7 +4643,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteAllLimitlessConversations => '删除所有Limitless对话？';
 
   @override
-  String get deleteAllLimitlessWarning => '这将永久删除从Limitless导入的所有对话。此操作无法撤消。';
+  String get deleteAllLimitlessWarning => '从 Limitless 导入的所有对话都将被删除。此操作无法撤销。';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4702,7 +4684,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return '您确定要删除 $name 的样本吗？';
+    return '$name 的声音样本将被删除。此操作无法撤销。';
   }
 
   @override
@@ -4710,7 +4692,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return '您确定要删除 $name 吗？这也将删除所有相关的语音样本。';
+    return '这将删除 $name 的声音样本，且无法撤销。其在过往对话中的发言将变为未命名的说话人。';
   }
 
   @override
@@ -4820,7 +4802,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get checkingForUpdates => '正在检查更新';
 
   @override
-  String get checkingFirmwareVersion => '正在检查固件版本...';
+  String get checkingFirmwareVersion => '正在检查固件版本…';
 
   @override
   String get firmwareUpdate => '固件更新';
@@ -4978,7 +4960,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
-  String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
+  String get tasksEmptyStateMessage => '开始对话以创建任务。';
 
   @override
   String get clearChatAction => '清除聊天';
@@ -4996,19 +4978,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get showLess => '收起 ↑';
 
   @override
-  String get loadingYourRecording => '正在加载您的录音...';
+  String get loadingYourRecording => '正在加载您的录音…';
 
   @override
   String get photoDiscardedMessage => '此照片因不重要而被丢弃。';
 
   @override
-  String get analyzing => '分析中...';
+  String get analyzing => '分析中…';
 
   @override
   String get searchCountries => '搜索国家...';
 
   @override
-  String get checkingAppleWatch => '正在检查 Apple Watch...';
+  String get checkingAppleWatch => '正在检查 Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => '在您的 Apple Watch 上\n安装 Omi';
@@ -5052,7 +5034,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishedConversation => '结束对话？';
 
   @override
-  String get stopRecordingConfirmation => '您确定要停止录音并立即总结对话吗？';
+  String get stopRecordingConfirmation => '停止录音并立即总结对话？';
 
   @override
   String get conversationEndsManually => '对话只能手动结束。';
@@ -5066,7 +5048,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dontAskAgain => '不再询问';
 
   @override
-  String get waitingForTranscriptOrPhotos => '等待转录或照片...';
+  String get waitingForTranscriptOrPhotos => '等待转录或照片…';
 
   @override
   String get noSummaryYet => '暂无摘要';
@@ -5113,7 +5095,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSummary => '无摘要';
 
   @override
-  String get updateOmiFirmware => '更新omi固件';
+  String get updateOmiFirmware => '更新Omi固件';
 
   @override
   String get anErrorOccurredTryAgain => '发生错误，请重试。';
@@ -5265,10 +5247,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wrappedGenerateMyWrapped => '生成我的年度回顾';
 
   @override
-  String get wrappedProcessingDefault => '处理中...';
+  String get wrappedProcessingDefault => '处理中…';
 
   @override
-  String get wrappedCreatingYourStory => '正在创建你的\n2025年故事...';
+  String get wrappedCreatingYourStory => '正在创建你的\n2025年故事…';
 
   @override
   String get wrappedSomethingWentWrong => '出了点\n问题';
@@ -5298,7 +5280,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wrappedFailedToStartGeneration => '无法开始生成，请重试。';
 
   @override
-  String get wrappedStarting => '启动中...';
+  String get wrappedStarting => '启动中…';
 
   @override
   String get wrappedShare => '分享';
@@ -5502,13 +5484,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get somethingWentWrongTryAgain => '出错了！请稍后重试。';
 
   @override
-  String get uploadingVoiceProfile => '正在上传您的语音配置文件....';
+  String get uploadingVoiceProfile => '正在上传您的语音配置文件….';
 
   @override
-  String get memorizingYourVoice => '正在记忆您的声音...';
+  String get memorizingYourVoice => '正在记忆您的声音…';
 
   @override
-  String get personalizingExperience => '正在个性化您的体验...';
+  String get personalizingExperience => '正在个性化您的体验…';
 
   @override
   String get keepSpeakingUntil100 => '继续说话直到达到100%。';
@@ -5631,7 +5613,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearChatQuestion => '清除聊天？';
 
   @override
-  String get syncingMessages => '正在与服务器同步消息...';
+  String get syncingMessages => '正在与服务器同步消息…';
 
   @override
   String get chatAppsTitle => '聊天应用';
@@ -5790,10 +5772,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => '正在总结对话...\n这可能需要几秒钟';
+  String get summarizingConversation => '正在总结对话…\n这可能需要几秒钟';
 
   @override
-  String get resummarizingConversation => '正在重新总结对话...\n这可能需要几秒钟';
+  String get resummarizingConversation => '正在重新总结对话…\n这可能需要几秒钟';
 
   @override
   String get nothingInterestingRetry => '没有发现有趣的内容，\n要重试吗？';
@@ -5888,7 +5870,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 300 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 300 分钟高级时长。选择“设备端”可无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -5921,7 +5903,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doNotCloseApp => '请不要关闭应用。';
 
   @override
-  String get downloading => '下载中...';
+  String get downloading => '下载中…';
 
   @override
   String get downloadModel => '下载模型';
@@ -5966,7 +5948,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月300分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月 300 分钟高级时长。选择“设备端”可无限免费转录。 ';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -5998,7 +5980,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return '正在准备 $model...';
+    return '正在准备 $model…';
   }
 
   @override
@@ -6017,7 +5999,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'Omi 的内置实时转录针对实时对话进行了优化，具有自动说话人检测和说话人分离功能。';
+  String get omiTranscriptionOptimized => 'Omi 的实时转录专为实时对话打造，并标注谁说了什么。';
 
   @override
   String get reset => '重置';
@@ -6026,7 +6008,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useTemplateFrom => '使用模板来自';
 
   @override
-  String get selectProviderTemplate => '选择提供商模板...';
+  String get selectProviderTemplate => '选择提供商模板…';
 
   @override
   String get quicklyPopulateResponse => '快速填充已知提供商响应格式';
@@ -6228,13 +6210,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signUpSuccess => '注册成功！';
 
   @override
-  String get loadingKnowledgeGraph => '正在加载知识图谱...';
+  String get loadingKnowledgeGraph => '正在加载知识图谱…';
 
   @override
   String get noKnowledgeGraphYet => '暂无知识图谱';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => '正在从记忆构建知识图谱...';
+  String get buildingKnowledgeGraphFromMemories => '正在从记忆构建知识图谱…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically => '当您创建新记忆时，知识图谱将自动构建。';
@@ -6250,7 +6232,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return '正在打开 $appName...';
+    return '正在打开 $appName…';
   }
 
   @override
@@ -6284,7 +6266,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moneyEarned => '收入';
 
   @override
-  String get writeYourReply => '写下您的回复...';
+  String get writeYourReply => '写下您的回复…';
 
   @override
   String get replySentSuccessfully => '回复发送成功';
@@ -6431,7 +6413,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectContactsToShareSummary => '选择联系人分享对话摘要';
 
   @override
-  String get searchContactsHint => '搜索联系人...';
+  String get searchContactsHint => '搜索联系人';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6519,7 +6501,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get transferring => '传输中...';
+  String get transferring => '传输中…';
 
   @override
   String get transferRequired => '需要传输';
@@ -6543,13 +6525,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingInfo => '录音信息';
 
   @override
-  String get transferInProgress => '传输进行中...';
+  String get transferInProgress => '传输进行中…';
 
   @override
   String get shareRecording => '分享录音';
 
   @override
-  String get deleteRecordingConfirmation => '您确定要永久删除此录音吗？此操作无法撤销。';
+  String get deleteRecordingConfirmation => '此操作无法撤销。';
 
   @override
   String get recordingIdLabel => '录音 ID';
@@ -6660,7 +6642,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errorUpdatingAppStatus => '更新应用状态时发生错误。';
 
   @override
-  String get calculatingETA => '正在计算...';
+  String get calculatingETA => '正在计算…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6671,29 +6653,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutAMinuteRemaining => '大约还需一分钟';
 
   @override
-  String get almostDone => '即将完成...';
+  String get almostDone => '即将完成…';
 
   @override
-  String get omiSays => 'omi 说';
+  String get omiSays => 'Omi 说';
 
   @override
-  String get analyzingYourData => '正在分析您的数据...';
+  String get analyzingYourData => '正在分析您的数据…';
 
   @override
   String migratingToProtection(String level) {
-    return '正在迁移到 $level 保护级别...';
+    return '正在迁移到 $level 保护级别…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => '没有需要迁移的数据。正在完成...';
+  String get noDataToMigrateFinalizing => '没有需要迁移的数据。正在完成…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return '正在迁移 $itemType... $percentage%';
+    return '正在迁移 $itemType… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => '所有对象已迁移。正在完成...';
+  String get allObjectsMigratedFinalizing => '所有对象已迁移。正在完成…';
 
   @override
   String get migrationErrorOccurred => '迁移过程中发生错误。请重试。';
@@ -6728,13 +6710,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get templateName => '模板名称';
 
   @override
-  String get templateNameHint => '例如：会议行动项提取器';
+  String get templateNameHint => '例如：会议任务提取器';
 
   @override
   String get nameMustBeAtLeast3Characters => '名称必须至少3个字符';
 
   @override
-  String get conversationPromptHint => '例如，从提供的对话中提取行动项、决策和关键要点。';
+  String get conversationPromptHint => '例如，从提供的对话中提取任务、决策和关键要点。';
 
   @override
   String get pleaseEnterAppPrompt => '请输入应用提示';
@@ -6749,13 +6731,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onlyYouCanUseTemplate => '只有您可以使用此模板';
 
   @override
-  String get generatingDescription => '正在生成描述...';
+  String get generatingDescription => '正在生成描述…';
 
   @override
-  String get creatingAppIcon => '正在创建应用图标...';
+  String get creatingAppIcon => '正在创建应用图标…';
 
   @override
-  String get installingApp => '正在安装应用...';
+  String get installingApp => '正在安装应用…';
 
   @override
   String get appCreatedAndInstalled => '应用已创建并安装！';
@@ -6884,7 +6866,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiGenPleaseEnterDescription => '请输入应用描述';
 
   @override
-  String get aiGenCreatingAppIcon => '正在创建应用图标...';
+  String get aiGenCreatingAppIcon => '正在创建应用图标…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -6917,7 +6899,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return '您正在将无限版计划切换到 $title。您确定要继续吗？';
+    return '您正在将无限版计划切换到 $title。';
   }
 
   @override
@@ -6939,7 +6921,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotLaunchUpgradePage => '无法打开升级页面。请重试。';
 
   @override
-  String get transcriptionJsonPlaceholder => '在此粘贴您的 JSON 配置...';
+  String get transcriptionJsonPlaceholder => '在此粘贴您的 JSON 配置…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7009,7 +6991,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingYoureAllSet => '您已准备就绪';
 
   @override
-  String get searchTranscriptOrSummary => '搜索转录或摘要...';
+  String get searchTranscriptOrSummary => '搜索转录或摘要';
 
   @override
   String get myGoal => '我的目标';
@@ -7234,10 +7216,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgUploadFileFailed => '文件上传失败，请稍后重试';
 
   @override
-  String get msgReadingMemories => '正在读取您的记忆...';
+  String get msgReadingMemories => '正在读取您的记忆…';
 
   @override
-  String get msgLearningMemories => '正在从您的记忆中学习...';
+  String get msgLearningMemories => '正在从您的记忆中学习…';
 
   @override
   String get msgUploadAttachedFileFailed => '上传附件失败。';
@@ -7294,7 +7276,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => '新的 🚀';
+  String get conversationNewIndicator => '新的';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7302,7 +7284,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => '合并中...';
+  String get mergingStatus => '合并中…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7397,10 +7379,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get color => '颜色';
 
   @override
-  String get waitingForDevice => '等待设备...';
+  String get waitingForDevice => '等待设备…';
 
   @override
-  String get saySomething => '说点什么...';
+  String get saySomething => '说点什么…';
 
   @override
   String get initialisingSystemAudio => '正在初始化系统音频';
@@ -7449,7 +7431,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioDownloadFailed => '音频下载失败';
 
   @override
-  String get downloadingAudio => '正在下载音频...';
+  String get downloadingAudio => '正在下载音频…';
 
   @override
   String get shareAudio => '分享音频';
@@ -7458,7 +7440,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingAudio => '正在准备音频';
 
   @override
-  String get gettingAudioFiles => '正在获取音频文件...';
+  String get gettingAudioFiles => '正在获取音频文件…';
 
   @override
   String get downloadingAudioProgress => '正在下载音频';
@@ -7467,13 +7449,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingAudio => '正在处理音频';
 
   @override
-  String get combiningAudioFiles => '正在合并音频文件...';
+  String get combiningAudioFiles => '正在合并音频文件…';
 
   @override
   String get audioReady => '音频已准备好';
 
   @override
-  String get openingShareSheet => '正在打开分享页面...';
+  String get openingShareSheet => '正在打开分享页面…';
 
   @override
   String get audioShareFailed => '分享失败';
@@ -7658,7 +7640,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mcpConnectionFailed => '连接 MCP 服务器失败';
 
   @override
-  String get authorizingMcpServer => '正在授权...';
+  String get authorizingMcpServer => '正在授权…';
 
   @override
   String get whereDidYouHearAboutOmi => '你是怎么知道我们的？';
@@ -7787,7 +7769,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadingFromDevice => '正在从设备下载';
 
   @override
-  String get reconnectingToInternet => '正在重新连接互联网...';
+  String get reconnectingToInternet => '正在重新连接互联网…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7795,11 +7777,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => '正在服务器上处理...';
+  String get processingOnServer => '正在服务器上处理…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return '处理中... $current/$total 个片段';
+    return '处理中… $current/$total 个片段';
   }
 
   @override
@@ -7979,7 +7961,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get followTheVoiceInstructions => '请按照语音指示操作';
 
   @override
-  String get statusCalling => '拨号中...';
+  String get statusCalling => '拨号中…';
 
   @override
   String get statusCallInProgress => '通话中';
@@ -8024,10 +8006,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToStartCall => '无法开始通话';
 
   @override
-  String get callStateConnecting => '连接中...';
+  String get callStateConnecting => '连接中…';
 
   @override
-  String get callStateRinging => '响铃中...';
+  String get callStateRinging => '响铃中…';
 
   @override
   String get callStateEnded => '通话结束';
@@ -8036,7 +8018,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get callStateFailed => '通话失败';
 
   @override
-  String get transcriptPlaceholder => '转录将在此显示...';
+  String get transcriptPlaceholder => '转录将在此显示…';
 
   @override
   String get phoneUnmute => '取消静音';
@@ -8133,7 +8115,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => '每次通话的实时转录';
 
   @override
-  String get phoneCallsUpsellFeature2 => '自动通话摘要和待办事项';
+  String get phoneCallsUpsellFeature2 => '自动通话摘要和任务';
 
   @override
   String get phoneCallsUpsellFeature3 => '接收方看到的是您的真实号码，而非随机号码';
@@ -8270,7 +8252,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionPaused => '录音中，正在重连';
 
   @override
-  String get transcriptionPausedReconnecting => '仍在录音 — 正在重新连接转录...';
+  String get transcriptionPausedReconnecting => '仍在录音 — 正在重新连接转录…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8417,7 +8399,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tellUsMore => '告诉我们更多（可选）';
 
   @override
-  String get cancelReasonDetailHint => '我们感谢任何反馈...';
+  String get cancelReasonDetailHint => '我们感谢任何反馈…';
 
   @override
   String get justAMoment => '请稍等';
@@ -8512,7 +8494,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnostics => '诊断';
 
   @override
-  String get waitingForData => '等待数据...';
+  String get waitingForData => '等待数据…';
 
   @override
   String get liveRssiOverTime => '实时RSSI变化';
@@ -8521,7 +8503,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noRssiDataYet => '暂无RSSI数据';
 
   @override
-  String get collectingData => '正在收集数据...';
+  String get collectingData => '正在收集数据…';
 
   @override
   String get cleanDisconnect => '正常断开';
@@ -8602,7 +8584,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stableFirmware => '稳定固件';
 
   @override
-  String get fetchingStableFirmware => '正在获取最新稳定固件...';
+  String get fetchingStableFirmware => '正在获取最新稳定固件…';
 
   @override
   String get noStableFirmwareFound => '未找到适用于您设备的稳定固件版本。';
@@ -8620,40 +8602,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return '正在上传 $duration 的音频以进行转录…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return '正在重试上传… $duration 的音频已保留在你的手机上';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return '上传失败 — $duration 的音频已保留在你的手机上。轻点重试。';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return '上传失败 — $duration 的音频已保留在你的手机上。';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => '正在聆听… 文字记录将显示在这里。';
 
   @override
-  String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+  String get recordingOfflineTranscriptWillCatchUp => '离线录音中 — 恢复联网后文字记录会自动补上。';
 
   @override
-  String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+  String get transcriptionUnavailableRecordingSaved => '转录不可用 — 录音仍在继续，你的音频已保存。';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => '正在捕获';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => '正在拍摄照片';
 
   @override
   String get willSyncAutomatically => '将自动同步';
@@ -8668,10 +8648,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceRecordingFound => '找到录音';
 
   @override
-  String get transcriptionConnecting => '正在连接转录...';
+  String get transcriptionConnecting => '正在连接转录…';
 
   @override
-  String get transcriptionReconnecting => '正在重新连接转录...';
+  String get transcriptionReconnecting => '正在重新连接转录…';
 
   @override
   String get transcriptionUnavailable => '转录不可用';
@@ -8776,10 +8756,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteFlowFeedbackHint => '可选 — 您的想法有助于我们打造更好的产品。';
 
   @override
-  String get deleteFlowConfirmTitle => '此操作不可撤销';
+  String get deleteFlowConfirmTitle => '删除你的账户？';
 
   @override
-  String get deleteFlowConfirmSubtitle => '一旦删除账户,将无法恢复。';
+  String get deleteFlowConfirmSubtitle => '此操作无法撤销，客服也无法恢复。';
 
   @override
   String get deleteConsequenceSubscription => '任何有效的订阅都将被取消。';
@@ -8804,9 +8784,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planUpdate => '套餐更新';
-
-  @override
-  String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
 
   @override
   String get upgradeYourPlan => '升级你的计划';
@@ -8976,7 +8953,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSubtitle => '录制带实时转录的通话';
 
   @override
-  String get searchActionItems => '搜索操作项';
+  String get searchActionItems => '搜索任务';
 
   @override
   String get selectActionItems => '多选';
@@ -9137,6 +9114,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardDownloadingTitle => '正在从你的设备下载';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '第 $current 项,共 $total 项';
   }
@@ -9214,7 +9201,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterTitle => '稍后转写';
 
   @override
-  String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
+  String get transcribeLaterDescription => '现在录音，想转录时再转录。在此之前，音频保存在你的手机上。';
 
   @override
   String get transcribeLaterNote => '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
@@ -9485,7 +9472,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteOnDeviceModel => '删除模型';
 
   @override
-  String get deleteOnDeviceModelConfirm => '确定要删除此模型吗？';
+  String get deleteOnDeviceModelConfirm => '删除此模型？';
 
   @override
   String get onDeviceModelDownloaded => '已下载';
@@ -9613,7 +9600,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyMessage => '复制消息';
 
   @override
-  String get searchSettings => '搜索设置…';
+  String get searchSettings => '搜索设置';
 
   @override
   String get errorLoadingAudio => '音频加载失败';
@@ -9637,7 +9624,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
 
   @override
-  String get planSheetChooseYourPlan => '选择你的方案，解锁无限 Omi。';
+  String get planSheetChooseYourPlan => '选择适合你的方案。';
 
   @override
   String get availableOnMacMobileWeb => '支持 Mac、手机和网页';
@@ -9764,11 +9751,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return '未记录 ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return '$name的语音档案';
   }
@@ -9795,7 +9777,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionNoAudio => '转录未接收到音频';
 
   @override
-  String get tapPlusToStartRecording => '点击 + 开始录音';
+  String get tapPlusToStartRecording => '点击录音按钮开始录音';
 
   @override
   String get chatBlockTask => '任务';
@@ -9875,27 +9857,26 @@ class AppLocalizationsZh extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -9905,13 +9886,13 @@ class AppLocalizationsZh extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -9943,8 +9924,2682 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': '你能为我做些什么？',
+        'goal': '帮我设定一个目标',
+        'activity': '总结我最近的活动',
+        'improve': '我该如何改进？',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
-  String get conversationReprocess => 'Reprocess';
+  String get nextWeek => '下周';
+
+  @override
+  String get clearSearch => '清除搜索';
+
+  @override
+  String get filterBySpeaker => '按说话人筛选';
+
+  @override
+  String get notNow => '以后再说';
+
+  @override
+  String get discard => '放弃';
+
+  @override
+  String get keepEditing => '继续编辑';
+
+  @override
+  String get discardChangesTitle => '放弃更改？';
+
+  @override
+  String get discardChangesMessage => '未保存的更改将会丢失。';
+
+  @override
+  String get pause => '暂停';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个对话？',
+      one: '删除 1 个对话？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => '这也会删除它们的记忆、任务和音频文件。';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 个对话',
+      one: '已删除 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已移动 $count 个对话',
+      one: '已移动 1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => '无法移动对话';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return '已舍弃 · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按录音按钮录制第一个对话。';
+
+  @override
+  String get conversationMap => '对话地图';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个对话',
+      one: '1 个对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '后退 10 秒';
+
+  @override
+  String get skipForward10Seconds => '前进 10 秒';
+
+  @override
+  String get failedToShareRecap => '无法分享回顾';
+
+  @override
+  String get captureOfflineBuffering => '离线，正在缓冲';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return '离线，正在缓冲 · $minutes 分钟';
+  }
+
+  @override
+  String get memoryDetailsTitle => '记忆';
+
+  @override
+  String get editMemoryTitle => '编辑记忆';
+
+  @override
+  String get newMemoryTitle => '新记忆';
+
+  @override
+  String get memoryReadOnlyHint => '此记忆作为历史保存，无法编辑。';
+
+  @override
+  String get openConversation => '打开对话';
+
+  @override
+  String get memoryGraphTitle => '记忆图谱';
+
+  @override
+  String get memoryReviewTitle => '今天了解到的';
+
+  @override
+  String get memoryReviewRight => '正确';
+
+  @override
+  String get memoryReviewWrong => '错误';
+
+  @override
+  String get memoryReviewFix => '更正';
+
+  @override
+  String get memoryReviewConfirmed => '已确认。我会据此行事。';
+
+  @override
+  String get memoryReviewDropped => '已舍弃。我会避免此类信息。';
+
+  @override
+  String get memoryReviewUpdated => '已更新。';
+
+  @override
+  String get memoryReviewSaveFailed => '无法保存，请重试';
+
+  @override
+  String get indentTask => '缩进';
+
+  @override
+  String get outdentTask => '取消缩进';
+
+  @override
+  String get goalDeleted => '目标已删除';
+
+  @override
+  String get sharedTasksAcceptFailed => '无法接受这些任务。你可能已经接受过此分享。';
+
+  @override
+  String get pausePlayback => '暂停';
+
+  @override
+  String get deleteSample => '删除样本';
+
+  @override
+  String get deletePersonTitle => '删除此人？';
+
+  @override
+  String get deletePersonLabel => '删除此人';
+
+  @override
+  String get noPeopleYet => '还没有人员';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个任务？',
+      one: '删除 1 个任务？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已将 $count 个任务添加到你的列表',
+      one: '已将 1 个任务添加到你的列表',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '添加 $count 个任务',
+      one: '添加 1 个任务',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个任务',
+      one: '1 个任务',
+    );
+    return '$name 分享了$_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '已导出到 $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return '截止 $date';
+  }
+
+  @override
+  String get linkEvent => '关联日程';
+
+  @override
+  String get noCalendarEventsNearby => '该时间附近没有找到日历日程。';
+
+  @override
+  String get suggestedEvent => '推荐';
+
+  @override
+  String get openInGoogleCalendar => '在 Google 日历中打开';
+
+  @override
+  String get shareWithAttendees => '与参与者共享';
+
+  @override
+  String get unlinkCalendarEvent => '取消关联日程';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return '笔记：$title';
+  }
+
+  @override
+  String get previousResult => '上一个结果';
+
+  @override
+  String get nextResult => '下一个结果';
+
+  @override
+  String get playFromHere => '从这里播放';
+
+  @override
+  String get shareConversationQuestion => '共享对话？';
+
+  @override
+  String get conversationTasksEmptyMessage => '此对话中的任务将显示在这里。';
+
+  @override
+  String get noPendingTasks => '没有待办任务';
+
+  @override
+  String nCompleted(int count) {
+    return '已完成 $count 项';
+  }
+
+  @override
+  String get identifySpeaker => '指定说话人';
+
+  @override
+  String get couldNotLoadCheckout => '无法加载结账页面。请检查网络连接后重试。';
+
+  @override
+  String get phoneFreeCallLimitReached => '已达到每月免费通话上限，将于下月重置。';
+
+  @override
+  String get couldNotLoadImportHistory => '无法加载导入记录';
+
+  @override
+  String get phoneCallButton => '呼叫';
+
+  @override
+  String get searchContacts => '搜索联系人';
+
+  @override
+  String get phoneContactsAccessTitle => '允许访问通讯录';
+
+  @override
+  String get phoneSelectCountryTitle => '选择国家/地区';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => '没有已验证的号码';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => '验证你的号码即可通过 Omi 拨打电话。';
+
+  @override
+  String get phoneDeleteNumberFailed => '无法删除此号码';
+
+  @override
+  String get forgetDeviceConfirmTitle => '要忘记设备吗?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi 将不再连接此设备。';
+
+  @override
+  String get deviceForgottenMessage => '已忘记设备';
+
+  @override
+  String get unpairDeviceConfirmTitle => '要取消配对设备吗?';
+
+  @override
+  String get rollBack => '回滚';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi 设备诊断';
+
+  @override
+  String get diagnosticsFailBadge => '失败';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration后重新连接';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$count天';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration前';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => '跟随您的主要语言';
+
+  @override
+  String get creatorPayouts => '创作者收款';
+
+  @override
+  String get sttLanguageOverride => '覆盖';
+
+  @override
+  String get sttUsePrimaryLanguage => '使用主要语言';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return '此提供商不支持$language，因此使用$fallback。';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return '检测到的内存：$ram GB。建议最低：4 GB。';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return '检测到的机型：$model（早于 iPhone XS）。设备端识别可能较慢。';
+  }
+
+  @override
+  String get copyLogs => '复制日志';
+
+  @override
+  String get openProviderDocs => '打开文档';
+
+  @override
+  String get getApiKey => '获取 API 密钥';
+
+  @override
+  String get showApiKey => '显示 API 密钥';
+
+  @override
+  String get hideApiKey => '隐藏 API 密钥';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '移除 $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个词',
+      one: '1 个词',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '本月剩余 $remaining/$limit 次免费通话';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '本月剩余 $remaining/$limit 次免费通话 · 每次最长 $minutes 分钟';
+  }
+
+  @override
+  String get appCreators => '应用创作者';
+
+  @override
+  String get homeScreen => '主屏幕';
+
+  @override
+  String get phoneCalls => '电话';
+
+  @override
+  String get vadGate => 'VAD 门控';
+
+  @override
+  String get vadGateDescription => '服务器端语音门控，降低语音转文字成本';
+
+  @override
+  String get flashCustomFirmware => '刷写自定义固件';
+
+  @override
+  String get flashCustomFirmwareDescription => '刷写自定义固件版本';
+
+  @override
+  String get selectFirmwareZip => '选择固件 ZIP 文件';
+
+  @override
+  String get customFirmwareWarning => '刷写自定义固件可能导致设备无法使用。请确认这是有效的 Omi 固件版本，并且更新期间不要断开连接。';
+
+  @override
+  String get firmwareFlashed => '固件已刷写';
+
+  @override
+  String get deviceWillRestart => '设备将重新启动。';
+
+  @override
+  String get exportFailedTryAgain => '导出失败，请重试。';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return '设备：$deviceName';
+  }
+
+  @override
+  String get keepSubscription => '保留订阅';
+
+  @override
+  String get couldNotLoadPage => '无法加载此页面。请检查网络连接后重试。';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get sharedTasksLinkExpired => '未找到这些共享任务，或链接已过期。';
+
+  @override
+  String get sharedTasksUnknownSender => '某人';
+
+  @override
+  String get allow => '允许';
+
+  @override
+  String get permissionAllowed => '已允许';
+
+  @override
+  String get permissionBlockedHint => '已在设置中关闭。请在设置中允许后使用。';
+
+  @override
+  String get useDifferentAccount => '使用其他账号';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get onboardingCompleteMessage => '让 Omi 在后台运行 2 天，它就会开始为你提供有用的反馈。';
+
+  @override
+  String get cantFindDeviceHint => '找不到设备？请确认设备已开启并靠近手机，然后重新扫描。';
+
+  @override
+  String get scanAgain => '重新扫描';
+
+  @override
+  String get howToPair => '如何配对';
+
+  @override
+  String get contactSupportAction => '联系支持';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName 已离线。按下它的按钮将其唤醒，然后重试。';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '电量 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => '更新 OmiGlass 固件';
+
+  @override
+  String get deviceConnecting => '正在连接…';
+
+  @override
+  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
+
+  @override
+  String get firmwareUpdateFailedTitle => '更新失败';
+
+  @override
+  String get firmwareUpdateFailedMessage => '更新未完成。你的设备仍使用当前固件，可以安全使用。请保持充电并靠近手机，然后重试。';
+
+  @override
+  String get firmwareDownloadFailedMessage => '无法下载更新，你的设备未作任何更改。请检查网络连接，然后重试。';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '电量为 $level%。更新前请将设备充电至至少 15%。';
+  }
+
+  @override
+  String get startUpdate => '开始更新';
+
+  @override
+  String get otaNotSupported => '此固件无法通过 Wi-Fi 更新。';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '无法连接到 $deviceName。请保持设备开启并靠近，然后重试。';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '此更新暂不可用。请稍后重试。';
+
+  @override
+  String get otaStarting => '正在开始更新…';
+
+  @override
+  String get otaStartFailed => '无法开始更新。请检查 Wi-Fi 名称和密码，然后重试。';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName 正在使用新固件重新启动。';
+  }
+
+  @override
+  String get otaUpdateCancelled => '已取消更新';
+
+  @override
+  String get cancelUpdate => '取消更新';
+
+  @override
+  String get otaKeepNearby => '更新期间请保持设备开启并靠近，不要关闭应用。';
+
+  @override
+  String get otaWifiConnecting => '正在连接 Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => '已连接 Wi-Fi';
+
+  @override
+  String get otaWifiFailed => '无法连接 Wi-Fi。请检查网络名称和密码。';
+
+  @override
+  String get otaDownloadFailed => '固件下载失败。请检查 Wi-Fi 连接后重试。';
+
+  @override
+  String get otaInstallFailed => '安装失败。你的设备仍使用当前固件。';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName 已更新，将自动重新启动。';
+  }
+
+  @override
+  String get showPassword => '显示密码';
+
+  @override
+  String get hidePassword => '隐藏密码';
+
+  @override
+  String get appNotFoundOrRemoved => '此应用已不可用';
+
+  @override
+  String get startupFailedTitle => 'Omi 无法启动';
+
+  @override
+  String get startupFailedMessage => 'Omi 启动时出了点问题。请检查您的网络连接，然后重试。';
+
+  @override
+  String get startupFailedConfigMessage => '此版本的 Omi 存在配置问题，这与您的设备无关。请联系支持团队并附上以下详细信息。';
+
+  @override
+  String get discardRecordingTitle => '放弃录音？';
+
+  @override
+  String get discardRecordingMessage => '您的语音样本尚未保存。如果现在离开，它将被丢弃。';
+
+  @override
+  String get keepRecording => '继续录音';
+
+  @override
+  String get view => '查看';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '允许 $appName 访问？';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName 将在其开发者的服务器上接收你的对话、记忆和录音。Omi 不对这些数据在那里如何被使用负责。';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '已停用 $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条评分',
+      one: '1 条评分',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return '截图 $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '与 $appName 聊天';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName 设置';
+  }
+
+  @override
+  String get appOptions => '应用选项';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => '在当前计费周期结束前，你仍可继续使用。';
+
+  @override
+  String get chatSendMessage => '发送消息';
+
+  @override
+  String get chatAddAttachment => '添加附件';
+
+  @override
+  String get removeAttachment => '移除附件';
+
+  @override
+  String get chatRemoveSelectedText => '移除引用的文字';
+
+  @override
+  String get chatOfflineHint => '你已离线。请重新连接以发送消息。';
+
+  @override
+  String get chatReplyFailed => 'Omi 无法回复。请检查网络连接后重试。';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '停用 $appName';
+  }
+
+  @override
+  String get whatWentWrong => '哪里出了问题？';
+
+  @override
+  String get selectAReason => '选择原因';
+
+  @override
+  String get submit => '提交';
+
+  @override
+  String get feedbackReasonTooVerbose => '太啰嗦';
+
+  @override
+  String get feedbackReasonIncorrect => '错误或编造';
+
+  @override
+  String get feedbackReasonNotHelpful => '没帮助或不相关';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => '没有按指示回答';
+
+  @override
+  String get additionalFeedbackOptional => '补充反馈（可选）';
+
+  @override
+  String get helpful => '有帮助';
+
+  @override
+  String daySummaryForDate(String date) {
+    return '每日总结 · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => '我昨天做了什么？';
+
+  @override
+  String get chatStarterDoDifferently => '今天我可以做些什么不同的事？';
+
+  @override
+  String get chatStarterTeachMe => '你能教我一些新东西吗？';
+
+  @override
+  String get thinking => '思考中';
+
+  @override
+  String get couldNotLoadWhatsNew => '无法加载新功能介绍';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub 仓库 URL';
+
+  @override
+  String get githubRepositoryUrlHint => '你的应用源代码仓库链接';
+
+  @override
+  String get triggerEvents => '触发事件';
+
+  @override
+  String get noAppsInCategoryYet => '此类别中还没有应用';
+
+  @override
+  String get scopes => '权限范围';
+
+  @override
+  String get aiAppGeneratorBannerTitle => '一键用 AI 创建应用';
+
+  @override
+  String get refreshManifest => '刷新清单';
+
+  @override
+  String versionLabel(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ 位用户';
+  }
+
+  @override
+  String get discovery => '发现';
+
+  @override
+  String get chatBlockShowMore => '显示更多';
+
+  @override
+  String get chatBlockShowLess => '收起';
+
+  @override
+  String get triggerEvent => '触发事件';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => '应用主页 URL';
+
+  @override
+  String get authUrl => '认证 URL';
+
+  @override
+  String get setupCompletedUrl => '设置完成 URL';
+
+  @override
+  String get chatToolsManifestUrl => '聊天工具清单 URL';
+
+  @override
+  String get invalidWebhookUrlError => '请输入有效的 Webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => '必须填写 GitHub 仓库 URL';
+
+  @override
+  String get removeScreenshot => '移除截图';
+
+  @override
+  String get addScreenshot => '添加截图';
+
+  @override
+  String get aiGenRegenerateIcon => '重新生成图标';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个应用',
+      one: '1 个应用',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => '生成描述';
+
+  @override
+  String get selectImageFileTitle => '选择图片文件';
+
+  @override
+  String get selectThumbnailImageTitle => '选择缩略图';
+
+  @override
+  String get appIdNotFoundError => '未找到应用ID';
+
+  @override
+  String get manifestRefreshedSuccess => '清单已成功刷新';
+
+  @override
+  String get manifestRefreshFailed => '刷新清单失败';
+
+  @override
+  String get captureRecordingsSheetTitle => '此对话的录音';
+
+  @override
+  String get captureRecordingSeparate => '分离…';
+
+  @override
+  String get captureRecordingSeparateTitle => '要分离此录音吗？';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording 将显示为单独的对话，并且不会再与此事件归为一组。';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '分离';
+
+  @override
+  String get captureRecordingSeparateFailed => '无法分离，请重试。';
+
+  @override
+  String get captureRecordingOpenFailed => '无法打开此录音。';
+
+  @override
+  String get captureRecordingViewing => '你正在查看此录音';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '由 $devices 录制';
+  }
+
+  @override
+  String get captureSourceDesktop => '电脑';
+
+  @override
+  String get renameConversation => '重命名';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段录音',
+      one: '1 段录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => '吊坠';
+
+  @override
+  String get conversationDeveloperTools => '对话中的开发者工具';
+
+  @override
+  String get conversationDeveloperToolsDescription => '在对话菜单中显示“复制对话 ID”和“测试提示词”';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count人',
+      many: '$count人',
+      few: '$count人',
+      one: '1人',
+    );
+    return '$name + $_temp0';
+  }
+
+  @override
+  String get recordingAndTranscription => '录音与转录';
+
+  @override
+  String get notificationsAndDisplay => '通知与显示';
+
+  @override
+  String get helpAndAbout => '帮助与关于';
+
+  @override
+  String get speakerTagPromptTitle => '帮助 Omi 识别声音';
+
+  @override
+  String get speakerTagPromptSubtitle => '快速确认最近两天的声音';
+
+  @override
+  String get speakerTagPromptIsThisYou => '这是你吗？';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return '这是 $name 吗？';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => '这是谁？';
+
+  @override
+  String get speakerTagPromptThatsMe => '是我';
+
+  @override
+  String get speakerTagPromptNotMe => '不是我';
+
+  @override
+  String get speakerTagPromptSomeoneNew => '新的人';
+
+  @override
+  String get speakerTagPromptDontKnow => '我不认识的人';
+
+  @override
+  String get speakerTagPromptNotSure => '不确定';
+
+  @override
+  String get speakerTagPromptPlayClip => '播放片段';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => '记住你命名的人的声音';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody => 'Omi 会保留一小段声音样本，以便下次认出对方。你可以随时在设置中更改。';
+
+  @override
+  String get speakerTagPromptThanks => '谢谢！Omi 识别声音会越来越准。';
+
+  @override
+  String get speakerTagPromptNameHint => '对方的名字';
+
+  @override
+  String get speakerTagPromptClipUnavailable => '无法播放此片段';
+
+  @override
+  String get speakerTagPromptAnswerFailed => '无法保存，请重试。';
+
+  @override
+  String get voiceSettingsAskToTag => '请我标记声音';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi 偶尔会问你最近的对话中是谁在说话';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
+
+  @override
+  String get leaveBlank => '留空';
+
+  @override
+  String get mcpOAuthSetup =>
+      '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '添加到 ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '待处理转录 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '待处理转录 $count';
+  }
+
+  @override
+  String get captureSourceCall => '通话';
+
+  @override
+  String get captureSourcePhoneMic => '手机麦克风';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '继续';
+
+  @override
+  String get finish => '结束';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => '吊坠已暂停 · 结束后恢复';
+
+  @override
+  String get pendantIsListeningTitle => '你的吊坠正在聆听';
+
+  @override
+  String get oneSourceAtATime => 'Omi 一次只能从一个来源录音。';
+
+  @override
+  String get recordWithPhoneInstead => '改用手机录音';
+
+  @override
+  String get pendantPausesUntilYouFinish => '录音结束前吊坠将暂停';
+
+  @override
+  String get pendantPausesDuringCall => '通话期间吊坠将暂停';
+
+  @override
+  String get keepUsingPendant => '继续使用吊坠';
+
+  @override
+  String get recordWith => '录音方式';
+
+  @override
+  String get moreWaysToRecord => '更多录音方式';
+
+  @override
+  String get openCall => '打开通话';
+
+  @override
+  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
+
+  @override
+  String get captureNotTranscribing => '未在转录';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureStillRecording => '仍在录音';
+
+  @override
+  String get captureMicInUseElsewhere => '麦克风被其他应用占用';
+
+  @override
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+
+  @override
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+
+  @override
+  String get captureStarting => '正在启动…';
+
+  @override
+  String get capturePhoneStorageFull => '手机存储空间已满';
+
+  @override
+  String get captureStorageAlmostFull => '存储空间即将用完';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => '聆听 Omi 的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '明白了。你的下一场会议将在二十分钟后开始。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '一切准备就绪';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '轻点一行即可查看或更改。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '当您使用按钮询问时，Omi 可以大声读出答案。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '听听你最后的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '正在播放您的最后一个答案...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '通过$device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '通过手机扬声器';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '通过当前音频输出';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答案保留在屏幕上。什么也没说。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '未连接耳机时使用手机扬声器。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi将保持沉默。答案仍然出现在应用程序中。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device已连接。 Omi 在此发言。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '未连接耳机。 Omi 保持沉默，直到您接通一些。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '播放至 $device。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '通过手机扬声器大声播放。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '您可以随时在 $settings › $voiceResponse 中更改此设置';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '随时重播此导览 $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分钟';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '任务';
+
+  @override
+  String get usageMonth => '本月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全部时间';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
+
+  @override
+  String get chatDiscardRecording => '放弃';
+
+  @override
+  String get voiceQuestionNoSpeech => '没听清楚 — 请再试一次';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '提供反馈';
+
+  @override
+  String get feedbackAllGood => '一切正常';
+
+  @override
+  String get feedbackChatWithUs => '想补充细节？和我们聊聊';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '不准确';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完整';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '不相关';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '语境不对';
+
+  @override
+  String get feedbackReasonSummaryOther => '其他问题';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '缺少音频';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '转写质量差';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '说话人错误';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '延迟或卡住';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '断断续续或重复';
+
+  @override
+  String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return '你好，$name，随便问吧';
+  }
+
+  @override
+  String get activity => '活动';
+
+  @override
+  String get places => '地点';
+
+  @override
+  String get recaps => '回顾';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
+
+  @override
+  String get peopleSearchPlaceholder => '搜索人物';
+
+  @override
+  String get peopleNotHeardYet => '尚未听过';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。';
+
+  @override
+  String get personTalkTime => '说话时长';
+
+  @override
+  String get personLastHeard => '最近一次听到';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个人？',
+      one: '删除 1 个人？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '你想知道什么？';
+
+  @override
+  String get askSuggestDecide => '我今天决定了什么？';
+
+  @override
+  String get askSuggestOwe => '我还欠别人什么？';
+
+  @override
+  String get askSuggestNotice => 'Omi 注意到了什么？';
+
+  @override
+  String get pastChats => '过往聊天';
+
+  @override
+  String get newChat => '新聊天';
+
+  @override
+  String get startFresh => '重新开始';
+
+  @override
+  String get noPastChats => '你和 Omi 的聊天会显示在这里。';
+
+  @override
+  String get deleteChatQuestion => '删除这个聊天？';
+
+  @override
+  String get deleteChatMessage => '它会从过往聊天中永久消失。';
+
+  @override
+  String get deleteChat => '删除聊天';
+
+  @override
+  String get appsAskWith => '用这些向 Omi 提问';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天有 $count 段对话。',
+      one: '今天有 1 段对话。',
+      zero: '今天还没有对话。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
+
+  @override
+  String get conversationSummaryFailed => '摘要生成失败';
+
+  @override
+  String get reconnectionsRecent => '重新连接（过去 7 天）';
+
+  @override
+  String get failedConnections => '连接失败';
+
+  @override
+  String get failedConnectionsRecent => '连接失败（过去 7 天）';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '配对以来 $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => '低可信度';
+
+  @override
+  String get peopleFilterPinned => '已置顶';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个已置顶',
+      one: '1 个已置顶',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => '已确认';
+
+  @override
+  String get confidenceLikely => '可能';
+
+  @override
+  String get confidenceUnverified => '未验证';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return '可信度：$level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你标记过 $count 次',
+      one: '你标记过 1 次',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 条建议中被选中',
+      one: '在 1 条建议中被选中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你确认过 $count 次匹配',
+      one: '你确认过 1 次匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => '仅自动匹配，从未确认';
+
+  @override
+  String get confidenceReasonNeverConfirmed => '从未确认';
+
+  @override
+  String get confidenceReasonCorrected => '你更正了它的匹配';
+
+  @override
+  String get confidenceReasonVoiceReady => '声音已就绪';
+
+  @override
+  String get confidenceReasonNeedsVoice => '需要声音';
+
+  @override
+  String get confidenceReasonNotHeard => '尚未听到';
+
+  @override
+  String get confidenceSheetTitle => '可信度';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi 能识别 $name 的声音，而且你已确认。';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi 通常能识别 $name 的声音，但你只确认过几次。';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return '你还没有做过任何能佐证 $name 的操作。';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => '依据';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你在 $count 段对话中标记过',
+      one: '你在 1 段对话中标记过',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '对 $count 条建议回答了“是”',
+      one: '对 1 条建议回答了“是”',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 条建议中被选中',
+      one: '在 1 条建议中被选中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已确认 $count 次自动匹配',
+      one: '已确认 1 次自动匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次匹配已改给其他人',
+      one: '1 次匹配已改给其他人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次无人确认的自动匹配',
+      one: '1 次无人确认的自动匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => '声音样本已就绪';
+
+  @override
+  String get evidenceNoVoice => '暂无声音样本';
+
+  @override
+  String get evidenceNotHeard => '尚未在任何对话中听到';
+
+  @override
+  String get evidenceNothing => '你还没有标记或确认过这个人';
+
+  @override
+  String get effectCountsALot => '帮助很大';
+
+  @override
+  String get effectCounts => '有帮助';
+
+  @override
+  String get effectCountsALittle => '帮助较小';
+
+  @override
+  String get effectBarelyCounts => '几乎没帮助';
+
+  @override
+  String get effectCountsAgainst => '有负面影响';
+
+  @override
+  String get effectNeeded => '达到“已确认”所需';
+
+  @override
+  String get confidenceToReachConfirmed => '如何达到“已确认”';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi 还需要 $name 的声音样本。请在开启“记住声音”的情况下进行标记。';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name 已确认。Omi 会继续从每次标记中学习。';
+  }
+
+  @override
+  String get confidenceFootnote => '只有你的回答才会明显提升可信度。仅靠自动匹配几乎没有帮助。';
+
+  @override
+  String get personWhyConfidence => '为什么？';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '置顶 $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '保留 $name，并预期对方会出现在你的对话中';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi 会在匹配相近的声音前先询问你。';
+
+  @override
+  String get pinAction => '置顶';
+
+  @override
+  String get unpinAction => '取消置顶';
+
+  @override
+  String personPinnedToast(String name) {
+    return '已置顶 $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '已取消置顶 $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return '为什么是$level？';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '删除 $name？';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name 已置顶。其声音样本将被删除，Omi 将不再识别此人，过往转录中也会显示为未命名的说话人。此操作无法撤销。';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '删除 $name';
+  }
+
+  @override
+  String get selectPeople => '选择人物';
+
+  @override
+  String get cleanUpEllipsis => '清理…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位 Omi 不确定的人',
+      one: '1 位 Omi 不确定的人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => '多数是听错的名字。查看并移除不真实的那些。';
+
+  @override
+  String get reviewAction => '查看';
+
+  @override
+  String get cleanUpTitle => '清理';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi 不确定这 $count 个人。多数是从转录中听错的名字。取消勾选你想保留的人。',
+      one: 'Omi 不确定这个人。取消勾选即可保留。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => '已置顶的人物绝不会出现在清理中。';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 人',
+      one: '删除 1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 人',
+      one: '已删除 1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => '无需清理';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi 目前没有不确定的人。';
+
+  @override
+  String get selectAllSkipsPinned => '“全选”会跳过已置顶的人物。请在其个人页面中逐个删除。';
+
+  @override
+  String get pinnedNotSelectable => '已置顶，无法选择';
+
+  @override
+  String get ignoredVoicesTitle => '已忽略的声音';
+
+  @override
+  String get ignoredVoicesSubtitle => '你标记为“不是真人”的电视、播客及其他声音';
+
+  @override
+  String get ignoredVoicesEmpty => '没有已忽略的声音';
+
+  @override
+  String get restoreAction => '恢复';
+
+  @override
+  String get voiceRestoredToast => 'Omi 可能会再次询问这个声音';
+
+  @override
+  String get speakerTagPromptSomeoneElse => '其他人…';
+
+  @override
+  String get speakerTagPromptNotAPerson => '不是真人';
+
+  @override
+  String get speakerTagPromptNotSureAction => '不确定';
+
+  @override
+  String get speakerTagPromptThatsMeAction => '这是我';
+
+  @override
+  String get speakerTagPromptClosestVoices => '最接近的声音';
+
+  @override
+  String get speakerTagPromptRecentPeople => '你最近交谈过的人';
+
+  @override
+  String get voiceMatchClose => '高度匹配';
+
+  @override
+  String get voiceMatchPossible => '可能匹配';
+
+  @override
+  String get voiceMatchWeak => '匹配度低';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return '声音匹配：$level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => '每次回答都会让 Omi 学会一个声音，并提升此人的可信度。';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '选“是”会提升 $name 的可信度。';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => '让你自己的声音档案保持精准，这样 Omi 就不会把你认成别人。';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '已保存为 $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => '已保存为你';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi 不会再询问这个声音';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '已标记为 $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => '已标记为你';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => '已标记为不是真人';
+
+  @override
+  String get speakerTagPromptRejectedToast => '已移除标记';
+
+  @override
+  String get whoIsItTitle => '这是谁？';
+
+  @override
+  String get newPersonEllipsis => '新建人物…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '添加“$name”';
+  }
+
+  @override
+  String get everyoneHeader => '所有人';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name？';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => '适用于该说话人的每一行';
+
+  @override
+  String get collapseAction => '收起';
+
+  @override
+  String get speakerTagPromptNotMeAction => '不是我';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '再在 $count 个对话中为对方添加标签。',
+      one: '再在 1 个对话中为对方添加标签。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return '在快捷指令 → Siri 中开启 Omi。说“$askPhrase”或“$questionPhrase”，然后提出你的问题。';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' 你还可以说“$searchPhrase for what I did today”。';
+  }
+
+  @override
+  String get updateAvailableTitle => '有可用更新';
+
+  @override
+  String get updateAvailableMessage => 'Omi 新版本已就绪，包含问题修复和改进。';
+
+  @override
+  String get updateRequiredTitle => '需要更新';
+
+  @override
+  String get updateRequiredMessage => '此版本的 Omi 已不再受支持。请更新以继续录音和同步。';
+
+  @override
+  String get exportingAllData => '正在导出您的数据… 请保持 Omi 打开；大型账户可能需要几分钟。';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位发言人',
+      one: '1 位发言人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => '自动删除已同步副本';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '已同步副本将在 $days 天后删除';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '在同步 $days 天后删除本地副本。云端副本会保留。';
+  }
+
+  @override
+  String get localCopiesSection => '本地副本';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已标记 $count 行',
+      one: '已标记 1 行',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '已学会声音',
+        'pending': '正在学习声音…',
+        'disabled': '声音保存已关闭',
+        'other': '尚未学会声音',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '下次 Omi 就能认出 $name。',
+        'pending': '这需要几秒钟。',
+        'disabled': '请在设置中开启声音保存，以便 Omi 能认出 $name。',
+        'other': 'Omi 需要 $name 更清晰的语音，并会继续尝试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 段过往对话中找到',
+      one: '在 1 段过往对话中找到',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '可能',
+        'soundsLike': '听起来像 $name',
+        'notPerson': '不是 $name',
+        'carried': '仍是 $name。沿用自你的上一段对话。',
+        'change': '更改',
+        'alsoTitle': '这也是 $name 吗？',
+        'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
+        'confirmed': '你已确认此标签',
+        'other': '查看',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '此声音共 $duration';
+  }
+
+  @override
+  String get findDeviceNoneTitle => '未找到 Omi';
+
+  @override
+  String get findDeviceNoneMessage => '请将其开机并靠近手机。';
+
+  @override
+  String get startupFailedDetails => '详细信息';
+
+  @override
+  String get couldNotLoadApiKeys => '无法加载 API 密钥。';
+
+  @override
+  String get speakerTagPromptNoAction => '否…';
+
+  @override
+  String get diagnosticsRightNow => '当前';
+
+  @override
+  String get diagnosticsLast7Days => '过去 7 天';
+
+  @override
+  String get diagnosticsConnectedFor => '已连接';
+
+  @override
+  String get diagnosticsVerdictReconnects => '可自动重新连接';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return '短暂断开，每次约 $duration 后恢复';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => '本周没有断开';
+
+  @override
+  String get diagnosticsVerdictTrouble => '连接出现问题';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return '过去 24 小时内连接失败：$count';
+  }
+
+  @override
+  String get diagnosticsDrops => '断开次数';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return '约每小时 $count 次';
+  }
+
+  @override
+  String get diagnosticsLongestGap => '最长中断';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return '最近 $duration';
+  }
+
+  @override
+  String get chatReplyOffline => '无法连接。请检查您的连接并重试。';
+
+  @override
+  String get chatReplyServerError => '我们这边出了点问题。请重试。';
+
+  @override
+  String get chatReplyTimeout => '响应耗时过长。请重试。';
+
+  @override
+  String get chatReplyNotSignedIn => '你尚未登录。请登录后重试。';
+
+  @override
+  String get chatAppsLoadFailed => '无法加载聊天应用。请重试。';
+
+  @override
+  String get assistantVoiceSettingsTitle => '语音';
+
+  @override
+  String get assistantVoice => '助手语音';
+
+  @override
+  String get voiceSharedAcrossDevices => '你选择的语音将在移动端和桌面端共享。';
+
+  @override
+  String get readChatRepliesAloud => '朗读聊天回复';
+
+  @override
+  String get readChatRepliesAloudDescription => '仅在“语音回复”允许时才会朗读。';
+
+  @override
+  String get voicePreviewSample => '嗨，我是 Omi。这是我的声音。';
+
+  @override
+  String get peopleStatsIncomplete => '统计可能不完整。';
+
+  @override
+  String get previousDay => '前一天';
+
+  @override
+  String get nextDay => '后一天';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return '$date 没有任务';
+  }
+
+  @override
+  String get reprocessingConversationProgress => '正在重新处理对话…';
+
+  @override
+  String get conversationReprocessed => '对话已更新';
+
+  @override
+  String get loadingTranscript => '正在加载转录…';
+
+  @override
+  String get transcriptLoadFailed => '无法加载转录。';
+
+  @override
+  String get processingConversationProgress => '正在处理对话…';
+
+  @override
+  String get conversationProcessingFailedMessage => '无法处理此对话。';
+
+  @override
+  String get waitForReprocessing => '请等待重新处理完成。';
+
+  @override
+  String get unnamedSpeakerLabel => '发言者';
+
+  @override
+  String get unresolvedSpeakersNotice => '说话人未在不同录音间区分开。';
+
+  @override
+  String get unresolvedSpeakersTitle => '关于说话人标签';
+
+  @override
+  String get unresolvedSpeakersMessage => 'Omi 无法区分录音中的其他声音。请轻点说话人标签，为正在说话的人命名。';
+
+  @override
+  String get nameSpeakerTitle => '命名说话者';
+
+  @override
+  String get playbackPreparingAudio => '正在准备音频…';
+
+  @override
+  String get playbackBackToCurrent => '回到当前位置';
+
+  @override
+  String get playbackAudioUnavailable => '音频不可用';
+
+  @override
+  String get playbackAudioLoadFailed => '无法加载音频';
+
+  @override
+  String get playbackAudioNetworkFailed => '请检查网络连接';
+
+  @override
+  String get forYou => '为你推荐';
+
+  @override
+  String get stopThese => '停止此类推荐';
+
+  @override
+  String get dismiss => '忽略';
+
+  @override
+  String get showOnLockScreen => '在锁定屏幕上显示';
+
+  @override
+  String get accountDeletionInProgressSignInAgain => '此账号正在删除中。请使用其他账号登录，或等待几分钟后重试。';
+
+  @override
+  String get onboardingSetupTitle => '正在设置你的 Omi';
+
+  @override
+  String get onboardingSetupSubtitle => '请稍等片刻，Omi 正在为你个性化设置';
+
+  @override
+  String get onboardingSetupStepWorkspace => '正在准备你的工作区';
+
+  @override
+  String get onboardingSetupStepLanguage => '正在根据你的语言优化转写';
+
+  @override
+  String get onboardingSetupStepMemory => '正在设置你的记忆';
+
+  @override
+  String get onboardingSetupStepDevices => '正在连接你的设备';
+
+  @override
+  String get onboardingSetupStepPersonalize => '正在个性化你的体验';
+
+  @override
+  String get onboardingRatingPromptTitle => '你喜欢 Omi 吗？';
+
+  @override
+  String get onboardingRatingPromptYes => '是';
+
+  @override
+  String get onboardingRatingPromptNo => '否';
+
+  @override
+  String get partialRecording => '部分录音';
+
+  @override
+  String get importTranscriptFiles => '转录文件';
+
+  @override
+  String get importTranscriptFilesDescription => '选择 SRT、VTT 或 TXT 转录文件，或包含它们的 ZIP 文件';
+
+  @override
+  String get importTooManyAttempts => '当前导入次数过多，请稍后再试。';
+
+  @override
+  String get importFileTooLarge => '此文件过大，无法导入。';
+
+  @override
+  String get importUnsupportedFileType => '无法导入此类型的文件。';
+
+  @override
+  String get reviewTitle => '审核';
+
+  @override
+  String get reviewEntryTitle => '给你的问题';
+
+  @override
+  String reviewRemaining(int count) {
+    return '还剩 $count 个';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => '这是谁说的？';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '和“$name”是同一个人吗？';
+  }
+
+  @override
+  String get reviewQuestionSpelling => '这个怎么拼写？';
+
+  @override
+  String get reviewPlayClip => '播放片段';
+
+  @override
+  String get reviewStopClip => '停止播放片段';
+
+  @override
+  String get reviewOpenDetailsHint => '打开详情';
+
+  @override
+  String get reviewAnswerMe => '我';
+
+  @override
+  String get reviewAnswerOther => '其他';
+
+  @override
+  String get reviewAddTask => '添加任务';
+
+  @override
+  String get reviewAnswerFailed => '无法保存你的回答，请重试。';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return '此回答将标记 $count 段对话';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => '未知说话人';
+
+  @override
+  String get reviewNewPersonName => '他们的名字';
+
+  @override
+  String get reviewSomeoneElse => '其他人…';
+
+  @override
+  String get reviewConfirm => '确认';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '确认$name';
+  }
+
+  @override
+  String get reviewNotSure => '不确定';
+
+  @override
+  String get reviewOpenConversation => '对话';
+
+  @override
+  String get reviewTaskField => '任务';
+
+  @override
+  String get reviewDue => '截止日期';
+
+  @override
+  String get reviewNoDate => '无';
+
+  @override
+  String get reviewProject => '项目';
+
+  @override
+  String get reviewReasonAlreadyDone => '已完成';
+
+  @override
+  String get reviewReasonNotMine => '不是我的';
+
+  @override
+  String get reviewReasonNotUseful => '没有用';
+
+  @override
+  String get reviewYesMerge => '是，合并';
+
+  @override
+  String reviewConversationCount(int count) {
+    return '对话：$count';
+  }
+
+  @override
+  String get reviewSpellingCustom => '手动输入';
+
+  @override
+  String get reviewLoadFailed => '无法加载你的问题。';
+
+  @override
+  String get reviewCaughtUpTitle => '没有需要回答的问题';
+
+  @override
+  String get reviewCaughtUpBody => '只有需要你时，Omi 才会在这里提问。';
+
+  @override
+  String get reviewRecentChanges => '最近更改';
+
+  @override
+  String get reviewChangesIntro => '过去 30 天内 Omi 自行做出的更改。看起来不对的都可以撤销。';
+
+  @override
+  String get reviewChangeUndone => '已撤销。Omi 不会自行再次这样做。';
+
+  @override
+  String get reviewChangeFailed => '无法更新此更改，请重试。';
+
+  @override
+  String get reviewChangesLoadFailed => '无法加载最近更改。';
+
+  @override
+  String get reviewNoChangesTitle => '暂无更改';
+
+  @override
+  String get reviewNoChangesBody => 'Omi 整理你的笔记后，更改会显示在这里。';
+
+  @override
+  String get reviewShowMore => '显示更多';
+
+  @override
+  String get entityKeptCurrent => '由 Omi 保持最新';
+
+  @override
+  String get entityNotRight => '不对？';
+
+  @override
+  String get entityCorrectionTitle => '哪里不对？';
+
+  @override
+  String get entityCorrectionHint => '告诉 Omi 需要修正什么';
+
+  @override
+  String get entityCorrectionSaved => '谢谢，Omi 会修正。';
+
+  @override
+  String get entityCorrectionFailed => '无法发送你的更正，请重试。';
+
+  @override
+  String get entityLoadFailed => '无法加载此页面。';
+
+  @override
+  String get entityProject => '项目';
+
+  @override
+  String get entityProjects => '项目';
+
+  @override
+  String get entityDecisions => '决定';
+
+  @override
+  String get entityOpenTasks => '未完成的任务';
+
+  @override
+  String get entityOpenThreads => '未解决的事项';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '等待$name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return '截止日期：$date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omi 知道的内容';
+
+  @override
+  String get entityRecentConversations => '最近的对话';
+
+  @override
+  String get tasksNoProject => '无项目';
+
+  @override
+  String get tasksGroupByProject => '按项目分组';
+
+  @override
+  String get tasksGroupByDate => '按日期分组';
+
+  @override
+  String get dreamReportTitle => 'Dream 报告';
+
+  @override
+  String get dreamReportShadowBanner => '预览模式：Dream 会显示它将要更改的内容，但目前不会更改你账户中的任何内容。';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream 会自动应用这些更改。你可以在“最近更改”中撤销任何更改。';
+
+  @override
+  String get dreamReportRunNow => '立即运行';
+
+  @override
+  String get dreamReportRunLimit => '今天的手动运行次数已用完';
+
+  @override
+  String get dreamReportRunInProgress => '已有一次运行正在进行。请一分钟后重试。';
+
+  @override
+  String get dreamReportRunFailed => '无法运行 Dream。请重试。';
+
+  @override
+  String get dreamReportIdle => '暂时没有新内容需要查看。';
+
+  @override
+  String get dreamReportLoadFailed => '无法加载 Dream 报告。';
+
+  @override
+  String get dreamReportEmptyTitle => '还没有运行记录';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream 大约每小时查看一次你账户中的更改。';
+
+  @override
+  String get dreamReportScheduled => '定时';
+
+  @override
+  String get dreamReportManual => '手动';
+
+  @override
+  String dreamReportFailed(String error) {
+    return '失败（$error）';
+  }
+
+  @override
+  String get dreamReportTimedOut => '已达时间上限而停止';
+
+  @override
+  String get dreamReportNothingFound => '没有需要修复的内容';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '已读取 $records 项 · $tokens 个 token';
+  }
+
+  @override
+  String get dreamReportWouldFix => '将会修复';
+
+  @override
+  String get dreamReportFixed => '已修复';
+
+  @override
+  String get dreamReportWouldAsk => '将会询问你';
+
+  @override
+  String get dreamReportWouldSuggestTasks => '将会建议任务';
+
+  @override
+  String get dreamReportLearnedWords => '学到的词语';
+
+  @override
+  String get dreamReportFeedback => '已报告给 Omi 团队';
+
+  @override
+  String get dreamReportDeletedItem => '已删除的项目';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '今天已运行 $count/$limit 次';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项更改等待处理',
+      one: '1 项更改等待处理',
+      zero: '没有等待处理的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天还可手动运行 $count 次',
+      one: '今天还可手动运行 1 次',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes 项修复',
+      one: '1 项修复',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks 条建议',
+      one: '1 条建议',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已跳过 $count 项较早的更改',
+      one: '已跳过 1 项较早的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '出于隐私考虑，已扣留 $count 份报告',
+      one: '出于隐私考虑，已扣留 1 份报告',
+    );
+    return '$_temp0';
+  }
 }

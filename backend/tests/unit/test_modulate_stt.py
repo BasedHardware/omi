@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
     SafeModulateSocket,
@@ -15,6 +16,11 @@ from utils.stt.streaming import (
     sort_segments_by_start,
     sort_transcript_segments_in_place,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 def _exercise_abrupt_modulate_close():
@@ -34,7 +40,7 @@ def _exercise_abrupt_modulate_close():
     loop = asyncio.new_event_loop()
 
     async def run():
-        class ObservedSendQueue(asyncio.Queue[bytes]):
+        class ObservedSendQueue(AudioSendQueue[bytes]):
             def __init__(self):
                 super().__init__(maxsize=2000)
                 self.get_count = 0
@@ -400,6 +406,20 @@ class TestUtteranceHandling(unittest.TestCase):
         sock._handle_utterance(msg)
         self.assertAlmostEqual(self.segments[0]['start'], 2.5)
         self.assertAlmostEqual(self.segments[0]['end'], 4.0)
+
+    def test_final_utterance_language_is_ephemeral_metadata(self):
+        sock = self._make_socket()
+        sock._handle_utterance(
+            {
+                'type': 'utterance',
+                'text': 'synthetic words',
+                'start_ms': 0,
+                'duration_ms': 500,
+                'speaker': 1,
+                'language': 'pt',
+            }
+        )
+        self.assertEqual(self.segments[0]['_provider_language'], 'pt')
 
 
 class TestModulatePrerecorded(unittest.TestCase):

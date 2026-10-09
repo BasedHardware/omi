@@ -8,6 +8,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import resolve_usage_plan_id
 from models.user_usage import UsageStats
 
@@ -625,6 +626,98 @@ def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+def _local_boundary_utc(user_tz: Any, local_boundary: datetime) -> datetime:
+    """Resolve a local period boundary to its first possible UTC instant.
+
+    A repeated midnight begins at its DST occurrence. A skipped midnight
+    begins at the first valid wall time after the gap.
+    """
+
+    try:
+        localized = user_tz.localize(local_boundary, is_dst=None)
+    except pytz.AmbiguousTimeError:
+        localized = user_tz.localize(local_boundary, is_dst=True)
+    except pytz.NonExistentTimeError:
+        lower = local_boundary
+        step = timedelta(minutes=1)
+        while True:
+            upper = local_boundary + step
+            try:
+                user_tz.localize(upper, is_dst=None)
+                break
+            except pytz.AmbiguousTimeError:
+                break
+            except pytz.NonExistentTimeError:
+                lower = upper
+                step *= 2
+        while upper - lower > timedelta(microseconds=1):
+            middle = lower + (upper - lower) // 2
+            try:
+                user_tz.localize(middle, is_dst=None)
+                upper = middle
+            except pytz.AmbiguousTimeError:
+                upper = middle
+            except pytz.NonExistentTimeError:
+                lower = middle
+        localized = user_tz.localize(upper, is_dst=True)
+    return localized.astimezone(timezone.utc)
+
+
+def _local_period_usage(
+    uid: str, now: datetime, user_tz: Any, period: str
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Read the UTC period plus at most two boundary days, then bucket locally.
+
+    Hourly documents are UTC keyed. The adjacent day reads cover time zone
+    offsets without scanning adjacent whole months or years.
+    """
+    local_now = now.astimezone(user_tz)
+    if period == 'monthly':
+        local_start = datetime(local_now.year, local_now.month, 1)
+        local_end = datetime(local_now.year + (local_now.month == 12), local_now.month % 12 + 1, 1)
+    else:
+        local_start = datetime(local_now.year, 1, 1)
+        local_end = datetime(local_now.year + 1, 1, 1)
+    start = _local_boundary_utc(user_tz, local_start)
+    end = _local_boundary_utc(user_tz, local_end)
+    collection = db.collection('users').document(uid).collection('hourly_usage')
+    main = collection.where(filter=FieldFilter('year', '==', local_now.year))
+    if period == 'monthly':
+        main = main.where(filter=FieldFilter('month', '==', local_now.month))
+    docs = list(main.stream())
+    boundary_days = {start.date(), (end - timedelta(microseconds=1)).date()}
+    for boundary in boundary_days:
+        if boundary.year == local_now.year and (period == 'yearly' or boundary.month == local_now.month):
+            continue
+        query = HOURLY_USAGE_UTC_DAY_QUERY.build(
+            collection,
+            {'year': boundary.year, 'month': boundary.month, 'day': boundary.day},
+            field_filter_factory=FieldFilter,
+        )
+        docs.extend(query.stream())
+
+    stats = _aggregate_stats_from_docs([])
+    buckets: Dict[str, Dict[str, int]] = {}
+    for doc in docs:
+        data = _typed_doc(doc)
+        try:
+            hour = datetime(
+                int(data['year']), int(data['month']), int(data['day']), int(data['hour']), tzinfo=timezone.utc
+            )
+        except (KeyError, ValueError, TypeError):
+            continue
+        if not start <= hour < end:
+            continue
+        local = hour.astimezone(user_tz)
+        key = local.strftime('%Y-%m-%d' if period == 'monthly' else '%Y-%m-01')
+        bucket = buckets.setdefault(key, {name: 0 for name in stats})
+        for name in stats:
+            value = int(data.get(name, 0) or 0)
+            stats[name] += value
+            bucket[name] += value
+    return stats, [{'date': key, **buckets[key]} for key in sorted(buckets)]
+
+
 def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
     """Aggregates all hourly usage stats for a user from Firestore."""
     stats, _ = _read_all_time_usage(uid)
@@ -804,25 +897,27 @@ def get_current_user_usage(
 ) -> Dict[str, Any]:
     """Gets usage for the current user for a specific period from Firestore.
 
-    ``tz_name`` (IANA zone, e.g. "America/Los_Angeles") anchors period='today'
-    to the caller's local calendar day instead of the UTC calendar day. Without
-    it, users west of UTC see "today" reset hours before their real midnight,
-    and users east of UTC see the tail of their local yesterday counted as
-    "today" — since usage docs are written on UTC dates but this endpoint is
-    read by a user thinking in their own timezone.
+    ``tz_name`` anchors today, month, and year to the user's calendar. All-time
+    remains UTC-yearly because it scans the full history once and has no local
+    period boundary to constrain an additional read.
     """
     now = now or datetime.now(timezone.utc)
     response: Dict[str, Any] = {}
+    user_tz = None
+    if tz_name:
+        try:
+            user_tz = pytz.timezone(tz_name)
+        except Exception as e:
+            logger.error('usage tz fallback to UTC uid=%s tz=%s: %s', uid, tz_name, e)
 
     if period == 'today':
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1)
-        if tz_name:
+        if user_tz is not None:
             try:
-                user_tz = pytz.timezone(tz_name)
                 display_date = now.astimezone(user_tz).date()
-                start = user_tz.localize(datetime.combine(display_date, time.min)).astimezone(timezone.utc)
-                end = user_tz.localize(datetime.combine(display_date, time.max)).astimezone(timezone.utc)
+                start = _local_boundary_utc(user_tz, datetime.combine(display_date, time.min))
+                end = _local_boundary_utc(user_tz, datetime.combine(display_date + timedelta(days=1), time.min))
             except Exception as e:
                 # Keep serving the UTC day rather than failing the request, but say so: a stored
                 # zone we cannot parse is a data problem worth seeing, not something to swallow.
@@ -830,11 +925,21 @@ def get_current_user_usage(
         response['today'] = UsageStats(**get_today_usage_stats(uid, start, end)).model_dump()
         response['history'] = get_hourly_history_for_today(uid, start, end)
     elif period == 'monthly':
-        response['monthly'] = UsageStats(**get_monthly_usage_stats(uid, now)).model_dump()
-        response['history'] = get_daily_history_for_month(uid, now)
+        stats, history = (
+            _local_period_usage(uid, now, user_tz, period)
+            if user_tz
+            else (get_monthly_usage_stats(uid, now), get_daily_history_for_month(uid, now))
+        )
+        response['monthly'] = UsageStats(**stats).model_dump()
+        response['history'] = history
     elif period == 'yearly':
-        response['yearly'] = UsageStats(**get_yearly_usage_stats(uid, now)).model_dump()
-        response['history'] = get_monthly_history_for_year(uid, now)
+        stats, history = (
+            _local_period_usage(uid, now, user_tz, period)
+            if user_tz
+            else (get_yearly_usage_stats(uid, now), get_monthly_history_for_year(uid, now))
+        )
+        response['yearly'] = UsageStats(**stats).model_dump()
+        response['history'] = history
     elif period == 'all_time':
         all_time, history = _read_all_time_usage(uid)
         response['all_time'] = UsageStats(**all_time).model_dump()

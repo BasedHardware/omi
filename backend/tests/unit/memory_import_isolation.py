@@ -74,6 +74,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_customer_firestore_client = lambda: client_mod.db
+    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store, jit_proactivity_store, and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
@@ -215,6 +216,10 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
     usage_tracker_mod.track_usage = lambda *args, **kwargs: None
+    # jev_shadow sets a dedicated shadow-lane context around ask_jev; the stub
+    # must accept the token-based setters without touching real contextvars.
+    usage_tracker_mod.set_usage_context = lambda *args, **kwargs: object()
+    usage_tracker_mod.reset_usage_context = lambda *args, **kwargs: None
 
     class _Features:
         pass
@@ -260,7 +265,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     _set("pinecone", pinecone_mod)
 
     auth_mod = AutoMockModule("database.auth")
-    auth_mod.get_user_name = lambda uid: "Test User"
+    auth_mod.get_user_name = lambda uid, use_default=True: "Test User"
     auth_mod.get_current_user_uid = MagicMock()
     auth_mod.with_rate_limit = lambda fn, *args, **kwargs: fn
     _set("database.auth", auth_mod)
@@ -753,8 +758,10 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
         "database._client",
         "database.redis_db",
         "database.conversations",
+        "database.mcp_conversation_pages",
         "database.memories",
         "database.action_items",
+        "database.action_item_sync",
         "database.folders",
         "database.users",
         "database.user_usage",

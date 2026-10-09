@@ -161,11 +161,24 @@ jobs:
           # separate recovery path and does not consume a release proof.
           ref: main
 
-      - name: Google Auth
-        id: auth
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
+      # plan v2 Phase E). Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
         uses: 'google-github-actions/auth@v3'
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        id: auth
+        if: github.event.inputs.environment != 'prod'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -281,50 +294,24 @@ jobs:
         with:
           ref: ${{ steps.admitted_source.outputs.admitted_sha }}
 
-      - name: Google Auth for read-only Firestore inventory
-        uses: 'google-github-actions/auth@v3'
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
         with:
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
 
       - name: Verify serving Firestore indexes
-        id: firestore_readiness
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --check-only \
-            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Validate blocked Firestore schema proposal
-        id: validate_firestore_proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Preserve blocked Firestore schema proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
-          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
-          if-no-files-found: error
-          retention-days: 1
+          source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
 
   # Kept out of firestore_readiness on purpose: that job is a least-privilege
   # release-proof boundary limited to actions:read/contents:read, so the audit
@@ -404,16 +391,17 @@ jobs:
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           release_version: ${{ github.event.inputs.release_version }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).
+          # Development: GitHub WIF as omi-ci-deployer-dev@ (WS-D). No JSON key.
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          # Unset by default, which keeps the existing signing behaviour.
-          firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           # The known-audio gate runs only for development, where the Firebase
-          # auth project (based-hardware) is not this lane's deploy project.
-          # This environment secret is the production Firebase signer key; the
-          # token minter refuses it if its project does not match.
-          firebase_probe_signer_credentials: ${{ github.event.inputs.environment == 'development' && secrets.GCP_SERVICE_ACCOUNT || '' }}
+          # auth project (based-hardware) is not this lane's deploy project. The
+          # probe token is signed through IAM signJwt as the no-role signer named
+          # by this development variable; no signer key is passed.
+          firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           runtime_env: ${{ vars.ENV }}
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
@@ -422,3 +410,62 @@ jobs:
           sync_backfill_alert_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Provision backend route 5xx alert
+        id: backend-route-alert
+        if: github.event.inputs.environment == 'prod'
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_WORKFLOW_ROOT:-}" || {
+            echo "DEPLOY_WORKFLOW_ROOT is not set; cannot run the workflow-owned route alert script." >&2
+            exit 1
+          }
+          test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_backend_route_5xx_alert.py" || {
+            echo "Workflow-owned route alert script not found under $DEPLOY_WORKFLOW_ROOT/.github/scripts." >&2
+            exit 1
+          }
+          POLICY="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_backend_route_5xx_alert.py" \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS")"
+          {
+            echo "### Backend route 5xx alert"
+            echo ""
+            echo "Provisioned \`${POLICY}\` for metric \`backend_route_5xx\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report backend route 5xx alert provisioning failure
+        if: always() && github.event.inputs.environment == 'prod' && steps.backend-route-alert.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          echo "::warning title=Backend route 5xx alert::Provisioning failed; the deploy is unaffected but the per-route 5xx metric or alert policy may be missing or stale. Follow backend/docs/runbooks/backend-route-5xx.md."
+          {
+            echo "### Backend route 5xx alert"
+            echo ""
+            echo "**Provisioning failed.** The deployment remains successful, but the \`backend_route_5xx\` metric or its alert policy may be missing or stale."
+            echo ""
+            echo "Re-run the deploy to retry provisioning, then follow the [runbook](https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/backend-route-5xx.md)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Provision Firestore missing-index alert
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_WORKFLOW_ROOT:-}" || {
+            echo "DEPLOY_WORKFLOW_ROOT is not set; cannot run the workflow-owned missing-index alert script." >&2
+            exit 1
+          }
+          test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" || {
+            echo "Workflow-owned missing-index alert script not found under $DEPLOY_WORKFLOW_ROOT/.github/scripts." >&2
+            exit 1
+          }
+          python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS"

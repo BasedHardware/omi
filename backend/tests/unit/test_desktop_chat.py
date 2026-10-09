@@ -1088,79 +1088,6 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_byok_key',
-        lambda provider: 'sk-openai' if provider == 'openai' else None,
-    )
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    recorded = []
-
-    async def record_usage(uid, usage):
-        recorded.append((uid, usage))
-
-    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append({'url': url, 'headers': headers, 'json': json})
-            assert headers.get('X-Omi-User-Uid') == 'user-1'
-            assert headers.get('X-Omi-LLM-Feature') == 'chat_agent'
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-1',
-                    'choices': [{'message': {'content': 'hello'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                headers={'x-omi-jit-gateway-receipt': 'trusted-receipt'},
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-
-    response = await desktop_chat.chat_completions(
-        {'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-        x_omi_jit_contract_version='jit-cloud-qa-v1',
-        x_omi_jit_run_id='jit-relay-run-1',
-        x_omi_jit_max_attempts='3',
-        x_omi_jit_max_output_tokens='2048',
-        x_omi_jit_max_input_tokens='32768',
-        x_omi_jit_max_spend_micro_usd='50000',
-    )
-
-    assert b'"id":"chat-1"' in response.body
-    assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
-    assert client.calls[0]['headers']['X-Omi-Request-ID']
-    assert client.calls[0]['headers']['X-Omi-Jit-Contract-Version'] == 'jit-cloud-qa-v1'
-    assert client.calls[0]['headers']['X-Omi-Jit-Run-Id'] == 'jit-relay-run-1'
-    assert client.calls[0]['headers']['X-Omi-Jit-Max-Attempts'] == '3'
-    assert client.calls[0]['headers']['X-Omi-Jit-Max-Output-Tokens'] == '2048'
-    assert client.calls[0]['headers']['X-Omi-Jit-Max-Input-Tokens'] == '32768'
-    assert client.calls[0]['headers']['X-Omi-Jit-Max-Spend-Micro-Usd'] == '50000'
-    assert response.headers['X-Omi-Jit-Gateway-Receipt'] == 'trusted-receipt'
-    assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
-    assert recorded and recorded[0][0] == 'user-1'
-    assert recorded[0][1].input_tokens == 3
-    assert recorded[0][1].output_tokens == 2
-
-
-@pytest.mark.asyncio
 async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
@@ -1709,82 +1636,6 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_jit_stays_on_gateway_when_anthropic_byok_exists(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-    monkeypatch.setattr(
-        desktop_chat, 'get_byok_key', lambda provider: 'sk-anthropic' if provider == 'anthropic' else None
-    )
-    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_direct_anthropic_client',
-        _fail_direct_anthropic('qualified JIT must not construct a direct Anthropic client'),
-    )
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append((url, headers, json))
-            return httpx.Response(
-                200,
-                json={'id': 'jit', 'choices': [{'message': {'content': 'gateway'}}], 'usage': {}},
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-    response = await desktop_chat.chat_completions(
-        {'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-        x_omi_jit_contract_version='jit-cloud-qa-v1',
-        x_omi_jit_run_id='jit-byok-run',
-        x_omi_jit_max_attempts='3',
-        x_omi_jit_max_output_tokens='2048',
-        x_omi_jit_max_input_tokens='32768',
-        x_omi_jit_max_spend_micro_usd='50000',
-    )
-
-    assert response.body and b'gateway' in response.body
-    assert len(client.calls) == 1
-    assert client.calls[0][1]['X-Omi-Jit-Run-Id'] == 'jit-byok-run'
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_jit_rejects_direct_mode(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-
-    with pytest.raises(desktop_chat.HTTPException) as error:
-        await desktop_chat.chat_completions(
-            {'messages': [{'role': 'user', 'content': 'hello'}]},
-            uid='user-1',
-            x_app_platform=None,
-            x_omi_chat_contract_version=None,
-            x_omi_request_id=None,
-            x_omi_jit_contract_version='jit-cloud-qa-v1',
-            x_omi_jit_run_id='jit-direct-run',
-            x_omi_jit_max_attempts='3',
-            x_omi_jit_max_output_tokens='2048',
-            x_omi_jit_max_input_tokens='32768',
-            x_omi_jit_max_spend_micro_usd='50000',
-        )
-
-    assert error.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_chat_completions_legacy_haiku_alias_uses_structured_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
@@ -1969,32 +1820,6 @@ async def test_desktop_chat_503_logs_coded_reason_without_live_redis(monkeypatch
     serialized = json.dumps(events)
     assert 'redis' not in serialized.lower()
     assert 'user' not in serialized
-
-
-@pytest.mark.asyncio
-async def test_chat_completions_jit_503_logs_coded_reason(monkeypatch, capsys):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-
-    with pytest.raises(desktop_chat.HTTPException) as error:
-        await desktop_chat.chat_completions(
-            {'messages': [{'role': 'user', 'content': 'hello'}]},
-            uid='user-1',
-            x_app_platform=None,
-            x_omi_chat_contract_version=None,
-            x_omi_request_id='req-jit',
-            x_omi_jit_contract_version='jit-cloud-qa-v1',
-            x_omi_jit_run_id='jit-direct-run',
-            x_omi_jit_max_attempts='3',
-            x_omi_jit_max_output_tokens='2048',
-            x_omi_jit_max_input_tokens='32768',
-            x_omi_jit_max_spend_micro_usd='50000',
-        )
-
-    assert error.value.status_code == 503
-    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
-    assert [(event['reason'], event['request_id']) for event in events] == [('jit_requires_gateway', 'req-jit')]
 
 
 @pytest.mark.asyncio
@@ -2352,26 +2177,6 @@ def test_gateway_request_headers_omit_app_platform_when_client_sent_none():
     assert 'X-Omi-App-Platform' not in headers
 
 
-def test_jit_qualification_headers_forward_only_versioned_bounded_contract(monkeypatch):
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-    headers = desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, '3', '2048', '32768', '50000')
-    assert headers['X-Omi-Jit-Run-Id'] == 'a' * 64
-    assert headers['X-Omi-Jit-Max-Attempts'] == '3'
-    assert headers['X-Omi-Jit-Max-Output-Tokens'] == '2048'
-    assert headers['X-Omi-Jit-Max-Input-Tokens'] == '32768'
-    assert headers['X-Omi-Jit-Max-Spend-Micro-Usd'] == '50000'
-    for values in (
-        ('4', '2048', '32768', '50000'),
-        ('3', '2049', '32768', '50000'),
-        ('3', '2048', '32769', '50000'),
-        ('3', '2048', '32768', '50001'),
-    ):
-        with pytest.raises(ValueError):
-            desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, *values)
-    monkeypatch.delenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT')
-    assert desktop_chat._jit_headers_for_forward(None, None, None, None, None, None) == {}
-
-
 def _count_cache_control(value):
     """Count cache_control keys in a payload. Nested markers would split or
     duplicate the automatic breakpoint and silently miss the shared prefix."""
@@ -2572,7 +2377,7 @@ def test_thinking_escalation_routes_managed_and_drops_tools():
     assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
     assert result['reasoning_effort'] == 'high'
     # OpenAI rejects function tools combined with a non-none effort on
-    # gpt-5.6-luna, so the escalation lane never carries client tools.
+    # gpt-x-luna, so the escalation lane never carries client tools.
     assert 'tools' not in result
     assert 'tool_choice' not in result
 
@@ -2810,3 +2615,22 @@ async def test_desktop_chat_metric_failure_does_not_break_stream(monkeypatch):
         x_omi_request_id='request-4',
     )
     assert 'still delivered' in await _drain(response)
+
+
+@pytest.mark.asyncio
+async def test_retired_jit_request_returns_410_before_subscription_or_provider(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError('retired request reached paid work')
+
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', unexpected)
+    with pytest.raises(desktop_chat.HTTPException) as exc:
+        await desktop_chat.chat_completions(
+            {'messages': []},
+            uid='fixture',
+            x_omi_chat_contract_version=None,
+            x_app_platform=None,
+            x_omi_request_id=None,
+            x_omi_jit_run_id='retired-run',
+        )
+    assert exc.value.status_code == 410
+    assert exc.value.detail == {'error': 'feature_retired'}

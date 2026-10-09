@@ -16,7 +16,7 @@ import logging
 import hashlib
 import os
 import uuid
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, Iterable, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -24,6 +24,7 @@ from google.auth.transport import requests as google_auth_requests
 from google.cloud import tasks_v2
 from google.oauth2 import id_token
 from google.protobuf import duration_pb2
+from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
 
@@ -45,6 +46,9 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'source',
         'should_lock',
         'conversation_id',
+        'recording_session_id',
+        'audio_start_seconds',
+        'audio_end_seconds',
         'geolocation',
         'client_device_id',
         'client_platform',
@@ -56,6 +60,20 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'ledger_fence_mode',
     }
 )
+SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_epoch'}
+# Present only when the upload carried parsed S1 capture-evidence claims
+# (routers/sync.py). An exact-set check without this key raised ValueError at
+# enqueue for every claims-bearing upload and wedged that uid's sequencer.
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims'})
+
+
+def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
+    """True when keys are a durable sync job schema plus only optional keys."""
+    core = frozenset(keys) - SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS
+    if core == SYNC_JOB_TASK_PAYLOAD_KEYS:
+        return True
+    return allow_sequenced and core == SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS
+
 
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
@@ -225,7 +243,7 @@ def get_listen_finalization_tasks_max_attempts() -> int:
     return int(os.getenv('LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 
 
-def _enqueue_named_task(
+def enqueue_named_task(
     queue: str,
     url: str,
     task_id: str,
@@ -233,6 +251,7 @@ def _enqueue_named_task(
     *,
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
+    schedule_at: Optional[int] = None,
 ) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
@@ -257,6 +276,7 @@ def _enqueue_named_task(
             ),
         ),
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
+        schedule_time=timestamp_pb2.Timestamp(seconds=schedule_at) if schedule_at is not None else None,
     )
     try:
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
@@ -285,21 +305,41 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
-    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+    if not sync_job_payload_keys_valid(payload):
         raise ValueError('sync job payload does not match the durable worker schema')
+    sequencer_epoch = payload.get('sequencer_epoch')
+    if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
+        raise ValueError('sync job sequencer epoch must be a positive integer')
+    task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
         if queue and handler_url:
-            _enqueue_named_task(
+            enqueue_named_task(
                 queue,
                 handler_url,
-                str(payload['job_id']),
+                task_id,
                 payload,
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
             )
             return
-    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
+    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+
+
+def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
+    """Wake a cutover-delayed UID without occupying a worker during the wait."""
+    handler = _handler_url()
+    if not handler.endswith('/v2/sync-jobs/run'):
+        raise RuntimeError('sync task handler URL is not the expected v2 route')
+    wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    enqueue_named_task(
+        os.getenv('SYNC_TASKS_QUEUE', ''),
+        wake_url,
+        f'sbu-{uid_hash}-{deadline}',
+        {'uid': uid},
+        audience=_oidc_audience(),
+        schedule_at=deadline,
+    )
 
 
 def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
@@ -324,7 +364,7 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     else:
         task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     handler_url = _audio_merge_handler_url()
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
         task_id,
@@ -344,7 +384,7 @@ def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
         raise ValueError('wipe_job_id must be non-empty')
     job_hash = hashlib.sha256(wipe_job_id.encode('utf-8')).hexdigest()[:32]
     task_id = f"account-delete-{job_hash}-{uuid.uuid4().hex}"
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
         os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
         task_id,
@@ -372,7 +412,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
     uid nor any conversation/BYOK material so Cloud Tasks diagnostics cannot
     expose user content or credentials.
     """
-    _enqueue_named_task(
+    enqueue_named_task(
         os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
         _listen_finalization_handler_url(),
         f'listen-finalization-{job_id}-{dispatch_generation}',
@@ -382,7 +422,9 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
     )
 
 
-def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True) -> int:
+def verify_configured_cloud_tasks_oidc(
+    request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True
+) -> int:
     """Verify a configured task audience and issuer; returns task retry count.
 
     Sync function on purpose — verify_oauth2_token fetches Google certs over
@@ -416,7 +458,7 @@ def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str
 
 def verify_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for sync-job task routes."""
-    return _verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
+    return verify_configured_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
 
 
 def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
@@ -426,13 +468,13 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
     audience names a different service (backend-sync-backfill) can still
     mint a token the merge worker will accept.
     """
-    return _verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
+    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
     """Verify deletion tasks."""
     deletion_audience = _account_deletion_oidc_audience()
-    retry_count = _verify_cloud_tasks_oidc(
+    retry_count = verify_configured_cloud_tasks_oidc(
         request,
         audience=deletion_audience,
         invoker_sa=_invoker_sa(),
@@ -443,7 +485,7 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:
     """FastAPI dependency for the isolated listen finalization task route."""
-    return _verify_cloud_tasks_oidc(
+    return verify_configured_cloud_tasks_oidc(
         request,
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),

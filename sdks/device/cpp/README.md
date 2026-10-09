@@ -5,6 +5,16 @@ builders, and a BLE surface you bind to your own platform stack.
 
 **No third-party dependencies.** `cmake -S . -B build && cmake --build build`.
 
+`omi::device::stt::ParakeetWsUrl()` preserves a base URL's path prefix and query
+parameters, replaces `sample_rate` with the requested rate, and omits fragments:
+
+```cpp
+#include "omi/device/stt/stt.hpp"
+
+auto url = omi::device::stt::ParakeetWsUrl("https://parakeet.example/proxy/?tenant=demo");
+// wss://parakeet.example/proxy/v3/stream?tenant=demo&sample_rate=16000
+```
+
 ## Protocol only
 
 ```cpp

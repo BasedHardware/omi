@@ -28,9 +28,13 @@ final class DailyRecapPageTests: XCTestCase {
     XCTAssertEqual(route.stableName, "daily-recap")
     XCTAssertEqual(route.title, "Daily recap")
     XCTAssertEqual(
-      ChatFirstModernNavigationPolicy.topBarIndex(for: route),
-      SidebarNavItem.dashboard.rawValue,
+      ChatFirstModernNavigationPolicy.topBarIndex(for: route, dailyRecapOrigin: .tasks),
+      SidebarNavItem.tasks.rawValue,
       "the recap opened from a surface keeps that surface's top-bar selection")
+    XCTAssertEqual(
+      ChatFirstModernNavigationPolicy.topBarIndex(for: route),
+      ChatFirstModernNavigationPolicy.noPill,
+      "a recap with no recorded origin claims no pill, not Chat's")
     XCTAssertTrue(
       ChatFirstPageGlassLanePolicy.shouldWrap(route),
       "the page sits on the glass lane like the other full pages")

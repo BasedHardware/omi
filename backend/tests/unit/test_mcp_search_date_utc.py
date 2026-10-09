@@ -119,19 +119,18 @@ class TestRestSearchUtcBounds:
 
     def test_start_date_anchors_to_utc_midnight(self):
         captured = {}
-        chunk_captured = {}
 
         def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        def _search_chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-            chunk_captured.update(starts_at=starts_at, ends_at=ends_at)
-            return []
-
-        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
-            mcp_router.vector_db, 'search_transcript_chunks', side_effect=_search_chunks
-        ), patch.object(mcp_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))):
+        with patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db, 'query_vectors', side_effect=_query_vectors
+        ), patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db,
+            'embeddings',
+            MagicMock(embed_query=MagicMock(return_value=[0.0])),
+        ):
             mcp_router.search_conversations(
                 query='hi',
                 start_date='2026-08-01',
@@ -141,52 +140,45 @@ class TestRestSearchUtcBounds:
 
         assert captured['starts_at'] == _utc_epoch(2026, 8, 1)
         assert captured['ends_at'] == _utc_epoch(2026, 8, 2, hour=23, minute=59, second=59, microsecond=999999)
-        assert chunk_captured['starts_at'] == captured['starts_at']
-        assert chunk_captured['ends_at'] == captured['ends_at']
 
     def test_end_date_includes_full_end_day(self):
         captured = {}
-        chunk_captured = {}
 
         def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        def _search_chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-            chunk_captured.update(starts_at=starts_at, ends_at=ends_at)
-            return []
-
-        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
-            mcp_router.vector_db, 'search_transcript_chunks', side_effect=_search_chunks
-        ), patch.object(mcp_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))):
+        with patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db, 'query_vectors', side_effect=_query_vectors
+        ), patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db,
+            'embeddings',
+            MagicMock(embed_query=MagicMock(return_value=[0.0])),
+        ):
             mcp_router.search_conversations(query='hi', end_date='2026-08-01', uid='user-1')
 
         # 2026-08-01T23:59:59.999999Z, not 2026-08-01T00:00:00Z (naive local parse).
         assert captured['ends_at'] == _utc_epoch(2026, 8, 1, hour=23, minute=59, second=59, microsecond=999999)
         assert captured['starts_at'] is None
-        assert chunk_captured['starts_at'] is None
-        assert chunk_captured['ends_at'] == captured['ends_at']
 
-    def test_start_date_only_forwards_one_sided_bounds_to_chunk_search(self):
+    def test_start_date_only_forwards_one_sided_bounds_to_vector_search(self):
         captured = {}
-        chunk_captured = {}
 
         def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
             captured.update(starts_at=starts_at, ends_at=ends_at)
             return []
 
-        def _search_chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-            chunk_captured.update(starts_at=starts_at, ends_at=ends_at)
-            return []
-
-        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
-            mcp_router.vector_db, 'search_transcript_chunks', side_effect=_search_chunks
-        ), patch.object(mcp_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))):
+        with patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db, 'query_vectors', side_effect=_query_vectors
+        ), patch.object(
+            mcp_router.mcp_conversation_handlers.vector_db,
+            'embeddings',
+            MagicMock(embed_query=MagicMock(return_value=[0.0])),
+        ):
             mcp_router.search_conversations(query='hi', start_date='2026-08-01', uid='user-1')
 
         assert captured['starts_at'] == _utc_epoch(2026, 8, 1)
         assert captured['ends_at'] is None
-        assert chunk_captured == captured
 
     def test_malformed_date_still_400(self):
         from fastapi import HTTPException
@@ -201,19 +193,14 @@ class TestSseSearchUtcBounds:
 
     def test_start_and_end_utc_bounds(self):
         captured = {}
-        chunk_captured = {}
 
         def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        def _search_chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-            chunk_captured.update(starts_at=starts_at, ends_at=ends_at)
-            return []
-
         with patch.object(mcp_sse_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
-            mcp_sse_router.vector_db, 'search_transcript_chunks', side_effect=_search_chunks
-        ), patch.object(mcp_sse_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))):
+            mcp_sse_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))
+        ):
             mcp_sse_router.execute_tool(
                 'user-1',
                 'search_conversations',
@@ -222,24 +209,17 @@ class TestSseSearchUtcBounds:
 
         assert captured['starts_at'] == _utc_epoch(2026, 8, 1)
         assert captured['ends_at'] == _utc_epoch(2026, 8, 2, hour=23, minute=59, second=59, microsecond=999999)
-        assert chunk_captured['starts_at'] == captured['starts_at']
-        assert chunk_captured['ends_at'] == captured['ends_at']
 
-    def test_end_date_only_forwards_one_sided_bounds_to_chunk_search(self):
+    def test_end_date_only_forwards_one_sided_bounds_to_vector_search(self):
         captured = {}
-        chunk_captured = {}
 
         def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None, query_vector=None):
             captured.update(starts_at=starts_at, ends_at=ends_at)
             return []
 
-        def _search_chunks(uid, query, limit=None, starts_at=None, ends_at=None, query_vector=None):
-            chunk_captured.update(starts_at=starts_at, ends_at=ends_at)
-            return []
-
         with patch.object(mcp_sse_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
-            mcp_sse_router.vector_db, 'search_transcript_chunks', side_effect=_search_chunks
-        ), patch.object(mcp_sse_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))):
+            mcp_sse_router.vector_db, 'embeddings', MagicMock(embed_query=MagicMock(return_value=[0.0]))
+        ):
             mcp_sse_router.execute_tool(
                 'user-1',
                 'search_conversations',
@@ -248,17 +228,18 @@ class TestSseSearchUtcBounds:
 
         assert captured['starts_at'] is None
         assert captured['ends_at'] == _utc_epoch(2026, 8, 1, hour=23, minute=59, second=59, microsecond=999999)
-        assert chunk_captured == captured
 
     def test_get_conversations_utc_aware_dates(self):
         captured = {}
 
-        def _get_conversations(uid, limit, offset, **kwargs):
+        def _get_conversations(uid, limit, **kwargs):
             captured.update(start_date=kwargs.get('start_date'), end_date=kwargs.get('end_date'))
-            return []
+            return [], None
+
+        from utils.mcp_server.handlers import conversations as _conv_handler
 
         with patch.object(
-            mcp_sse_router.conversations_db, 'get_mcp_conversation_cards', side_effect=_get_conversations
+            _conv_handler.mcp_conversation_pages, 'get_mcp_conversation_cards_page', side_effect=_get_conversations
         ):
             mcp_sse_router.execute_tool(
                 'user-1', 'get_conversations', {'start_date': '2026-08-01', 'end_date': '2026-08-02'}
@@ -295,11 +276,13 @@ class TestSseSearchUtcBounds:
         rest of the day)."""
         captured = {}
 
-        def _get_screen_activity(uid, start_date=None, end_date=None, app_filter=None, limit=None):
+        def _get_screen_activity_page(uid, *, start_date=None, end_date=None, app_filter=None, limit=None, after=None):
             captured.update(start_date=start_date, end_date=end_date)
-            return []
+            return ([], False)
 
-        with patch.object(mcp_sse_router.screen_activity_db, 'get_screen_activity', side_effect=_get_screen_activity):
+        with patch.object(
+            mcp_sse_router.screen_activity_db, 'get_screen_activity_page', side_effect=_get_screen_activity_page
+        ):
             mcp_sse_router.execute_tool(
                 'user-1',
                 'get_screen_activity',

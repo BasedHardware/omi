@@ -2,13 +2,13 @@ import ast
 import base64
 import json
 import os
-import secrets
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
 import logging
 
+from database import api_key_cache
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
@@ -18,17 +18,37 @@ from database.api_key_metadata import (
 
 logger = logging.getLogger(__name__)
 
+
 # redis.Redis is untyped under strict Pyright; treat the client as Any at this
 # SDK boundary. Downstream callers narrow results via the adapter pattern.
-_redis_host: Optional[str] = os.getenv('REDIS_DB_HOST')
-_redis_port_env: Optional[str] = os.getenv('REDIS_DB_PORT')
-r: Any = redis.Redis(
-    host=cast(str, _redis_host),
-    port=int(_redis_port_env) if _redis_port_env is not None else 6379,
-    username='default',
-    password=os.getenv('REDIS_DB_PASSWORD'),
-    health_check_interval=30,
-)
+def _redis_connection_kwargs(*, health_check_interval: int = 30) -> dict[str, Any]:
+    """Connection settings shared by the default and bounded Redis clients."""
+    port_env = os.getenv('REDIS_DB_PORT')
+    return {
+        'host': cast(str, os.getenv('REDIS_DB_HOST')),
+        'port': int(port_env) if port_env is not None else 6379,
+        'username': 'default',
+        'password': os.getenv('REDIS_DB_PASSWORD'),
+        'health_check_interval': health_check_interval,
+    }
+
+
+r: Any = redis.Redis(**_redis_connection_kwargs())
+
+
+def create_bounded_redis_client(timeout_seconds: float) -> Any:
+    """Create a client for the shared Redis deployment with bounded socket I/O.
+
+    A few best-effort writer-side caches need stricter timeouts than ``r`` so
+    cache outages cannot hold durable writes open. Keep their connection
+    configuration at this shared boundary so Redis settings and harness
+    overrides stay consistent with the rest of the backend.
+    """
+    kwargs = _redis_connection_kwargs()
+    kwargs['socket_connect_timeout'] = timeout_seconds
+    kwargs['socket_timeout'] = timeout_seconds
+    return redis.Redis(**kwargs)
+
 
 # Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
 # slack, so a jti cannot become reusable while its approval could still be
@@ -280,12 +300,29 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+# Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
+# a write that lands between another writer's GET and SET vanish, silently
+# dropping that reviewer from everything the product reads. Do the read-modify-
+# write as a single atomic script instead, mirroring the rate-limit scripts
+# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
+# rather than raising, matching the fail-open behavior of the Python reader.
+_SET_APP_REVIEW_CACHE_LUA = r.register_script("""
+local raw = redis.call('GET', KEYS[1])
+local reviews = {}
+if raw then
+    local ok, decoded = pcall(cjson.decode, raw)
+    if ok and type(decoded) == 'table' then
+        reviews = decoded
+    end
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+""")
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
@@ -393,16 +430,47 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
+# Most specific first. AuthenticationError subclasses ConnectionError, and some
+# redis-py versions also subclass TimeoutError from ConnectionError. A later
+# parent match would collapse those into connection_error.
+_CACHE_WRITE_FAIL_OPEN: tuple[tuple[str, str], ...] = (
+    ('OutOfMemoryError', 'capacity_full'),
+    ('AuthenticationError', 'auth_error'),
+    ('TimeoutError', 'timeout'),
+    ('ConnectionError', 'connection_error'),
+)
+
+
+def _cache_write_fail_open_reason(exc: BaseException) -> Optional[str]:
+    """Bounded fail-open reason, or None when the caller must raise.
+
+    Match the redis-py class when it can be resolved. Fall back to the class
+    name only when that class is absent (redis-py typing drift). A same-named
+    exception from another module, including the builtin ``TimeoutError``, still
+    raises. ConnectionError subclasses other than the more specific rows above,
+    such as BusyLoadingError, map to connection_error.
+    """
+    exceptions = getattr(redis, 'exceptions', None)
+    name = type(exc).__name__
+    for class_name, reason in _CACHE_WRITE_FAIL_OPEN:
+        cls = getattr(exceptions, class_name, None) if exceptions is not None else None
+        if cls is not None and isinstance(exc, cls):
+            return reason
+        if cls is None and name == class_name:
+            return reason
+    return None
+
+
 def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
-    """Best-effort cache write. Redis maxmemory must not 500 product requests."""
+    """Best-effort cache write. Redis maxmemory and connection-class faults must not 500 product requests."""
     try:
         r.set(key, value, ex=ttl)
     except Exception as exc:
-        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
-        if type(exc).__name__ != 'OutOfMemoryError':
+        reason = _cache_write_fail_open_reason(exc)
+        if reason is None:
             raise
         prefix = key.split(':', 1)[0]
-        logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
+        logger.warning('redis cache write skipped reason=%s prefix=%s', reason, prefix)
         try:
             from utils.observability.fallback import record_fallback
 
@@ -410,7 +478,7 @@ def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
                 component='other',
                 from_mode='cache_write',
                 to_mode='skip',
-                reason='capacity_full',
+                reason=reason,
                 outcome='degraded',
                 log=logger,
             )
@@ -431,6 +499,12 @@ def get_cached_signed_url(blob_path: str) -> str:
     if not signed_url:
         return ''
     return signed_url.decode()
+
+
+def get_cached_signed_url_ttl(blob_path: str) -> int:
+    """Seconds the cached signed URL has left (0 when absent); the cache entry expires just before the signature."""
+    ttl = r.ttl(f'urls:{blob_path}')
+    return ttl if isinstance(ttl, int) and ttl > 0 else 0
 
 
 def delete_cached_signed_url(blob_path: str) -> None:
@@ -514,10 +588,12 @@ def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 3
     # Best-effort pointer written AFTER the authoritative Firestore create of the
     # in-progress conversation. Every reader falls back to Firestore
     # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
-    # key is absent, so a Redis capacity failure must skip the write instead of
-    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
-    # lifetime task and tore down live sessions (supervisor `crash`), and the
-    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    # key is absent, so a Redis capacity or connection-class failure must skip
+    # the write instead of raising: under prod maxmemory the raise crashed the
+    # listen `lifecycle` lifetime task and tore down live sessions (supervisor
+    # `crash`), and the same raise inside prepare() surfaced as the ASGI
+    # WebSocket traceback. AuthenticationError did the same to every listen
+    # accept during the 2026-10-08 dev credential drift.
     _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
@@ -538,8 +614,8 @@ def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int 
     # is an enrichment pointer (meeting-context attribution during processing,
     # utils/conversations/process_conversation.py), written after the durable
     # conversation create. Its absence degrades enrichment to the calendar
-    # overlap path, so a Redis capacity failure skips the write rather than
-    # raising out of the listen session bootstrap.
+    # overlap path, so a Redis capacity or connection-class failure skips the
+    # write rather than raising out of the listen session bootstrap.
     _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 
@@ -720,33 +796,39 @@ async def get_async_redis_client() -> Any:
     if _async_redis_client is None:
         import redis.asyncio as _asyncio_redis
 
+        # Keep the async client's historical health-check default (disabled)
+        # while sharing the same endpoint and credentials as the sync client.
         _async_redis_client = _asyncio_redis.Redis(
-            host=cast(str, _redis_host),
-            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
-            username='default',
-            password=os.getenv('REDIS_DB_PASSWORD'),
+            **_redis_connection_kwargs(health_check_interval=0),
             decode_responses=True,
         )
     return _async_redis_client
 
 
-@try_catch_decorator
-def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+def _daily_notification_key(uid: str, tz: Optional[Any] = None) -> str:
+    """Bucket the count by the user's own calendar day, not UTC's.
+
+    A UTC bucket rolls over mid-afternoon west of UTC, which hands the user a
+    second full allotment inside one of their days.
+    """
     from datetime import datetime, timezone
 
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    return f'{uid}:daily_noti_count:{datetime.now(tz or timezone.utc).strftime("%Y-%m-%d")}'
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+    key = _daily_notification_key(uid, tz)
     count = r.incr(key)
-    r.expire(key, 90000)  # 25 hours TTL
+    r.expire(key, 172800)  # 48 hours TTL: a local day can start up to 14 hours before the UTC one
     return count
 
 
 @try_catch_decorator
-def get_daily_notification_count(uid: str) -> int:
+def get_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
     """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
-    from datetime import datetime, timezone
-
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    key = _daily_notification_key(uid, tz)
     val = r.get(key)
     if not val:
         return 0
@@ -788,8 +870,7 @@ def get_user_data_protection_level(uid: str) -> Optional[str]:
 
 @try_catch_decorator
 def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600) -> None:
-    """Caches the user_id for a given hashed MCP API key."""
-    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+    api_key_cache.fill_if_active(r, "mcp", hashed_key, [(f'mcp_api_key:{hashed_key}', user_id)], ttl)
 
 
 @try_catch_decorator
@@ -812,9 +893,13 @@ def cache_mcp_api_key_auth_context(
         "memory_grant_seeded": memory_grant_seeded,
         "auth_context_version": auth_context_version,
     }
-    r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
-    r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
-    return True
+    return api_key_cache.fill_if_active(
+        r,
+        "mcp",
+        hashed_key,
+        [(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data)), (f'mcp_api_key:{hashed_key}', user_id)],
+        ttl,
+    )
 
 
 @try_catch_decorator
@@ -825,32 +910,8 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
 
 
 def read_cached_mcp_api_key_auth_context(hashed_key: str) -> ApiKeyCacheReadResult:
-    """Read MCP auth context while distinguishing cache absence from failure."""
-    try:
-        cached = r.get(f'mcp_api_key_auth:{hashed_key}')
-        if cached:
-            decoded = cached.decode() if isinstance(cached, bytes) else cached
-            cache_data: object = json.loads(decoded)
-            if not isinstance(cache_data, dict):
-                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-            return ApiKeyCacheReadResult(
-                mode=ApiKeyCacheReadMode.HIT,
-                data=cast(Dict[str, Any], cache_data),
-            )
-
-        legacy_cached = r.get(f'mcp_api_key:{hashed_key}')
-        if not legacy_cached:
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
-        legacy_user_id = legacy_cached.decode() if isinstance(legacy_cached, bytes) else legacy_cached
-        if not isinstance(legacy_user_id, str):
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-        return ApiKeyCacheReadResult(
-            mode=ApiKeyCacheReadMode.HIT,
-            data={"user_id": legacy_user_id, "scopes": None, "key_id": None, "app_id": None},
-        )
-    except Exception as exc:
-        logger.error("Error reading MCP API key auth cache: %s", exc)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+    """Read auth context while distinguishing cache absence from failure."""
+    return api_key_cache.read_context(r, "mcp", hashed_key)
 
 
 def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -860,7 +921,8 @@ def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, A
 
 
 def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
-    """Atomically delete both MCP auth cache keys, raising on Redis failure."""
+    """Confirm the revocation fence, then purge both MCP positive cache keys."""
+    api_key_cache.mark_revoked(r, "mcp", hashed_key)
     r.delete(f'mcp_api_key:{hashed_key}', f'mcp_api_key_auth:{hashed_key}')
     return True
 
@@ -888,24 +950,14 @@ def cache_dev_api_key(
         "app_id": app_id,
         "auth_context_version": auth_context_version,
     }
-    r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
-    return True
+    return api_key_cache.fill_if_active(
+        r, "dev", hashed_key, [(f'dev_api_key:{hashed_key}', json.dumps(cache_data))], ttl
+    )
 
 
 def read_cached_dev_api_key_data(hashed_key: str) -> ApiKeyCacheReadResult:
-    """Read Developer auth context while distinguishing absence from failure."""
-    try:
-        cached = r.get(f'dev_api_key:{hashed_key}')
-        if not cached:
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
-        decoded = cached.decode() if isinstance(cached, bytes) else cached
-        loaded: object = json.loads(decoded)
-        if not isinstance(loaded, dict):
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=cast(Dict[str, Any], loaded))
-    except Exception as exc:
-        logger.error("Error reading Developer API key auth cache: %s", exc)
-        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+    """Read auth context while distinguishing cache absence from failure."""
+    return api_key_cache.read_context(r, "dev", hashed_key)
 
 
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -915,7 +967,8 @@ def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
 
 
 def delete_cached_dev_api_key_strict(hashed_key: str) -> bool:
-    """Delete a Developer auth cache key, raising on Redis failure."""
+    """Confirm the revocation fence, then purge the Developer positive cache."""
+    api_key_cache.mark_revoked(r, "dev", hashed_key)
     r.delete(f'dev_api_key:{hashed_key}')
     return True
 
@@ -1125,197 +1178,6 @@ return remaining
 """
 _RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
 
-# Proactive quota leases are separate from the legacy integer limiter above.
-# A pending provider call occupies a short-lived ZSET member; only a validated
-# success is finalized into the full daily window. If the process dies or a
-# request is cancelled before that point, the member expires without consuming
-# a full quota slot and is pruned atomically by the next reservation.
-PROACTIVE_QUOTA_LEASE_SECONDS = 90
-PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS = 24 * 60 * 60
-_PROACTIVE_QUOTA_COMMITTED_PREFIX = 'committed:'
-
-_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE = """
-local key = KEYS[1]
-local server_time = redis.call('TIME')
-local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
-local lease_ms = tonumber(ARGV[1])
-local window_seconds = tonumber(ARGV[2])
-local limit = tonumber(ARGV[3])
-local token = ARGV[4]
-
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
-local current = redis.call('ZCARD', key)
-local function reset_seconds()
-    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-    if #first < 2 then
-        return 0
-    end
-    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
-end
-
-if current >= limit then
-    return {0, current, reset_seconds(), ''}
-end
-
-redis.call('ZADD', key, now_ms + lease_ms, token)
-redis.call('EXPIRE', key, window_seconds)
-return {1, current + 1, reset_seconds(), token}
-"""
-_PROACTIVE_QUOTA_RESERVE_LUA = r.register_script(_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE)
-
-_PROACTIVE_QUOTA_RENEW_LUA_SOURCE = """
-local key = KEYS[1]
-local server_time = redis.call('TIME')
-local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
-local lease_ms = tonumber(ARGV[1])
-local window_seconds = tonumber(ARGV[2])
-local token = ARGV[3]
-local committed_member = ARGV[4] .. token
-
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
-if redis.call('ZSCORE', key, committed_member) then
-    return {0, 0}
-end
-local score = redis.call('ZSCORE', key, token)
-if not score then
-    return {0, 0}
-end
-
-redis.call('ZADD', key, now_ms + lease_ms, token)
-redis.call('EXPIRE', key, window_seconds)
-local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-if #first < 2 then
-    return {1, 0}
-end
-return {1, math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))}
-"""
-_PROACTIVE_QUOTA_RENEW_LUA = r.register_script(_PROACTIVE_QUOTA_RENEW_LUA_SOURCE)
-
-_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE = """
-local key = KEYS[1]
-local server_time = redis.call('TIME')
-local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
-local window_ms = tonumber(ARGV[1])
-local window_seconds = tonumber(ARGV[2])
-local token = ARGV[3]
-local committed_member = ARGV[4] .. token
-
-redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
-local function reset_seconds()
-    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-    if #first < 2 then
-        return 0
-    end
-    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
-end
-
-local committed_score = redis.call('ZSCORE', key, committed_member)
-if committed_score then
-    return {1, reset_seconds()}
-end
-if not redis.call('ZSCORE', key, token) then
-    return {0, 0}
-end
-
-redis.call('ZREM', key, token)
-redis.call('ZADD', key, now_ms + window_ms, committed_member)
-redis.call('EXPIRE', key, window_seconds)
-return {1, reset_seconds()}
-"""
-_PROACTIVE_QUOTA_FINALIZE_LUA = r.register_script(_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE)
-
-_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE = """
-local key = KEYS[1]
-local token = ARGV[1]
-return redis.call('ZREM', key, token)
-"""
-_PROACTIVE_QUOTA_RELEASE_LUA = r.register_script(_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE)
-
-
-def _proactive_quota_key(key: str, policy: str) -> str:
-    return f'rl:proactive_lease:{policy}:{key}'
-
-
-def reserve_proactive_rate_limit(
-    key: str,
-    policy: str,
-    max_requests: int,
-    window: int,
-    *,
-    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
-) -> tuple[bool, int, int, str | None]:
-    """Reserve a tokenized short lease for a proactive provider attempt.
-
-    The ZSET score is the member expiry in epoch milliseconds. The script
-    prunes expired pending/committed members and admits only when the active
-    plus committed count is below ``max_requests``. ``remaining`` and
-    ``reset_seconds`` are derived from that same atomic snapshot; reset is the
-    first member's expiry, so a caller can advertise when the next slot may
-    become available.
-    """
-    if max_requests <= 0 or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
-        raise ValueError('proactive quota limits and lease must be positive; lease must be below window')
-    token = secrets.token_urlsafe(24)
-    result = _PROACTIVE_QUOTA_RESERVE_LUA(
-        keys=[_proactive_quota_key(key, policy)],
-        args=[lease_seconds * 1000, window, max_requests, token],
-    )
-    allowed, current, reset_seconds, returned_token = result
-    admitted = bool(allowed)
-    token_value = _decode_redis_value(returned_token) if returned_token else None
-    return admitted, max(0, max_requests - int(current)), max(0, int(reset_seconds)), token_value
-
-
-def renew_proactive_rate_limit(
-    key: str,
-    policy: str,
-    token: str,
-    *,
-    window: int,
-    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
-) -> tuple[bool, int]:
-    """Renew an active token lease; missing/committed tokens fail closed."""
-    if not token or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
-        return False, 0
-    result = _PROACTIVE_QUOTA_RENEW_LUA(
-        keys=[_proactive_quota_key(key, policy)],
-        args=[lease_seconds * 1000, window, token, _PROACTIVE_QUOTA_COMMITTED_PREFIX],
-    )
-    return bool(result[0]), max(0, int(result[1]))
-
-
-def finalize_proactive_rate_limit(
-    key: str,
-    policy: str,
-    token: str,
-    *,
-    window: int = PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS,
-) -> tuple[bool, int]:
-    """Commit a successful token into the full daily window exactly once."""
-    if not token or window <= 0:
-        return False, 0
-    result = _PROACTIVE_QUOTA_FINALIZE_LUA(
-        keys=[_proactive_quota_key(key, policy)],
-        args=[
-            window * 1000,
-            window,
-            token,
-            _PROACTIVE_QUOTA_COMMITTED_PREFIX,
-        ],
-    )
-    return bool(result[0]), max(0, int(result[1]))
-
-
-def release_proactive_rate_limit(key: str, policy: str, token: str) -> bool:
-    """Release a pending token idempotently without undoing a committed success."""
-    if not token:
-        return False
-    removed = _PROACTIVE_QUOTA_RELEASE_LUA(
-        keys=[_proactive_quota_key(key, policy)],
-        args=[token],
-    )
-    return bool(removed)
-
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
     """Check per-key rate limit using a single atomic Lua call.
@@ -1395,8 +1257,8 @@ return {0, 0}
 """)
 
 
-def _seconds_until_midnight_utc() -> int:
-    now = datetime.now(timezone.utc)
+def _seconds_until_next_midnight(tz: Optional[Any]) -> int:
+    now = datetime.now(tz or timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((tomorrow - now).total_seconds()))
 
@@ -1407,6 +1269,7 @@ def check_tts_rate_limit(
     burst_limit: int = 50,
     burst_window_secs: int = 60,
     daily_char_limit: int = 10_000,
+    tz: Optional[Any] = None,
 ) -> tuple[int, int]:
     """Atomic per-user TTS rate limit check.
 
@@ -1418,11 +1281,11 @@ def check_tts_rate_limit(
     """
     try:
         burst_key = f'tts:burst:{uid}'
-        today_utc = datetime.now(timezone.utc).strftime('%Y%m%d')
-        daily_key = f'tts:chars:{uid}:{today_utc}'
+        today = datetime.now(tz or timezone.utc).strftime('%Y%m%d')
+        daily_key = f'tts:chars:{uid}:{today}'
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         window_ms = burst_window_secs * 1000
-        daily_ttl = _seconds_until_midnight_utc()
+        daily_ttl = _seconds_until_next_midnight(tz)
         result = _TTS_RATE_LIMIT_LUA(
             keys=[burst_key, daily_key],
             args=[now_ms, window_ms, burst_limit, char_count, daily_char_limit, daily_ttl],
@@ -1431,6 +1294,35 @@ def check_tts_rate_limit(
     except Exception as e:
         logger.error(f'check_tts_rate_limit: redis error uid={uid}: {e}')
         return -1, 0
+
+
+def check_tts_rate_limit_for_user(
+    uid: str,
+    char_count: int,
+    burst_limit: int = 50,
+    burst_window_secs: int = 60,
+    daily_char_limit: int = 10_000,
+) -> tuple[int, int]:
+    """check_tts_rate_limit with the user's own day resolved here.
+
+    resolve_user_timezone reads Firestore, so it must run inside the executor
+    this is handed to, never on the event loop of an async route.
+    """
+    from zoneinfo import ZoneInfo
+    from database.notifications import resolve_user_timezone
+
+    try:
+        tz = ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        tz = timezone.utc
+    return check_tts_rate_limit(
+        uid,
+        char_count,
+        burst_limit=burst_limit,
+        burst_window_secs=burst_window_secs,
+        daily_char_limit=daily_char_limit,
+        tz=tz,
+    )
 
 
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
@@ -1463,16 +1355,23 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
         return True
 
 
-def set_persona_update_timestamp(uid: str) -> None:
-    """Mark that user has updated personas (expires at 00:00 UTC)"""
-    now = datetime.now(timezone.utc)
-    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ttl = int((tomorrow - now).total_seconds())
+def set_persona_update_timestamp(uid: str, tz: Optional[Any] = None) -> None:
+    """Mark that user has updated personas (expires at the user's next midnight).
+
+    A UTC expiry frees the gate mid-afternoon west of UTC, which hands the user a
+    second persona regeneration inside one of their days.
+    """
+    from datetime import time as _time
+
+    zone = tz or timezone.utc
+    now = datetime.now(zone)
+    tomorrow = datetime.combine(now.date() + timedelta(days=1), _time.min, tzinfo=zone)
+    ttl = max(1, int((tomorrow - now).total_seconds()))
     r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
 
 
 def can_update_persona(uid: str) -> bool:
-    """Check if user can update personas (not updated since last 00:00 UTC)"""
+    """Check if user can update personas (not updated since their last midnight)"""
     return not r.exists(f'users:{uid}:persona_updated')
 
 
@@ -1621,24 +1520,6 @@ def release_notifications_job_run_lock(token: str) -> None:
         _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
-
-
-def try_acquire_x_sync_window_lock(date: str, window: int, ttl: int = 6 * 60 * 60 + 10 * 60) -> bool:
-    """At most one X-connector sweep per 6-hour window across job executions.
-
-    Cloud Scheduler fires every minute, so a whole sync hour of executions can
-    otherwise start overlapping full-registry sweeps. The key carries the UTC
-    date and window index (``hour // 6``); the TTL is one window plus a margin
-    so a crashed holder cannot black out the next window for long and stale
-    keys reap themselves. Fail-open on Redis errors: losing the lock degrades
-    to the previous always-run behavior instead of silently skipping syncs.
-    """
-    try:
-        result = r.set(f'notifications_job:x_sync_lock:{date}:{window}', '1', ex=ttl, nx=True)
-        return result is not None
-    except Exception as error:
-        logger.warning('notifications-job x-sync window lock unavailable, running sweep without dedupe: %s', error)
-        return True
 
 
 @try_catch_decorator

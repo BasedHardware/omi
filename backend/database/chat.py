@@ -22,23 +22,25 @@ CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
-from ._client import db
+from utils.other.portability_read import (
+    check_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
+from ._client import db, get_firestore_client
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+FILES_BATCH_LIMIT = 499  # Safe Firestore batch limit leaving headroom under 500
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
 CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
-# Maximum number of reported (hidden) rows to over-fetch per raw Firestore
-# query when reading cache-aligned history. Keeps the raw read bounded even
-# when a user has thousands of lifetime reported messages; the newest page
-# rarely contains more reported rows than this cap.
-CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
-# Extra documents a visible page may stream *beyond* the rows it would need if none
+# Extra non-automatic documents a visible page may stream beyond the rows needed if none
 # were reported. The floor is the page itself, never this: the previous raw
 # ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
 # ``needed + slack`` can only read more than before by the slack, and can never fail
@@ -54,6 +56,30 @@ class ClientMessageIdPayloadConflict(ValueError):
 
 class MessageReconcileCursorError(ValueError):
     """A desktop journal cursor is absent or outside the authenticated scope."""
+
+
+def is_automatic_chat_message(message: Dict[str, Any]) -> bool:
+    """Filter provenance, never rich block types or assistant-only text guesses."""
+    metadata = message.get('metadata') or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (ValueError, TypeError):
+            metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return bool(
+        metadata.get('chatFirstIntentId')
+        or metadata.get('chatFirstIntentSource')
+        or metadata.get('origin') == 'proactive_notification'
+        or message.get('message_source') == 'proactive_notification'
+        or (message.get('sender') == 'ai' and str(metadata.get('continuityKey', '')).startswith('notification:'))
+        or message.get('type') in {'task', 'goal', 'question', 'day_summary'}
+        or any(
+            isinstance(block, dict) and (block.get('coldStartSequence') or block.get('cold_start_sequence'))
+            for block in message.get('content_blocks', metadata.get('content_blocks', [])) or []
+        )
+    )
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -83,10 +109,12 @@ def _decrypt_chat_data(chat_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(chat_data)
 
     if 'text' in data and isinstance(data['text'], str):
+        raw_text = data['text']
         try:
-            data['text'] = encryption.decrypt(data['text'], uid)
+            data['text'] = encryption.decrypt(raw_text, uid)
         except Exception:
             pass
+        data['text'] = verified_encrypted_read(raw_text, data['text'])
 
     return data
 
@@ -127,10 +155,24 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
+    if message_data.get('sender') == 'human' and message_data.get('plugin_id', message_data.get('app_id')) == 'mentor':
+        from database.proactivity_producers import record_mentor_reply
+
+        try:
+            record_mentor_reply(uid, firestore_client=db)
+        except Exception:
+            logger.info('mentor_v2 outcome_unavailable')
     return message_data
 
 
-def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+def add_app_message(
+    text: str,
+    app_id: str,
+    uid: str,
+    conversation_id: Optional[str] = None,
+    *,
+    proactivity_item_id: Optional[str] = None,
+) -> Message:
     """Add a chat message an app posted for the user, linking it to that app's chat session so it
     appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
     a message stored without one is never returned on that path."""
@@ -148,7 +190,10 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         memories_id=[conversation_id] if conversation_id else [],
         chat_session_id=chat_session_id,
     )
-    add_message(uid, ai_message.model_dump())
+    payload = ai_message.model_dump()
+    if proactivity_item_id:
+        payload['proactivity_item_id'] = proactivity_item_id
+    add_message(uid, payload)
     if chat_session_id:
         add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
@@ -202,7 +247,8 @@ def get_app_messages(
     not run before that visibility rule: a reported row inside the raw page
     would otherwise consume a caller-visible slot and leave an older visible
     message unfetched.  This follows the same bounded visible-row scan as
-    ``get_messages`` below.
+    ``get_messages`` below. Automatic rows do not consume its reported-row
+    budget: only collection exhaustion may end a page inside an automatic prefix.
     """
     visible_limit = max(0, int(limit))
     if visible_limit == 0:
@@ -215,12 +261,12 @@ def get_app_messages(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
     # A clean page needs exactly ``visible_limit`` raw rows.  Bound only the
-    # extra rows needed to cross reported records, so this cannot become an
-    # unbounded history read while a deep run of reported rows still has a
-    # flat allowance to cross.
+    # extra non-automatic rows needed to cross reported records. Automatic
+    # history is scanned to exhaustion or a full page; capping it would look
+    # like EOF to offset clients, which have no continuation field.
     scan_budget = visible_limit + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
-    reported_row_seen = False
+    hidden_row_seen = False
     cursor_snapshot: Any = None
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
@@ -231,7 +277,7 @@ def get_app_messages(
         # appeared, use capped batches to cross a dense hidden run without
         # turning a missing visible row into one read per document.
         batch_limit = min(100, scan_budget - scanned)
-        if not reported_row_seen:
+        if not hidden_row_seen:
             batch_limit = min(batch_limit, max(1, visible_limit - len(messages)))
         page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
         documents = list(page_query.limit(batch_limit).stream())
@@ -239,11 +285,14 @@ def get_app_messages(
             break
 
         for document in documents:
-            scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
+            if is_automatic_chat_message(message):
+                hidden_row_seen = True
+                continue
+            scanned += 1
             if message.get('reported') is True:
-                reported_row_seen = True
+                hidden_row_seen = True
                 continue
             messages.append(message)
             conversations_id.update(message.get('memories_id', []))
@@ -286,14 +335,15 @@ def get_messages(
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Return a visible chat page with offset counted in non-reported rows.
+    """Return a visible chat page with offset counted only in visible rows.
 
     Firestore cannot apply ``reported != True`` cheaply for legacy docs that omit
     the field, so reported rows are filtered in Python. Applying ``limit`` /
     ``offset`` on the raw query first makes pages short and advances past
     visible messages the client never saw. Scan with a bounded budget (same
     spirit as ``get_messages_reconcile_page``) until ``offset`` visible rows are
-    skipped and ``limit`` visible rows are collected.
+    skipped and ``limit`` visible rows are collected. Automatic rows do not
+    consume that budget; a finite automatic prefix cannot masquerade as EOF.
     """
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
@@ -319,6 +369,7 @@ def get_messages(
     scan_budget = needed + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
     scanned = 0
     visible_skipped = 0
+    hidden_row_seen = False
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
@@ -327,21 +378,25 @@ def get_messages(
     while scanned < scan_budget and len(messages) < limit:
         # Read exactly what the page needs before reading any slack. Without this the
         # first batch was a flat 100 documents, so the chat-send path's limit=5 and
-        # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
-        # for by a page that actually met a reported row.
+        # limit=15 reads streamed ~20x the documents they used to. After a hidden
+        # row, use capped batches to cross dense prefixes efficiently.
         batch_limit = min(100, scan_budget - scanned)
-        if scanned == 0:
-            batch_limit = min(batch_limit, max(1, needed))
+        if not hidden_row_seen:
+            batch_limit = min(batch_limit, max(1, needed - scanned))
         page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
         documents = list(page_query.limit(batch_limit).stream())
         if not documents:
             break
 
         for document in documents:
-            scanned += 1
             cursor_snapshot = document
             message: Dict[str, Any] = _typed_doc(document)
+            if is_automatic_chat_message(message):
+                hidden_row_seen = True
+                continue
+            scanned += 1
             if message.get('reported') is True:
+                hidden_row_seen = True
                 continue
             if visible_skipped < offset:
                 visible_skipped += 1
@@ -419,9 +474,10 @@ def get_cache_aligned_messages(
 ) -> List[Dict[str, Any]]:
     """Read a cache-aligned, scope-safe chat history in newest-first order.
 
-    Reported messages are excluded from the visible count and read. Over-fetching
-    by the scoped reported count guarantees the target number of visible messages
-    even when hidden records fall inside the selected raw Firestore page.
+    Count the same visibility predicate as the page reader, preserving the
+    append epoch when historical automatic rows are present. Provenance can be
+    serialized JSON, so aggregates cannot express this exclusion: project only
+    visibility fields, without loading message text or attachments.
     """
     user_ref = db.collection('users').document(uid)
     scoped_ref = user_ref.collection('messages')
@@ -430,27 +486,22 @@ def get_cache_aligned_messages(
     else:
         scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    total_result = scoped_ref.count().get()
-    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
-    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
-    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
-    visible_total = max(0, total - reported)
+    visibility_fields = ['reported', 'sender', 'metadata', 'message_source', 'type', 'content_blocks']
+    visible_total = 0
+    for document in scoped_ref.select(visibility_fields).stream():
+        message = _typed_doc(document)
+        if message.get('reported') is not True and not is_automatic_chat_message(message):
+            visible_total += 1
     visible_limit = cache_aligned_history_limit(visible_total)
     if visible_limit == 0:
         return []
 
-    # Cap the raw Firestore read so a large lifetime reported count cannot
-    # cause unbounded document reads on every chat send. The over-fetch only
-    # needs to cover reported rows that fall inside the newest raw page, not
-    # the lifetime total.
-    reported_overfetch = min(reported, CHAT_HISTORY_REPORTED_RAW_SCAN_CAP)
-    raw_limit = min(total, visible_limit + reported_overfetch)
     return get_messages(
         uid,
-        limit=raw_limit,
+        limit=visible_limit,
         app_id=app_id,
         chat_session_id=chat_session_id,
-    )[:visible_limit]
+    )
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
@@ -518,7 +569,7 @@ def get_messages_reconcile_page(
             cursor_snapshot = document
             next_cursor = str(document.id)
             message = _typed_doc(document)
-            if message.get('reported') is not True:
+            if message.get('reported') is not True and not is_automatic_chat_message(message):
                 messages.append(message)
                 if len(messages) == limit:
                     reached_return_limit = True
@@ -568,8 +619,9 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch: List[Dict[str, Any]] = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
@@ -679,14 +731,24 @@ def clear_chat(
 
 
 def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data['id'])
         batch.set(file_ref, file_data)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -751,14 +813,24 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
 
 
 def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data["id"])
         batch.delete(file_ref)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -940,6 +1012,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
     doc_refs = [messages_ref.document(msg_id) for msg_id in message_doc_ids]
     doc_snapshots = db.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
@@ -960,8 +1033,14 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
         update_data: Dict[str, Any] = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 # ============================================================================
@@ -1100,6 +1179,8 @@ def save_message(
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
     journal_revision: Optional[int] = None,
+    *,
+    firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Save a chat message for the desktop app.
 
@@ -1108,33 +1189,29 @@ def save_message(
     """
     msg_id = client_message_id or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    requested_session_id = session_id
-    idempotency_payload_hash = _message_idempotency_payload_hash(
+    request_payload: Dict[str, Any] = dict(
         text=text,
         sender=sender,
         app_id=app_id,
-        session_id=requested_session_id,
+        session_id=session_id,
         metadata=metadata,
         content_blocks=content_blocks,
         message_source=message_source,
     )
-
-    message_ref = db.collection('users').document(uid).collection('messages').document(msg_id)
+    idempotency_payload_hash = _message_idempotency_payload_hash(**request_payload)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    revision_args: Dict[str, Any] = dict(
+        **request_payload,
+        payload_hash=idempotency_payload_hash,
+        journal_revision=journal_revision,
+        firestore_client=client,
+    )
+    message_ref = user_ref.collection('messages').document(msg_id)
     if client_message_id:
         existing_message = message_ref.get()
         if existing_message.exists:
-            existing_result = _apply_existing_message_revision(
-                message_ref,
-                text=text,
-                sender=sender,
-                app_id=app_id,
-                session_id=requested_session_id,
-                metadata=metadata,
-                content_blocks=content_blocks,
-                message_source=message_source,
-                payload_hash=idempotency_payload_hash,
-                journal_revision=journal_revision,
-            )
+            existing_result = _apply_existing_message_revision(message_ref, **revision_args)
             if existing_result is not None:
                 return _message_revision_response(msg_id, existing_result, now)
 
@@ -1166,47 +1243,42 @@ def save_message(
         doc['client_message_payload_hash'] = idempotency_payload_hash
         if journal_revision is not None:
             doc['journal_revision'] = journal_revision
-    created = True
-    if client_message_id:
-        try:
-            message_ref.create(doc)
-        except (AlreadyExists, Conflict):
-            existing_result = _apply_existing_message_revision(
-                message_ref,
-                text=text,
-                sender=sender,
-                app_id=app_id,
-                session_id=requested_session_id,
-                metadata=metadata,
-                content_blocks=content_blocks,
-                message_source=message_source,
-                payload_hash=idempotency_payload_hash,
-                journal_revision=journal_revision,
-            )
-            if existing_result is None:
-                raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
-            return _message_revision_response(msg_id, existing_result, now)
-    else:
-        message_ref.set(doc)
+    session_ref = user_ref.collection('chat_sessions').document(session_id)
 
-    # Update session message_count and preview (skip if session was deleted).
-    # Retried client_message_id saves are idempotent and must not bump counters.
-    if session_id and created:
-        session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-        if session_ref.get().exists:
-            session_ref.update(
+    @firestore_v1.transactional
+    def persist(transaction: Any) -> None:
+        # The session read fences concurrent deletion. A rejected commit cannot
+        # leave a newly created message without its session count / preview.
+        session_exists = session_ref.get(transaction=transaction).exists
+        if client_message_id:
+            transaction.create(message_ref, doc)
+        else:
+            transaction.set(message_ref, doc)
+        if session_exists:
+            transaction.update(
+                session_ref,
                 {
                     'updated_at': now,
                     'message_count': firestore.Increment(1),
                     'preview': text[:100] if text else None,
-                }
+                },
             )
+
+    try:
+        run_with_transaction_contention_retry(client.transaction, persist, operation_name='chat_message_save')
+    except (AlreadyExists, Conflict):
+        if not client_message_id:
+            raise
+        existing_result = _apply_existing_message_revision(message_ref, **revision_args)
+        if existing_result is None:
+            raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
+        return _message_revision_response(msg_id, existing_result, now)
 
     return {
         'id': msg_id,
         'created_at': now.isoformat(),
         'session_id': session_id,
-        'created': created,
+        'created': True,
         'updated': False,
         'journal_revision': journal_revision,
     }
@@ -1224,9 +1296,11 @@ def _apply_existing_message_revision(
     message_source: str,
     payload_hash: str,
     journal_revision: Optional[int],
+    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Atomically arbitrate an idempotent retry or monotonic journal enrichment."""
-    transaction = db.transaction()
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    transaction = client.transaction()
 
     @firestore_v1.transactional
     def apply(write_transaction: Any) -> Optional[Dict[str, Any]]:

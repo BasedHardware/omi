@@ -220,12 +220,14 @@ class TestBYOKSubscriptionEntitlements:
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
 
-    def test_usage_quota_requires_validated_llm_capability(self, monkeypatch):
+    def test_usage_quota_requires_validated_desktop_provider_capability(self, monkeypatch):
         from models.users import PlanType
         from routers import users
 
-        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
+        customer_client = object()
+        monkeypatch.setattr(users, 'get_customer_firestore_client', lambda: customer_client)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid, **_kwargs: True)
+        monkeypatch.setattr(users, 'request_has_byok_provider', lambda provider: False)
         monkeypatch.setattr(
             users,
             'get_chat_quota_snapshot',
@@ -243,8 +245,8 @@ class TestBYOKSubscriptionEntitlements:
         assert response.plan_type == PlanType.basic.value
         assert response.limit == 30
 
-        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
-        response = users.get_user_chat_usage_quota(uid='llm-byok-user')
+        monkeypatch.setattr(users, 'request_has_byok_provider', lambda provider: provider == 'anthropic')
+        response = users.get_user_chat_usage_quota(uid='anthropic-byok-user')
         assert response.plan_type == PlanType.unlimited.value
         assert response.limit is None
         assert response.allowed is True
@@ -470,7 +472,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories') is client
         create_client.assert_called_once()
@@ -489,7 +490,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories', streaming=True) is client
         create_client.assert_called_once()
@@ -516,29 +516,21 @@ class TestCacheRouting:
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
         assert result is not None
 
-    def test_legacy_openai_key_never_pairs_with_gemini_resolved_model(self, monkeypatch):
-        """A legacy OpenAI key must not be paired with a Gemini-resolved model.
-
-        'followup' resolves to a Gemini model in the BYOK QoS profile. When only a
-        legacy OpenAI key is present (no Gemini key), the fallback must select the
-        OpenAI-compatible fallback model — never hand the OpenAI credential to the
-        resolved Gemini model, which would be an incompatible model/provider
-        request at the provider.
-        """
+    def test_legacy_openai_key_uses_the_paid_luna_route(self, monkeypatch):
+        """A legacy OpenAI key must stay paired with an OpenAI-compatible model."""
         from utils.llm import clients
 
         create_client = MagicMock(return_value=MagicMock())
         monkeypatch.setattr(clients, '_create_byok_client', create_client)
-        # Only a legacy Gemini-resolved feature, but only an OpenAI key is attached.
+        # The managed feature is now Luna/OpenAI; only an OpenAI key is attached.
         monkeypatch.setattr(
             clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args
-        assert args[0] == 'gpt-4o-mini', f"model must be OpenAI fallback, got {args[0]}"
+        assert args[0] == clients.get_model('followup'), f"model must stay on the Luna route, got {args[0]}"
         assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
         assert args[2] == 'sk-legacy-openai'
 
@@ -561,7 +553,6 @@ class TestCacheRouting:
             ),
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args

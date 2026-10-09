@@ -21,14 +21,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptTab => 'Transcript';
 
   @override
-  String get actionItemsTab => 'Mga Aksyon';
+  String get actionItemsTab => 'Mga Gawain';
 
   @override
   String get deleteConversationTitle => 'Tanggalin ang Pag-uusap?';
 
   @override
-  String get deleteConversationMessage =>
-      'Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file. Hindi maaaring bawiin ang aksyong ito.';
+  String get deleteConversationMessage => 'Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file.';
 
   @override
   String get confirm => 'Kumpirma';
@@ -112,10 +111,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get remaining => 'Natitirang';
 
   @override
-  String get loading => 'Naglo-load...';
+  String get loading => 'Naglo-load…';
 
   @override
-  String get loadingDuration => 'Naglo-load ng tagal...';
+  String get loadingDuration => 'Naglo-load ng tagal…';
 
   @override
   String secondsCount(int count) {
@@ -135,7 +134,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createPersonHint => 'Lumikha ng bagong tao at turuan ang Omi na kilalanin ang kanilang pagsasalita!';
 
   @override
-  String get speechProfile => 'Profil ng Boses';
+  String get speechProfile => 'Voice Profile';
 
   @override
   String sampleNumber(int number) {
@@ -152,7 +151,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get selectLanguage => 'Piliin ang Wika';
 
   @override
-  String get deleting => 'Inaalis...';
+  String get deleting => 'Inaalis…';
 
   @override
   String get pleaseCompleteAuthentication =>
@@ -180,7 +179,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get disconnected => 'Nawawalan ng koneksyon';
 
   @override
-  String get searching => 'Naghahanap...';
+  String get searching => 'Naghahanap';
 
   @override
   String get connectDevice => 'Ikonekta ang Device';
@@ -241,7 +240,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Para maglagay ng bituin sa isang pag-uusap, buksan ito at i-tap ang bituin icon sa header.';
 
   @override
-  String get searchConversations => 'Maghanap ng pag-uusap...';
+  String get searchConversations => 'Maghanap ng pag-uusap';
 
   @override
   String selectedCount(int count) {
@@ -272,7 +271,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noMessagesYet => 'Walang mensahe pa!\nBakit hindi ka magsimula ng pag-uusap?';
 
   @override
-  String get deletingMessages => 'Inaalis ang iyong mga mensahe mula sa memorya ni Omi...';
+  String get deletingMessages => 'Inaalis ang iyong mga mensahe mula sa memorya ni Omi…';
 
   @override
   String get messageCopied => '✨ Ang mensahe ay kinopya sa clipboard';
@@ -284,7 +283,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reportMessage => 'I-report ang Mensahe';
 
   @override
-  String get reportMessageConfirm => 'Sigurado ka na bang gustong i-report ang mensaheng ito?';
+  String get reportMessageConfirm => 'I-report ang mensaheng ito?';
 
   @override
   String get messageReported => 'Ang mensahe ay na-report na.';
@@ -296,7 +295,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearChat => 'Burahin ang Chat';
 
   @override
-  String get clearChatConfirm => 'Sigurado ka na bang gustong burahin ang chat? Hindi maaaring bawiin ang aksyong ito.';
+  String get clearChatConfirm => 'Mabubura ang lahat ng mensahe sa chat na ito. Hindi ito maaaring bawiin.';
 
   @override
   String get maxFilesLimit => 'Maaari lang kang mag-upload ng 4 files nang sabay-sabay';
@@ -320,7 +319,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get buildAndShareApp => 'Bumuo at ibahagi ang iyong custom app';
 
   @override
-  String get searchApps => 'Maghanap ng mga app...';
+  String get searchApps => 'Maghanap ng mga app';
 
   @override
   String get myApps => 'Likha ko';
@@ -360,10 +359,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get cannotBeUndone => 'Hindi ito maaaring bawiin.';
 
   @override
-  String get allDataErased => 'Lahat ng iyong mga alaala at pag-uusap ay permanenteng buburahin.';
+  String get allDataErased => 'Mabubura ang iyong mga alaala at conversation.';
 
   @override
-  String get appsDisconnected => 'Ang iyong Mga App at Integrations ay mawawalan ng koneksyon kaagad.';
+  String get appsDisconnected => 'Madidiskonekta ang iyong mga app at integration.';
 
   @override
   String get exportBeforeDelete =>
@@ -480,7 +479,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa Omi, kami ay nakatuon sa pagprotekta ng iyong privacy. Ang pahina na ito ay nagbibigay-daan sa iyo na kontrolin kung paano ginagamit at iniimbak ang iyong data.';
 
   @override
-  String get learnMore => 'Matutunan ang higit pa...';
+  String get learnMore => 'Matutunan ang higit pa…';
 
   @override
   String get dataProtectionLevel => 'Antas ng Proteksyon ng Data';
@@ -666,7 +665,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get developerSettingsTitle => 'Developer Settings';
 
   @override
-  String get saving => 'Nase-save...';
+  String get saving => 'Nase-save…';
 
   @override
   String get beta => 'BETA';
@@ -745,7 +744,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get providing => 'Nagbibigay';
 
   @override
-  String get providingSubtitle => 'Mga aksyon, at mga tala na awtomatikong na-capture.';
+  String get providingSubtitle => 'Mga gawain at tala, awtomatikong na-capture.';
 
   @override
   String get remembering => 'Naaalala';
@@ -787,16 +786,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get shareStatsMessage => 'Nagbabahagi ng aking Omi stats! (omi.me - ang iyong palaging-bukas na AI assistant)';
 
   @override
-  String get sharePeriodToday => 'Ngayon, omi ay:';
+  String get sharePeriodToday => 'Ngayon, Omi ay:';
 
   @override
-  String get sharePeriodMonth => 'Sa buwan na ito, omi ay:';
+  String get sharePeriodMonth => 'Sa buwan na ito, Omi ay:';
 
   @override
-  String get sharePeriodYear => 'Sa taon na ito, omi ay:';
+  String get sharePeriodYear => 'Sa taon na ito, Omi ay:';
 
   @override
-  String get sharePeriodAllTime => 'Sa ngayon, omi ay:';
+  String get sharePeriodAllTime => 'Sa ngayon, Omi ay:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -846,7 +845,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get debugLogCleared => 'Debug log ay naburahin';
 
   @override
-  String get exportStarted => 'Nagsimula ang pag-export. Maaaring tumagal ng ilang segundo...';
+  String get exportStarted => 'Nagsimula ang pag-export. Maaaring tumagal ng ilang segundo…';
 
   @override
   String get exportAllData => 'I-export ang Lahat ng Data';
@@ -949,9 +948,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get claudeDesktop => 'Claude Desktop';
-
-  @override
-  String get addToClaudeConfig => 'Idagdag sa claude_desktop_config.json';
 
   @override
   String get copyConfig => 'Kopyahin ang Config';
@@ -1058,7 +1054,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Sigurado ka na bang gustong mag-disconnect mula sa $appName? Maaari kang muling kumonekta anumang oras.';
+    return 'Puwede mong ikonekta muli ang $appName anumang oras.';
   }
 
   @override
@@ -1348,7 +1344,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'Ang iyong mga action item ay i-sync sa iyong $appName account';
+    return 'Ang iyong mga gawain ay i-sync sa iyong $appName account';
   }
 
   @override
@@ -1482,7 +1478,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get bringYourOwn => 'Dalhin ang iyong sarili';
 
   @override
-  String get payYourSttProvider => 'Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
+  String get payYourSttProvider => 'Gamitin ang Omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
 
   @override
   String get freeMinutesMonth => '300 libreng minuto/buwan kasama. Unlimited sa ';
@@ -1643,7 +1639,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get viewTemplate => 'Tingnan ang Template';
 
   @override
-  String get trySomethingLike => 'Subukan ang isang bagay tulad ng...';
+  String get trySomethingLike => 'Subukan ang isang bagay tulad ng…';
 
   @override
   String get tryIt => 'Subukan ito';
@@ -1670,10 +1666,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get features => 'Mga Features';
 
   @override
-  String get creatingYourApp => 'Lumilikha ng iyong app...';
+  String get creatingYourApp => 'Lumilikha ng iyong app…';
 
   @override
-  String get generatingIcon => 'Bumubuo ng icon...';
+  String get generatingIcon => 'Bumubuo ng icon…';
 
   @override
   String get whatShouldWeMake => 'Ano ang dapat tayong gawing?';
@@ -1724,13 +1720,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get perMonthLabel => '/ buwan';
 
   @override
-  String get creating => 'Lumilikha...';
+  String get creating => 'Lumilikha…';
 
   @override
   String get createApp => 'Lumikha ng App';
 
   @override
-  String get searchingForDevices => 'Naghahanap ng mga device...';
+  String get searchingForDevices => 'Naghahanap ng mga device';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1777,26 +1773,27 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundActivity => 'Background activity';
 
   @override
-  String get backgroundActivityDesc => 'Hayaang tumakbo ang Omi sa background para sa mas magandang stability';
+  String get backgroundActivityDesc =>
+      'Para patuloy na mag-record ang Omi kapag naka-off ang screen o lumipat ka ng app.';
 
   @override
   String get locationAccess => 'Location access';
 
   @override
-  String get locationAccessDesc => 'Paganahin ang background location para sa buong karanasan';
+  String get locationAccessDesc => 'Para maitala ng Omi kung saan nangyari ang iyong mga usapan.';
 
   @override
   String get notifications => 'Mga Notipikasyon';
 
   @override
-  String get notificationsDesc => 'Paganahin ang mga notipikasyon upang manatiling informed';
+  String get notificationsDesc =>
+      'Para makapagpadala ang Omi ng mga buod ng usapan, paalala sa gawain at sagot mula sa iyong mga app.';
 
   @override
   String get locationServiceDisabled => 'Ang Location Service ay Disabled';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Ang Location Service ay Disabled. Mangyaring pumunta sa Settings > Privacy & Security > Location Services at paganahin ito';
+  String get locationServiceDisabledDesc => 'Naka-off ang Location Services sa device na ito. I-on ito sa Settings.';
 
   @override
   String get backgroundLocationDenied => 'Ang Background Location Access ay Dineny';
@@ -1970,7 +1967,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get personalGrowthJourney => 'Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.';
 
   @override
-  String get actionItemsTitle => 'Mga To-Do';
+  String get actionItemsTitle => 'Mga Gawain';
 
   @override
   String get actionItemsDescription => 'Tapin upang i-edit • Long press upang pumili • Mag-swipe para sa aksyon';
@@ -1985,7 +1982,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tabOld => 'Matanda';
 
   @override
-  String get emptyTodoMessage => '🎉 Tapos na!\nWalang pending action items';
+  String get emptyTodoMessage => '🎉 Tapos na!\nWalang pending na gawain';
 
   @override
   String get emptyDoneMessage => 'Walang kumpleting items pa';
@@ -1997,37 +1994,37 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noItems => 'Walang items';
 
   @override
-  String get actionItemMarkedIncomplete => 'Ang action item ay minarkahan bilang incomplete';
+  String get actionItemMarkedIncomplete => 'Ang gawain ay minarkahan bilang incomplete';
 
   @override
-  String get actionItemCompleted => 'Ang action item ay kumpleto na';
+  String get actionItemCompleted => 'Ang gawain ay kumpleto na';
 
   @override
-  String get deleteActionItemTitle => 'I-delete ang Action Item';
+  String get deleteActionItemTitle => 'I-delete ang Gawain';
 
   @override
-  String get deleteActionItemMessage => 'Sigurado ka ba na gusto mong i-delete ang action item na ito?';
+  String get deleteActionItemMessage => 'I-delete ang task na ito?';
 
   @override
   String get deleteSelectedItemsTitle => 'I-delete ang Mga Piniling Items';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Sigurado ka ba na gusto mong i-delete ang $count piniling action item$s?';
+    return 'I-delete ang $count piniling task$s?';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'Ang action item \"$description\" ay natanggal na';
+    return 'Ang gawain \"$description\" ay natanggal na';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count action item$s ay natanggal na';
+    return '$count task$s ay natanggal na';
   }
 
   @override
-  String get failedToDeleteItem => 'Nabigo ang pagtanggal ng action item';
+  String get failedToDeleteItem => 'Nabigo ang pagtanggal ng gawain';
 
   @override
   String get failedToDeleteItems => 'Nabigo ang pagtanggal ng mga items';
@@ -2036,11 +2033,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get failedToDeleteSomeItems => 'Nabigo ang pagtanggal ng ilang items';
 
   @override
-  String get welcomeActionItemsTitle => 'Handa para sa Action Items';
+  String get welcomeActionItemsTitle => 'Handa para sa Mga Gawain';
 
   @override
   String get welcomeActionItemsDescription =>
-      'Ang iyong AI ay awtomatikong makakakuha ng mga tasks at to-dos mula sa iyong mga pag-usap. Makikita nila dito kapag ginawa.';
+      'Ang iyong AI ay awtomatikong kukuha ng mga gawain mula sa iyong mga pag-uusap. Makikita nila dito kapag ginawa.';
 
   @override
   String get autoExtractionFeature => 'Awtomatikong na-extract mula sa mga pag-usap';
@@ -2060,10 +2057,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteSelected => 'I-delete ang pinili';
 
   @override
-  String get searchMemories => 'Maghanap ng mga alaala...';
+  String get searchMemories => 'Maghanap ng mga alaala';
 
   @override
-  String get memoryDeleted => 'Ang Alaala ay Natanggal.';
+  String get memoryDeleted => 'Ang Alaala ay Natanggal';
 
   @override
   String get memoryHistoryPartial =>
@@ -2082,7 +2079,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get undo => 'Undo';
 
   @override
-  String get noMemoriesYet => '🧠 Walang mga alaala pa';
+  String get noMemoriesYet => 'Walang mga alaala pa';
 
   @override
   String get noAutoMemories => 'Walang awtomatikong na-extract na mga alaala pa';
@@ -2094,7 +2091,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noMemoriesInCategories => 'Walang mga alaala sa mga kategoryang ito';
 
   @override
-  String get noMemoriesFound => '🔍 Walang mga alaala na nahanap';
+  String get noMemoriesFound => 'Walang mga alaala na nahanap';
 
   @override
   String get addFirstMemory => 'Magdagdag ng iyong unang alaala';
@@ -2103,8 +2100,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearMemoryTitle => 'I-clear ang Alaala ng Omi';
 
   @override
-  String get clearMemoryMessage =>
-      'Sigurado ka ba na gusto mong i-clear ang alaala ng Omi? Ang aksyon na ito ay hindi mababawi.';
+  String get clearMemoryMessage => 'Mabubura ang lahat ng iyong alaala. Hindi ito maaaring bawiin.';
 
   @override
   String get clearMemoryButton => 'I-clear ang Alaala';
@@ -2119,7 +2115,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createMemoryTooltip => 'Lumikha ng bagong alaala';
 
   @override
-  String get createActionItemTooltip => 'Lumikha ng bagong action item';
+  String get createActionItemTooltip => 'Lumikha ng bagong gawain';
 
   @override
   String get memoryManagement => 'Memory Management';
@@ -2172,7 +2168,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get alwaysInContext => 'Palaging nasa konteksto';
 
   @override
-  String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
+  String get memoryContentHint => 'Mas gusto ko ang mga pulong sa umaga.';
 
   @override
   String get failedToSaveMemory => 'Nabigo ang pagsave. Mangyaring suriin ang iyong koneksyon.';
@@ -2184,28 +2180,28 @@ class AppLocalizationsTl extends AppLocalizations {
   String get retry => 'Subukan muli';
 
   @override
-  String get createActionItem => 'Lumikha ng Action Item';
+  String get createActionItem => 'Lumikha ng Gawain';
 
   @override
-  String get editActionItem => 'I-edit ang Action Item';
+  String get editActionItem => 'I-edit ang Gawain';
 
   @override
   String get actionItemDescriptionHint => 'Ano ang kailangan gawin?';
 
   @override
-  String get actionItemDescriptionEmpty => 'Ang action item description ay hindi maaaring walang laman.';
+  String get actionItemDescriptionEmpty => 'Ang paglalarawan ng gawain ay hindi maaaring walang laman.';
 
   @override
-  String get actionItemUpdated => 'Ang action item ay na-update na';
+  String get actionItemUpdated => 'Ang gawain ay na-update na';
 
   @override
-  String get failedToUpdateActionItem => 'Nabigo ang pag-update ng action item';
+  String get failedToUpdateActionItem => 'Nabigo ang pag-update ng gawain';
 
   @override
-  String get actionItemCreated => 'Ang action item ay nilikha na';
+  String get actionItemCreated => 'Ang gawain ay nilikha na';
 
   @override
-  String get failedToCreateActionItem => 'Nabigo ang paglikha ng action item';
+  String get failedToCreateActionItem => 'Nabigo ang paglikha ng gawain';
 
   @override
   String get dueDate => 'Due Date';
@@ -2241,29 +2237,29 @@ class AppLocalizationsTl extends AppLocalizations {
   String get markComplete => 'Markahan Bilang Kumpleto';
 
   @override
-  String get actionItemDeleted => 'Ang action item ay natanggal na';
+  String get actionItemDeleted => 'Ang gawain ay natanggal na';
 
   @override
-  String get failedToDeleteActionItem => 'Nabigo ang pagtanggal ng action item';
+  String get failedToDeleteActionItem => 'Nabigo ang pagtanggal ng gawain';
 
   @override
-  String get deleteActionItemConfirmTitle => 'I-delete ang Action Item';
+  String get deleteActionItemConfirmTitle => 'I-delete ang Gawain';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Sigurado ka ba na gusto mong i-delete ang action item na ito?';
+  String get deleteActionItemConfirmMessage => 'I-delete ang task na ito?';
 
   @override
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App Interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & Transcription';
 
   @override
   String get languageSettingsHelperText =>
-      'Ang App Language ay nagbabago ng mga menu at button. Ang Speech Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.';
+      'Ang App Language ay nagbabago ng mga menu at button. Ang Primary Language ay nakakaapekto sa kung paano na-transcribe ang iyong mga recording.';
 
   @override
   String get translationNotice => 'Translation Notice';
@@ -2279,7 +2275,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get pleaseSelectReason => 'Mangyaring pumili ng dahilan';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Sabihin sa amin nang higit pa ang nangyari...';
+  String get tellUsMoreWhatWentWrong => 'Sabihin sa amin nang higit pa ang nangyari…';
 
   @override
   String get selectText => 'Pumili ng Text';
@@ -2338,7 +2334,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get exportButton => 'I-export';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Action items ay nai-copy sa clipboard';
+  String get actionItemsCopiedToClipboard => 'Ang mga gawain ay nai-copy sa clipboard';
 
   @override
   String get summarize => 'Bumuod';
@@ -2353,7 +2349,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteMemory => 'Burahin ang Memory';
 
   @override
-  String get thisActionCannotBeUndone => 'Ang aksyong ito ay hindi maaaring bawiin.';
+  String get thisActionCannotBeUndone => 'Hindi ito maaaring bawiin.';
 
   @override
   String memoriesCount(int count) {
@@ -2493,7 +2489,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Tumutulong na tukuyin ang mga isyu';
 
   @override
-  String get exportStartedMessage => 'Nagsimula na ang export. Ito ay maaaring tumagal ng ilang segundo...';
+  String get exportStartedMessage => 'Nagsimula na ang export. Ito ay maaaring tumagal ng ilang segundo…';
 
   @override
   String get exportConversationsToJson => 'I-export ang mga conversation sa isang JSON file';
@@ -2510,13 +2506,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Burahin ang lahat ng nodes at connections';
 
   @override
-  String get addToClaudeDesktopConfig => 'Idagdag sa claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Ikonekta ang mga AI assistant sa iyong data';
-
-  @override
-  String get useYourMcpApiKey => 'Gamitin ang iyong MCP API key';
 
   @override
   String get realTimeTranscript => 'Real-time Transcript';
@@ -2531,12 +2521,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed na mga diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Awtomatikong Lumikha ng Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Awtomatikong lumikha kapag ang pangalan ay natuklasan';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override
@@ -2549,7 +2533,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Subaybayan ang iyong personal na mga layunin sa homepage';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Ang paglalarawan ng action item ay hindi maaaring walang laman';
+  String get actionItemDescriptionCannotBeEmpty => 'Ang paglalarawan ng gawain ay hindi maaaring walang laman';
 
   @override
   String get saved => 'Nai-save';
@@ -2632,7 +2616,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get toggleControlBar => 'I-toggle ang Control Bar';
 
   @override
-  String get pressKeys => 'Pindutin ang mga susi...';
+  String get pressKeys => 'Pindutin ang mga susi…';
 
   @override
   String get cmdRequired => '⌘ kinakailangan';
@@ -2647,7 +2631,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get search => 'Maghanap';
 
   @override
-  String get searchPlaceholder => 'Maghanap...';
+  String get searchPlaceholder => 'Maghanap';
 
   @override
   String get untitledConversation => 'Walang Panandaliang Conversation';
@@ -2721,7 +2705,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get searchResults => 'Mga resulta ng paghahanap';
 
   @override
-  String get actionItems => 'Action Items';
+  String get actionItems => 'Mga Gawain';
 
   @override
   String get tasksToday => 'Ngayong Araw';
@@ -2736,7 +2720,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tasksLater => 'Mamaya';
 
   @override
-  String get loadingTasks => 'Kumakarga ng mga gawain...';
+  String get loadingTasks => 'Kumakarga ng mga gawain…';
 
   @override
   String get tasks => 'Mga Gawain';
@@ -2797,23 +2781,22 @@ class AppLocalizationsTl extends AppLocalizations {
   String get timeAM => 'AM';
 
   @override
-  String get actionItemUpdatedSuccessfully => 'Ang action item ay matagumpay na na-update';
+  String get actionItemUpdatedSuccessfully => 'Ang gawain ay matagumpay na na-update';
 
   @override
-  String get actionItemCreatedSuccessfully => 'Ang action item ay matagumpay na nalikha';
+  String get actionItemCreatedSuccessfully => 'Ang gawain ay matagumpay na nalikha';
 
   @override
-  String get actionItemDeletedSuccessfully => 'Ang action item ay matagumpay na nabura';
+  String get actionItemDeletedSuccessfully => 'Ang gawain ay matagumpay na nabura';
 
   @override
-  String get deleteActionItem => 'Burahin ang Action Item';
+  String get deleteActionItem => 'Burahin ang Gawain';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Sigurado ka na ba na nais mong burahin ang action item na ito? Ang aksyong ito ay hindi maaaring bawiin.';
+  String get deleteActionItemConfirmation => 'I-delete ang task na ito? Hindi ito maaaring bawiin.';
 
   @override
-  String get enterActionItemDescription => 'Magpasok ng paglalarawan ng action item...';
+  String get enterActionItemDescription => 'Magpasok ng paglalarawan ng gawain';
 
   @override
   String get markAsCompleted => 'Markahan bilang Kumpleto';
@@ -2822,10 +2805,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get setDueDateAndTime => 'Itakda ang due date at oras';
 
   @override
-  String get reloadingApps => 'Nag-reload ng mga app...';
+  String get reloadingApps => 'Nag-reload ng mga app…';
 
   @override
-  String get loadingApps => 'Kumakarga ng mga app...';
+  String get loadingApps => 'Kumakarga ng mga app…';
 
   @override
   String get browseInstallCreateApps => 'Mag-browse, mag-install, at lumikha ng mga app';
@@ -2861,10 +2844,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Bumuo at magpadala ng iyong custom na Omi app';
 
   @override
-  String get submittingYourApp => 'Nag-submit ng iyong app...';
+  String get submittingYourApp => 'Nag-submit ng iyong app…';
 
   @override
-  String get preparingFormForYou => 'Naghahanda ng form para sa iyo...';
+  String get preparingFormForYou => 'Naghahanda ng form para sa iyo…';
 
   @override
   String get appDetails => 'App Details';
@@ -2886,14 +2869,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Ikaw ay isang kahanga-hangang app, ang iyong trabaho ay tumugon sa mga query ng user at gawing masaya sila...';
+      'Ikaw ay isang kahanga-hangang app, ang iyong trabaho ay tumugon sa mga query ng user at gawing masaya sila…';
 
   @override
   String get conversationPrompt => 'Conversation Prompt';
 
   @override
   String get conversationPromptPlaceholder =>
-      'Ikaw ay isang kahanga-hangang app, bibigyan ka ng transcript at summary ng isang conversation...';
+      'Ikaw ay isang kahanga-hangang app, bibigyan ka ng transcript at summary ng isang conversation…';
 
   @override
   String get notificationScopes => 'Notification Scopes';
@@ -3053,7 +3036,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get pricingPaid => 'Bayad';
 
   @override
-  String get loadingCapabilities => 'Kumakarga ng capabilities...';
+  String get loadingCapabilities => 'Kumakarga ng capabilities…';
 
   @override
   String get filterInstalled => 'Nai-install';
@@ -3151,7 +3134,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Ang mensahe ay matagumpay na nai-report';
 
   @override
-  String get confirmReportMessage => 'Sigurado ka na ba na nais mong i-report ang mensaheng ito?';
+  String get confirmReportMessage => 'I-report ang mensaheng ito?';
 
   @override
   String get selectChatAssistant => 'Pumili ng Chat Assistant';
@@ -3166,8 +3149,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearChatTitle => 'I-clear ang Chat?';
 
   @override
-  String get confirmClearChat =>
-      'Sigurado ka na ba na nais mong i-clear ang chat? Ang aksyong ito ay hindi maaaring bawiin.';
+  String get confirmClearChat => 'I-clear ang chat na ito? Hindi ito maaaring bawiin.';
 
   @override
   String get copy => 'Kopyahin';
@@ -3194,7 +3176,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get failedToTranscribeAudio => 'Nabigong mag-transcribe ng audio';
 
   @override
-  String get transcribing => 'Nag-transcribe...';
+  String get transcribing => 'Nag-transcribe…';
 
   @override
   String get discardedConversation => 'Itinakda ang Conversation';
@@ -3206,7 +3188,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get from => 'mula sa';
 
   @override
-  String get copied => 'Nakopyahin!';
+  String get copied => 'Nakopyahin';
 
   @override
   String get copyLink => 'Kopyahin ang link';
@@ -3244,7 +3226,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get failedToGenerateShareLink => 'Nabigong lumikha ng share link';
 
   @override
-  String get reloadingConversations => 'Nag-reload ng mga conversation...';
+  String get reloadingConversations => 'Nag-reload ng mga conversation…';
 
   @override
   String get user => 'User';
@@ -3303,7 +3285,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wearableAiCompanion => 'Wearable AI companion';
 
   @override
-  String get loadingMemories => 'Kumakarga ng mga memories...';
+  String get loadingMemories => 'Kumakarga ng mga memories…';
 
   @override
   String get allMemories => 'Lahat ng Memories';
@@ -3315,7 +3297,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get manual => 'Manual';
 
   @override
-  String get loadingYourMemories => 'Kumakarga ng iyong mga memories...';
+  String get loadingYourMemories => 'Kumakarga ng iyong mga memories…';
 
   @override
   String get createYourFirstMemory => 'Lumikha ng iyong unang memory upang magsimula';
@@ -3339,8 +3321,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get createMemory => 'Lumikha ng Memory';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Sigurado ka na ba na nais mong burahin ang memory na ito? Ang aksyong ito ay hindi maaaring bawiin.';
+  String get deleteMemoryConfirmation => 'I-delete ang alaalang ito? Hindi ito maaaring bawiin.';
 
   @override
   String get makePrivate => 'Gawing Private';
@@ -3377,7 +3358,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Sigurado ka na ba na nais mong burahin ang memory ng Omi? Ang aksyong ito ay hindi maaaring bawiin at permanenteng magsasabing lahat ng $count memories.';
+    return 'Mabubura ang lahat ng $count alaala. Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -3434,7 +3415,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience';
 
   @override
-  String get searchLanguages => 'Maghanap ng mga wika...';
+  String get searchLanguages => 'Maghanap ng mga wika';
 
   @override
   String get selectALanguage => 'Pumili ng isang wika';
@@ -3492,13 +3473,13 @@ class AppLocalizationsTl extends AppLocalizations {
       'Kailangan ng Omi ng accessibility permission upang matukoy kung kailan ka sumali sa Zoom, Meet, o Teams meetings sa iyong browser.';
 
   @override
-  String get pleaseWait => 'Mangyaring maghintay...';
+  String get pleaseWait => 'Mangyaring maghintay…';
 
   @override
   String get joinTheCommunity => 'Sumali sa komunidad!';
 
   @override
-  String get loadingProfile => 'Nag-load ng profile...';
+  String get loadingProfile => 'Nag-load ng profile…';
 
   @override
   String get profileSettings => 'Profile Settings';
@@ -3628,7 +3609,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saveSettings => 'I-save ang Mga Setting';
 
   @override
-  String get syncingDeveloperSettings => 'Nag-sync ng Developer Settings...';
+  String get syncingDeveloperSettings => 'Nag-sync ng Developer Settings…';
 
   @override
   String get summary => 'Buod';
@@ -3675,14 +3656,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Hayaan ang Omi na pumili ng pinakamahusay na app nang awtomatiko';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Sigurado ka na ba na gusto mong burahin ang conversation na ito? Ang aksyong ito ay hindi mababawi.';
+  String get deleteConversationConfirmation => 'I-delete ang usapang ito? Hindi ito maaaring bawiin.';
 
   @override
   String get conversationDeleted => 'Conversation na nabura';
 
   @override
-  String get generatingLink => 'Gumagawa ng link...';
+  String get generatingLink => 'Gumagawa ng link…';
 
   @override
   String get editConversation => 'I-edit ang conversation';
@@ -3703,7 +3683,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get conversationTitle => 'Conversation Title';
 
   @override
-  String get enterConversationTitle => 'Ilagay ang pamagat ng conversation...';
+  String get enterConversationTitle => 'Ilagay ang pamagat ng conversation…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Conversation title na successfully na-update';
@@ -3715,7 +3695,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Error sa pag-update ng conversation title';
 
   @override
-  String get settingUp => 'Nag-setup...';
+  String get settingUp => 'Nag-setup…';
 
   @override
   String get startYourFirstRecording => 'Magsimula ng Iyong Unang Recording';
@@ -3724,7 +3704,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Nag-prepare ng system audio capture';
 
   @override
-  String get reconnecting => 'Nag-reconnect...';
+  String get reconnecting => 'Nag-reconnect…';
 
   @override
   String get recordingPaused => 'Recording na Iniwas';
@@ -3737,14 +3717,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Magsisimula ulit sa ${countdown}s...';
+    return 'Magsisimula ulit sa ${countdown}s…';
   }
 
   @override
   String get tapPlayToResume => 'Itap ang play upang magpatuloy';
 
   @override
-  String get listeningForAudio => 'Nakinig para sa audio...';
+  String get listeningForAudio => 'Nakinig para sa audio…';
 
   @override
   String get preparingAudioCapture => 'Nag-prepare ng audio capture';
@@ -3772,7 +3752,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paused => 'Iniwas';
 
   @override
-  String get initializing => 'Nag-initialize...';
+  String get initializing => 'Nag-initialize…';
 
   @override
   String get recording => 'Nag-record';
@@ -3800,7 +3780,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'isinalin ng omi';
+  String get translatedByOmi => 'isinalin ng Omi';
 
   @override
   String get backToConversations => 'Bumalik sa Mga Conversation';
@@ -3825,7 +3805,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get selectAudioInput => 'Pumili ng Audio Input';
 
   @override
-  String get loadingDevices => 'Nag-load ng mga device...';
+  String get loadingDevices => 'Nag-load ng mga device…';
 
   @override
   String get settingsHeader => 'SETTINGS';
@@ -3855,7 +3835,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get signOutQuestion => 'Mag-sign Out?';
 
   @override
-  String get signOutConfirmation => 'Sigurado ka na ba na gusto mong mag-sign out?';
+  String get signOutConfirmation =>
+      'Kailangan mong mag-sign in muli para makita ang iyong mga usapan. Mananatili sa teleponong ito ang naka-pair na device at mga kagustuhan sa app.';
 
   @override
   String get customVocabularyHeader => 'CUSTOM VOCABULARY';
@@ -3935,7 +3916,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get exportConversationsDescription => 'I-export ang mga conversation sa JSON';
 
   @override
-  String get exportingConversations => 'Nag-export ng mga conversation...';
+  String get exportingConversations => 'Nag-export ng mga conversation…';
 
   @override
   String get clearNodesDescription => 'I-clear ang lahat ng nodes at connections';
@@ -4002,8 +3983,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get updateAppQuestion => 'I-update ang App?';
 
   @override
-  String get updateAppConfirmation =>
-      'Sigurado ka na ba na gusto mong i-update ang iyong app? Ang mga pagbabago ay makikita kapag na-review na ng aming team.';
+  String get updateAppConfirmation => 'Makikita ang mga pagbabago kapag na-review na ng aming team.';
 
   @override
   String get updateApp => 'I-update ang App';
@@ -4025,9 +4005,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Public Mga App ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'Ang Bagong Bersyon ay Available 🎉';
 
   @override
   String get no => 'Hindi';
@@ -4071,13 +4048,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get cancelSubscriptionConfirmation =>
-      'Sigurado ka na ba na gusto mong i-cancel ang iyong subscription? Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.';
+      'Magpapatuloy kang may access hanggang sa katapusan ng iyong current billing period.';
 
   @override
   String get cancelSubscriptionButton => 'I-cancel ang Subscription';
 
   @override
-  String get cancelling => 'Nag-cancel...';
+  String get cancelling => 'Nag-cancel…';
 
   @override
   String get betaTesterMessage =>
@@ -4196,7 +4173,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Nagdadagdag sa $serviceName...';
+    return 'Nagdadagdag sa $serviceName…';
   }
 
   @override
@@ -4233,7 +4210,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'Ang API Keys ay ginagamit para sa authentication kapag ang iyong app ay nakikipag-ugnayan sa OMI server. Pinapayagan nila ang iyong application na lumikha ng mga memory at mag-access ng ibang OMI services nang secure.';
+      'Ang API Keys ay ginagamit para sa authentication kapag ang iyong app ay nakikipag-ugnayan sa Omi server. Pinapayagan nila ang iyong application na lumikha ng mga memory at mag-access ng ibang Omi services nang secure.';
 
   @override
   String get aboutOmiApiKeys => 'Tungkol sa Omi API Keys';
@@ -4258,7 +4235,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Ang aksyong ito ay hindi mababawi. Ang anumang aplikasyon na gumagamit ng key na ito ay hindi na makakapag-access sa API.';
+      'Mawawalan ng access sa API ang mga app na gumagamit ng key na ito. Hindi ito maaaring bawiin.';
 
   @override
   String get revoke => 'Mag-revoke';
@@ -4315,7 +4292,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Sigurado ka na ba na gusto mong burahin ang $item? Ang aksyong ito ay hindi mababawi.';
+    return 'Hindi na mababawi ang pagbura sa $item na ito.';
   }
 
   @override
@@ -4323,7 +4300,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Sigurado ka na ba na gusto mong mag-revoke ng key na \"$keyName\"? Ang aksyong ito ay hindi mababawi.';
+    return 'Mawawalan ng access ang lahat ng gumagamit ng \"$keyName\". Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -4501,7 +4478,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ang iyong plan ay manatiling aktibo hanggang sa $date. Pagkatapos, mawawalan ka ng access sa iyong unlimited features. Sigurado ka na ba?';
+    return 'Ang iyong plan ay manatiling aktibo hanggang sa $date. Pagkatapos, mawawalan ka ng access sa iyong unlimited features.';
   }
 
   @override
@@ -4598,7 +4575,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get askOmiAnything => 'Tanungin ang Omi tungkol sa kahit ano sa iyong buhay';
 
   @override
-  String get unlockOmiInfiniteMemory => 'I-unlock ang walang hanggang memorya ng Omi';
+  String get unlockOmiInfiniteMemory => 'Walang limitasyong alaala';
 
   @override
   String get youreOnAnnualPlan => 'Ikaw ay nasa Annual Plan';
@@ -4610,7 +4587,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get unableToLoadPlans => 'Hindi ma-load ang mga plan';
 
   @override
-  String get checkConnectionTryAgain => 'Suriin ang koneksyon at subukan ulit';
+  String get checkConnectionTryAgain => 'Suriin ang iyong koneksyon at subukang muli.';
 
   @override
   String get useFreePlan => 'Gamitin ang Free Plan';
@@ -4717,14 +4694,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Knowledge Graph ay matagumpay na nabura';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo...';
+  String get exportStartedMayTakeFewSeconds => 'Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
       'Ito ay magbabura ng lahat ng derived knowledge graph data (nodes at connections). Ang iyong mga orihinal na memories ay magiging ligtas. Ang graph ay muling mabubuo sa paglipas ng panahon o sa susunod na request.';
 
   @override
-  String get configureDailySummaryDigest => 'I-configure ang iyong daily action items digest';
+  String get configureDailySummaryDigest => 'I-configure ang iyong pang-araw-araw na digest ng mga gawain';
 
   @override
   String accessesDataTypes(String dataTypes) {
@@ -4792,7 +4769,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Ito ay permanenteng magbabura ng lahat ng mga pag-uusap na na-import mula sa Limitless. Ang aksyon na ito ay hindi maaaring i-undo.';
+      'Mabubura ang lahat ng usapang na-import mula sa Limitless. Hindi ito maaaring bawiin.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4833,7 +4810,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Sigurado ka ba na gusto mong burahin ang $name\'s sample?';
+    return 'Aalisin ang voice sample ni $name. Hindi ito maaaring bawiin.';
   }
 
   @override
@@ -4841,7 +4818,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Sigurado ka ba na gusto mong burahin ang $name? Ito rin ay magtatanggal ng lahat ng associated speech samples.';
+    return 'Aalisin nito ang mga voice sample ni $name at hindi na ito maibabalik. Ang mga sinabi niya sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
   }
 
   @override
@@ -4957,7 +4934,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get checkingForUpdates => 'Kumikita para sa Updates';
 
   @override
-  String get checkingFirmwareVersion => 'Kumikita ng firmware version...';
+  String get checkingFirmwareVersion => 'Kumikita ng firmware version…';
 
   @override
   String get firmwareUpdate => 'Firmware Update';
@@ -5122,8 +5099,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.';
+  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -5141,19 +5117,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String get showLess => 'magpakita ng mas kaunti ↑';
 
   @override
-  String get loadingYourRecording => 'Nag-load ng iyong recording...';
+  String get loadingYourRecording => 'Nag-load ng iyong recording…';
 
   @override
   String get photoDiscardedMessage => 'Ang photo na ito ay iniwan dahil hindi ito significant.';
 
   @override
-  String get analyzing => 'Nag-analyze...';
+  String get analyzing => 'Nag-analyze…';
 
   @override
   String get searchCountries => 'Maghanap ng mga bansa';
 
   @override
-  String get checkingAppleWatch => 'Kumikita ng Apple Watch...';
+  String get checkingAppleWatch => 'Kumikita ng Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'I-install ang Omi sa iyong\nApple Watch';
@@ -5201,8 +5177,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finishedConversation => 'Natapos ang Conversation?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Sigurado ka ba na gusto mong ihinto ang pag-record at i-summarize ang pag-uusap ngayon?';
+  String get stopRecordingConfirmation => 'Ihinto ang pagre-record at ibuod ang usapan ngayon?';
 
   @override
   String get conversationEndsManually => 'Ang pag-uusap ay magtatapos lamang nang manual.';
@@ -5216,7 +5191,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dontAskAgain => 'Huwag na itanong muli';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Naghihintay para sa transcript o mga photo...';
+  String get waitingForTranscriptOrPhotos => 'Naghihintay para sa transcript o mga photo…';
 
   @override
   String get noSummaryYet => 'Walang summary pa';
@@ -5263,7 +5238,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noSummary => 'Walang summary';
 
   @override
-  String get updateOmiFirmware => 'I-update ang omi firmware';
+  String get updateOmiFirmware => 'I-update ang Omi firmware';
 
   @override
   String get anErrorOccurredTryAgain => 'Isang error ang nangyari. Mangyaring subukan ulit.';
@@ -5324,7 +5299,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wrappedYouTalkedAbout => 'Nagsalita Ka Tungkol sa';
 
   @override
-  String get wrappedActionItems => 'Action Items';
+  String get wrappedActionItems => 'Mga Gawain';
 
   @override
   String get wrappedTasksCreated => 'tasks created';
@@ -5416,10 +5391,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Lumikha ng Aking Wrapped';
 
   @override
-  String get wrappedProcessingDefault => 'Processing...';
+  String get wrappedProcessingDefault => 'Processing…';
 
   @override
-  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\n2025 story...';
+  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\n2025 story…';
 
   @override
   String get wrappedSomethingWentWrong => 'Isang bagay\nay nagkamali';
@@ -5449,7 +5424,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Nabigong magsimula ng generation. Mangyaring subukan ulit.';
 
   @override
-  String get wrappedStarting => 'Nagsisimula...';
+  String get wrappedStarting => 'Nagsisimula…';
 
   @override
   String get wrappedShare => 'Ibahagi';
@@ -5658,13 +5633,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'May problema! Subukan ulit mamaya.';
 
   @override
-  String get uploadingVoiceProfile => 'Ina-upload ang iyong voice profile....';
+  String get uploadingVoiceProfile => 'Ina-upload ang iyong voice profile….';
 
   @override
-  String get memorizingYourVoice => 'Natatandaan ang iyong boses...';
+  String get memorizingYourVoice => 'Natatandaan ang iyong boses…';
 
   @override
-  String get personalizingExperience => 'Personalisasyon ng iyong karanasan...';
+  String get personalizingExperience => 'Personalisasyon ng iyong karanasan…';
 
   @override
   String get keepSpeakingUntil100 => 'Magpatuloy na magsalita hanggang 100%.';
@@ -5791,7 +5766,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearChatQuestion => 'Linasin ang Chat?';
 
   @override
-  String get syncingMessages => 'Sine-sync ang mga mensahe sa server...';
+  String get syncingMessages => 'Sine-sync ang mga mensahe sa server…';
 
   @override
   String get chatAppsTitle => 'Chat Apps';
@@ -5951,10 +5926,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Sine-summarize ang pag-usap...\nIto ay maaaring tumagal ng ilang segundo';
+  String get summarizingConversation => 'Sine-summarize ang pag-usap…\nIto ay maaaring tumagal ng ilang segundo';
 
   @override
-  String get resummarizingConversation => 'Re-summarizing ang pag-usap...\nIto ay maaaring tumagal ng ilang segundo';
+  String get resummarizingConversation => 'Re-summarizing ang pag-usap…\nIto ay maaaring tumagal ng ilang segundo';
 
   @override
   String get nothingInterestingRetry => 'Walang nahanap na interesante,\ngusto mo bang subukan ulit?';
@@ -6052,7 +6027,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6088,7 +6063,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doNotCloseApp => 'Pakihuwag isara ang app.';
 
   @override
-  String get downloading => 'Dine-download...';
+  String get downloading => 'Dine-download…';
 
   @override
   String get downloadModel => 'Download Model';
@@ -6135,7 +6110,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '300 premium minuto bawat buwan. Piliin ang On Device para sa walang limitasyong libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6170,7 +6145,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Hinihanda ang $model...';
+    return 'Hinihanda ang $model…';
   }
 
   @override
@@ -6190,7 +6165,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Ang built-in live transcription ng Omi ay na-optimize para sa real-time na pag-usap na may automatic speaker detection at diarization.';
+      'Ang live transcription ng Omi ay ginawa para sa mga real-time na usapan at minamarkahan kung sino ang nagsabi ng ano.';
 
   @override
   String get reset => 'I-reset';
@@ -6199,7 +6174,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get useTemplateFrom => 'Gamitin ang template mula sa';
 
   @override
-  String get selectProviderTemplate => 'Pumili ng provider template...';
+  String get selectProviderTemplate => 'Pumili ng provider template…';
 
   @override
   String get quicklyPopulateResponse => 'Mabilis na puno ang kilalang response format ng provider';
@@ -6402,13 +6377,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get signUpSuccess => 'Successful na Signup!';
 
   @override
-  String get loadingKnowledgeGraph => 'Kina-load ang Knowledge Graph...';
+  String get loadingKnowledgeGraph => 'Kina-load ang Knowledge Graph…';
 
   @override
   String get noKnowledgeGraphYet => 'Walang knowledge graph pa';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Binubuo ang iyong knowledge graph mula sa mga alaala...';
+  String get buildingKnowledgeGraphFromMemories => 'Binubuo ang iyong knowledge graph mula sa mga alaala…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6425,7 +6400,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Binubuksan ang $appName...';
+    return 'Binubuksan ang $appName…';
   }
 
   @override
@@ -6459,7 +6434,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get moneyEarned => 'Pera na Kinita';
 
   @override
-  String get writeYourReply => 'Isulat ang iyong reply...';
+  String get writeYourReply => 'Isulat ang iyong reply…';
 
   @override
   String get replySentSuccessfully => 'Ang reply ay successfully na ipinadala';
@@ -6606,7 +6581,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get selectContactsToShareSummary => 'Piliin ang mga contact upang ibahagi ang iyong conversation summary';
 
   @override
-  String get searchContactsHint => 'Maghanap ng mga contact...';
+  String get searchContactsHint => 'Maghanap ng mga contact';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6696,7 +6671,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Naglilipat...';
+  String get transferring => 'Naglilipat…';
 
   @override
   String get transferRequired => 'Transfer Required';
@@ -6721,14 +6696,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get recordingInfo => 'Recording Info';
 
   @override
-  String get transferInProgress => 'Nagsisimula ang paglipat...';
+  String get transferInProgress => 'Nagsisimula ang paglipat…';
 
   @override
   String get shareRecording => 'Ibahagi ang Recording';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Sigurado ka na gusto mong permanenteng tanggalin ang recording na ito? Hindi na ito mababawi.';
+  String get deleteRecordingConfirmation => 'Hindi ito maaaring bawiin.';
 
   @override
   String get recordingIdLabel => 'Recording ID';
@@ -6843,7 +6817,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Nagkaroon ng error sa pag-update ng app status.';
 
   @override
-  String get calculatingETA => 'Kinakalkula...';
+  String get calculatingETA => 'Kinakalkula…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6854,29 +6828,29 @@ class AppLocalizationsTl extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Humigit-kumulang isang minuto na lang';
 
   @override
-  String get almostDone => 'Halos tapos na...';
+  String get almostDone => 'Halos tapos na…';
 
   @override
-  String get omiSays => 'sinabi ni omi';
+  String get omiSays => 'sinabi ni Omi';
 
   @override
-  String get analyzingYourData => 'Sinusuri ang iyong data...';
+  String get analyzingYourData => 'Sinusuri ang iyong data…';
 
   @override
   String migratingToProtection(String level) {
-    return 'Minomuber sa $level protection...';
+    return 'Minomuber sa $level protection…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Walang data na ilipat. Fininalizing...';
+  String get noDataToMigrateFinalizing => 'Walang data na ilipat. Fininalizing…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Minomuber ang $itemType... $percentage%';
+    return 'Minomuber ang $itemType… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Lahat ng objects ay nalipat. Fininalizing...';
+  String get allObjectsMigratedFinalizing => 'Lahat ng objects ay nalipat. Fininalizing…';
 
   @override
   String get migrationErrorOccurred => 'Nagkamalian sa panahon ng migration. Mangyaring subukan ulit.';
@@ -6911,14 +6885,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get templateName => 'Template Name';
 
   @override
-  String get templateNameHint => 'e.g., Meeting Action Items Extractor';
+  String get templateNameHint => 'e.g., Meeting Task Extractor';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Dapat ang pangalan ay hindi bababa sa 3 character';
 
   @override
   String get conversationPromptHint =>
-      'e.g., I-extract ang action items, decisions na ginawa, at key takeaways mula sa ibinigay na conversation.';
+      'e.g., I-extract ang mga gawain, decisions na ginawa, at key takeaways mula sa ibinigay na conversation.';
 
   @override
   String get pleaseEnterAppPrompt => 'Mangyaring magpasok ng prompt para sa iyong app';
@@ -6933,13 +6907,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Ikaw lang ang maaaring gumagamit ng template na ito';
 
   @override
-  String get generatingDescription => 'Lumilikha ng description...';
+  String get generatingDescription => 'Lumilikha ng description…';
 
   @override
-  String get creatingAppIcon => 'Lumilikha ng app icon...';
+  String get creatingAppIcon => 'Lumilikha ng app icon…';
 
   @override
-  String get installingApp => 'Nag-i-install ng app...';
+  String get installingApp => 'Nag-i-install ng app…';
 
   @override
   String get appCreatedAndInstalled => 'Nilikha at na-install ang app!';
@@ -7074,7 +7048,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Mangyaring magpasok ng description para sa iyong app';
 
   @override
-  String get aiGenCreatingAppIcon => 'Lumilikha ng app icon...';
+  String get aiGenCreatingAppIcon => 'Lumilikha ng app icon…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7107,7 +7081,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Ikaw ay gumagalit ng iyong Unlimited Plan sa $title. Sigurado ka na bang gusto mong magpatuloy?';
+    return 'Inililipat mo ang iyong Unlimited Plan sa $title.';
   }
 
   @override
@@ -7132,7 +7106,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Hindi makabuksan ang upgrade page. Mangyaring subukan ulit.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'I-paste ang iyong JSON configuration dito...';
+  String get transcriptionJsonPlaceholder => 'I-paste ang iyong JSON configuration dito…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7202,7 +7176,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingYoureAllSet => 'Handa ka na';
 
   @override
-  String get searchTranscriptOrSummary => 'Maghanap ng transcript o summary...';
+  String get searchTranscriptOrSummary => 'Maghanap ng transcript o summary';
 
   @override
   String get myGoal => 'Ang Aking Layunin';
@@ -7438,10 +7412,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get msgUploadFileFailed => 'Nabigo ang pag-upload ng file, mangyaring subukan ulit mamaya';
 
   @override
-  String get msgReadingMemories => 'Binabasa ang iyong mga memories...';
+  String get msgReadingMemories => 'Binabasa ang iyong mga memories…';
 
   @override
-  String get msgLearningMemories => 'Natututo mula sa iyong mga memories...';
+  String get msgLearningMemories => 'Natututo mula sa iyong mga memories…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Nabigo ang pag-upload ng attached file.';
@@ -7498,7 +7472,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Bago 🚀';
+  String get conversationNewIndicator => 'Bago';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7506,7 +7480,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Nagsasama...';
+  String get mergingStatus => 'Nagsasama…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7601,10 +7575,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get color => 'Kulay';
 
   @override
-  String get waitingForDevice => 'Naghihintay para sa device...';
+  String get waitingForDevice => 'Naghihintay para sa device…';
 
   @override
-  String get saySomething => 'Sabihin ang kahit ano...';
+  String get saySomething => 'Sabihin ang kahit ano…';
 
   @override
   String get initialisingSystemAudio => 'Nag-i-initialize ng System Audio';
@@ -7653,7 +7627,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get audioDownloadFailed => 'Nabigo ang pag-download ng audio';
 
   @override
-  String get downloadingAudio => 'Nag-download ng audio...';
+  String get downloadingAudio => 'Nag-download ng audio…';
 
   @override
   String get shareAudio => 'Ibahagi ang Audio';
@@ -7662,7 +7636,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get preparingAudio => 'Naghahanda ng Audio';
 
   @override
-  String get gettingAudioFiles => 'Nakakakuha ng audio files...';
+  String get gettingAudioFiles => 'Nakakakuha ng audio files…';
 
   @override
   String get downloadingAudioProgress => 'Nag-download ng Audio';
@@ -7671,13 +7645,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingAudio => 'Nagpoproseso ng Audio';
 
   @override
-  String get combiningAudioFiles => 'Pinagsasama ang audio files...';
+  String get combiningAudioFiles => 'Pinagsasama ang audio files…';
 
   @override
   String get audioReady => 'Handa na ang Audio';
 
   @override
-  String get openingShareSheet => 'Binubuksan ang share sheet...';
+  String get openingShareSheet => 'Binubuksan ang share sheet…';
 
   @override
   String get audioShareFailed => 'Nabigo ang Share';
@@ -7862,7 +7836,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get mcpConnectionFailed => 'Nabigo ang pagkonekta sa MCP server';
 
   @override
-  String get authorizingMcpServer => 'Nag-authorize...';
+  String get authorizingMcpServer => 'Nag-authorize…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Paano ka nakahanap sa amin?';
@@ -7998,7 +7972,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get downloadingFromDevice => 'Nag-download mula sa device';
 
   @override
-  String get reconnectingToInternet => 'Muling kumokonekta sa internet...';
+  String get reconnectingToInternet => 'Muling kumokonekta sa internet…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -8006,11 +7980,11 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Pinoproseso sa server...';
+  String get processingOnServer => 'Pinoproseso sa server…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Pinoproseso... $current/$total segments';
+    return 'Pinoproseso… $current/$total segments';
   }
 
   @override
@@ -8194,7 +8168,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get followTheVoiceInstructions => 'Sundin ang voice instructions';
 
   @override
-  String get statusCalling => 'Tumatawag...';
+  String get statusCalling => 'Tumatawag…';
 
   @override
   String get statusCallInProgress => 'Call in progress';
@@ -8239,10 +8213,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get failedToStartCall => 'Nabigo ang pagpagsimula ng call';
 
   @override
-  String get callStateConnecting => 'Kumokonekta...';
+  String get callStateConnecting => 'Kumokonekta…';
 
   @override
-  String get callStateRinging => 'Tumutunog...';
+  String get callStateRinging => 'Tumutunog…';
 
   @override
   String get callStateEnded => 'Call Ended';
@@ -8251,7 +8225,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get callStateFailed => 'Call Failed';
 
   @override
-  String get transcriptPlaceholder => 'Ang transcript ay magpapakita dito...';
+  String get transcriptPlaceholder => 'Ang transcript ay magpapakita dito…';
 
   @override
   String get phoneUnmute => 'I-unmute';
@@ -8350,7 +8324,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'Real-time transcription ng bawat call';
 
   @override
-  String get phoneCallsUpsellFeature2 => 'Automatic call summaries at action items';
+  String get phoneCallsUpsellFeature2 => 'Automatic call summaries at mga gawain';
 
   @override
   String get phoneCallsUpsellFeature3 =>
@@ -8491,7 +8465,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionPaused => 'Recording, muling kumokonekta';
 
   @override
-  String get transcriptionPausedReconnecting => 'Patuloy na nag-record — muling kumokonekta sa transcription...';
+  String get transcriptionPausedReconnecting => 'Patuloy na nag-record — muling kumokonekta sa transcription…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8580,7 +8554,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tipAutoSync => 'Ang mga recordings ay nag-sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -8645,7 +8619,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tellUsMore => 'Sabihin sa amin ng higit pa (optional)';
 
   @override
-  String get cancelReasonDetailHint => 'Pinapahalagahan namin ang anumang feedback...';
+  String get cancelReasonDetailHint => 'Pinapahalagahan namin ang anumang feedback…';
 
   @override
   String get justAMoment => 'Isang sandali lamang';
@@ -8741,7 +8715,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get diagnostics => 'Diagnostics';
 
   @override
-  String get waitingForData => 'Naghihintay ng data...';
+  String get waitingForData => 'Naghihintay ng data…';
 
   @override
   String get liveRssiOverTime => 'Live RSSI over time';
@@ -8750,7 +8724,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noRssiDataYet => 'Walang RSSI data pa';
 
   @override
-  String get collectingData => 'Nagkololekta ng data...';
+  String get collectingData => 'Nagkololekta ng data…';
 
   @override
   String get cleanDisconnect => 'Clean disconnect';
@@ -8831,7 +8805,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stableFirmware => 'Stable Firmware';
 
   @override
-  String get fetchingStableFirmware => 'Kukunin ang pinakabagong stable firmware...';
+  String get fetchingStableFirmware => 'Kukunin ang pinakabagong stable firmware…';
 
   @override
   String get noStableFirmwareFound => 'Hindi makaghanap ng stable firmware version para sa iyong device.';
@@ -8849,40 +8823,40 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'Ina-upload ang $duration na audio para sa transcription…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'Sinusubukang i-upload muli… $duration na audio ang nakatago sa iyong phone';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'Nabigo ang pag-upload — $duration na audio ang nakatago sa iyong phone. I-tap para subukang muli.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'Nabigo ang pag-upload — $duration na audio ang nakatago sa iyong phone.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'Nakikinig… lalabas dito ang transcript.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'Nagre-record offline — hahabol ang transcript kapag online ka na ulit.';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'Hindi available ang transcription — tuloy ang pagre-record at naka-save ang iyong audio.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'Kumukuha';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'Kumukuha ng mga larawan';
 
   @override
   String get willSyncAutomatically => 'mag-sync automatically';
@@ -8898,10 +8872,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get voiceRecordingFound => 'Recording na nahanap';
 
   @override
-  String get transcriptionConnecting => 'Kumokonekta sa transcription...';
+  String get transcriptionConnecting => 'Kumokonekta sa transcription…';
 
   @override
-  String get transcriptionReconnecting => 'Muling kumokonekta sa transcription...';
+  String get transcriptionReconnecting => 'Muling kumokonekta sa transcription…';
 
   @override
   String get transcriptionUnavailable => 'Transcription unavailable';
@@ -9013,10 +8987,10 @@ class AppLocalizationsTl extends AppLocalizations {
       'Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Ito ay permanente';
+  String get deleteFlowConfirmTitle => 'I-delete ang Iyong Account?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.';
+  String get deleteFlowConfirmSubtitle => 'Hindi na ito maibabalik, kahit ng support.';
 
   @override
   String get deleteConsequenceSubscription => 'Ang anumang aktibong subscription ay ikakansela.';
@@ -9041,10 +9015,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get planUpdate => 'Update ng Plano';
-
-  @override
-  String get planDeprecationMessage =>
-      'Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa \$49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.';
 
   @override
   String get upgradeYourPlan => 'I-upgrade ang Iyong Plano';
@@ -9215,7 +9185,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSubtitle => 'Mag-record ng tawag na may live na transkripsyon';
 
   @override
-  String get searchActionItems => 'Maghanap ng mga action item';
+  String get searchActionItems => 'Maghanap ng mga gawain';
 
   @override
   String get selectActionItems => 'Pumili ng marami';
@@ -9382,6 +9352,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Dina-download mula sa iyong device';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current ng $total';
   }
@@ -9464,7 +9444,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.';
+      'Mag-record ngayon, i-transcribe kapag gusto mo. Hanggang doon, nasa phone mo lang ang audio.';
 
   @override
   String get transcribeLaterNote =>
@@ -9527,7 +9507,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Magaling!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Magsimulang magsalita...';
+  String get deviceOnboardingStartSpeaking => 'Magsimulang magsalita…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Magtanong sa Omi';
@@ -9537,10 +9517,10 @@ class AppLocalizationsTl extends AppLocalizations {
       'Pindutin ang button nang isang beses, sabihin ang iyong tanong, pagkatapos ay pindutin muli kapag tapos na';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Pinoproseso ang iyong tanong...';
+  String get deviceOnboardingProcessingQuestion => 'Pinoproseso ang iyong tanong…';
 
   @override
-  String get deviceOnboardingListening => 'Nakikinig...';
+  String get deviceOnboardingListening => 'Nakikinig…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Patayin';
@@ -9567,7 +9547,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Nadiskonekta';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Pinapatay...';
+  String get deviceOnboardingStatusTurningOff => 'Pinapatay…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'I-customize ang Double Tap';
@@ -9749,7 +9729,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteOnDeviceModel => 'Tanggalin ang Modelo';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Sigurado ka bang gusto mong tanggalin ang modelong ito?';
+  String get deleteOnDeviceModelConfirm => 'I-delete ang model na ito?';
 
   @override
   String get onDeviceModelDownloaded => 'Na-download';
@@ -9878,7 +9858,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get copyMessage => 'Kopyahin ang mensahe';
 
   @override
-  String get searchSettings => 'Maghanap ng setting…';
+  String get searchSettings => 'Maghanap ng setting';
 
   @override
   String get errorLoadingAudio => 'Nagkaproblema sa pag-load ng audio';
@@ -9906,7 +9886,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
 
   @override
-  String get planSheetChooseYourPlan => 'Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.';
+  String get planSheetChooseYourPlan => 'Piliin ang plan na bagay sa iyo.';
 
   @override
   String get availableOnMacMobileWeb => 'Available sa Mac, mobile, at web';
@@ -10042,11 +10022,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Hindi na-record ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Profile ng Boses ni $name';
   }
@@ -10073,7 +10048,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 
   @override
-  String get tapPlusToStartRecording => 'I-tap ang + para magsimulang mag-record';
+  String get tapPlusToStartRecording => 'I-tap ang record button para magsimulang mag-record';
 
   @override
   String get chatBlockTask => 'Gawain';
@@ -10155,27 +10130,26 @@ class AppLocalizationsTl extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10185,13 +10159,13 @@ class AppLocalizationsTl extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10223,8 +10197,2725 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Ano ang magagawa mo para sa akin?',
+        'goal': 'Tulungan mo akong magtakda ng layunin',
+        'activity': 'Ibuod ang mga kamakailan kong aktibidad',
+        'improve': 'Paano pa ako mapapabuti?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
-  String get conversationReprocess => 'Reprocess';
+  String get nextWeek => 'Sa susunod na linggo';
+
+  @override
+  String get clearSearch => 'I-clear ang paghahanap';
+
+  @override
+  String get filterBySpeaker => 'I-filter ayon sa nagsasalita';
+
+  @override
+  String get notNow => 'Hindi Ngayon';
+
+  @override
+  String get discard => 'Itapon';
+
+  @override
+  String get keepEditing => 'Ipagpatuloy ang Pag-edit';
+
+  @override
+  String get discardChangesTitle => 'Itapon ang mga Pagbabago?';
+
+  @override
+  String get discardChangesMessage => 'Mawawala ang mga hindi mo na-save na pagbabago.';
+
+  @override
+  String get pause => 'I-pause';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count Usapan?',
+      one: 'Burahin ang 1 Usapan?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Mabubura din ang kanilang mga alaala, gawain, at audio file.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nabura ang $count usapan',
+      one: 'Nabura ang 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nailipat ang $count usapan',
+      one: 'Nailipat ang 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Hindi mailipat ang mga usapan';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Itinapon · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Lalabas dito ang mga usapang nire-record mo. I-tap ang record button sa Home para i-record ang una.';
+
+  @override
+  String get conversationMap => 'Mapa ng mga Usapan';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count usapan',
+      one: '1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Bumalik ng 10 segundo';
+
+  @override
+  String get skipForward10Seconds => 'Umabante ng 10 segundo';
+
+  @override
+  String get failedToShareRecap => 'Hindi maibahagi ang recap';
+
+  @override
+  String get captureOfflineBuffering => 'Offline, nagba-buffer';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Offline, nagba-buffer · $minutes min';
+  }
+
+  @override
+  String get memoryDetailsTitle => 'Alaala';
+
+  @override
+  String get editMemoryTitle => 'I-edit ang Alaala';
+
+  @override
+  String get newMemoryTitle => 'Bagong Alaala';
+
+  @override
+  String get memoryReadOnlyHint => 'Itinatago ang alaalang ito bilang kasaysayan at hindi ito mae-edit.';
+
+  @override
+  String get openConversation => 'Buksan ang usapan';
+
+  @override
+  String get memoryGraphTitle => 'Graph ng Alaala';
+
+  @override
+  String get memoryReviewTitle => 'Mga natutunan ko ngayon';
+
+  @override
+  String get memoryReviewRight => 'Tama';
+
+  @override
+  String get memoryReviewWrong => 'Mali';
+
+  @override
+  String get memoryReviewFix => 'Ayusin';
+
+  @override
+  String get memoryReviewConfirmed => 'Nakumpirma. Isasaalang-alang ko ito.';
+
+  @override
+  String get memoryReviewDropped => 'Tinanggal. Iiwasan ko ang ganitong mga detalye.';
+
+  @override
+  String get memoryReviewUpdated => 'Na-update.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Hindi ma-save, subukan ulit';
+
+  @override
+  String get indentTask => 'I-indent';
+
+  @override
+  String get outdentTask => 'Bawasan ang indent';
+
+  @override
+  String get goalDeleted => 'Na-delete ang layunin';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Hindi matanggap ang mga gawaing ito. Baka natanggap mo na ang share na ito.';
+
+  @override
+  String get pausePlayback => 'I-pause';
+
+  @override
+  String get deleteSample => 'I-delete ang sample';
+
+  @override
+  String get deletePersonTitle => 'I-delete ang Tao?';
+
+  @override
+  String get deletePersonLabel => 'I-delete ang tao';
+
+  @override
+  String get noPeopleYet => 'Wala Pang Tao';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-delete ang $count Gawain?',
+      one: 'I-delete ang 1 Gawain?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Naidagdag ang $count gawain sa listahan mo',
+      one: 'Naidagdag ang 1 gawain sa listahan mo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Idagdag ang $count Gawain',
+      one: 'Idagdag ang 1 Gawain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gawain',
+      one: '1 gawain',
+    );
+    return 'Nagbahagi si $name ng $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Na-export sa $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Takdang petsa $date';
+  }
+
+  @override
+  String get linkEvent => 'I-link ang Event';
+
+  @override
+  String get noCalendarEventsNearby => 'Walang nahanap na event sa kalendaryo sa oras na ito.';
+
+  @override
+  String get suggestedEvent => 'Iminumungkahi';
+
+  @override
+  String get openInGoogleCalendar => 'Buksan sa Google Calendar';
+
+  @override
+  String get shareWithAttendees => 'Ibahagi sa mga Dumalo';
+
+  @override
+  String get unlinkCalendarEvent => 'I-unlink ang Event sa Kalendaryo';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Mga Tala: $title';
+  }
+
+  @override
+  String get previousResult => 'Nakaraang resulta';
+
+  @override
+  String get nextResult => 'Susunod na resulta';
+
+  @override
+  String get playFromHere => 'I-play mula rito';
+
+  @override
+  String get shareConversationQuestion => 'Ibahagi ang Pag-uusap?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Lalabas dito ang mga gawain mula sa pag-uusap na ito.';
+
+  @override
+  String get noPendingTasks => 'Walang nakabinbing gawain';
+
+  @override
+  String nCompleted(int count) {
+    return '$count tapos na';
+  }
+
+  @override
+  String get identifySpeaker => 'Tukuyin ang nagsasalita';
+
+  @override
+  String get couldNotLoadCheckout => 'Hindi ma-load ang checkout page. Suriin ang iyong koneksyon at subukang muli.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Naabot na ang buwanang limitasyon ng libreng tawag. Magre-reset ito sa susunod na buwan.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Hindi ma-load ang kasaysayan ng pag-import';
+
+  @override
+  String get phoneCallButton => 'Tumawag';
+
+  @override
+  String get searchContacts => 'Maghanap ng contact';
+
+  @override
+  String get phoneContactsAccessTitle => 'Payagan ang Access sa Contacts';
+
+  @override
+  String get phoneSelectCountryTitle => 'Pumili ng Bansa';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Walang Na-verify na Numero';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'I-verify ang iyong numero para tumawag gamit ang Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Hindi ma-delete ang numerong ito';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Kalimutan ang Device?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Hihinto ang Omi sa pagkonekta sa device na ito.';
+
+  @override
+  String get deviceForgottenMessage => 'Nakalimutan na ang device';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'I-unpair ang Device?';
+
+  @override
+  String get rollBack => 'Ibalik';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi Device Diagnostics';
+
+  @override
+  String get diagnosticsFailBadge => 'Nabigo';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'muling nakakonekta sa loob ng $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '${count}d';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration ang nakalipas';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Sumusunod sa iyong pangunahing wika';
+
+  @override
+  String get creatorPayouts => 'Mga Bayad sa Creator';
+
+  @override
+  String get sttLanguageOverride => 'I-override';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Gamitin ang Pangunahing Wika';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Hindi sinusuportahan ng provider na ito ang $language, kaya $fallback ang ginagamit.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Natukoy na RAM: $ram GB. Inirerekomendang minimum: 4 GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Natukoy na modelo: $model (mas luma sa iPhone XS). Maaaring mas mabagal ang pagkilala sa device.';
+  }
+
+  @override
+  String get copyLogs => 'Kopyahin ang mga Log';
+
+  @override
+  String get openProviderDocs => 'Buksan ang Dokumentasyon';
+
+  @override
+  String get getApiKey => 'Kumuha ng API Key';
+
+  @override
+  String get showApiKey => 'Ipakita ang API Key';
+
+  @override
+  String get hideApiKey => 'Itago ang API Key';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Alisin ang $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salita',
+      one: '1 salita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '$remaining sa $limit libreng tawag ang natitira ngayong buwan';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '$remaining sa $limit libreng tawag ang natitira ngayong buwan · hanggang $minutes min bawat isa';
+  }
+
+  @override
+  String get appCreators => 'Mga Gumagawa ng App';
+
+  @override
+  String get homeScreen => 'Home Screen';
+
+  @override
+  String get phoneCalls => 'Mga Tawag sa Telepono';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text';
+
+  @override
+  String get flashCustomFirmware => 'I-flash ang Custom na Firmware';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Mag-flash ng custom na firmware build';
+
+  @override
+  String get selectFirmwareZip => 'Piliin ang ZIP file ng firmware';
+
+  @override
+  String get customFirmwareWarning =>
+      'Maaaring masira ang iyong device dahil sa custom na firmware. Tiyaking valid na Omi firmware build ito, at huwag idiskonekta habang nag-a-update.';
+
+  @override
+  String get firmwareFlashed => 'Na-flash na ang firmware';
+
+  @override
+  String get deviceWillRestart => 'Magre-restart ang iyong device.';
+
+  @override
+  String get exportFailedTryAgain => 'Nabigo ang pag-export. Pakisubukang muli.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Device: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Panatilihin ang Subscription';
+
+  @override
+  String get couldNotLoadPage => 'Hindi ma-load ang pahinang ito. Suriin ang iyong koneksyon at subukang muli.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Hakbang $current ng $total';
+  }
+
+  @override
+  String get sharedTasksLinkExpired => 'Hindi nahanap ang mga ibinahaging task na ito, o nag-expire na ang link.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Isang tao';
+
+  @override
+  String get allow => 'Payagan';
+
+  @override
+  String get permissionAllowed => 'Pinayagan';
+
+  @override
+  String get permissionBlockedHint => 'Naka-off sa Settings. Payagan ito doon para magamit ito.';
+
+  @override
+  String get useDifferentAccount => 'Gumamit ng Ibang Account';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Hakbang $current sa $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage =>
+      'Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.';
+
+  @override
+  String get scanAgain => 'Mag-scan Ulit';
+
+  @override
+  String get howToPair => 'Paano Mag-pair';
+
+  @override
+  String get contactSupportAction => 'Makipag-ugnayan sa Suporta';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return 'Offline ang $deviceName. Pindutin ang button nito para gisingin, saka subukang muli.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Baterya $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'I-update ang Firmware ng OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Kumokonekta…';
+
+  @override
+  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Nasa $level% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.';
+  }
+
+  @override
+  String get startUpdate => 'Simulan ang Update';
+
+  @override
+  String get otaNotSupported => 'Hindi maa-update ang firmware na ito sa Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Hindi makakonekta sa $deviceName. Panatilihin itong naka-on at malapit, saka subukang muli.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Hindi available ang update na ito ngayon. Subukang muli mamaya.';
+
+  @override
+  String get otaStarting => 'Sinisimulan ang update…';
+
+  @override
+  String get otaStartFailed =>
+      'Hindi masimulan ang update. Tingnan ang pangalan at password ng Wi-Fi, saka subukang muli.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return 'Nagre-restart ang $deviceName gamit ang bagong firmware.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Kinansela ang update';
+
+  @override
+  String get cancelUpdate => 'Kanselahin ang Update';
+
+  @override
+  String get otaKeepNearby =>
+      'Habang nag-a-update, panatilihing naka-on at malapit ang device, at huwag isara ang app.';
+
+  @override
+  String get otaWifiConnecting => 'Kumokonekta sa Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Nakakonekta sa Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Hindi makasali sa Wi-Fi. Tingnan ang pangalan ng network at password.';
+
+  @override
+  String get otaDownloadFailed =>
+      'Nabigo ang pag-download ng firmware. Tingnan ang koneksyon sa Wi-Fi at subukang muli.';
+
+  @override
+  String get otaInstallFailed => 'Nabigo ang pag-install. Nasa kasalukuyang firmware pa rin ang device mo.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return 'Na-update na ang $deviceName at kusa itong magre-restart.';
+  }
+
+  @override
+  String get showPassword => 'Ipakita ang password';
+
+  @override
+  String get hidePassword => 'Itago ang password';
+
+  @override
+  String get appNotFoundOrRemoved => 'Hindi na available ang app na ito';
+
+  @override
+  String get startupFailedTitle => 'Hindi ma-start ang Omi';
+
+  @override
+  String get startupFailedMessage =>
+      'May naganap na problema habang nagsi-start ang Omi. Suriin ang iyong koneksyon, pagkatapos ay subukan muli.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'May problema sa configuration ang build na ito ng Omi. Hindi ito problema sa iyong device. Makipag-ugnayan sa suporta at isama ang mga detalye sa ibaba.';
+
+  @override
+  String get discardRecordingTitle => 'Itapon ang Recording?';
+
+  @override
+  String get discardRecordingMessage =>
+      'Hindi pa na-save ang iyong voice sample. Kung aalis ka ngayon, ito ay itatapon.';
+
+  @override
+  String get keepRecording => 'Ipagpatuloy ang Pag-record';
+
+  @override
+  String get view => 'Tingnan';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Payagan ang access ng $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return 'Matatanggap ng $appName ang iyong mga usapan, alaala at recording sa server ng developer nito. Walang pananagutan ang Omi sa kung paano gagamitin doon ang data na iyon.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return 'Na-disable ang $appName';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rating',
+      one: '1 rating',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Screenshot $index ng $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Makipag-chat sa $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Mga setting ng $appName';
+  }
+
+  @override
+  String get appOptions => 'Mga opsyon ng app';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Mananatili ang iyong access hanggang sa katapusan ng kasalukuyang billing period.';
+
+  @override
+  String get chatSendMessage => 'Ipadala ang mensahe';
+
+  @override
+  String get chatAddAttachment => 'Magdagdag ng attachment';
+
+  @override
+  String get removeAttachment => 'Alisin ang attachment';
+
+  @override
+  String get chatRemoveSelectedText => 'Alisin ang sinipi na teksto';
+
+  @override
+  String get chatOfflineHint => 'Offline ka. Kumonekta muli para makapagpadala ng mensahe.';
+
+  @override
+  String get chatReplyFailed => 'Hindi nakasagot si Omi. Tingnan ang iyong koneksyon at subukang muli.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'I-disable ang $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Ano ang mali?';
+
+  @override
+  String get selectAReason => 'Pumili ng dahilan';
+
+  @override
+  String get submit => 'Ipasa';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Masyadong mahaba';
+
+  @override
+  String get feedbackReasonIncorrect => 'Mali o gawa-gawa';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Hindi nakatulong o walang kaugnayan';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Hindi sinunod ang mga tagubilin';
+
+  @override
+  String get additionalFeedbackOptional => 'Karagdagang feedback (opsyonal)';
+
+  @override
+  String get helpful => 'Nakatulong';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Buod ng Araw · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Ano ang ginawa ko kahapon?';
+
+  @override
+  String get chatStarterDoDifferently => 'Ano ang puwede kong gawin nang iba ngayon?';
+
+  @override
+  String get chatStarterTeachMe => 'Puwede mo ba akong turuan ng bago?';
+
+  @override
+  String get thinking => 'Nag-iisip';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Hindi ma-load ang mga bago';
+
+  @override
+  String get githubRepositoryUrl => 'URL ng GitHub Repository';
+
+  @override
+  String get githubRepositoryUrlHint => 'Link sa source code repository ng iyong app';
+
+  @override
+  String get triggerEvents => 'Mga Trigger Event';
+
+  @override
+  String get noAppsInCategoryYet => 'Wala Pang App sa Kategoryang Ito';
+
+  @override
+  String get scopes => 'Mga Scope';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Gumawa ng app gamit ang AI sa isang tap';
+
+  @override
+  String get refreshManifest => 'I-refresh ang manifest';
+
+  @override
+  String versionLabel(String version) {
+    return 'Bersyon $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ user';
+  }
+
+  @override
+  String get discovery => 'Natuklasan';
+
+  @override
+  String get chatBlockShowMore => 'Magpakita Pa';
+
+  @override
+  String get chatBlockShowLess => 'Magpakita ng Mas Kaunti';
+
+  @override
+  String get triggerEvent => 'Trigger Event';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'URL ng Home ng App';
+
+  @override
+  String get authUrl => 'Auth URL';
+
+  @override
+  String get setupCompletedUrl => 'URL ng Natapos na Setup';
+
+  @override
+  String get chatToolsManifestUrl => 'URL ng Manifest ng Chat Tools';
+
+  @override
+  String get invalidWebhookUrlError => 'Maglagay ng valid na webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Kailangan ang URL ng GitHub repository';
+
+  @override
+  String get removeScreenshot => 'Alisin ang screenshot';
+
+  @override
+  String get addScreenshot => 'Magdagdag ng screenshot';
+
+  @override
+  String get aiGenRegenerateIcon => 'Gumawa muli ng icon';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na app',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Bumuo ng paglalarawan';
+
+  @override
+  String get selectImageFileTitle => 'Pumili ng image file';
+
+  @override
+  String get selectThumbnailImageTitle => 'Pumili ng thumbnail na imahe';
+
+  @override
+  String get appIdNotFoundError => 'Hindi nahanap ang App ID';
+
+  @override
+  String get manifestRefreshedSuccess => 'Matagumpay na na-refresh ang manifest';
+
+  @override
+  String get manifestRefreshFailed => 'Nabigong i-refresh ang manifest';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Mga recording ng usapang ito';
+
+  @override
+  String get captureRecordingSeparate => 'Ihiwalay…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Ihiwalay ang recording na ito?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return 'Ipapakita ang $recording bilang sariling usapan at hindi na muling ipapangkat sa event na ito.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Ihiwalay';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Hindi maihiwalay. Subukang muli.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Hindi mabuksan ang recording na ito.';
+
+  @override
+  String get captureRecordingViewing => 'Tinitingnan mo ang recording na ito';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Ni-record ng $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Desktop';
+
+  @override
+  String get renameConversation => 'Palitan ang pangalan';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Pendant';
+
+  @override
+  String get conversationDeveloperTools => 'Mga developer tool sa mga usapan';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count iba pa',
+      many: '$count iba pa',
+      few: '$count iba pa',
+      one: '1 iba pa',
+    );
+    return '$name + $_temp0';
+  }
+
+  @override
+  String get recordingAndTranscription => 'Pagre-record at Transcription';
+
+  @override
+  String get notificationsAndDisplay => 'Mga Notipikasyon at Display';
+
+  @override
+  String get helpAndAbout => 'Tulong at Tungkol';
+
+  @override
+  String get speakerTagPromptTitle => 'Tulungan ang Omi na makilala ang mga boses';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ikaw ba ito?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Si $name ba ito?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Sino ito?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Ako iyan';
+
+  @override
+  String get speakerTagPromptNotMe => 'Hindi ako';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Bagong tao';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Taong hindi ko kilala';
+
+  @override
+  String get speakerTagPromptNotSure => 'Hindi sigurado';
+
+  @override
+  String get speakerTagPromptPlayClip => 'I-play ang clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current sa $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Tandaan ang boses ng mga taong pinangalanan mo';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Nagtatago ang Omi ng maikling sample ng boses para makilala sila sa susunod. Mababago mo ito anumang oras sa Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Salamat! Mas gagaling ang Omi sa pagkilala ng mga boses.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Pangalan nila';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Hindi ma-play ang clip na ito';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Hindi ito ma-save. Pakisubukang muli.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Hilingin sa akin na i-tag ang mga boses';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Paminsan-minsan, itatanong ng Omi kung sino ang nagsasalita sa mga kamakailan mong pag-uusap';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod';
+
+  @override
+  String get leaveBlank => 'Iwanang blangko';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Idagdag sa ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Mga transcript na naghihintay $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Mga transcript na naghihintay $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Tawag';
+
+  @override
+  String get captureSourcePhoneMic => 'Mic ng telepono';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Ituloy';
+
+  @override
+  String get finish => 'Tapusin';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Naka-pause ang pendant · magpapatuloy pagkatapos mo';
+
+  @override
+  String get pendantIsListeningTitle => 'Nakikinig ang iyong pendant';
+
+  @override
+  String get oneSourceAtATime => 'Isang source lang ang nire-record ng Omi sa bawat pagkakataon.';
+
+  @override
+  String get recordWithPhoneInstead => 'Sa telepono na lang mag-record';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Naka-pause ang pendant hanggang matapos ka';
+
+  @override
+  String get pendantPausesDuringCall => 'Naka-pause ang pendant habang may tawag';
+
+  @override
+  String get keepUsingPendant => 'Ituloy ang paggamit ng pendant';
+
+  @override
+  String get recordWith => 'Mag-record gamit ang';
+
+  @override
+  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
+
+  @override
+  String get openCall => 'Buksan ang tawag';
+
+  @override
+  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.';
+
+  @override
+  String get captureNotTranscribing => 'Hindi nagta-transcribe';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
+
+  @override
+  String get captureStillRecording => 'Nagre-record pa rin';
+
+  @override
+  String get captureMicInUseElsewhere => 'Ginagamit ng ibang app ang mic';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.';
+
+  @override
+  String get captureStarting => 'Nagsisimula…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puno na ang storage ng telepono';
+
+  @override
+  String get captureStorageAlmostFull => 'Halos puno na ang storage';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Kusang kokonekta muli ang Omi';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name at iba pa';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Handa Ka Na';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'I-tap ang isang row para suriin o baguhin ito.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Pakinggan ang iyong huling sagot';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Pinapatugtog ang iyong huling sagot...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Sa pamamagitan ng $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Sa pamamagitan ng speaker ng telepono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Sa pamamagitan ng kasalukuyang output ng audio';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Mananatili sa screen ang mga sagot. Walang sinasabi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device konektado. Omi ang magsasalita dito.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Nagpe-play sa pamamagitan ng $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Maaari mo itong baguhin anumang oras sa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'I-replay ang tour na ito anumang oras sa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Mga Gawain';
+
+  @override
+  String get usageMonth => 'Sa Buwan Na Ito';
+
+  @override
+  String get usageYear => 'Sa Taong Ito';
+
+  @override
+  String get usageAll => 'Lahat ng Panahon';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hi $name, magtanong ng kahit ano';
+  }
+
+  @override
+  String get activity => 'Aktibidad';
+
+  @override
+  String get places => 'Mga lugar';
+
+  @override
+  String get recaps => 'Mga buod';
+
+  @override
+  String get recent => 'Kamakailan';
+
+  @override
+  String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
+
+  @override
+  String get peopleSearchPlaceholder => 'Maghanap ng tao';
+
+  @override
+  String get peopleNotHeardYet => 'Hindi pa naririnig';
+
+  @override
+  String get peopleRecent => 'Kamakailan';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
+
+  @override
+  String get personTalkTime => 'Oras ng pagsasalita';
+
+  @override
+  String get personLastHeard => 'Huling narinig';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count tao?',
+      one: 'Burahin ang 1 tao?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Kailangan ng Boses';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tao',
+      one: '1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Walang Tugmang Tao';
+
+  @override
+  String get deselectAll => 'Alisin ang Lahat ng Pili';
+
+  @override
+  String get voiceRecognitionSettings => 'Pagkilala sa Boses';
+
+  @override
+  String get greetingMorning => 'Magandang umaga';
+
+  @override
+  String get greetingAfternoon => 'Magandang hapon';
+
+  @override
+  String get greetingEvening => 'Magandang gabi';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ano ang gusto mong malaman?';
+
+  @override
+  String get askSuggestDecide => 'Ano ang napagpasyahan ko ngayon?';
+
+  @override
+  String get askSuggestOwe => 'Ano pa ang utang ko sa mga tao?';
+
+  @override
+  String get askSuggestNotice => 'Ano ang napansin ni Omi?';
+
+  @override
+  String get pastChats => 'Mga nakaraang chat';
+
+  @override
+  String get newChat => 'Bagong chat';
+
+  @override
+  String get startFresh => 'Magsimula ulit';
+
+  @override
+  String get noPastChats => 'Dito lumalabas ang mga chat mo kay Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Burahin ang chat na ito?';
+
+  @override
+  String get deleteChatMessage => 'Mawawala ito sa mga nakaraang chat nang tuluyan.';
+
+  @override
+  String get deleteChat => 'Burahin ang chat';
+
+  @override
+  String get appsAskWith => 'Tanungin si Omi gamit ang';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count usapan ngayon.',
+      one: '1 usapan ngayon.',
+      zero: 'Walang usapan ngayon.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ano ang nasa screen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Screenshot mula sa meeting na ito';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Burahin ang Screenshot?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
+
+  @override
+  String get conversationSummaryFailed => 'Nabigo ang buod';
+
+  @override
+  String get reconnectionsRecent => 'Muling pagkonekta (nakaraang 7 araw)';
+
+  @override
+  String get failedConnections => 'Mga bigong koneksyon';
+
+  @override
+  String get failedConnectionsRecent => 'Mga bigong koneksyon (nakaraang 7 araw)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count mula nang ipares';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Mababang kumpiyansa';
+
+  @override
+  String get peopleFilterPinned => 'Naka-pin';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count naka-pin',
+      one: '1 naka-pin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Kumpirmado';
+
+  @override
+  String get confidenceLikely => 'Malamang';
+
+  @override
+  String get confidenceUnverified => 'Hindi pa kumpirmado';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Kumpiyansa: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label nang $count beses',
+      one: 'Nilagyan mo ng label nang isang beses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kinumpirma mo ang $count tugma',
+      one: 'Kinumpirma mo ang 1 tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Awtomatikong itinugma lang, hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonCorrected => 'Itinama mo ang tugma nito';
+
+  @override
+  String get confidenceReasonVoiceReady => 'handa na ang boses';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'kailangan ng boses';
+
+  @override
+  String get confidenceReasonNotHeard => 'hindi pa naririnig';
+
+  @override
+  String get confidenceSheetTitle => 'Kumpiyansa';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Nakikilala ni Omi ang boses ni $name, at kinumpirma mo ito.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Karaniwang nakikilala ni Omi ang boses ni $name, pero ilang beses mo pa lang itong nakumpirma.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Wala ka pang ginawang nagpapatunay kay $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Ebidensya';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label sa $count usapan',
+      one: 'Nilagyan mo ng label sa 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oo sa $count mungkahi',
+      one: 'Oo sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakumpirma ang $count awtomatikong tugma',
+      one: 'Nakumpirma ang 1 awtomatikong tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tugma ang inilipat sa iba',
+      one: '1 tugma ang inilipat sa iba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count awtomatikong tugma na walang nagkumpirma',
+      one: '1 awtomatikong tugma na walang nagkumpirma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Handa na ang sample ng boses';
+
+  @override
+  String get evidenceNoVoice => 'Wala pang sample ng boses';
+
+  @override
+  String get evidenceNotHeard => 'Hindi pa naririnig sa usapan';
+
+  @override
+  String get evidenceNothing => 'Hindi mo pa sila nilagyan ng label o kinumpirma';
+
+  @override
+  String get effectCountsALot => 'Malaking tulong';
+
+  @override
+  String get effectCounts => 'Nakakatulong';
+
+  @override
+  String get effectCountsALittle => 'Kaunting tulong';
+
+  @override
+  String get effectBarelyCounts => 'Halos hindi nakakatulong';
+
+  @override
+  String get effectCountsAgainst => 'Nakakasama';
+
+  @override
+  String get effectNeeded => 'Kailangan para maging Kumpirmado';
+
+  @override
+  String get confidenceToReachConfirmed => 'Para Maging Kumpirmado';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Kailangan din ni Omi ng sample ng boses ni $name. Lagyan sila ng label habang naka-on ang Tandaan ang mga boses.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Kumpirmado na si $name. Patuloy na natututo si Omi sa bawat label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos hindi nakakatulong ang mga awtomatikong tugma nang mag-isa.';
+
+  @override
+  String get personWhyConfidence => 'Bakit?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'I-pin si $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Panatilihin si $name at asahan sila sa mga usapan mo';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.';
+
+  @override
+  String get pinAction => 'I-pin';
+
+  @override
+  String get unpinAction => 'I-unpin';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Na-pin si $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Na-unpin si $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Bakit $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'I-delete si $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Naka-pin si $name. Made-delete ang mga sample ng boses nila, hindi na sila makikilala ni Omi, at lalabas silang hindi pinangalanang speaker sa mga lumang transcript. Hindi na ito maibabalik.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'I-delete si $name';
+  }
+
+  @override
+  String get selectPeople => 'Pumili ng mga tao';
+
+  @override
+  String get cleanUpEllipsis => 'Linisin…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taong hindi sigurado si Omi',
+      one: '1 taong hindi sigurado si Omi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Karamihan ay maling narinig na pangalan. Suriin at alisin ang mga hindi totoo.';
+
+  @override
+  String get reviewAction => 'Suriin';
+
+  @override
+  String get cleanUpTitle => 'Linisin';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hindi sigurado si Omi sa $count taong ito. Karamihan ay mga pangalang maling narinig sa mga transcript. Alisin ang check ng sinumang gusto mong panatilihin.',
+      one: 'Hindi sigurado si Omi sa taong ito. Alisin ang check para panatilihin sila.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Hindi kailanman isinasama sa Paglilinis ang mga naka-pin na tao.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-delete ang $count tao',
+      one: 'I-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Na-delete ang $count tao',
+      one: 'Na-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Walang Lilinisin';
+
+  @override
+  String get cleanUpNothingMessage => 'Sa ngayon, sigurado si Omi sa lahat.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Nilalaktawan ng Piliin Lahat ang mga naka-pin na tao. I-delete sila nang isa-isa mula sa page nila.';
+
+  @override
+  String get pinnedNotSelectable => 'Naka-pin, hindi mapipili';
+
+  @override
+  String get ignoredVoicesTitle => 'Mga Binalewalang Boses';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast, at iba pang boses na minarkahan mong Hindi Tao';
+
+  @override
+  String get ignoredVoicesEmpty => 'Walang binalewalang boses';
+
+  @override
+  String get restoreAction => 'Ibalik';
+
+  @override
+  String get voiceRestoredToast => 'Maaaring magtanong ulit si Omi tungkol sa boses na ito';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Iba Pa…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Hindi Tao';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Hindi Sigurado';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Ako Ito';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Pinakamalapit na boses';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Mga taong kausap mo kamakailan';
+
+  @override
+  String get voiceMatchClose => 'Malapit na tugma';
+
+  @override
+  String get voiceMatchPossible => 'Posibleng tugma';
+
+  @override
+  String get voiceMatchWeak => 'Mahinang tugma';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Tugma ng boses: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ang Oo ay nagpapataas ng kumpiyansa kay $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Na-save bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Na-save bilang ikaw';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Hindi na magtatanong si Omi tungkol sa boses na ito';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Nilagyan ng label bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Nilagyan ng label bilang ikaw';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Minarkahang hindi tao';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Inalis ang label';
+
+  @override
+  String get whoIsItTitle => 'Sino Ito?';
+
+  @override
+  String get newPersonEllipsis => 'Bagong Tao…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Idagdag ang “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Lahat';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Nalalapat sa bawat linya mula sa speaker na ito';
+
+  @override
+  String get collapseAction => 'I-collapse';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Hindi ako';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-label sila sa $count pang usapan.',
+      one: 'I-label sila sa 1 pang usapan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “$askPhrase” o “$questionPhrase”, pagkatapos ay itanong ang tanong mo.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Maaari mo ring sabihin ang “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'May available na update';
+
+  @override
+  String get updateAvailableMessage => 'Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.';
+
+  @override
+  String get updateRequiredTitle => 'Kailangang mag-update';
+
+  @override
+  String get updateRequiredMessage =>
+      'Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.';
+
+  @override
+  String get exportingAllData =>
+      'Ini-export ang iyong data… Panatilihing bukas ang Omi; ang malalaking account ay maaaring tumagal ng ilang minuto.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagsasalita',
+      one: '1 nagsasalita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Awtomatikong Tanggalin ang mga Naka-sync na Kopya';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Binubura ang mga naka-sync na kopya pagkatapos ng $days araw';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Binubura ang mga lokal na kopya $days araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.';
+  }
+
+  @override
+  String get localCopiesSection => 'Mga Lokal na Kopya';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan ng label ang $count linya',
+      one: 'Nilagyan ng label ang 1 linya',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Natutunan na ang boses',
+        'pending': 'Tinututunan ang boses…',
+        'disabled': 'Naka-off ang pag-save ng boses',
+        'other': 'Hindi pa natutunan ang boses',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Makikilala ni Omi si $name sa susunod.',
+        'pending': 'Tatagal ito ng ilang segundo.',
+        'disabled': 'I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si $name.',
+        'other': 'Kailangan ni Omi ng mas malinaw na pananalita mula kay $name at patuloy itong susubok.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakita sa $count naunang usapan',
+      one: 'Nakita sa 1 naunang usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Posible',
+        'soundsLike': 'Parang si $name',
+        'notPerson': 'Hindi si $name',
+        'carried': 'Si $name pa rin. Dinala mula sa huli mong usapan.',
+        'change': 'Baguhin',
+        'alsoTitle': 'Si $name rin ba ito?',
+        'alsoBody': 'Nahanap ni Omi ang parehong boses sa mga naunang usapan.',
+        'confirmed': 'Kinumpirma mo ang label na ito',
+        'other': 'Suriin',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ng boses na ito';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Walang Nahanap na Omi';
+
+  @override
+  String get findDeviceNoneMessage => 'I-on ito at hawakan malapit sa iyong telepono.';
+
+  @override
+  String get startupFailedDetails => 'Mga Detalye';
+
+  @override
+  String get couldNotLoadApiKeys => 'Hindi ma-load ang mga API key.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Hindi…';
+
+  @override
+  String get diagnosticsRightNow => 'Ngayon';
+
+  @override
+  String get diagnosticsLast7Days => 'Nakaraang 7 Araw';
+
+  @override
+  String get diagnosticsConnectedFor => 'Nakakonekta nang';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Kusang muling kumokonekta';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Maiikling pagputol, bumabalik sa loob ng mga $duration bawat beses';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'Walang pagputol ngayong linggo';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Nahihirapang kumonekta';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Mga bigong koneksyon sa nakaraang 24 na oras: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Mga pagputol';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'mga $count kada oras';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Pinakamahabang puwang';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'Mula nang ipares: $drops pagputol, $failed bigong koneksyon.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Nakaraang $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.';
+
+  @override
+  String get chatReplyServerError => 'May nangyaring mali sa aming panig. Subukan muli.';
+
+  @override
+  String get chatReplyTimeout => 'Napakatagal ng sagot. Subukan muli.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Hindi ka naka-sign in. Mag-sign in at subukan muli.';
+
+  @override
+  String get chatAppsLoadFailed => 'Hindi ma-load ang mga chat app. Subukan muli.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Boses';
+
+  @override
+  String get assistantVoice => 'Boses ng Assistant';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Ang napili mong boses ay ibinabahagi sa mobile at desktop.';
+
+  @override
+  String get readChatRepliesAloud => 'Basahin nang malakas ang mga sagot sa chat';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Magsasalita lamang kapag pinapayagan ng Voice response.';
+
+  @override
+  String get voicePreviewSample => 'Hi, ako si Omi. Ito ang boses ko.';
+
+  @override
+  String get peopleStatsIncomplete => 'Maaaring hindi kumpleto ang mga bilang.';
+
+  @override
+  String get previousDay => 'Nakaraang araw';
+
+  @override
+  String get nextDay => 'Susunod na araw';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Walang gawain noong $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Muling pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationReprocessed => 'Na-update ang pag-uusap';
+
+  @override
+  String get loadingTranscript => 'Kumakarga ng transcript…';
+
+  @override
+  String get transcriptLoadFailed => 'Hindi ma-load ang transcript.';
+
+  @override
+  String get processingConversationProgress => 'Pinoproseso ang pag-uusap…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Hindi maproseso ang pag-uusap na ito.';
+
+  @override
+  String get waitForReprocessing => 'Hintaying matapos ang muling pagproseso.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Speaker';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Hindi pinaghihiwalay ang mga speaker sa iba\'t ibang recording.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Tungkol sa mga Label ng Speaker';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.';
+
+  @override
+  String get nameSpeakerTitle => 'Pangalanan ang Speaker';
+
+  @override
+  String get playbackPreparingAudio => 'Inihahanda ang Audio…';
+
+  @override
+  String get playbackBackToCurrent => 'Bumalik sa Kasalukuyan';
+
+  @override
+  String get playbackAudioUnavailable => 'Hindi Magagamit ang Audio';
+
+  @override
+  String get playbackAudioLoadFailed => 'Hindi Ma-load ang Audio';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Suriin ang Koneksyon';
+
+  @override
+  String get forYou => 'Para Sa Iyo';
+
+  @override
+  String get stopThese => 'Itigil Ang Mga Ito';
+
+  @override
+  String get dismiss => 'Isara';
+
+  @override
+  String get showOnLockScreen => 'Ipakita sa lock screen';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Binubura ang account na ito. Mag-sign in gamit ang ibang account, o maghintay ng ilang minuto at subukang muli.';
+
+  @override
+  String get onboardingSetupTitle => 'Sine-set up ang iyong Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Bigyan ng sandali ang Omi para i-personalize';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Inihahanda ang iyong workspace';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Inaayos ang transcription para sa iyong wika';
+
+  @override
+  String get onboardingSetupStepMemory => 'Sine-set up ang iyong memory';
+
+  @override
+  String get onboardingSetupStepDevices => 'Kinokonekta ang iyong mga device';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Pini-personalize ang iyong karanasan';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Nag-e-enjoy ka ba sa Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Oo';
+
+  @override
+  String get onboardingRatingPromptNo => 'Hindi';
+
+  @override
+  String get partialRecording => 'Bahagyang pagrekord';
+
+  @override
+  String get importTranscriptFiles => 'Mga file ng transcript';
+
+  @override
+  String get importTranscriptFilesDescription => 'Pumili ng mga transcript na SRT, VTT o TXT, o isang ZIP ng mga ito';
+
+  @override
+  String get importTooManyAttempts => 'Masyadong maraming pag-import ngayon. Subukan ulit mamaya.';
+
+  @override
+  String get importFileTooLarge => 'Masyadong malaki ang file na ito para i-import.';
+
+  @override
+  String get importUnsupportedFileType => 'Hindi ma-import ang ganitong uri ng file.';
+
+  @override
+  String get reviewTitle => 'Review';
+
+  @override
+  String get reviewEntryTitle => 'Mga tanong para sa iyo';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count na lang';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Sino ang nagsabi nito?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Siya rin ba si “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Paano ito ibabaybay?';
+
+  @override
+  String get reviewPlayClip => 'I-play ang clip';
+
+  @override
+  String get reviewStopClip => 'Ihinto ang clip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Binubuksan ang mga detalye';
+
+  @override
+  String get reviewAnswerMe => 'Ako';
+
+  @override
+  String get reviewAnswerOther => 'Iba pa';
+
+  @override
+  String get reviewAddTask => 'Magdagdag ng Task';
+
+  @override
+  String get reviewAnswerFailed => 'Hindi na-save ang sagot mo. Subukan ulit.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Nilalagyan ng label ng sagot na ito ang $count usapan';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Hindi kilalang nagsasalita';
+
+  @override
+  String get reviewNewPersonName => 'Pangalan nila';
+
+  @override
+  String get reviewSomeoneElse => 'May iba pa…';
+
+  @override
+  String get reviewConfirm => 'Kumpirmahin';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Kumpirmahin si $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Hindi sigurado';
+
+  @override
+  String get reviewOpenConversation => 'Usapan';
+
+  @override
+  String get reviewTaskField => 'Task';
+
+  @override
+  String get reviewDue => 'Takdang petsa';
+
+  @override
+  String get reviewNoDate => 'Wala';
+
+  @override
+  String get reviewProject => 'Proyekto';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Tapos na';
+
+  @override
+  String get reviewReasonNotMine => 'Hindi akin';
+
+  @override
+  String get reviewReasonNotUseful => 'Hindi nakatutulong';
+
+  @override
+  String get reviewYesMerge => 'Oo, pagsamahin';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Mga usapan: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'I-type';
+
+  @override
+  String get reviewLoadFailed => 'Hindi na-load ang mga tanong mo.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Walang sasagutin';
+
+  @override
+  String get reviewCaughtUpBody => 'Magtatanong lang ang Omi dito kapag kailangan ka niya.';
+
+  @override
+  String get reviewRecentChanges => 'Mga Kamakailang Pagbabago';
+
+  @override
+  String get reviewChangesIntro =>
+      'Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.';
+
+  @override
+  String get reviewChangeUndone => 'Na-undo na. Hindi na ito uulitin ng Omi nang mag-isa.';
+
+  @override
+  String get reviewChangeFailed => 'Hindi na-update ang pagbabagong ito. Subukan ulit.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Hindi na-load ang mga kamakailang pagbabago.';
+
+  @override
+  String get reviewNoChangesTitle => 'Wala pang pagbabago';
+
+  @override
+  String get reviewNoChangesBody => 'Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.';
+
+  @override
+  String get reviewShowMore => 'Magpakita Pa';
+
+  @override
+  String get entityKeptCurrent => 'Pinananatiling napapanahon ng Omi';
+
+  @override
+  String get entityNotRight => 'Mali ba?';
+
+  @override
+  String get entityCorrectionTitle => 'Ano ang mali?';
+
+  @override
+  String get entityCorrectionHint => 'Sabihin sa Omi kung ano ang aayusin';
+
+  @override
+  String get entityCorrectionSaved => 'Salamat. Aayusin ito ng Omi.';
+
+  @override
+  String get entityCorrectionFailed => 'Hindi naipadala ang pagwawasto mo. Subukan ulit.';
+
+  @override
+  String get entityLoadFailed => 'Hindi na-load ang page na ito.';
+
+  @override
+  String get entityProject => 'Proyekto';
+
+  @override
+  String get entityProjects => 'Mga proyekto';
+
+  @override
+  String get entityDecisions => 'Mga desisyon';
+
+  @override
+  String get entityOpenTasks => 'Mga bukas na task';
+
+  @override
+  String get entityOpenThreads => 'Mga bukas na usapin';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Naghihintay kay $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Takdang petsa: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Ang alam ng Omi';
+
+  @override
+  String get entityRecentConversations => 'Mga kamakailang usapan';
+
+  @override
+  String get tasksNoProject => 'Walang proyekto';
+
+  @override
+  String get tasksGroupByProject => 'I-group ayon sa Proyekto';
+
+  @override
+  String get tasksGroupByDate => 'I-group ayon sa Petsa';
+
+  @override
+  String get dreamReportTitle => 'Ulat ng Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Preview mode: ipinapakita ng Dream ang babaguhin nito, pero wala pang nagbabago sa account mo.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Kusang ina-apply ng Dream ang mga pagbabagong ito. I-undo ang alinman sa Mga Kamakailang Pagbabago.';
+
+  @override
+  String get dreamReportRunNow => 'Patakbuhin Ngayon';
+
+  @override
+  String get dreamReportRunLimit => 'Wala nang manual na takbo ngayon';
+
+  @override
+  String get dreamReportRunInProgress => 'May tumatakbo nang pass. Subukan ulit sa isang minuto.';
+
+  @override
+  String get dreamReportRunFailed => 'Hindi napatakbo ang Dream. Subukan ulit.';
+
+  @override
+  String get dreamReportIdle => 'Wala pang bagong titingnan.';
+
+  @override
+  String get dreamReportLoadFailed => 'Hindi ma-load ang ulat ng Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Wala pang pass';
+
+  @override
+  String get dreamReportEmptyBody => 'Tinitingnan ng Dream ang mga nagbago sa account mo mga isang beses kada oras.';
+
+  @override
+  String get dreamReportScheduled => 'Naka-iskedyul';
+
+  @override
+  String get dreamReportManual => 'Manual';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Nabigo ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Huminto sa limitasyon ng oras';
+
+  @override
+  String get dreamReportNothingFound => 'Walang aayusin';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Nabasa ang $records item · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Aayusin sana';
+
+  @override
+  String get dreamReportFixed => 'Naayos';
+
+  @override
+  String get dreamReportWouldAsk => 'Itatanong sana sa iyo';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Magmumungkahi sana ng mga gawain';
+
+  @override
+  String get dreamReportLearnedWords => 'Mga salitang natutunan';
+
+  @override
+  String get dreamReportFeedback => 'Iniulat sa team ng Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Naburang item';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count sa $limit na pass ngayon';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagbabagong naghihintay',
+      one: '1 pagbabagong naghihintay',
+      zero: 'Walang pagbabagong naghihintay',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count manual na takbo na lang ngayon',
+      one: '1 manual na takbo na lang ngayon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes ayos',
+      one: '1 ayos',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks mungkahi',
+      one: '1 mungkahi',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lumang pagbabago ang nilaktawan',
+      one: '1 lumang pagbabago ang nilaktawan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ulat ang pinigil para sa privacy',
+      one: '1 ulat ang pinigil para sa privacy',
+    );
+    return '$_temp0';
+  }
 }

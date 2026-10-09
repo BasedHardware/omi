@@ -15,6 +15,77 @@ DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.js
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'dream': {
+        'spec': ROOT_DIR / 'backend' / 'docs' / 'api' / 'dream-openapi.json',
+        'output': DEFAULT_OUTPUT_DIR / 'dream_wire.g.dart',
+        'schemas': (
+            'DreamRunRequest',
+            'DreamReportEdit',
+            'DreamReportQuestion',
+            'DreamReportTask',
+            'DreamReportTerm',
+            'DreamReportFeedback',
+            'DreamRun',
+            'DreamRunsResponse',
+        ),
+    },
+    'review': {
+        'output': DEFAULT_OUTPUT_DIR / 'review_wire.g.dart',
+        'schemas': (
+            'PersonRef',
+            'EntityRef',
+            'EntitySummary',
+            'ReviewEvidence',
+            'TranscriptLine',
+            'SpeakerItem',
+            'TaskItem',
+            'SamePersonItem',
+            'SpellingItem',
+            'ReviewItem',
+            'ReviewItemsResponse',
+            'SpeakerAnswer',
+            'TaskAnswer',
+            'SamePersonAnswer',
+            'SpellingAnswer',
+            'ReviewAnswer',
+            'ReviewAnswerReceipt',
+            'ChangeRef',
+            'ReviewChange',
+            'ReviewChangesResponse',
+        ),
+    },
+    'entity_pages': {
+        'output': DEFAULT_OUTPUT_DIR / 'entity_pages_wire.g.dart',
+        'schemas': (
+            'PersonRef',
+            'EntityRef',
+            'EntitySummary',
+            'ReviewEvidence',
+            'TranscriptLine',
+            'SpeakerItem',
+            'TaskItem',
+            'SamePersonItem',
+            'SpellingItem',
+            'ReviewItem',
+            'FactSource',
+            'Fact',
+            'TaskRef',
+            'ConversationRef',
+            'EntityPage',
+            'EntityCorrection',
+            'EntitiesResponse',
+        ),
+    },
+    'proactivity': {
+        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
+        'schemas': (
+            'ProactivityTarget',
+            'ProactivityFeedItem',
+            'ProactivityFeedResponse',
+            'ProactivityOutcomeRequest',
+            'ProactivityOutcomeResponse',
+        ),
+    },
     'frame_requests': {
         'output': DEFAULT_OUTPUT_DIR / 'frame_requests_wire.g.dart',
         'schemas': (
@@ -35,6 +106,15 @@ SCHEMA_GROUPS = {
             'ScreenActivitySyncResponse',
         ),
     },
+    'screen_frames': {
+        'output': DEFAULT_OUTPUT_DIR / 'screen_frames_wire.g.dart',
+        'schemas': (
+            'NormalizedRect',
+            'ScreenFrameGround',
+            'ConversationScreenFrame',
+            'ConversationScreenFrameSet',
+        ),
+    },
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (
@@ -45,15 +125,23 @@ SCHEMA_GROUPS = {
             'PluginResult',
             'Event',
             'Section',
+            'Participant',
+            'Insight',
+            'NoteEvidenceRef',
+            'NoteClaim',
             'Structured',
             'Geolocation',
             'ConversationPhoto',
+            'ChunkSpan',
             'AudioFile',
             'ConversationAudioSpan',
             'ConversationAudio',
             'CalendarEventLink',
-            'CalendarCaptureGap',
             'TranscriptMatchSnippet',
+            'CaptureGroupMember',
+            'CaptureGroup',
+            'ConversationSpeakers',
+            'AudioTimelineProvenance',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
@@ -69,10 +157,15 @@ SCHEMA_GROUPS = {
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',
             'SyncJobStatusResponse',
+            'RejectSpeakerRequest',
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
         ),
+    },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
     },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
@@ -201,7 +294,37 @@ SCHEMA_GROUPS = {
     },
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
-        'schemas': ('Person',),
+        'schemas': ('Person', 'PersonConfidenceReason', 'VoiceMatch', 'VoiceMatchesResponse'),
+    },
+    'speaker_tag_prompts': {
+        'output': DEFAULT_OUTPUT_DIR / 'speaker_tag_prompts_wire.g.dart',
+        'schemas': (
+            'SpeakerTagCandidate',
+            'SpeakerTagPrompt',
+            'SpeakerTagPromptsResponse',
+            'SpeakerTagPromptsShownRequest',
+            'SpeakerTagPromptsShownResponse',
+            'SpeakerTagPromptAnswerRequest',
+            'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptClip',
+            'IgnoredVoice',
+            'IgnoredVoicesResponse',
+            'VoiceProfileSettings',
+            'VoiceProfileSettingsUpdate',
+        ),
+    },
+    'search': {
+        'output': DEFAULT_OUTPUT_DIR / 'search_wire.g.dart',
+        'schemas': (
+            'SearchOverviewFolder',
+            'SearchOverviewResponse',
+            'ProductMemorySearchItem',
+            'MemorySearchPolicyPayload',
+            'MemoryGlobalReadGateObservability',
+            'ReadRolloutCapabilities',
+            'ProductRolloutObservability',
+            'ProductMemorySearchResponse',
+        ),
     },
     'imports_integrations': {
         'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',
@@ -239,6 +362,10 @@ SCHEMA_GROUPS = {
             'KnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
+            'StatusResponse',
+            'TtsVoice',
+            'TtsVoiceCatalog',
+            'AssistantVoicePreference',
         ),
     },
     'wrapped_task_integrations': {
@@ -304,6 +431,7 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
             'StoreRecordingPermissionResponse',
@@ -817,7 +945,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             constructor_is_const = False
 
     const_prefix = 'const ' if constructor_is_const else ''
-    lines.append(f'  {const_prefix}{class_name}({{')
+    lines.append(f'  {const_prefix}{class_name}({{' if fields else f'  {const_prefix}{class_name}(')
     for field in fields:
         required = 'required ' if field.required else ''
         default = ''
@@ -835,7 +963,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             suffix = ';' if index == len(initializers) - 1 else ','
             lines.append(f'       {initializer}{suffix}')
     else:
-        lines.append('  });')
+        lines.append('  });' if fields else '  );')
     lines.append('')
     lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
     lines.append(f'    return {class_name}(')
@@ -1262,7 +1390,9 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
     chunks = [
         '// GENERATED CODE - DO NOT EDIT.',
         '// ignore_for_file: unused_element',
-        f'// Generated by backend/scripts/generate_dart_models.py --group {group} from docs/api-reference/app-client-openapi.json.',
+        f'// Generated by backend/scripts/generate_dart_models.py --group {group} from '
+        + str(SCHEMA_GROUPS[group].get('spec', DEFAULT_SPEC_PATH).relative_to(ROOT_DIR))
+        + '.',
         '',
     ]
     if group in {'action_items_folders', 'task_intelligence'}:
@@ -1328,7 +1458,8 @@ def main() -> int:
     groups = tuple(SCHEMA_GROUPS) if args.all else (args.group,)
     for group in groups:
         output_path = Path(args.output) if args.output else SCHEMA_GROUPS[group]['output']
-        generated = build_output(spec, group)
+        group_spec = SCHEMA_GROUPS[group].get('spec')
+        generated = build_output(json.loads(group_spec.read_text(encoding='utf-8')) if group_spec else spec, group)
         if args.check:
             if not output_path.exists() or output_path.read_text(encoding='utf-8') != generated:
                 raise SystemExit(f'{output_path} is stale; run backend/scripts/generate_dart_models.py --group {group}')

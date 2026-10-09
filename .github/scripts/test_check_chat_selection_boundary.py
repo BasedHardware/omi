@@ -63,6 +63,21 @@ def conversation_detail_sources() -> dict[str, str]:
             "  }\n"
             "}\n"
         ),
+        CHECKER.CONVERSATION_DETAIL_FILES[2]: (
+            "struct ConversationDetailHeader {\n"
+            "  var title: some View {\n"
+            "    Text(conversation.title)\n"
+            "      .scaledFont(size: OmiType.heading, weight: .semibold)\n"
+            "  }\n"
+            "}\n"
+        ),
+        CHECKER.CONVERSATION_DETAIL_FILES[3]: (
+            "struct ConversationDetailSections {\n"
+            "  var overview: some View {\n"
+            "    OmiMarkdown(text: content, sender: .ai, appKitProseSelection: true, documentProse: true)\n"
+            "  }\n"
+            "}\n"
+        ),
     }
 
 

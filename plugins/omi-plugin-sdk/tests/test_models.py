@@ -187,3 +187,58 @@ def test_section_and_action_items_extraction():
     extraction = ActionItemsExtraction(action_items=[ActionItem(description="Follow up")])
     assert len(extraction.action_items) == 1
     assert extraction.action_items[0].description == "Follow up"
+
+
+def _canonical_punctuation_normalization(text):
+    """The normalization backend/models/transcript_segment.py applies.
+
+    Mirrors the canonical implementation's final pass verbatim so a future
+    divergence fails here instead of silently corrupting plugin transcripts.
+    """
+    return text.strip().replace("  ", " ").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+
+
+def test_combine_segments_keeps_the_word_boundary_when_a_segment_is_space_padded():
+    from omi_plugin_sdk.models import TranscriptSegment
+
+    # combine_segments joins with f" {new_segment.text}", so a segment whose
+    # text is already space-padded - routine in streaming STT output - produces
+    # a double space that the normalization pass must not delete.
+    seg1 = TranscriptSegment(text="Part 1 ", speaker="SPEAKER_01", is_user=False, start=0.0, end=2.0)
+    seg2 = TranscriptSegment(text="Part 2", speaker="SPEAKER_01", is_user=False, start=2.0, end=4.0)
+
+    combined = TranscriptSegment.combine_segments([seg1], [seg2])
+
+    assert len(combined) == 1
+    assert combined[0].text == "Part 1 Part 2"
+
+
+def test_combine_segments_collapses_an_internal_double_space_instead_of_deleting_it():
+    from omi_plugin_sdk.models import TranscriptSegment
+
+    seg = TranscriptSegment(text="I said  hello", speaker="SPEAKER_00", is_user=False, start=0.0, end=1.0)
+
+    combined = TranscriptSegment.combine_segments([], [seg])
+
+    assert combined[0].text == "I said hello"
+
+
+def test_combine_segments_normalization_matches_the_canonical_backend_pass():
+    from omi_plugin_sdk.models import TranscriptSegment
+
+    cases = [
+        "I said  hello",
+        "hello world",
+        "trailing space ",
+        " leading space",
+        "spaced , comma",
+        "spaced . period",
+        "spaced ? question",
+    ]
+
+    for index, text in enumerate(cases):
+        seg = TranscriptSegment(
+            text=text, speaker="SPEAKER_00", is_user=False, start=float(index), end=float(index) + 0.5
+        )
+        combined = TranscriptSegment.combine_segments([], [seg])
+        assert combined[0].text == _canonical_punctuation_normalization(text), text

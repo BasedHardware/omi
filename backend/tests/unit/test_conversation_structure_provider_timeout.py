@@ -37,6 +37,7 @@ exactly as httpx does, against a provider that needs longer than the background 
 """
 
 import os
+from contextlib import asynccontextmanager
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
@@ -52,7 +53,7 @@ from langchain_core.runnables import RunnableLambda  # noqa: E402
 from models.app import App  # noqa: E402
 import utils.llm.conversation_processing as processing  # noqa: E402
 import utils.llm.model_config as model_config  # noqa: E402
-from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix  # noqa: E402
+from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.gateway_resilience import DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS  # noqa: E402
 
 # What the provider actually needs to answer a whole-transcript structuring prompt. Longer than the
@@ -80,6 +81,13 @@ def slow_provider(monkeypatch):
     call succeeded or failed.
     """
 
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setattr(processing, 'isolated_notes_model', isolated_fake)
     resolved: list[float] = []
 
     def _get_llm(feature, *args, request_timeout=None, **kwargs):
@@ -98,24 +106,7 @@ def slow_provider(monkeypatch):
         return RunnableLambda(_invoke)
 
     monkeypatch.setattr(processing, "get_llm", _get_llm)
-    # The shadow comparison hands the same prompt to a second client on a background executor; it is
-    # not part of the deadline contract under test.
-    monkeypatch.setattr(processing, "_should_run_conversation_structure_shadow", lambda *a, **k: False)
     return resolved
-
-
-def _structure():
-    return processing.get_transcript_structure(
-        TRANSCRIPT,
-        STARTED_AT,
-        'en',
-        'UTC',
-        'test-uid',
-    )
-
-
-def _reprocess_structure():
-    return processing.get_reprocess_transcript_structure(TRANSCRIPT, STARTED_AT, 'en', 'UTC')
 
 
 def _conversation_notes():
@@ -151,7 +142,7 @@ TEMPLATE_APP = App(
 
 
 def _app_result_with_notes_prefix():
-    """POST /reprocess?app_id= with CONVERSATION_NOTES_V2_ENABLED, which is how prod runs."""
+    """POST /reprocess?app_id= with the notes prefix used in production."""
     prefix = build_conversation_prompt_prefix(
         conversation_id='277d188e-9563-4fd1-bf1b-8a6bbcbe4b94',
         transcript=TRANSCRIPT,
@@ -177,8 +168,6 @@ def _returns_app_content(result) -> None:
 
 
 SUMMARY_CALLS = [
-    pytest.param(_structure, _summarizes, id='get_transcript_structure'),
-    pytest.param(_reprocess_structure, _summarizes, id='get_reprocess_transcript_structure'),
     pytest.param(_conversation_notes, _summarizes, id='get_conversation_notes'),
     pytest.param(_app_result_with_notes_prefix, _returns_app_content, id='get_app_result_notes_prefix'),
     pytest.param(_app_result_legacy_prompt, _returns_app_content, id='get_app_result_legacy_prompt'),

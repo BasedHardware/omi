@@ -7,6 +7,9 @@ transactional read must occur before the first transactional write.
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+Projected client BatchGet of folder membership is covered by
+test_folder_delete_concurrency_emulator.py; all of its reads obey the same
+read-before-write rule. BatchGet does not promise request-order results.
 It deliberately does not model other queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
@@ -35,8 +38,24 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
+class InvalidFirestoreValueError(ValueError):
+    """Raised for a value Firestore rejects with InvalidArgument (an array directly inside an array)."""
+
+
+def _assert_storable(value: Any, *, in_array: bool = False) -> None:
+    if isinstance(value, (list, tuple)):
+        if in_array:
+            raise InvalidFirestoreValueError('Firestore cannot store an array directly inside an array')
+        for item in value:
+            _assert_storable(item, in_array=True)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _assert_storable(item)
+
+
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries'
+    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
+    'projected client folder-membership BatchGet'
 )
 
 
@@ -55,6 +74,11 @@ class StrictFirestoreDocument:
         self._database = database
         self.path = path
 
+    @property
+    def id(self) -> str:
+        """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
+        return self.path[-1]
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
@@ -66,12 +90,19 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths != ["is_locked"]:
-                raise UnsupportedFirestoreOperationError("only the sweep privacy projection is supported")
+            if field_paths not in (
+                ["is_locked"],
+                ["folder_id"],
+                ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+            ):
+                raise UnsupportedFirestoreOperationError(
+                    "only privacy, folder membership and speaker-receipt projections are supported"
+                )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
 
     def create(self, data: dict[str, Any]) -> None:
+        _assert_storable(data)
         if self.path in self._database.rows:
             raise RuntimeError('document already exists')
         self._database.rows[self.path] = deepcopy(data)
@@ -190,6 +221,7 @@ class StrictFirestoreTransaction:
 
     def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
@@ -197,6 +229,7 @@ class StrictFirestoreTransaction:
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         if ref.path in self._database.rows:
             raise RuntimeError('document already exists')
@@ -206,6 +239,7 @@ class StrictFirestoreTransaction:
 
     def update(self, ref: StrictFirestoreDocument, patch: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(patch)
         self.has_written = True
         if ref.path not in self._database.rows:
             raise RuntimeError('missing row')
@@ -255,3 +289,21 @@ class StrictFirestore:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
         self.transactions.append(transaction)
         return transaction
+
+    def get_all(
+        self,
+        references: list[StrictFirestoreDocument],
+        *,
+        field_paths: list[str],
+        transaction: StrictFirestoreTransaction,
+    ) -> list[StrictFirestoreSnapshot]:
+        if field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        snapshots = []
+        for reference in reversed(references):
+            if reference._database is not self:
+                raise ForeignTransactionError('BatchGet and document reference must belong to the same store')
+            snapshot = reference.get(transaction=transaction, field_paths=field_paths)
+            snapshot.reference = reference
+            snapshots.append(snapshot)
+        return snapshots

@@ -70,7 +70,7 @@ def _parse_value(raw: str) -> Any:
     value = raw.strip()
     if not value:
         return ""
-    if value.startswith(("[", '"')) or value in {"true", "false", "null"}:
+    if value.startswith(("[", "{", '"')) or value in {"true", "false", "null"}:
         return json.loads(value)
     return value
 
@@ -91,6 +91,12 @@ def _parse_yaml_subset(path: Path) -> dict[str, list[dict[str, Any]]]:
             continue
         if section is None:
             raise ValueError(f"{path}:{lineno}: entry appears before a section")
+        if stripped.startswith("- {"):
+            current = json.loads(stripped[2:])
+            if not isinstance(current, dict):
+                raise ValueError(f"{path}:{lineno}: expected an object")
+            sections[section].append(current)
+            continue
         if stripped.startswith("- "):
             current = {}
             sections[section].append(current)
@@ -184,7 +190,11 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
         for pattern in check.triggers:
             if not pattern or pattern.count("[") != pattern.count("]"):
                 errors.append(f"{check.id}: invalid trigger glob: {pattern!r}")
-            elif pattern != "all" and not glob.has_magic(pattern) and not (root / pattern).exists():
+            elif (
+                pattern not in {"all", "@firestore-index-guard"}
+                and not glob.has_magic(pattern)
+                and not (root / pattern).exists()
+            ):
                 errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
             errors.append(f"{check.id}: lanes must not be empty")
@@ -238,20 +248,43 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     )
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
+        files.update(
+            run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines()
+        )
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
 
 def trigger_matches(pattern: str, path: str) -> bool:
+    if pattern == "@firestore-index-guard":
+        # The backend selector owns both the inventory scope and guard inputs.
+        # It and its inventory imports are stdlib-only; selection needs no venv.
+        backend_scripts = Path(__file__).resolve().parents[2] / "backend/scripts"
+        if str(backend_scripts) not in sys.path:
+            sys.path.insert(0, str(backend_scripts))
+        from select_backend_unit_tests import is_firestore_index_guard_path
+
+        return is_firestore_index_guard_path(path)
     if pattern == "all":
         return True
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
-    if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
+    if fnmatch.fnmatchcase(path, pattern):
         return True
-    if "/**/" in pattern:
-        return fnmatch.fnmatchcase(path, pattern.replace("/**/", "/"))
+    # Path.match treats a slash-free pattern as a final-component glob, so a
+    # trigger written as `package.json` also selects `web/frontend/package.json`.
+    # A literal trigger names one repo path. Glob patterns still use Path.match.
+    if ("/" in pattern or glob.has_magic(pattern)) and PurePath(path).match(pattern):
+        return True
+    if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
+        return True
+    # `**/x` means "x at any depth, the repository root included" -- the reading
+    # git, .gitignore and Actions path filters share. fnmatch needs the literal
+    # `/`, so a trigger list written only as `**/*.json` selects nothing for a
+    # root-level file it is meant to cover. Collapse a leading `**/` to nothing,
+    # exactly as the interior `/**/` is collapsed above.
+    if pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]):
+        return True
     return False
 
 

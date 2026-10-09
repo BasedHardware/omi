@@ -54,6 +54,34 @@ omi action-item list --open
 omi goal list
 ```
 
+## Terminal chat
+
+Sign in with your Omi account, then chat on your current default Omi cloud
+chat thread:
+
+```bash
+omi auth login --browser
+omi chat                        # interactive; replies stream as they arrive
+omi chat "What did we decide?"  # one message, then exit
+omi chat --history --limit 20   # recent shared messages
+omi chat --clear                 # asks before deleting shared chat history
+omi chat --clear --yes           # explicit non-interactive reset
+omi --json chat "Summarize today"  # one final response as JSON
+```
+
+Interactive commands: `/history`, `/clear`, `/tasks`, `/task add TEXT`,
+`/task done ID`, `/help`, and `/quit`. `/clear` removes the shared cloud chat
+history across clients, not just terminal output. It always asks first.
+The terminal does not keep a second transcript on disk. If a stream disconnects,
+check `omi chat --history` before resending because the server may have saved the turn.
+
+This uses the cloud chat backend and its synced memories, conversations, and
+tasks. It does **not** grant the terminal live access to the Mac's private
+screen or the desktop-only agent context; use the desktop app for those.
+Developer API keys cannot authenticate the user chat endpoint, so `omi chat`
+requires browser sign-in. `omi ask` remains available for scoped, one-shot
+developer API-key questions.
+
 Pass `--json` to any command (as a global flag, before the verb) to get
 machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 
@@ -67,14 +95,17 @@ to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
 > [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), or the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇮🇩 Panduan mulai cepat (Indonesian Quickstart)](examples/quickstart.id.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md), the [🇲🇳 omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart)](examples/quickstart.mn.md), the [🇳🇬 Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart)](examples/quickstart.ha.md), the [🇧🇦 Vodič za brzi početak rada s omi-cli (Bosnian Quickstart)](examples/quickstart.bs.md), the [🇳🇬 Ntuziaka mmalite ngwa ngwa nke omi-cli (Igbo Quickstart)](examples/quickstart.ig.md), or the [🇪🇹 የ omi-cli ፈጣን መጀመሪያ መመሪያ (Amharic Quickstart)](examples/quickstart.am.md).
+> Looking for localized guides? See the [nnapulitano (Neapolitan Quickstart)](examples/quickstart.nap.md), the [vosa vakaViti (Fijian Quickstart)](examples/quickstart.fj.md), the [papiamentu (Papiamento Quickstart)](examples/quickstart.pap.md), the [mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md), the [hornjoserbšćina (Upper Sorbian Quickstart)](examples/quickstart.hsb.md), the [rumantsch (Romansh Quickstart)](examples/quickstart.rm.md), the [armãneashti (Aromanian Quickstart)](examples/quickstart.rup.md), or the [estremeñu (Extremaduran Quickstart)](examples/quickstart.ext.md).
 
-> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
+
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), the [🇧🇩 omi-cli দিয়ে শুরু করা (Bengali Quickstart)](examples/quickstart.bn.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 
 > Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md), or the [ᏣᎳᎩ (Cherokee Quickstart)](examples/quickstart.chr.md).
 > Looking for localized guides? See the [asturianu (Asturian Quickstart)](examples/quickstart.ast.md), the [vèneto (Venetian Quickstart)](examples/quickstart.vec.md), the [corsu (Corsican Quickstart)](examples/quickstart.co.md), the [gagana Samoa (Samoan Quickstart)](examples/quickstart.sm.md), the [lea faka-Tonga (Tongan Quickstart)](examples/quickstart.to.md), the [ʻōlelo Hawaiʻi (Hawaiian Quickstart)](examples/quickstart.haw.md), the [kalaallisut (Greenlandic Quickstart)](examples/quickstart.kl.md), the [মৈতৈলোন (Meitei Quickstart)](examples/quickstart.mni.md), the [ತುಳು (Tulu Quickstart)](examples/quickstart.tcy.md), the [isiNdebele (Ndebele Quickstart)](examples/quickstart.nd.md), the [Kikongo (Kongo Quickstart)](examples/quickstart.kg.md), or the [chisena (Sena Quickstart)](examples/quickstart.seh.md).
+> Looking for localized guides? See the [Kajin M̧ajeļ (Marshallese Quickstart)](examples/quickstart.mh.md), the [Chamoru (Chamorro Quickstart)](examples/quickstart.ch.md), the [Tetun (Tetum Quickstart)](examples/quickstart.tet.md), the [Tok Pisin (Tok Pisin Quickstart)](examples/quickstart.tpi.md), the [Aymar aru (Aymara Quickstart)](examples/quickstart.ay.md), or the [Macehuallahtolli (Nahuatl Quickstart)](examples/quickstart.nah.md).
 
 > Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
 
@@ -91,6 +122,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [Sängö (Sango Quickstart)](examples/quickstart.sg.md), the [Qafar af (Afar Quickstart)](examples/quickstart.aa.md), the [Te Ggana Tuuvalu (Tuvaluan Quickstart)](examples/quickstart.tvl.md), the [Vagahau Niue (Niuean Quickstart)](examples/quickstart.niu.md), the [Gagana Tokelau (Tokelauan Quickstart)](examples/quickstart.tkl.md), or the [Reo Tahiti (Tahitian Quickstart)](examples/quickstart.ty.md).
 
 > Looking for localized guides? See the [🇸🇦 دليل البدء السريع (Arabic Quickstart)](examples/quickstart.ar.md), the [🇻🇳 Hướng dẫn nhanh (Vietnamese Quickstart)](examples/quickstart.vi.md), the [🇨🇿 Rychlý start (Czech Quickstart)](examples/quickstart.cs.md), or the [🇮🇱 מדריך מהיר (Hebrew Quickstart)](examples/quickstart.he.md).
+> Looking for localized guides? See the [Bislama (Bislama Quickstart)](examples/quickstart.bi.md), the [Sranan Tongo (Sranan Tongo Quickstart)](examples/quickstart.srn.md), the [Karelian (Karelian Quickstart)](examples/quickstart.krl.md), the [Võro (Võro Quickstart)](examples/quickstart.vro.md), the [Kashubian (Kashubian Quickstart)](examples/quickstart.csb.md), the [Silesian (Silesian Quickstart)](examples/quickstart.szl.md), the [Rusyn (Rusyn Quickstart)](examples/quickstart.rue.md), the [Lower Sorbian (Lower Sorbian Quickstart)](examples/quickstart.dsb.md), the [Aragonese (Aragonese Quickstart)](examples/quickstart.an.md), the [Kirundi (Kirundi Quickstart)](examples/quickstart.rn.md).
 > Looking for localized guides? See the [🇵🇭 Umuna a Gabay iti omi-cli (Ilocano Quickstart)](examples/quickstart.ilo.md).
 > Looking for localized guides? See the [🇵🇭 Mga Unang Lakang gamit ang omi-cli (Cebuano Quickstart)](examples/quickstart.ceb.md).
 > Looking for localized guides? See the [Diné bizaad (Navajo Quickstart)](examples/quickstart.nv.md).
@@ -279,15 +311,31 @@ omi
 │       ├── search <query> [--include-completed]
 │       ├── complete <id>
 │       └── delete <id> [-y]
-└── goal
-    ├── list [--limit N] [--include-inactive]
-    ├── get <id>
-    ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [--unit ... | --clear-unit] [...]
-    ├── progress <id> <value>
-    ├── history <id> [--days N]
-    └── delete <id> [-y]
+├── goal
+│   ├── list [--limit N] [--include-inactive]
+│   ├── get <id>
+│   ├── create <title> --target N [--type ...] [--current N] [--unit ...]
+│   ├── update <id> [--unit ... | --clear-unit] [...]
+│   ├── progress <id> <value>
+│   ├── history <id> [--days N]
+│   └── delete <id> [-y]
+└── app
+    ├── events
+    ├── payload <event> [--uid UID]
+    ├── send <event> --to URL [--uid UID] [--payload-file FILE] [--idempotency-key K] [--timeout S]
+    ├── verify --to URL [--event EVENT] [--uid UID]
+    └── serve [--port N] [--host H] [--status N] [--reply JSON] [--requests N]
 ```
+
+`omi app` is the local test harness for an Omi app. `omi app serve` receives
+deliveries and prints them, `omi app send` posts a sample event the way the
+backend posts it: same query parameters, content type, and `Idempotency-Key`
+header. `send` exits non-zero unless the receiver answers 2xx, and says what
+Omi would do next, including whether a `realtime_transcript` reply was long
+enough to reach the user as a notification. `omi app verify` posts every event
+to one URL and reports whether that endpoint would work in production: a
+private or loopback host, a redirect, or a response slower than 30 seconds all
+fail, because that is what the backend's delivery client does with them.
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
@@ -295,6 +343,9 @@ Both transcript JSON and `local call --args-json` require finite numbers:
 `NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
 range are rejected before opening an API client. In `--json` mode, these input
 errors are reported as JSON on stderr.
+
+Goal numeric options and progress values must also be finite. NaN, infinities,
+and overflowing exponents are rejected before an API request.
 
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;
@@ -369,6 +420,10 @@ rate-limit responses still retry; read retries are unchanged.
 ## Allow clearing an action item due date
 
 `omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
+## Preserve ambiguous sql table output
+
+`omi --json local sql` keeps ambiguous or truncated display tables under `text` rather than silently dropping cells. Structured Desktop responses pass through unchanged; the text display is not a lossless SQL wire format.
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`

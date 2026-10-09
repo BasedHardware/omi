@@ -56,7 +56,11 @@ def test_serve_error_cooldown_is_longer_than_connect_path_and_needs_multiple_suc
     """RCA 2026-09-09: first transcript succeeds, then teardown fails ~1:1.
 
     A 30s serve-error bench flaps. Connect-path still closes on the first
-    success; serve-error recovery must not re-admit on the first probe.
+    success; serve-error recovery must not re-admit on the first probe — and
+    since 2026-09-22's storm a grace-only probe success cannot close the
+    bench at all: closing takes consecutive SERVING successes (transcript or
+    done frame), because the 0.3s liveness grace is passed by streams the
+    provider kills mid-session.
     """
     clock = Clock()
     circuit = ProviderCircuitBreaker(
@@ -78,10 +82,13 @@ def test_serve_error_cooldown_is_longer_than_connect_path_and_needs_multiple_suc
     circuit.record_success()
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success(serving=True)
     assert circuit.state == 'closed'
     assert circuit.allow_request() is True
 

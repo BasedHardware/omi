@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-best-effort-push-rewrites-committed-job",
+  "violated_contract": "A completed import job must reflect the conversations already committed. Failure to send its best-effort completion push must not reclassify the job as failed or trigger a contradictory failure push.",
+  "canonical_prevention": "Send import outcome notifications through the typed notification dispatcher at a non-throwing boundary after persisting the job result. Observe delivery failure separately from the durable import status, including transport exceptions and zero successful sends.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_limitless_import_idempotency.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/imports/limitless.py",
+    "backend/utils/notification_dispatch.py"
+  ],
+  "status": "open"
+}

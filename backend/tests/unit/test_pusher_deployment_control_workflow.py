@@ -133,8 +133,12 @@ def test_prod_evidence_failure_halts_before_any_registry_or_helm_mutation() -> N
     helm_mutation = MANUAL.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
 
     assert qualification_verifier < registry_mutation < canary_verifier < config_mutation < helm_mutation
-    assert "--phase qualification" in MANUAL[qualification_verifier - 300 : qualification_verifier + 500]
-    assert "--phase canary" in MANUAL[canary_verifier - 300 : canary_verifier + 500]
+    qualification_block = MANUAL[qualification_verifier : qualification_verifier + 900]
+    canary_block = MANUAL[canary_verifier : canary_verifier + 1200]
+    assert "--phase qualification" in qualification_block
+    assert "--phase canary" in canary_block
+    assert '--expected-canary-source-sha "$CHECKED_OUT_SHA"' not in qualification_block
+    assert '--expected-canary-source-sha "$CHECKED_OUT_SHA"' in canary_block
 
 
 def test_dev_qualification_runs_real_deployed_semantic_probe_before_recording_pass() -> None:
@@ -288,6 +292,7 @@ def test_prod_qualifies_an_isolated_config_then_proves_the_shared_config_is_iden
     assert (
         "--final-deployment-receipt pusher-prod-deployment-receipt.json" in MANUAL[final_verify : final_verify + 2000]
     )
+    assert '--expected-canary-source-sha "$CHECKED_OUT_SHA"' in MANUAL[final_verify : final_verify + 2000]
 
 
 def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> None:
@@ -298,6 +303,7 @@ def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> Non
     assert "verify_pusher_source_closure.py" in MANUAL
     assert "PUSHER_SOURCE_PATHS" in MANUAL
     assert '"${PUSHER_SOURCE_PATHS[@]}"' in MANUAL
+    assert MANUAL.index("verify_pusher_source_closure.py") < MANUAL.index("gcloud container images add-tag --quiet")
     # The stale hardcoded subset must not be present.
     assert "backend/pusher backend/charts/pusher" not in MANUAL
 

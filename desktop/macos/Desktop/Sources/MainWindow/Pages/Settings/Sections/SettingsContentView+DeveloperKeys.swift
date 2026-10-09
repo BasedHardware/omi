@@ -4,21 +4,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// Users often paste one key and miss the banner saying a valid LLM key is
-/// required. Non-nil while 1–3 keys (in `BYOKProvider.allCases` order)
-/// are entered, listing the ones still missing.
-func byokMissingKeysHint(_ keys: [String]) -> String? {
-  let missing = zip(BYOKProvider.allCases, keys).filter { $0.1.isEmpty }.map(\.0.displayName)
-  guard !missing.isEmpty, missing.count < keys.count else { return nil }
-  return
-    "Still missing: \(missing.joined(separator: ", ")). All 4 keys must be entered at the same time to activate the free plan."
-}
-
 /// What a settled BYOK key set owes the backend.
 ///
-/// The four fields are `SecureField`s bound straight to `@AppStorage`, so the
+/// The key fields are `SecureField`s bound straight to `@AppStorage`, so the
 /// binding is written on *every character*. Reconciling on each of those writes
-/// pinged four provider auth endpoints with a half-typed key and flapped the
+/// pinged provider auth endpoints with a half-typed key and flapped the
 /// backend free-plan flag once per keystroke. Deciding the action from the
 /// settled key set — separately from performing it — is what makes that policy
 /// testable without a network.
@@ -56,7 +46,7 @@ extension SettingsContentView {
           Text("Language model")
             .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(Ink.primary)
-          Text("Choose the provider that powers chat, memory, and insights. OpenRouter is selected by default.")
+          Text("Choose a provider for supported memory and insight features. Desktop chat supports Anthropic keys.")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Picker("LLM provider", selection: $devBYOKLLMProvider) {
@@ -79,7 +69,7 @@ extension SettingsContentView {
       developerKeyField(
         provider: .deepgram,
         title: "Deepgram API Key",
-        subtitle: "For live transcription.",
+        subtitle: "Required for BYOK transcription; otherwise Omi's transcription allowance applies.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
       )
@@ -167,27 +157,45 @@ extension SettingsContentView {
       || !devDeepgramKey.isEmpty
   }
 
-  var hasAllBYOKKeys: Bool {
+  var hasActiveLLMByok: Bool {
     APIKeyService.isByokActive
+  }
+
+  var byokStatusTitle: String {
+    hasActiveLLMByok ? "LLM BYOK active" : "Bring your own keys"
+  }
+
+  var byokUsageDescription: String {
+    "An LLM key covers supported AI features only. Desktop chat supports Anthropic keys; other LLM keys do not remove Omi's chat limit."
   }
 
   @ViewBuilder
   var byokStatusBanner: some View {
     settingsCard(settingId: "advanced.devkeys.info") {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
-        Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
-          .foregroundColor(hasAllBYOKKeys ? Ink.listeningGreen : Ink.secondary)
+        Image(systemName: hasActiveLLMByok ? "checkmark.seal.fill" : "key.fill")
+          .foregroundColor(hasActiveLLMByok ? Ink.listeningGreen : Ink.secondary)
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+          Text(byokStatusTitle)
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(Ink.primary)
+          Text(byokUsageDescription)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
           Text(
-            hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Choose a language model provider, then add its key. Deepgram is optional and only powers transcription. Keys stay on this Mac — we never store them on our servers."
+            "A validated Deepgram key is required to avoid Omi's transcription allowance. Without it, new synced conversations may be locked when that allowance runs out."
           )
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
+          Text(TranscriptionAllowancePresentation.statusText(userSubscription?.transcriptionAllowance))
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.primary)
+          Text("Adding Deepgram later does not unlock conversations already locked.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          Text("Keys are saved on this Mac and sent with requests, never stored on Omi's servers.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
         Spacer()
       }
@@ -229,6 +237,7 @@ extension SettingsContentView {
         APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
       }
+      loadSubscriptionInfo()
       return
     }
     let action = BYOKReconciliation.action(
@@ -281,7 +290,8 @@ extension SettingsContentView {
           await MainActor.run {
             // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
             // event — once the selected LLM BYOK key validates, the user is on the
-            // free BYOK plan and shouldn't be locked out of capture/transcription.
+            // free BYOK plan for supported AI features. Managed transcription
+            // still follows the server allowance without an enrolled Deepgram key.
             AppState.current?.isPaywalled = false
             byokKeyStatuses = results
             byokActivationError = nil
@@ -292,6 +302,16 @@ extension SettingsContentView {
             byokActivationError =
               "Could not enroll keys with Omi. Free plan stays off until enrollment succeeds."
           }
+        }
+      } else if BYOKValidator.isTransient(results[selectedBYOKLLMProvider.provider] ?? .failed("missing")) {
+        // The check produced no provider verdict (transport failure, provider
+        // 5xx/429, offline). The key may be perfectly good: keep the existing
+        // enrollment intact and say the check can be retried, instead of
+        // treating a non-answer as a rejection and tearing the free plan down.
+        await MainActor.run {
+          byokKeyStatuses = results
+          byokActivationError =
+            "Couldn't reach \(selectedBYOKLLMProvider.displayName) to verify your key. Your saved keys stay active — try again in a moment."
         }
       } else {
         let failed = results.filter {
@@ -366,6 +386,8 @@ extension SettingsContentView {
       Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.listeningGreen)
     case .failed:
       Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(SettingsInk.notice)
+    case .transient:
+      Text("Check failed").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.secondary)
     }
   }
 

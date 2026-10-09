@@ -111,10 +111,10 @@ test("JIT gateway receipt parser accepts trusted header and terminal SSE framing
     attempts: [{
       attempt_id: "invocation:1",
       provider: "openai",
-      configured_model: "gpt-5.6-luna",
-      actual_model_version: "gpt-5.6-luna-20260901",
+      configured_model: "gpt-6-luna",
+      actual_model_version: "gpt-6-luna-20260901",
       provider_response_id: "resp_1",
-      rate_card_id: "openai:gpt-5.6-luna:v1",
+      rate_card_id: "openai:gpt-6-luna:v1",
       cost_basis: "rate_card",
       usage_status: "confirmed",
       cost_status: "estimated",
@@ -156,7 +156,7 @@ test("JIT fetch guard forwards streaming bytes before the receipt arrives", asyn
     attempts: [{
       attempt_id: "invocation:stream",
       provider: "openai",
-      configured_model: "gpt-5.6-luna",
+      configured_model: "gpt-6-luna",
       cost_basis: "rate_card",
       usage_status: "confirmed",
       cost_status: "estimated",
@@ -247,7 +247,7 @@ test("JIT fetch guard permanently blocks a run after unknown receipt cost", asyn
     attempts: [{
       attempt_id: "invocation:unknown",
       provider: "openai",
-      configured_model: "gpt-5.6-luna",
+      configured_model: "gpt-6-luna",
       cost_basis: "rate_card",
       usage_status: "unknown",
       cost_status: "unknown",
@@ -1615,12 +1615,24 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     check_permission_status: [],
     request_permission: ["type"],
     web_search: ["query", "scope"],
+    screenshot: [],
+    get_work_context: [],
+    search_contacts: ["query"],
+    list_message_chats: [],
+    read_message_history: [],
+    list_mail_messages: [],
+    send_message: ["to", "text"],
+    run_applescript: ["script"],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(expected, tool.name),
+      `${tool.name} is missing from the expected required-field table`,
+    );
     assert.deepEqual(
       req.sort(),
-      (expected[tool.name] ?? []).sort(),
+      expected[tool.name].sort(),
       `${tool.name} required fields mismatch`,
     );
   }

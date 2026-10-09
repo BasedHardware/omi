@@ -45,8 +45,8 @@ vi.mock('@/lib/referrals', () => ({
     value === 'dev' || value === 'prod' ? value : null,
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: { pageView: vi.fn(), track: vi.fn() },
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: { pageView: vi.fn(), track: vi.fn() },
 }));
 
 import { LoginClient } from '@/app/login/LoginClient';

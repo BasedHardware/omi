@@ -259,12 +259,20 @@ def load(path: Optional[Path] = None) -> Config:
                         profiles={},
                         load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got {type(val).__name__}",
                     )
-                if not math.isfinite(val):
+                try:
+                    if not math.isfinite(val):
+                        return Config(
+                            path=p,
+                            active_profile=DEFAULT_PROFILE_NAME,
+                            profiles={},
+                            load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got non-finite ({val})",
+                        )
+                except OverflowError:
                     return Config(
                         path=p,
                         active_profile=DEFAULT_PROFILE_NAME,
                         profiles={},
-                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got non-finite ({val})",
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got overflow",
                     )
         profiles[name] = Profile.from_toml_dict(name, raw)
 

@@ -27,6 +27,13 @@ from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
@@ -240,6 +247,7 @@ async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(m
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = ListenRequest(websocket=SimpleNamespace(), uid='select-user', stt_service='parakeet')
     runtime.use_custom_stt = False
+    runtime.is_multi_channel = False
     runtime.session_id = 'select-session'
     runtime.language = 'en'
 

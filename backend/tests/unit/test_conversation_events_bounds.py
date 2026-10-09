@@ -142,6 +142,7 @@ def router():
         "database": _pkg("database"),
         "database._client": client_mod,
         "database.conversations": _pkg("database.conversations"),
+        "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
@@ -192,6 +193,8 @@ def router():
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),
+        "utils.speaker_tag_prompts.service": _pkg("utils.speaker_tag_prompts.service"),
+        "utils.subscription": _pkg("utils.subscription"),
         "utils.app_integrations": _pkg("utils.app_integrations"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.memory_service": memory_service,
@@ -450,7 +453,40 @@ def test_bulk_assign_exact_id_still_supports_user_assignment(router):
     assert segments[0].is_user is True
     assert segments[0].person_id is None
     assert segments[1].is_user is False
-    assert background_tasks.tasks == []
+    assert len(background_tasks.tasks) == 1
+    assert background_tasks.tasks[0].kwargs["segment_ids"] == ["segment-0"]
+
+
+def test_is_user_false_assignment_records_an_explicit_not_me(router):
+    convo, segments = _fake_conversation_with_segments(
+        1, status=router.conv.ConversationStatus.completed, with_ids=True
+    )
+    captured = {}
+
+    def commit(uid, cid, **kwargs):
+        captured.update(kwargs)
+        return {'id': cid, 'transcript_segments': []}, [], [], []
+
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv, "commit_manual_assignment", side_effect=commit), patch.object(
+        router.conv, "emit_product_event"
+    ):
+        handler("c1", 0, "is_user", value="false", uid="u1")
+
+    assert captured["is_user"] is False
+    assert captured["rejection"] == {"kind": "not_me", "person_id": None}
+
+    captured.clear()
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv, "commit_manual_assignment", side_effect=commit), patch.object(
+        router.conv, "emit_product_event"
+    ):
+        handler("c1", 0, "person_id", value="null", uid="u1")
+
+    assert captured["rejection"] is None
 
 
 def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
@@ -554,9 +590,13 @@ def _set_action_item_status(router, mirrored, values):
     ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
         router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
     ), patch.object(
-        router.conv.action_items_db, "mark_action_item_completed"
+        router.conv.action_items_db, "mark_action_item_completed", return_value=True
     ) as mark, patch.dict(
         "sys.modules", {"utils.notifications": notifications}
+    ), patch.object(
+        router.conv.action_items_db,
+        "get_action_item",
+        return_value={**mirrored[0], 'completed': values[0], 'status': 'completed' if values[0] else 'active'},
     ):
         router.conv.set_action_item_status(data, "c1", uid="u1")
     return mark, notifications.sync_action_item_reminder
@@ -570,7 +610,13 @@ def test_checking_off_a_conversation_task_cancels_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", True)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=True, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=True,
+        due_at=due,
+        status='completed',
+        deleted=False,
     )
 
 
@@ -582,7 +628,13 @@ def test_unchecking_a_conversation_task_rearms_its_reminder(router):
 
     mark.assert_called_once_with("u1", "task-1", False)
     reminder.assert_called_once_with(
-        user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
+        user_id="u1",
+        action_item_id="task-1",
+        description="Send the budget",
+        completed=False,
+        due_at=due,
+        status='active',
+        deleted=False,
     )
 
 

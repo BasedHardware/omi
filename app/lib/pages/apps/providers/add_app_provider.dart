@@ -561,7 +561,7 @@ class AddAppProvider extends ChangeNotifier {
         (cap) => cap.id == 'external_integration' || cap.id == 'proactive_notification',
       );
       if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
-        AppSnackbar.showSnackbarError('GitHub repository URL is required for this app type');
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.githubRepositoryUrlRequired);
         return false;
       }
       return true;
@@ -659,8 +659,9 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   Future<bool> refreshManifest() async {
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (updateAppId == null) {
-      AppSnackbar.showSnackbarError('App ID not found');
+      AppSnackbar.showSnackbarError(l10n?.appIdNotFoundError ?? 'App ID not found');
       return false;
     }
 
@@ -670,10 +671,10 @@ class AddAppProvider extends ChangeNotifier {
       var app = await getAppDetailsServer(updateAppId!);
       if (app != null) {
         appProvider!.updateLocalApp(App.fromJson(app));
-        AppSnackbar.showSnackbarSuccess('Manifest refreshed successfully');
+        AppSnackbar.showSnackbarSuccess(l10n?.manifestRefreshedSuccess ?? 'Manifest refreshed successfully');
       }
     } else {
-      AppSnackbar.showSnackbarError('Failed to refresh manifest');
+      AppSnackbar.showSnackbarError(l10n?.manifestRefreshFailed ?? 'Failed to refresh manifest');
     }
     setIsRefreshingManifest(false);
     return success;
@@ -760,7 +761,7 @@ class AddAppProvider extends ChangeNotifier {
             type: FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
             allowMultiple: false,
-            dialogTitle: 'Select an image file',
+            dialogTitle: globalNavigatorKey.currentContext!.l10n.selectImageFileTitle,
             withData: false,
             withReadStream: false,
           );
@@ -827,7 +828,7 @@ class AddAppProvider extends ChangeNotifier {
             type: FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
             allowMultiple: false,
-            dialogTitle: 'Select a thumbnail image',
+            dialogTitle: globalNavigatorKey.currentContext!.l10n.selectThumbnailImageTitle,
             withData: false,
             withReadStream: false,
           );
@@ -915,7 +916,7 @@ class AddAppProvider extends ChangeNotifier {
           type: FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
           allowMultiple: false,
-          dialogTitle: 'Select an image file',
+          dialogTitle: globalNavigatorKey.currentContext!.l10n.selectImageFileTitle,
           withData: false,
           withReadStream: false,
         );

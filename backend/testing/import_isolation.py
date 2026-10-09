@@ -231,6 +231,25 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
     return module
 
 
+# Stdlib-only relevance policy that sync intake and the pipeline import at module
+# scope. Harnesses that replace ``utils.conversations`` with a stub register the
+# real files so the policy under test is production's, never a copy.
+PURE_RELEVANCE_MODULES = (
+    'utils.conversations.processing_trigger',
+    'utils.conversations.relevance_rules',
+    'utils.conversations.relevance',
+    'utils.conversations.fragment_visibility',
+)
+
+
+def register_pure_relevance_modules(saved_modules: dict[str, ModuleType | None]) -> None:
+    """Exec the real relevance modules into ``sys.modules``, saving priors for restore."""
+    backend = Path(__file__).resolve().parents[1]
+    for name in PURE_RELEVANCE_MODULES:
+        saved_modules.setdefault(name, sys.modules.get(name))
+        load_module_fresh(name, str(backend.joinpath(*name.split('.')).with_suffix('.py')))
+
+
 def fake_firestore_transactional(func):
     """Firestore ``transactional`` replacement for unit-test fake transactions.
 

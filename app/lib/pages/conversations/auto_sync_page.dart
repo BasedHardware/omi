@@ -7,12 +7,13 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
+import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/widgets/omi_confirm_dialog.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/sync_card_progress_line.dart';
@@ -100,29 +101,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         final filteredWals = hasAnyRecording ? syncProvider.walsForDisplayFilter(_filter) : const <Wal>[];
 
         return Scaffold(
-          backgroundColor: const Color(0xFF0D0D0D),
+          // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
           appBar: AppBar(
-            backgroundColor: const Color(0xFF0D0D0D),
-            elevation: 0,
-            centerTitle: true,
-            title: Text(
-              context.l10n.sync,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            leading: const OmiBackButton(),
+            title: Text(context.l10n.offlineSync),
             actions: [
-              IconButton(
-                icon: const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
+              OmiIconButton(
+                icon: const FaIcon(FontAwesomeIcons.circleInfo, size: 18),
+                label: context.l10n.howSyncingWorks,
+                color: OmiColors.textSecondary,
                 onPressed: () => _showInfoSheet(context),
               ),
               if (syncProvider.clearableWalsCount > 0)
-                IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
+                OmiIconButton(
+                  icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
+                  label: context.l10n.manageStorage,
+                  color: OmiColors.textSecondary,
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
+              const SizedBox(width: OmiSpacing.xxs),
             ],
           ),
           body: CustomScrollView(
@@ -185,19 +182,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     String title;
     String? progressText;
-    Color titleColor = Colors.white;
+    Color titleColor = OmiColors.textPrimary;
     Widget? action;
 
     if (isActive) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
-          progressText = SyncCardProgressLine.subtitle(
-            phase: s.phase,
-            currentFile: s.currentFile,
-            totalFiles: s.totalFiles,
-            counterLabel: (processed, total) => l.syncCardProgressOf(processed, total),
-          );
+          // Percent and speed live on [DeviceDownloadMeter], not the file-count line.
+          // A ring download has no file index, so the old subtitle stayed blank.
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
@@ -235,62 +228,64 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+      action = statusActionPill(l.sync, OmiColors.accent, () async {
         if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (readyToBackUp > 0) {
       title = l.syncCardReadyCount(readyToBackUp);
-      action = statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+      action = statusActionPill(l.sync, OmiColors.accent, () async {
         if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (hasAnyRecording) {
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     } else {
       // No recordings — same calm baseline; the card never pops in/out.
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
+
+    final downloading = isActive && s.phase == SyncPhase.downloadingFromDevice;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (showSpinner) ...[
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent),
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (progressText != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        progressText,
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
+                      ),
+                    ],
+                  ],
                 ),
-                if (progressText != null) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    progressText,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              if (action != null) ...[const SizedBox(width: 10), action],
+            ],
           ),
-          if (action != null) ...[const SizedBox(width: 10), action],
+          if (downloading) ...[
+            const SizedBox(height: 10),
+            DeviceDownloadMeter(fraction: s.progress, speedKBps: s.speedKBps),
+          ],
         ],
       ),
     );
@@ -306,7 +301,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () => routeToPage(context, const SyncedConversationsPage()),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Row(
           children: [
             Container(
@@ -319,7 +314,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             Expanded(
               child: Text(
                 context.l10n.nConversationsCreated(count),
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
             FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
@@ -380,76 +375,51 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget _buildStorageSettings(UserProvider userProvider) {
     final isPhoneOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     final isCloudOn = userProvider.privateCloudSyncEnabled;
+    final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
+    final autoRemoveDays = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(
-            context.l10n.storageSection,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-          child: Column(
-            children: [
-              _settingRow(
-                icon: FontAwesomeIcons.mobile,
-                label: context.l10n.storeAudioOnPhone,
-                isOn: isPhoneOn,
-                onTap: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const LocalStoragePage())).then((_) => setState(() {}));
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
-              _settingRow(
-                icon: FontAwesomeIcons.cloud,
-                label: context.l10n.storeAudioOnCloud,
-                isOn: isCloudOn,
-                onTap: () =>
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivateCloudSyncPage())),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _settingRow({
-    required FaIconData icon,
-    required String label,
-    required bool isOn,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
+        OmiSettingsGroup(
+          header: context.l10n.storageSection,
           children: [
-            FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
-              ),
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.mobile),
+              title: context.l10n.storeAudioOnPhone,
+              value: isPhoneOn ? context.l10n.on : context.l10n.off,
+              onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
             ),
-            Text(
-              isOn ? context.l10n.on : context.l10n.off,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w400),
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.cloud),
+              title: context.l10n.storeAudioOnCloud,
+              value: isCloudOn ? context.l10n.on : context.l10n.off,
+              onTap: () => routeToPage(context, const PrivateCloudSyncPage()),
             ),
-            const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
-      ),
+        const SizedBox(height: OmiSpacing.xxl),
+        OmiSettingsGroup(
+          header: context.l10n.localCopiesSection,
+          children: [
+            OmiSettingsRow.toggle(
+              leading: const Icon(Icons.auto_delete),
+              title: context.l10n.autoRemoveSyncedCopiesTitle,
+              subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
+              value: autoRemoveOn,
+              onChanged: (value) async {
+                SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+                if (value) {
+                  // Apply immediately: expired copies should not wait for the
+                  // next sync pass or app restart.
+                  await context.read<SyncProvider>().applySyncedCopyRetention();
+                }
+                if (context.mounted) setState(() {});
+              },
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -458,23 +428,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   Widget _buildRecordingsHeader(int total) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 2),
-      child: Row(
-        children: [
-          Text(
-            context.l10n.recordings,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: 8),
-          Text('$total', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-          const Spacer(),
-          Text(
-            context.l10n.newestFirst,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.w400),
-          ),
-        ],
-      ),
+    return OmiSectionHeader(
+      context.l10n.recordings,
+      trailing: Text(context.l10n.newestFirst, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
     );
   }
 
@@ -490,13 +446,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              color: selected ? OmiColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade500,
+                color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
               ),
@@ -508,7 +464,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalDisplayFilter.all, context.l10n.all),
@@ -538,7 +494,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         sliver: SliverToBoxAdapter(
           child: Container(
             padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
             child: Center(
               child: Text(emptyMsg, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
             ),
@@ -563,7 +519,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final isLast = i == wals.length - 1;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: OmiColors.surface1,
         borderRadius: BorderRadius.vertical(
           top: isFirst ? const Radius.circular(20) : Radius.zero,
           bottom: isLast ? const Radius.circular(20) : Radius.zero,
@@ -580,12 +536,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
-              return OmiConfirmDialog.show(
+              return showOmiConfirm(
                 context,
                 title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
                 message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
                 confirmLabel: context.l10n.delete,
-                confirmColor: Colors.red,
+                destructive: true,
               );
             },
             background: Container(
@@ -605,11 +561,30 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
+  /// Bar fraction for the recording that is actually leaving the device.
+  /// Phone-local "Waiting to sync" rows stay null so they do not grow a bar.
+  /// Percent and speed are not returned here; those stay on the status card.
+  double? _rowDownloadFraction(Wal wal) {
+    final sync = context.read<SyncProvider>();
+    if (!sync.syncState.isSyncing || sync.syncState.phase != SyncPhase.downloadingFromDevice) return null;
+    final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+    if (!onDevice || wal.status != WalStatus.miss) return null;
+    if (wal.deviceDownloadFraction != null) return wal.deviceDownloadFraction;
+    if (wal.isSyncing) return sync.syncState.progress;
+    if (wal.syncDisplayState != WalSyncDisplayState.waiting) return null;
+    final peers = sync.allWals.where(
+      (w) => (w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage) && w.status == WalStatus.miss,
+    );
+    if (peers.length == 1 && peers.first.id == wal.id) return sync.syncState.progress;
+    return null;
+  }
+
   Widget _walRow(Wal wal) {
     final date = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
-    final timeStr = dateTimeFormat('h:mm a', date);
-    final dateStr = '${_monthName(date.month)} ${date.day}';
-    final duration = wal.seconds > 0 ? _fmtDuration(wal.seconds) : null;
+    final dates = OmiDateFormat.of(context);
+    final timeStr = dates.time(date);
+    final dateStr = dates.dayHeader(date);
+    final duration = wal.seconds > 0 ? OmiDuration.compact(wal.seconds, context.l10n) : null;
 
     final state = wal.syncDisplayState;
     var (color, _, label) = _rowVisual(state);
@@ -629,12 +604,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)));
+          OmiFeedback.info(context, context.l10n.syncInProgress);
           return;
         }
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
+        routeToPage(context, WalItemDetailPage(wal: wal));
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -647,7 +620,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
                     style: TextStyle(
-                      color: isSynced ? Colors.grey.shade500 : Colors.white,
+                      color: isSynced ? Colors.grey.shade500 : OmiColors.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
@@ -659,6 +632,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400),
                   ),
+                  if (_rowDownloadFraction(wal) != null) ...[
+                    const SizedBox(height: 8),
+                    DeviceDownloadMeter(
+                      fraction: _rowDownloadFraction(wal)!,
+                      showReadout: false,
+                      barHeight: 4,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -672,45 +653,23 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   Widget _rowTrailing(Wal wal, WalSyncDisplayState state) {
     if (state == WalSyncDisplayState.syncing) {
-      return const SizedBox(
-        width: 16,
-        height: 16,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
-      );
+      return const OmiSpinner(size: OmiSpinnerSize.small);
     }
     if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
-      return GestureDetector(
-        onTap: () => context.read<SyncProvider>().syncWal(wal),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(100),
-          ),
-          child: Text(
-            context.l10n.retry,
-            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
+      return OmiButton.secondary(
+        label: context.l10n.tryAgain,
+        size: OmiButtonSize.compact,
+        onPressed: () => context.read<SyncProvider>().syncWal(wal),
       );
     }
     // Nothing can move these forward, so the only honest action is removal.
     // Swipe-to-delete already works, but it is invisible: without a labelled
     // control the needs-attention banner reads as permanent chores.
     if (_isUnsyncableState(state)) {
-      return GestureDetector(
-        onTap: () => _confirmDeleteWal(wal),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(100),
-          ),
-          child: Text(
-            context.l10n.delete,
-            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
+      return OmiButton.destructive(
+        label: context.l10n.delete,
+        size: OmiButtonSize.compact,
+        onPressed: () => _confirmDeleteWal(wal),
       );
     }
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
@@ -722,18 +681,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   static bool _isUnsyncableState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 
   Future<void> _confirmDeleteWal(Wal wal) async {
     final syncProvider = context.read<SyncProvider>();
-    final confirmed = await OmiConfirmDialog.show(
+    final confirmed = await showOmiConfirm(
       context,
       title: context.l10n.deleteRecording,
       message: context.l10n.thisCannotBeUndone,
       confirmLabel: context.l10n.delete,
-      confirmColor: Colors.red,
+      destructive: true,
     );
-    if (confirmed == true) await syncProvider.deleteWal(wal);
+    if (confirmed) await syncProvider.deleteWal(wal);
   }
 
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
@@ -759,6 +719,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, FontAwesomeIcons.fileCircleExclamation, context.l10n.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.failedStatus);
     }
   }
 
@@ -767,44 +729,27 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _showInfoSheet(BuildContext context) {
-    showModalBottomSheet(
+    final l = context.l10n;
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      isScrollControlled: true,
+      title: l.howSyncingWorks,
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xxs, OmiSpacing.xl, OmiSpacing.xl),
       builder: (context) {
-        final l = context.l10n;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Text(
-                  l.howSyncingWorks,
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 10),
-                Text(l.syncFlowIntro, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45)),
-                const SizedBox(height: 22),
-                _syncFlowStep(1, l.syncStepUpload, l.syncStepUploadDesc),
-                const SizedBox(height: 16),
-                _syncFlowStep(2, l.syncStepProcess, l.syncStepProcessDesc),
-                const SizedBox(height: 16),
-                _syncFlowStep(3, l.syncStepBackedUp, l.syncStepBackedUpDesc),
-                const SizedBox(height: 22),
-                Text(l.syncFailureFootnote, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45)),
-              ],
-            ),
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l.syncFlowIntro, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45)),
+              const SizedBox(height: 22),
+              _syncFlowStep(1, l.syncStepUpload, l.syncStepUploadDesc),
+              const SizedBox(height: 16),
+              _syncFlowStep(2, l.syncStepProcess, l.syncStepProcessDesc),
+              const SizedBox(height: 16),
+              _syncFlowStep(3, l.syncStepBackedUp, l.syncStepBackedUpDesc),
+              const SizedBox(height: 22),
+              Text(l.syncFailureFootnote, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45)),
+            ],
           ),
         );
       },
@@ -819,7 +764,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           width: 22,
           child: Text(
             '$n.',
-            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 15, fontWeight: FontWeight.w600),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(width: 8),
@@ -829,7 +774,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 3),
               Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.45)),
@@ -854,64 +799,68 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       clearAll: provider.deleteAllClearableWals,
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
     );
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      title: context.l10n.manageStorage,
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
       builder: (sheetContext) => _ManageStorageSheet(
         provider: provider,
         onClearSynced: () async {
           Navigator.of(sheetContext).pop();
-          final confirmed = await OmiConfirmDialog.show(
+          final confirmed = await showOmiConfirm(
             context,
             title: context.l10n.deleteSyncedFiles,
             message: context.l10n.deleteSyncedFilesMessage,
             confirmLabel: context.l10n.clear,
-            confirmColor: Colors.red,
+            destructive: true,
           );
-          if (confirmed == true && context.mounted) {
+          if (confirmed && context.mounted) {
             await clearActions.synced();
             if (context.mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green));
+              OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
             }
           }
         },
         onClearPending: () async {
           Navigator.of(sheetContext).pop();
-          final confirmed = await OmiConfirmDialog.show(
+          final confirmed = await showOmiConfirm(
             context,
             title: context.l10n.deletePendingFiles,
             message: context.l10n.deletePendingFilesWarning,
             confirmLabel: context.l10n.clear,
-            confirmColor: Colors.red,
+            destructive: true,
           );
-          if (confirmed == true && context.mounted) {
+          if (confirmed && context.mounted) {
             await clearActions.pending();
             if (context.mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green));
+              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
             }
           }
         },
         onClearAll: () async {
           Navigator.of(sheetContext).pop();
-          final confirmed = await OmiConfirmDialog.show(
+          final confirmed = await showOmiConfirm(
             context,
             title: context.l10n.deleteAllFiles,
             message: context.l10n.deleteAllFilesWarning,
             confirmLabel: context.l10n.clearAll,
-            confirmColor: Colors.red,
+            destructive: true,
           );
-          if (confirmed == true && context.mounted) {
+          if (confirmed && context.mounted) {
             await clearActions.all();
             if (context.mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green));
+              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }
+        },
+        onToggleAutoRemove: (value) async {
+          SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+          if (value) {
+            // Apply immediately: expired copies should not wait for the next
+            // sync pass or app restart.
+            await context.read<SyncProvider>().applySyncedCopyRetention();
+          }
+          if (context.mounted) setState(() {});
         },
       ),
     );
@@ -922,31 +871,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _confirmCancel(BuildContext context, SyncProvider syncProvider) async {
-    final confirmed = await OmiConfirmDialog.show(
+    final confirmed = await showOmiConfirm(
       context,
       title: context.l10n.cancelSyncQuestion,
       message: context.l10n.filesDownloadedUploadedNextTime,
       confirmLabel: context.l10n.cancelSync,
       cancelLabel: context.l10n.keepSyncing,
+      destructive: true,
     );
-    if (confirmed == true) {
+    if (confirmed) {
       syncProvider.cancelSync();
     }
-  }
-
-  String _fmtDuration(int seconds) {
-    if (seconds < 60) return '${seconds}s';
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    if (m < 60) return s > 0 ? '${m}m ${s}s' : '${m}m';
-    final h = m ~/ 60;
-    final rm = m % 60;
-    return rm > 0 ? '${h}h ${rm}m' : '${h}h';
-  }
-
-  String _monthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months[month - 1];
   }
 }
 
@@ -955,12 +890,14 @@ class _ManageStorageSheet extends StatelessWidget {
   final VoidCallback onClearSynced;
   final VoidCallback onClearPending;
   final VoidCallback onClearAll;
+  final ValueChanged<bool> onToggleAutoRemove;
 
   const _ManageStorageSheet({
     required this.provider,
     required this.onClearSynced,
     required this.onClearPending,
     required this.onClearAll,
+    required this.onToggleAutoRemove,
   });
 
   @override
@@ -968,73 +905,79 @@ class _ManageStorageSheet extends StatelessWidget {
     final syncedCount = provider.syncedWals.length;
     final pendingCount = provider.pendingDeletableWals.length;
     final totalCount = provider.clearableWalsCount;
+    final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                context.l10n.manageStorage,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              _StorageRow(
-                icon: FontAwesomeIcons.circleCheck,
-                iconColor: Colors.green,
-                title: context.l10n.synced,
-                subtitle: context.l10n.safelyBackedUp,
-                count: syncedCount,
-                onClear: syncedCount > 0 ? onClearSynced : null,
-                clearLabel: context.l10n.clear,
-              ),
-              const SizedBox(height: 12),
-              _StorageRow(
-                icon: FontAwesomeIcons.clockRotateLeft,
-                iconColor: Colors.orange,
-                title: context.l10n.pending,
-                subtitle: context.l10n.notYetSynced,
-                count: pendingCount,
-                onClear: pendingCount > 0 ? onClearPending : null,
-                clearLabel: context.l10n.clear,
-                isWarning: true,
-              ),
-              if (totalCount > 0) ...[
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: onClearAll,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
-                      ),
-                    ),
-                    child: Text(
-                      context.l10n.clearAll,
-                      style: TextStyle(color: Colors.red.shade300, fontSize: 15, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StorageRow(
+            icon: FontAwesomeIcons.circleCheck,
+            iconColor: Colors.green,
+            title: context.l10n.synced,
+            subtitle: context.l10n.safelyBackedUp,
+            count: syncedCount,
+            onClear: syncedCount > 0 ? onClearSynced : null,
+            clearLabel: context.l10n.clear,
           ),
-        ),
+          const SizedBox(height: 12),
+          _StorageRow(
+            icon: FontAwesomeIcons.clockRotateLeft,
+            iconColor: Colors.orange,
+            title: context.l10n.pending,
+            subtitle: context.l10n.notYetSynced,
+            count: pendingCount,
+            onClear: pendingCount > 0 ? onClearPending : null,
+            clearLabel: context.l10n.clear,
+          ),
+          const SizedBox(height: 12),
+          _AutoRemoveRow(initialValue: autoRemoveOn, onChanged: onToggleAutoRemove),
+          if (totalCount > 0) ...[
+            const SizedBox(height: 20),
+            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The auto-remove preference, surfaced beside the clear actions it governs so
+/// the two ways of reclaiming synced-copy space read as one set. Persists
+/// through [SharedPreferencesUtil.autoRemoveSyncedCopies]; both this sheet and
+/// the Offline Sync settings page write the same key, and each rereads it on
+/// build so neither can drift from the stored value. The row holds the tapped
+/// value itself: the sheet around it is stateless and does not rebuild when
+/// only the switch flips, so without local state the knob would snap back
+/// while the stored preference had already changed.
+class _AutoRemoveRow extends StatefulWidget {
+  final bool initialValue;
+  final ValueChanged<bool> onChanged;
+
+  const _AutoRemoveRow({required this.initialValue, required this.onChanged});
+
+  @override
+  State<_AutoRemoveRow> createState() => _AutoRemoveRowState();
+}
+
+class _AutoRemoveRowState extends State<_AutoRemoveRow> {
+  late bool _value = widget.initialValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+      child: OmiSettingsRow.toggle(
+        leading: const Icon(Icons.auto_delete),
+        title: context.l10n.autoRemoveSyncedCopiesTitle,
+        subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
+        value: _value,
+        onChanged: (value) {
+          setState(() => _value = value);
+          widget.onChanged(value);
+        },
       ),
     );
   }
@@ -1048,7 +991,6 @@ class _StorageRow extends StatelessWidget {
   final int count;
   final VoidCallback? onClear;
   final String clearLabel;
-  final bool isWarning;
 
   const _StorageRow({
     required this.icon,
@@ -1058,23 +1000,19 @@ class _StorageRow extends StatelessWidget {
     required this.count,
     required this.onClear,
     required this.clearLabel,
-    this.isWarning = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
             child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
           const SizedBox(width: 14),
@@ -1086,21 +1024,18 @@ class _StorageRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text('$count', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                      child: Text('$count', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
               ],
             ),
           ),
@@ -1109,17 +1044,10 @@ class _StorageRow extends StatelessWidget {
               onTap: onClear,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(100),
-                ),
+                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.pillAll),
                 child: Text(
                   clearLabel,
-                  style: TextStyle(
-                    color: isWarning ? Colors.orange : Colors.red.shade300,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),
                 ),
               ),
             ),

@@ -18,6 +18,7 @@ class _VertexHttpError(Exception):
 
     status_code: int
     preview: bytes
+    retry_after_header: str | None = None
 
 
 @dataclass
@@ -25,6 +26,11 @@ class ProviderFailure(Exception):
     failure_class: FailureClass
     safe_message: str = GENERIC_PROVIDER_FAILURE_MESSAGE
     provider_rejection: ProviderRejection = ProviderRejection.NONE
+    # Seconds-form Retry-After from a provider 429. None when the header is
+    # absent or is an HTTP-date; the executor then uses jittered backoff.
+    retry_after_seconds: float | None = None
+    # HTTP status only; never carry a response body into terminal telemetry.
+    upstream_http_status: int | None = None
 
     def __str__(self) -> str:
         return self.safe_message

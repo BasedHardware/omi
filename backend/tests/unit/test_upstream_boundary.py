@@ -197,7 +197,7 @@ class TestExtractionSeamFanOut:
         assert "_extract_memories(uid, conversation)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
-        assert "_save_action_items(uid, conversation, people)" in source
+        assert "_save_action_items(uid, conversation, people, trigger)" in source
         assert "submit_with_context(postprocess_executor, update_goal_progress" in source
 
     def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
@@ -253,15 +253,15 @@ class TestExtractionSeamFanOut:
             patch.object(pc, "_save_action_items", save_action_items),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
-            patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
-            pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
+            pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
 
         submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
         extract_memories.assert_called_once_with("uid-boundary", conversation)
         save_action_items.assert_called_once()
         assert save_action_items.call_args.args[0] == "uid-boundary"
         assert save_action_items.call_args.args[1] is conversation
+        assert save_action_items.call_args.args[3] is pc.ProcessingTrigger.USER_REPROCESS  # logged by the identity plan
         assert "_save_action_items" not in submitted_fns
         assert "update_goal_progress" in submitted_fns
         assert "_extract_memories" not in submitted_fns

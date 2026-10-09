@@ -7,6 +7,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
@@ -89,10 +90,11 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? appId}) async {
+Future<List<ServerMessage>> clearChatServer({String? appId, String? chatSessionId}) async {
   if (appId == 'no_selected') appId = null;
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}',
+    url:
+        '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}${chatSessionId == null ? '' : '&chat_session_id=${Uri.encodeQueryComponent(chatSessionId)}'}',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -105,12 +107,42 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
   }
 }
 
+const String chatStreamTimeoutFrameText = 'The response took too long. Please try again.';
+
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line == 'memory: saved' || line == 'memory: updated') {
+    return ServerMessageChunk(messageId, line.substring('memory: '.length), MessageChunkType.memory);
+  }
   if (line.startsWith('error: ')) {
-    final message = line.substring('error: '.length).trim();
+    final payload = line.substring('error: '.length).trim();
+    Object? decoded;
+    try {
+      decoded = jsonDecode(payload);
+    } on FormatException {
+      decoded = null;
+    }
+    if (decoded is Map) {
+      final message = decoded['message'];
+      final code = decoded['error'];
+      if (message is String && message.trim().isNotEmpty) {
+        return ServerMessageChunk(
+          messageId,
+          message,
+          MessageChunkType.error,
+          errorCode: code is String ? code : null,
+        );
+      }
+      if (code is String) {
+        return ServerMessageChunk(messageId, payload, MessageChunkType.error, errorCode: code);
+      }
+      return ServerMessageChunk.failedMessage();
+    }
+    if (payload == chatStreamTimeoutFrameText) {
+      return ServerMessageChunk(messageId, payload, MessageChunkType.error, errorCode: 'timeout');
+    }
     return ServerMessageChunk(
       messageId,
-      message.isEmpty ? ServerMessageChunk.failedMessage().text : message,
+      payload.isEmpty ? ServerMessageChunk.failedMessage().text : payload,
       MessageChunkType.error,
     );
   }
@@ -121,6 +153,24 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 
   if (line.startsWith('data: ')) {
     return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
+  }
+
+  // A device tool request. Base64 because the payload carries arbitrary message
+  // text that must not be parsed as part of the line-delimited SSE grammar.
+  //
+  // A frame that will not decode yields an empty payload rather than throwing.
+  // decodeBase64 throwing here would tear down the whole stream mid-turn, so a
+  // single corrupt frame would cost the user the entire reply instead of one
+  // tool call; the dispatcher fails that call closed on its own.
+  if (line.startsWith('tool: ')) {
+    String payload;
+    try {
+      payload = decodeBase64(line.substring(6));
+    } catch (e) {
+      Logger.error('Discarding undecodable device tool frame: $e');
+      payload = '';
+    }
+    return ServerMessageChunk(messageId, payload, MessageChunkType.tool);
   }
 
   if (line.startsWith('done: ')) {
@@ -154,7 +204,8 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
 /// return the established generic error chunk instead.
 ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) {
   if (line.startsWith('error:402:')) {
-    return ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+    return ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error,
+        errorCode: 'quota_exceeded');
   }
 
   if (line.startsWith('error: ')) {
@@ -164,8 +215,14 @@ ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) 
 
       final message = payload['message'];
       if (message is! String || message.trim().isEmpty) return ServerMessageChunk.failedMessage();
+      final errorCode = payload['error'];
 
-      return ServerMessageChunk(messageId, message, MessageChunkType.error);
+      return ServerMessageChunk(
+        messageId,
+        message,
+        MessageChunkType.error,
+        errorCode: errorCode is String ? errorCode : null,
+      );
     } on FormatException {
       return ServerMessageChunk.failedMessage();
     }
@@ -174,15 +231,23 @@ ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) 
   return parseMessageChunk(line, messageId);
 }
 
+bool _isIgnorableStreamFrame(String line) => line.trim().isEmpty || line.trimLeft().startsWith(':');
+
 Stream<ServerMessageChunk> sendMessageStreamServer(
   String text, {
   String? appId,
   List<String>? filesId,
   ChatPageContext? context,
+  String? chatSessionId,
+  ApiStreamingSeams? seams,
 }) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
+  }
+
+  if (chatSessionId != null) {
+    url += '${url.contains('?') ? '&' : '?'}chat_session_id=${Uri.encodeQueryComponent(chatSessionId)}';
   }
 
   var messageId = "1000"; // Default new message
@@ -192,20 +257,36 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   } catch (_) {
     // Omit time_zone when device timezone is unavailable so chat send is not blocked.
   }
+  final dispatcher = DeviceToolDispatcher();
   final body = <String, dynamic>{
     'text': text,
     'file_ids': filesId,
+    'device_tools': await dispatcher.declaredToolNames(),
     if (deviceTimeZone != null) 'time_zone': deviceTimeZone,
     if (context != null) 'context': context.toJson(),
   };
 
-  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode(body))) {
+  await for (var line in makeStreamingApiCall(
+    url: url,
+    headers: const {'X-Omi-Chat-Failure-Protocol': '1'},
+    body: jsonEncode(body),
+    seams: seams,
+  )) {
+    if (_isIgnorableStreamFrame(line)) continue;
     if (line.startsWith('error:402:')) {
-      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error,
+          errorCode: 'quota_exceeded');
       return;
     }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
+      // A device tool request is handled here rather than surfaced to the chat
+      // UI: the server is still waiting on this turn, and the visible result is
+      // the reply it produces once the tool comes back.
+      if (messageChunk.type == MessageChunkType.tool) {
+        await dispatcher.handleFrame(messageChunk.text);
+        continue;
+      }
       yield messageChunk;
     } else {
       yield ServerMessageChunk.failedMessage();
@@ -230,14 +311,17 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {String? language}) async* {
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
+    {String? language, ApiStreamingSeams? seams}) async* {
   var messageId = "1000"; // Default new message
 
   await for (var line in makeMultipartStreamingApiCall(
     url: '${Env.apiBaseUrl}v2/voice-messages',
     files: files,
     fields: language != null ? {'language': language} : {},
+    seams: seams,
   )) {
+    if (_isIgnorableStreamFrame(line)) continue;
     var messageChunk = parseVoiceMessageStreamChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;

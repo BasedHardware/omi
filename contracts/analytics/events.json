@@ -720,11 +720,122 @@
     {
       "id": "deviceDisconnected",
       "wire_name": "Device Disconnected",
+      "status": "deprecated",
+      "replaced_by": "deviceDisconnectedDetailed",
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceDisconnectedDetailed",
+      "wire_name": "Device Disconnected Detailed",
       "status": "active",
       "replaced_by": null,
       "phase": "point",
       "intent": null,
-      "properties": {},
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "clean_disconnect",
+            "connection_timeout",
+            "remote_device_terminated",
+            "connection_failed_instant_passed",
+            "paired_to_another_phone",
+            "link_key_mismatch",
+            "pairing_lost",
+            "app_closed",
+            "manual",
+            "gatt_error",
+            "unknown"
+          ]
+        },
+        "reasonCode": {
+          "type": "int",
+          "wire_name": "reason_code"
+        },
+        "appState": {
+          "type": "enum",
+          "wire_name": "app_state",
+          "values": [
+            "foreground",
+            "background",
+            "inactive",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSent",
+      "wire_name": "Diagnostics Sent",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSendFailed",
+      "wire_name": "Diagnostics Send Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        },
+        "failureStage": {
+          "type": "enum",
+          "wire_name": "failure_stage",
+          "values": [
+            "build_bundle",
+            "dialog_cancelled",
+            "upload",
+            "ticket_parse"
+          ]
+        },
+        "statusCode": {
+          "type": "int",
+          "wire_name": "status_code"
+        }
+      },
       "consumers": [
         "mobile-instrumentation-presence"
       ],
@@ -790,6 +901,76 @@
       "phase": "point",
       "intent": null,
       "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingSetupRatingPromptShown",
+      "wire_name": "Onboarding Setup Rating Prompt Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingSetupRatingPromptAnswered",
+      "wire_name": "Onboarding Setup Rating Prompt Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "support",
+            "not_really"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "firstSummaryRatingPromptShown",
+      "wire_name": "First Summary Rating Prompt Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "firstSummaryRatingPromptAnswered",
+      "wire_name": "First Summary Rating Prompt Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "yes",
+            "no"
+          ]
+        }
+      },
       "consumers": [
         "mobile-instrumentation-presence"
       ],
@@ -1841,7 +2022,8 @@
             "lifecycle_changed",
             "availability_error",
             "unavailable",
-            "request_error"
+            "request_error",
+            "recent_bad_experience"
           ]
         }
       },
@@ -1899,6 +2081,804 @@
       },
       "consumers": [
         "mobile-review-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "productJourneyStarted",
+      "wire_name": "Product Journey Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "attempt",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyFirstResult",
+      "wire_name": "Product Journey First Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "progress",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productJourneyOutcome",
+      "wire_name": "Product Journey Outcome",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "outcome",
+      "intent": "product_journey",
+      "properties": {
+        "journey": {
+          "type": "enum",
+          "wire_name": "journey",
+          "values": [
+            "search",
+            "chat_text",
+            "chat_voice",
+            "subscription_cancel",
+            "summary_feedback",
+            "recording_feedback",
+            "notification_open",
+            "integration_connect",
+            "integration_sync",
+            "onboarding",
+            "permission",
+            "task_mutation",
+            "conversation_load",
+            "capture"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "success",
+            "empty",
+            "failure",
+            "cancelled",
+            "superseded",
+            "unobserved"
+          ]
+        },
+        "failure": {
+          "type": "enum",
+          "wire_name": "failure",
+          "values": [
+            "none",
+            "network",
+            "server",
+            "unauthorized",
+            "permission_denied",
+            "quota",
+            "timeout",
+            "invalid_response",
+            "incomplete",
+            "unknown"
+          ]
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "resultCount": {
+          "type": "int",
+          "wire_name": "result_count"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": {
+        "type": "random_attempt_id",
+        "field": "correlation_id"
+      }
+    },
+    {
+      "id": "productValueEvent",
+      "wire_name": "Product Value",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "result_viewed",
+            "copied",
+            "shared",
+            "task_completed",
+            "memory_kept",
+            "feedback_helpful",
+            "search_result_opened",
+            "recording_recovered"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "conversations",
+            "conversation_detail",
+            "chat",
+            "tasks",
+            "onboarding",
+            "settings",
+            "notification",
+            "integration",
+            "background",
+            "unknown"
+          ]
+        },
+        "objectId": {
+          "type": "record_reference",
+          "wire_name": "object_id"
+        }
+      },
+      "consumers": [
+        "mobile-product-outcomes"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationAction",
+      "wire_name": "Conversation Action",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "action": {
+          "type": "enum",
+          "wire_name": "action",
+          "values": [
+            "ask_omi",
+            "star",
+            "unstar",
+            "share",
+            "rename",
+            "move_folder",
+            "recordings_open",
+            "separate",
+            "delete",
+            "copy_transcript",
+            "copy_summary",
+            "share_audio",
+            "link_event",
+            "reprocess",
+            "search",
+            "visibility",
+            "open",
+            "select",
+            "copy_conversation_id",
+            "test_prompt"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "top_bar",
+            "overflow",
+            "detail_body",
+            "row_long_press",
+            "row_swipe"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-conversation-actions"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsViewed",
+      "wire_name": "Speaker Tag Prompts Viewed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptClipPlayed",
+      "wire_name": "Speaker Tag Prompt Clip Played",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "loaded": {
+          "type": "bool",
+          "wire_name": "loaded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptAnswerSubmitted",
+      "wire_name": "Speaker Tag Prompt Answer Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "me",
+            "not_me",
+            "person",
+            "new_person",
+            "someone_else",
+            "skip",
+            "unknown",
+            "not_a_person"
+          ]
+        },
+        "clipPlayed": {
+          "type": "bool",
+          "wire_name": "clip_played"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsClosed",
+      "wire_name": "Speaker Tag Prompts Closed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answeredCount": {
+          "type": "int",
+          "wire_name": "answered_count"
+        },
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceProfileSettingToggled",
+      "wire_name": "Voice Profile Setting Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "setting": {
+          "type": "enum",
+          "wire_name": "setting",
+          "values": [
+            "tag_prompts",
+            "save_other_voices"
+          ]
+        },
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "settings",
+            "first_prompt"
+          ]
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceReplyPlayback",
+      "wire_name": "Voice Reply Playback",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "played",
+            "played_with_fallback",
+            "fallback_only",
+            "skipped",
+            "interrupted",
+            "failed"
+          ]
+        },
+        "skipReason": {
+          "type": "enum",
+          "wire_name": "skip_reason",
+          "values": [
+            "mode_off",
+            "no_headphones",
+            "headphone_check_failed",
+            "none"
+          ]
+        },
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always",
+            "unknown"
+          ]
+        },
+        "outputRoute": {
+          "type": "enum",
+          "wire_name": "output_route",
+          "values": [
+            "bluetooth",
+            "wired",
+            "airplay",
+            "usb",
+            "speaker",
+            "unknown"
+          ]
+        },
+        "chunksRequested": {
+          "type": "int",
+          "wire_name": "chunks_requested"
+        },
+        "chunksPlayed": {
+          "type": "int",
+          "wire_name": "chunks_played"
+        },
+        "chunksDropped": {
+          "type": "int",
+          "wire_name": "chunks_dropped"
+        },
+        "fallbackReason": {
+          "type": "enum",
+          "wire_name": "fallback_reason",
+          "values": [
+            "none",
+            "rate_limited_429",
+            "unavailable_503",
+            "no_response"
+          ]
+        },
+        "firstAudioLatencyMs": {
+          "type": "int",
+          "wire_name": "first_audio_latency_ms"
+        },
+        "interruptSource": {
+          "type": "enum",
+          "wire_name": "interrupt_source",
+          "values": [
+            "none",
+            "user_typed",
+            "new_voice_query",
+            "audio_interruption",
+            "headphones_unplugged",
+            "quota_error",
+            "stream_error",
+            "mode_off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantVoiceQuestionDropped",
+      "wire_name": "Pendant Voice Question Dropped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "invalid_button_payload",
+            "actions_disabled",
+            "empty_frames",
+            "no_device",
+            "cancelled",
+            "send_in_flight",
+            "audio_save_failed",
+            "auto_end_grace",
+            "codec_lookup_failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "siriIntentPerformed",
+      "wire_name": "Siri Intent Performed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "intent": {
+          "type": "enum",
+          "wire_name": "intent",
+          "values": [
+            "remember",
+            "create_note",
+            "open",
+            "search",
+            "complete_task",
+            "create_task",
+            "start_listening",
+            "stop_listening",
+            "open_chat"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        },
+        "invokedVia": {
+          "type": "enum",
+          "wire_name": "invoked_via",
+          "values": [
+            "siri",
+            "shortcuts",
+            "spotlight",
+            "unknown",
+            "app_intent",
+            "user_activity"
+          ]
+        }
+      },
+      "consumers": [
+        "siri-intents"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "siriAskOmiPerformed",
+      "wire_name": "Siri Ask Omi Performed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        },
+        "invokedVia": {
+          "type": "enum",
+          "wire_name": "invoked_via",
+          "values": [
+            "siri",
+            "shortcuts",
+            "spotlight",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "siri-intents"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "siriIndexRebuilt",
+      "wire_name": "Siri Index Rebuilt",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "entityCounts": {
+          "type": "int",
+          "wire_name": "entity_counts"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        }
+      },
+      "consumers": [
+        "siri-index-health"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "conversationUntitledRendered",
+      "wire_name": "Conversation Untitled Rendered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "list",
+            "map",
+            "actions",
+            "home_widget"
+          ]
+        },
+        "ageBucket": {
+          "type": "enum",
+          "wire_name": "age_bucket",
+          "values": [
+            "under_1h",
+            "under_1d",
+            "under_7d",
+            "under_30d",
+            "over_30d"
+          ]
+        },
+        "summaryRetryable": {
+          "type": "bool",
+          "wire_name": "summary_retryable"
+        }
+      },
+      "consumers": [
+        "conversation-untitled-rendered"
       ],
       "correlation": null
     }

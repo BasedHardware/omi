@@ -13,6 +13,11 @@ continues to use SpeechProfileProvider.
 microphone capture, transcription, enrollment, and explicit memory/goal submission.
 The controller has a fakeable I/O boundary for state-transition tests.
 
+First-run onboarding reserves its back/progress header above the introduction's
+scroll viewport through `OnboardingStepLayout`. The host consumes the top safe
+area once; Settings already supplies an AppBar. Keep this spacing in the host,
+so scrolling and large text cannot move the page under the navigation controls.
+
 - Prompt progress advances only after Next or Skip. The separate audio-level
   indicator measures PCM energy, not transcription or enrollment quality.
 - Recording does not auto-finish after five seconds. Each answer pauses at 45
@@ -39,13 +44,23 @@ The controller has a fakeable I/O boundary for state-transition tests.
 From `app/`:
 
 ```sh
-flutter test test/providers/guided_voice_controller_test.dart test/widgets/speech_profile_onboarding_test.dart test/providers/speech_profile_provider_test.dart
+flutter test test/providers/guided_voice_controller_test.dart test/widgets/speech_profile_onboarding_test.dart test/widgets/onboarding_header_spacing_test.dart test/providers/speech_profile_provider_test.dart
 ```
 
 Tests cover prompt progress, no five-second cutoff, skipped content, transcription
 and upload retries, independent memory writes, interruption, stale completion,
 and layout with large text on a small phone. Physical-device acceptance still
 requires real speech, enrollment, and memory save/readback against a dev backend.
+
+`app/integration_test/onboarding_header_capture.dart` is a native screenshot fixture
+for the first prompt, using the production page and layout with inert voice I/O.
+It captures the former floating-header layout and the reserved-header layout
+without signing in or resetting app data. Images are written to
+`omi-layout-evidence` under iOS Documents or Android external app storage.
+Use it only for layout evidence; it does not verify recording, enrollment, or
+saving. Selecting the fixture with `-t` leaves `app/lib/main.dart` unchanged. If the
+fixture is installed over the regular phone app, reinstall a normal app build
+afterward; no source entry-point edits are needed.
 
 ## Guided introduction follow-up
 

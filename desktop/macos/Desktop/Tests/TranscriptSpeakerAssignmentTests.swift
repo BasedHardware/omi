@@ -161,9 +161,9 @@ import XCTest
       transcript.contains("You: Hello from user"), "User segment should use 'You' label based on isUser, not speaker ID"
     )
 
-    // isUser=false speaker 0 should show "Speaker 0", not "You"
+    // isUser=false SPEAKER_00 should show "Speaker 1" (1-based, matching mobile), not "You"
     XCTAssertTrue(
-      transcript.contains("Speaker 0: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
+      transcript.contains("Speaker 1: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
   }
 
   // MARK: - Translation Tests

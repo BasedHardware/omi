@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
@@ -129,7 +131,7 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
+        border: Border.all(color: OmiColors.textPrimary.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }
@@ -139,10 +141,10 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
       child: Text(
         text,
-        style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.5),
+        style: TextStyle(color: OmiColors.textPrimary, fontSize: 17, height: 1.5),
         textAlign: TextAlign.left,
       ),
     );

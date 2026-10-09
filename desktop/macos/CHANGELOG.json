@@ -2,6 +2,594 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.459",
+      "date": "2026-10-09",
+      "changes": [
+        "Recovered local tasks now keep repetition, linked context, ownership and ordering when a failed upload is retried"
+      ]
+    },
+    {
+      "version": "0.12.458",
+      "date": "2026-10-09",
+      "changes": [
+        "Fixed deleted recordings reappearing when your Mac retries older uploads"
+      ]
+    },
+    {
+      "version": "0.12.457",
+      "date": "2026-10-09",
+      "changes": [
+        "Copy link now reuses an existing share link instead of failing when the conversation is already shared."
+      ]
+    },
+    {
+      "version": "0.12.456",
+      "date": "2026-10-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.455",
+      "date": "2026-10-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.454",
+      "date": "2026-10-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.453",
+      "date": "2026-10-08",
+      "changes": [
+        "Fixed Task Assistant opening new threads with the wrong AI provider and added an option to recover existing Claude threads using Omi AI",
+        "Fixed chat billing errors incorrectly claiming your API key was ignored or directing you to the wrong billing account",
+        "Fixed a dropped network connection or provider hiccup silently turning off BYOK keys — your saved keys now stay active when a validation check can't reach the provider, instead of chat falling back to Omi's metered service."
+      ]
+    },
+    {
+      "version": "0.12.452",
+      "date": "2026-10-08",
+      "changes": [
+        "Fixed chat failing with a generic error for BYOK users despite validated API keys — the desktop backend now actually reads the keys instead of silently ignoring them."
+      ]
+    },
+    {
+      "version": "0.12.451",
+      "date": "2026-10-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.450",
+      "date": "2026-10-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.449",
+      "date": "2026-10-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.448",
+      "date": "2026-10-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.447",
+      "date": "2026-10-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.446",
+      "date": "2026-10-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.445",
+      "date": "2026-10-05",
+      "changes": [
+        "Fixed conversation summary tasks losing their links and leaving duplicate suggestions after being added",
+        "Choose a brief, normal, or deep daily recap in Settings",
+        "Show installed summary apps with search when changing a conversation summary"
+      ]
+    },
+    {
+      "version": "0.12.444",
+      "date": "2026-10-05",
+      "changes": [
+        "Omi can now look up a contact, read a Messages thread, send an iMessage, and run an AppleScript on your Mac — each one showing you exactly what it will do before it does it",
+        "Omi can now tell you what's waiting in your Apple Mail inbox — who wrote and about what, never the message bodies — and it says when Full Disk Access needs a restart instead of asking you to grant it again"
+      ]
+    },
+    {
+      "version": "0.12.443",
+      "date": "2026-10-04",
+      "changes": [
+        "Removed automatic goal, task, and meeting-note cards from Chat while keeping rich cards in replies"
+      ]
+    },
+    {
+      "version": "0.12.442",
+      "date": "2026-10-04",
+      "changes": [
+        "Clarified which custom keys cover AI features versus transcription and show the current transcription allowance in macOS settings"
+      ]
+    },
+    {
+      "version": "0.12.441",
+      "date": "2026-10-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.440",
+      "date": "2026-10-04",
+      "changes": [
+        "Added relevant follow-up cards with source links and helpfulness feedback",
+        "Removed the legacy screen Advice timer and settings while keeping Focus suggestions and task and memory extraction"
+      ]
+    },
+    {
+      "version": "0.12.439",
+      "date": "2026-10-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.438",
+      "date": "2026-10-03",
+      "changes": [
+        "Assistant voice now uses the shared Gemini voice picker (30 voices) synced with the mobile app — spoken replies and live voice sessions follow your choice."
+      ]
+    },
+    {
+      "version": "0.12.437",
+      "date": "2026-10-03",
+      "changes": [
+        "Connection keys are no longer created automatically. Generate one yourself when you want to connect a tool."
+      ]
+    },
+    {
+      "version": "0.12.436",
+      "date": "2026-10-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.435",
+      "date": "2026-10-02",
+      "changes": [
+        "Fixed screen task suggestions across context switches, account changes, privacy exclusions and service limits"
+      ]
+    },
+    {
+      "version": "0.12.434",
+      "date": "2026-10-02",
+      "changes": [
+        "Web Search on the floating typed chat uses the same public-web lookup as the main chat window."
+      ]
+    },
+    {
+      "version": "0.12.433",
+      "date": "2026-10-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.432",
+      "date": "2026-10-02",
+      "changes": [
+        "Added an Export All Data action in Settings > Data Controls that saves a verified JSON copy of your account data"
+      ]
+    },
+    {
+      "version": "0.12.431",
+      "date": "2026-10-01",
+      "changes": [
+        "Naming a speaker during a live recording now actually saves — the label is stored before the sheet closes and the sheet shows an error instead of silently dismissing when the save fails."
+      ]
+    },
+    {
+      "version": "0.12.430",
+      "date": "2026-10-01",
+      "changes": [
+        "Added a way to disconnect Google Calendar from the Calendar import while keeping previously imported memories"
+      ]
+    },
+    {
+      "version": "0.12.429",
+      "date": "2026-10-01",
+      "changes": [
+        "Ask Omi with Siri using more phrases, and hear answers without opening chat"
+      ]
+    },
+    {
+      "version": "0.12.428",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.427",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.426",
+      "date": "2026-09-30",
+      "changes": [
+        "Meeting notes now name the people shown on video call tiles, and meeting screenshots are chosen when the meeting ends instead of when you first open the note"
+      ]
+    },
+    {
+      "version": "0.12.425",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.424",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.423",
+      "date": "2026-09-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.422",
+      "date": "2026-09-29",
+      "changes": [
+        "Fixed \"Summarize with an app\" being unreachable on a conversation that has no summary yet"
+      ]
+    },
+    {
+      "version": "0.12.421",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.420",
+      "date": "2026-09-29",
+      "changes": [
+        "Ask Omi a full question with Siri in one breath and get an answer"
+      ]
+    },
+    {
+      "version": "0.12.419",
+      "date": "2026-09-29",
+      "changes": [
+        "Proactive Insights now always skip apps you excluded from Rewind and can only read, never change, your local screen history and tasks",
+        "Conversations transcribed on-device now finish uploading once you are back online, even after a long outage or backend errors, instead of getting stuck on this Mac",
+        "Fixed the app getting stuck on \"Preparing your data…\" after the local Rewind database was corrupted"
+      ]
+    },
+    {
+      "version": "0.12.418",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.417",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.416",
+      "date": "2026-09-28",
+      "changes": [
+        "Ask Omi questions with Siri and continue in the desktop chat"
+      ]
+    },
+    {
+      "version": "0.12.415",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.414",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed Rewind video encoding in macOS releases built with Xcode 27"
+      ]
+    },
+    {
+      "version": "0.12.413",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
+      ]
+    },
+    {
+      "version": "0.12.412",
+      "date": "2026-09-28",
+      "changes": [
+        "Add Siri and Apple Intelligence actions for memories, tasks, search and listening, with local Spotlight indexing controls.",
+        "Improved voice answers so they start speaking while audio is still being generated"
+      ]
+    },
+    {
+      "version": "0.12.411",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed automatic microphone retries opening the mic while you are away and counting silent retry probes as recording errors"
+      ]
+    },
+    {
+      "version": "0.12.410",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.409",
+      "date": "2026-09-28",
+      "changes": [
+        "Recording now waits for the microphone after an app update and resumes on its own when the input becomes available"
+      ]
+    },
+    {
+      "version": "0.12.408",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.407",
+      "date": "2026-09-27",
+      "changes": [
+        "Long conversation titles and related generated labels now remain readable through wrapping or tooltips on mobile and macOS.",
+        "Stopped conversation notes from showing screenshots captured outside the conversation's trusted transcript window"
+      ]
+    },
+    {
+      "version": "0.12.406",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.405",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed desktop chat usage showing unlimited for keys that do not power chat, and clarified that BYOK covers supported features rather than every Omi service"
+      ]
+    },
+    {
+      "version": "0.12.404",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.403",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed conversation summaries to show compact Sources controls instead of internal transcript identifiers"
+      ]
+    },
+    {
+      "version": "0.12.402",
+      "date": "2026-09-26",
+      "changes": [
+        "Improved chat scrolling reliability and added read-only automation that blocks actions which can change app or account data."
+      ]
+    },
+    {
+      "version": "0.12.401",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.400",
+      "date": "2026-09-26",
+      "changes": [
+        "Beta experiment: a randomized group sees Omi as memory first — the daily postcard leads, Interject on, proactive director quiet, generic web answers starved — while everyone else keeps today's experience"
+      ]
+    },
+    {
+      "version": "0.12.399",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.398",
+      "date": "2026-09-26",
+      "changes": [
+        "Back-to-back Zoom calls are now saved as separate conversations"
+      ]
+    },
+    {
+      "version": "0.12.397",
+      "date": "2026-09-26",
+      "changes": [
+        "Fixed Discord calls, and other call apps that use the microphone from a helper process, not being detected as meetings",
+        "Speaker names now appear immediately when you label a transcript, with a retry if saving fails"
+      ]
+    },
+    {
+      "version": "0.12.396",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.395",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.394",
+      "date": "2026-09-25",
+      "changes": [
+        "Onboarding no longer restarts unexpectedly after setup; any in-progress setup can still be completed."
+      ]
+    },
+    {
+      "version": "0.12.393",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.392",
+      "date": "2026-09-25",
+      "changes": [
+        "Back-to-back calls are now saved as separate conversations, even when you join the next Google Meet or switch call apps within seconds"
+      ]
+    },
+    {
+      "version": "0.12.391",
+      "date": "2026-09-25",
+      "changes": [
+        "Fixed macOS dev app launches that could stay stuck without a window after resetting a profile"
+      ]
+    },
+    {
+      "version": "0.12.390",
+      "date": "2026-09-25",
+      "changes": [
+        "Fixed automatic updates restarting Omi in the middle of a call, which split one meeting into two conversations"
+      ]
+    },
+    {
+      "version": "0.12.389",
+      "date": "2026-09-25",
+      "changes": [
+        "Memory export and AI-assistant connections now use Omi's canonical MCP endpoint, and connection checks show the server's actual error instead of a generic failure."
+      ]
+    },
+    {
+      "version": "0.12.388",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.387",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.386",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.385",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.384",
+      "date": "2026-09-24",
+      "changes": [
+        "Improved the conversation page: the title, date, people, and actions stay at the top while you switch between Summary and Transcript, and you can star a conversation from its page",
+        "Clicking the microphone in the top bar now opens a menu to choose Off, Always On or Only Meetings instead of switching modes on each click; the icon stays a microphone in every mode, and waiting for a call has its own ring-shaped dot so green always means recording",
+        "A conversation recorded by both your Mac and your Omi device now shows as one row with a badge for each device, and its page lists every recording so you can open or separate one",
+        "Made navigation, closing, deleting and copying work the same way across the app: Back returns to where you came from, Esc steps back one layer, every delete can be undone or asks first, and copy actions confirm"
+      ]
+    },
+    {
+      "version": "0.12.383",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.382",
+      "date": "2026-09-23",
+      "changes": [
+        "Fixed a bug that could stop and restart ambient recording every few minutes, splitting one conversation into many"
+      ]
+    },
+    {
+      "version": "0.12.381",
+      "date": "2026-09-23",
+      "changes": [
+        "Omi no longer pulls its window in front of what you are working in to show a microphone or transcription warning. The alert waits and appears the next time you come back to Omi."
+      ]
+    },
+    {
+      "version": "0.12.380",
+      "date": "2026-09-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.379",
+      "date": "2026-09-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.378",
+      "date": "2026-09-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.377",
       "date": "2026-09-22",
       "changes": [

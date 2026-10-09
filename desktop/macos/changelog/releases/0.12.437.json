@@ -1,0 +1,7 @@
+{
+  "version": "0.12.437",
+  "date": "2026-10-03",
+  "changes": [
+    "Connection keys are no longer created automatically. Generate one yourself when you want to connect a tool."
+  ]
+}

@@ -18,6 +18,9 @@ LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
     'backend/database/conversation_finalization_jobs.py',
+    # Storage primitive for the 1 MiB-ceiling in_progress terminal; its only
+    # caller is lifecycle.close_oversized_in_progress_conversation.
+    'backend/database/oversized_conversation_terminal.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -169,9 +172,12 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'update_conversation_segments': 'apply_manual_assignments',
         'assign_conversation_speaker': 'manual_assignment',
         # These rewrite current transactional content rather than caller snapshots.
-        'update_conversation_segment_text': '_prepare_conversation_for_read',
+        'update_conversation_segment_text': 'prepare_conversation_for_read',
         'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
         'create_conversation_if_absent_with_lifecycle': None,
+        # Field-scoped display-only translation merge: reads the transaction
+        # snapshot inside _write and preserves raw text/projections (#15247).
+        'materialize_translation': None,
     }
     errors = []
     for node in tree.body:
@@ -197,11 +203,45 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
     return errors
 
 
+def _smart_merge_tombstone_violations(tree: ast.Module, relative_path: str) -> list[str]:
+    """Pin the variable-payload lifecycle write to its reviewed storage owner.
+
+    The generic literal-field scan cannot see ``donor_update``. If this call is
+    renamed or moved, review the new writer before changing this inventory.
+    """
+    if relative_path != 'backend/database/smart_merge.py':
+        return []
+    owners = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'absorb_conversation']
+    if len(owners) != 1:
+        return [f'{relative_path}: smart-merge tombstone writer absorb_conversation is missing']
+    calls = [
+        node
+        for node in ast.walk(owners[0])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == 'update'
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'transaction'
+        and len(node.args) == 2
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == 'donor_ref'
+        and isinstance(node.args[1], ast.Name)
+        and node.args[1].id == 'donor_update'
+    ]
+    if len(calls) != 1:
+        return [f'{relative_path}: smart-merge tombstone writer must update donor_ref with donor_update exactly once']
+    return []
+
+
 def violations(source: str, relative_path: str) -> list[str]:
     tree = ast.parse(source, filename=relative_path)
     visitor = _LifecycleWriteVisitor(relative_path)
     visitor.visit(tree)
-    return visitor.errors + _transcript_writer_violations(tree, relative_path)
+    return (
+        visitor.errors
+        + _transcript_writer_violations(tree, relative_path)
+        + _smart_merge_tombstone_violations(tree, relative_path)
+    )
 
 
 def _source_files() -> list[Path]:

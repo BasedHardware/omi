@@ -70,8 +70,7 @@ def _account_deletion_status(uid: str) -> str | None:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
         logger.error(
-            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
-            uid,
+            'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
         raise HTTPException(
@@ -160,10 +159,13 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
+        # A keyless deployment has no credential variable at all; its
+        # customer-data project pin marks it as real just the same.
         no_real_credential = not (
             os.getenv('SERVICE_ACCOUNT_JSON')
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+            or os.getenv('OMI_CUSTOMER_DATA_PROJECT')
         )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
@@ -664,7 +666,9 @@ def check_api_key_rate_limit(
     _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
-def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
+def with_rate_limit(
+    auth_dependency: Callable[..., Any], policy_name: str, *, fail_closed: bool = False
+) -> Callable[..., Any]:
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
@@ -673,13 +677,14 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
         policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+        fail_closed: Reject requests when Redis is unavailable (default: False).
     """
     if policy_name not in RATE_POLICIES:
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error
         return uid

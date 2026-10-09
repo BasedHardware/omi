@@ -7,9 +7,23 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// The user-facing name of a data protection level id from the backend
+/// (`enhanced`, `e2ee`). An unknown id is shown as-is rather than hidden.
+String dataProtectionLevelLabel(AppLocalizations l10n, String level) {
+  switch (level) {
+    case 'enhanced':
+      return l10n.secureEncryption;
+    case 'e2ee':
+      return l10n.endToEndEncryption;
+    default:
+      return level;
+  }
+}
 
 class UserProvider with ChangeNotifier {
   static const int _migrationNotificationId = 1337;
@@ -419,10 +433,13 @@ class UserProvider with ChangeNotifier {
     try {
       await PrivacyApi.startMigration(targetLevel);
 
+      final l10n = ctx?.l10n;
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
         title: ctx?.l10n.omiSays ?? 'omi says',
-        body: ctx?.l10n.migratingToProtection(targetLevel) ?? 'Migrating to $targetLevel protection...',
+        body: l10n == null
+            ? 'Migrating to $targetLevel protection...'
+            : l10n.migratingToProtection(dataProtectionLevelLabel(l10n, targetLevel)),
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
       );
@@ -486,11 +503,13 @@ class UserProvider with ChangeNotifier {
     _processedCount = 0;
     _migrationQueue = [];
 
+    final l10n = ctx?.l10n;
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
       title: ctx?.l10n.omiSays ?? 'omi says',
-      body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
-          'Your data is now protected with the new $targetLevel settings.',
+      body: l10n == null
+          ? 'Your data is now protected with the new $targetLevel settings.'
+          : l10n.dataProtectedWithSettings(dataProtectionLevelLabel(l10n, targetLevel)),
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
     );

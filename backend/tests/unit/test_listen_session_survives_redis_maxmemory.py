@@ -51,28 +51,23 @@ from routers.listen.conversations import LiveConversationController
 
 
 class OutOfMemoryError(Exception):
-    """Shape-matched to redis.exceptions.OutOfMemoryError by class name.
-
-    Defined locally (not imported) so the name-match logic in
-    ``_cache_set_fail_open`` — which cannot import the type from redis-py
-    typings — is exercised exactly as it runs in production.
-    """
+    """Local stand-in for supervisor tests that raise outside the Redis matcher."""
 
 
 class _MaxMemorySocket:
-    """Redis socket at maxmemory: every write command raises OOM."""
+    """Redis socket at maxmemory: every write command raises redis-py OOM."""
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def expire(self, key: str, ttl: int) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     def get(self, key: str) -> Optional[bytes]:
         return None
 
     def delete(self, key: str) -> None:
-        raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
 
 class _RecordingSocket:
@@ -509,6 +504,41 @@ async def test_create_new_survives_maxmemory_on_desktop_meeting_write():
     assert 'set_conversation_meeting_id' in host.storage_calls
 
 
+async def test_create_new_skips_malformed_meetings_without_crashing():
+    """A meeting record with a naive datetime, an ISO string, a ``None``
+    ``start_time``, or a missing ``id`` must not raise (#19153) — the
+    previous ``meeting['start_time'] - now`` subtraction crashed on the first
+    three and ``closest['id']`` crashed on the fourth. A valid meeting among
+    them is still linked."""
+    malformed = [
+        {'id': 'meeting-naive', 'start_time': datetime.now() - timedelta(minutes=1)},
+        {'id': 'meeting-string', 'start_time': (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+        {'id': 'meeting-none', 'start_time': None},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed + [_overlapping_meeting()], source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' in host.storage_calls
+
+
+async def test_create_new_skips_meeting_write_when_all_meetings_malformed():
+    """No meeting qualifies (unparseable ``start_time`` or missing ``id``) ->
+    the pointer write is skipped entirely, not crashed into with a bogus id."""
+    malformed = [
+        {'id': 'meeting-unparseable', 'start_time': 'not-a-date'},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed, source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' not in host.storage_calls
+
+
 async def test_create_new_healthy_control_writes_both_pointers():
     socket = _RecordingSocket()
     host = _Host(socket, meetings=[_overlapping_meeting()], source='desktop')
@@ -647,7 +677,7 @@ def test_meeting_context_reader_survives_raising_redis():
 
     class _RaisingGetSocket(_MaxMemorySocket):
         def get(self, key: str) -> Optional[bytes]:
-            raise OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+            raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
 
     conversation = Conversation(
         id='conv-1',

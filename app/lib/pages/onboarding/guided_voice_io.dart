@@ -5,11 +5,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
@@ -18,9 +20,23 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'guided_voice_controller.dart';
 
 class DeviceGuidedVoiceIO implements GuidedVoiceIO {
+  DeviceGuidedVoiceIO({
+    Future<Memory?> Function(String, String, String)? createMemoryRequest,
+    IMicRecorderService? mic,
+  })  : _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _mic = mic;
+
+  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
+  final IMicRecorderService? _mic;
+  IMicRecorderService get _recorder => _mic ?? ServiceManager.instance().mic;
   bool _local = false;
   bool _recording = false;
   bool _closed = false;
+  // Non-null while a start() call is awaiting the recorder's own start-up. A stop()
+  // that lands in this window can't stop a recorder that isn't running yet, so it
+  // defers to start(): once the recorder comes up, start() sees _recording is false
+  // and stops it immediately instead of leaving it running with no owner.
+  Future<void>? _starting;
   String _language = 'en';
   OnDeviceAppleProvider? _recognizer;
   Directory? _directory;
@@ -46,26 +62,36 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
   Future<void> start(void Function(Uint8List) onAudio, VoidCallback onInterrupted) async {
     if (_closed) return;
     _recording = true;
+    final starting = _recorder.start(
+      onByteReceived: onAudio,
+      onStalled: onInterrupted,
+      onInterruption: (began) {
+        if (began) onInterrupted();
+      },
+    );
+    _starting = starting;
     try {
-      await ServiceManager.instance().mic.start(
-            onByteReceived: onAudio,
-            onStalled: onInterrupted,
-            onInterruption: (began) {
-              if (began) onInterrupted();
-            },
-          );
-      PlatformManager.instance.analytics.speechProfileCapturePageClicked();
+      await starting;
     } catch (_) {
+      _starting = null;
       _recording = false;
       rethrow;
     }
+    _starting = null;
+    if (!_recording) {
+      // A stop() arrived while we were starting up; finish the job it couldn't.
+      _recorder.stop();
+      return;
+    }
+    PlatformManager.instance.analytics.speechProfileCapturePageClicked();
   }
 
   @override
   Future<void> stop() async {
     if (!_recording) return;
     _recording = false;
-    ServiceManager.instance().mic.stop();
+    if (_starting != null) return;
+    _recorder.stop();
   }
 
   Uint8List _wav(Uint8List pcm) => WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes();
@@ -106,8 +132,10 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
       }
       return saved;
     } on SpeechProfileUploadException catch (e) {
-      PlatformManager.instance.analytics
-          .speechProfileUploadFailed(reason: 'http_${e.statusCode}', statusCode: e.statusCode);
+      PlatformManager.instance.analytics.speechProfileUploadFailed(
+        reason: 'http_${e.statusCode}',
+        statusCode: e.statusCode,
+      );
       if (e.statusCode == 503) throw VoiceEnrollmentUnavailable();
       rethrow;
     } catch (_) {
@@ -123,7 +151,10 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
     if (HardSecretDetector.contains(text)) return false;
     // The canonical create endpoint derives the memory identity from content;
     // retries keep the same confirmed content and successful answers are skipped.
-    return await createMemoryServer(text, 'private', 'system').timeout(const Duration(seconds: 30)) != null;
+    final memory = await _createMemoryRequest(text, 'private', 'system').timeout(const Duration(seconds: 30));
+    if (memory == null) return false;
+    SiriIntegration.current.queueUpsertMemories([memory]);
+    return true;
   }
 
   @override

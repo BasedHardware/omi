@@ -1,7 +1,7 @@
 import hashlib
 import os
 import re
-from typing import Any, Mapping, Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
-from utils.llm.model_config import get_model_config
+from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
@@ -17,13 +17,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 Record = Mapping[str, object]
-
-# Kill switch for the gate's explicit prompt cache. Default on: the gate is the
-# single largest paid-tier OpenAI line and the whole point of the split prompt
-# below is that its prefix becomes readable. Set to a falsey value to fall back
-# to an unmarked (uncached, plain-input-rate) request without a deploy.
-MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV = 'MENTOR_GATE_PROMPT_CACHE_ENABLED'
-
 
 # ---------------------------------------------------------------------------
 # Step 1: Relevance Gate — is this conversation worth evaluating?
@@ -210,7 +203,7 @@ APPROVE only if ALL of these are true:
 _BCP47_LANGUAGE_RE = re.compile(r'[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*')
 
 
-def _language_instruction(output_language: str, *, for_critic: bool = False) -> str:
+def language_instruction(output_language: str, *, for_critic: bool = False) -> str:
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
 
@@ -324,7 +317,7 @@ def _str_value(value: object, default: str = "") -> str:
     return default
 
 
-def _format_goals(goals: list[Record]) -> str:
+def format_goals(goals: Sequence[Record]) -> str:
     if not goals:
         return "No active goals set."
     lines: list[str] = []
@@ -338,7 +331,7 @@ def _format_goals(goals: list[Record]) -> str:
     return "\n".join(lines)
 
 
-def _format_current_conversation(messages: list[Record], user_name: str) -> str:
+def format_current_conversation(messages: Sequence[Record], user_name: str) -> str:
     if not messages:
         return "No conversation in progress."
     lines: list[str] = []
@@ -348,7 +341,7 @@ def _format_current_conversation(messages: list[Record], user_name: str) -> str:
     return "\n".join(lines)
 
 
-def _format_recent_notifications(notifications: list[Record]) -> str:
+def format_recent_notifications(notifications: Sequence[Record]) -> str:
     if not notifications:
         return "No recent notifications sent."
     lines: list[str] = []
@@ -364,18 +357,11 @@ def _format_recent_notifications(notifications: list[Record]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _env_flag_enabled(name: str, *, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
 def gate_cache_supported() -> bool:
-    """True only when the gate request actually reaches an OpenAI GPT-5.6 model.
+    """True only when the gate request reaches a model on the explicit-cache contract.
 
-    The explicit-cache contract (``prompt_cache_options`` plus a
-    ``prompt_cache_breakpoint`` content part) is a GPT-5.6 request shape. A BYOK
+    That contract (``prompt_cache_options`` plus a ``prompt_cache_breakpoint``
+    content part) is the GPT-5.6 request shape, and gpt-x-luna keeps it. A BYOK
     user's key can reroute this feature to another provider entirely, and a
     non-gateway deployment resolves the route from the QoS profile, so both are
     checked before a provider-specific field is put on the wire.
@@ -384,14 +370,14 @@ def gate_cache_supported() -> bool:
         return False
     if should_route_features_through_gateway():
         # generated_route_overrides.yaml pins the proactive_notification lane to
-        # openai/gpt-5.6-luna.
+        # openai/gpt-x-luna.
         return True
     model, provider = get_model_config('proactive_notification')
-    return provider == 'openai' and model.startswith('gpt-5.6')
+    return provider == 'openai' and uses_explicit_cache_and_chat_sanitizer(model)
 
 
 def gate_cache_enabled() -> bool:
-    return gate_cache_supported() and _env_flag_enabled(MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, default=True)
+    return gate_cache_supported()
 
 
 def gate_cache_key(uid: str) -> str:
@@ -429,9 +415,9 @@ def evaluate_relevance(
     uid: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     resolved_date = current_date or current_date_in_tz(None)
 
     stable = GATE_PROMPT_STABLE.format(
@@ -481,9 +467,9 @@ def generate_notification(
     current_date: Optional[str] = None,
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = GENERATE_PROMPT.format(
@@ -497,7 +483,7 @@ def generate_notification(
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
-        language_instruction=_language_instruction(output_language),
+        language_instruction=language_instruction(output_language),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -521,8 +507,8 @@ def validate_notification(
     current_date: Optional[str] = None,
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    goals_text = _format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    goals_text = format_goals(goals)
 
     prompt = CRITIC_PROMPT.format(
         user_name=user_name,
@@ -530,7 +516,7 @@ def validate_notification(
         draft_reasoning=draft_reasoning,
         current_conversation=current_conversation,
         goals_text=goals_text,
-        language_instruction=_language_instruction(output_language, for_critic=True),
+        language_instruction=language_instruction(output_language, for_critic=True),
         current_date=current_date or current_date_in_tz(None),
     )
 
@@ -623,9 +609,9 @@ def evaluate_proactive_notification(
     current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
-    goals_text = _format_goals(goals)
-    current_conversation = _format_current_conversation(current_messages, user_name)
-    notifications_text = _format_recent_notifications(recent_notifications)
+    goals_text = format_goals(goals)
+    current_conversation = format_current_conversation(current_messages, user_name)
+    notifications_text = format_recent_notifications(recent_notifications)
     guidance = FREQUENCY_GUIDANCE.get(frequency, FREQUENCY_GUIDANCE[3])
 
     prompt = PROACTIVE_PROMPT_TEMPLATE.format(

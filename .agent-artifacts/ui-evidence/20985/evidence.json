@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-speak-into-omi-light.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 1, light mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-ask-a-question-light.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 2, light mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-turn-off-light.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 4 (Turn Off), light mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-double-tap-light.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 5 (Customize Double Tap), light mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-all-set-light.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial last step (All Set), light mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-turn-off-dark.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 4 (Turn Off), dark mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-double-tap-dark.png",
+      "platform": "mobile-ios",
+      "description": "Tutorial step 5 (Customize Double Tap), dark mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-rating-prompt-light.png",
+      "platform": "mobile-ios",
+      "description": "Setup rating prompt: Are you enjoying Omi? Yes / No",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

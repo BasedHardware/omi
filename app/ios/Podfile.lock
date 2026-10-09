@@ -9,9 +9,9 @@ PODS:
     - AppAuth/Core
   - audio_session (0.0.1):
     - Flutter
-  - awesome_notifications (0.10.0):
+  - awesome_notifications (0.12.0):
     - Flutter
-    - IosAwnCore (~> 0.10.0)
+    - IosAwnCore (~> 0.12.0)
   - awesome_notifications_core (0.0.1):
     - Flutter
   - connectivity_plus (0.0.1):
@@ -206,7 +206,7 @@ PODS:
   - intercom_flutter (9.0.0):
     - Flutter
     - Intercom (= 19.7.2)
-  - IosAwnCore (0.10.0)
+  - IosAwnCore (0.12.1)
   - iOSDFULibrary (4.15.3):
     - ZIPFoundation (= 0.9.19)
   - iOSMcuManagerLibrary (1.6):
@@ -469,7 +469,7 @@ SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
-  awesome_notifications: 0f432b28098d193920b11a44cfa9d2d9313a3888
+  awesome_notifications: e52a8e6a8cdaca4edbd31f38f345305a377445c5
   awesome_notifications_core: 429c28df8746780a474de177e5acde33af87da63
   connectivity_plus: cb623214f4e1f6ef8fe7403d580fdad517d2f7dd
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
@@ -516,7 +516,7 @@ SPEC CHECKSUMS:
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   Intercom: 8d5ddc9d9f186c3eaeeaf3a3125c41ebef1a0987
   intercom_flutter: 3a89377cc07bb0e623c1196a3702cb727e1c5521
-  IosAwnCore: 653786a911089012092ce831f2945cd339855a89
+  IosAwnCore: ea91b2d2ee2fd3236748e1b9cdc16194f9558327
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed

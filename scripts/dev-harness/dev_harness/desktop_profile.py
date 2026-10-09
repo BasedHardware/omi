@@ -181,6 +181,10 @@ def resolve_profile(
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,
         "OMI_PYTHON_API_URL": python_api_url,
+        # Auth-scoped calls (desktop prompts, CSAT config, sign-in helpers) default to the
+        # production API. Without this, a local profile sends its emulator token there,
+        # gets 401, and the app treats it as a dead session.
+        "OMI_AUTH_API_URL": python_api_url,
         "OMI_LOCAL_PROFILE_STORAGE_NAME": storage_name,
         "OMI_LOCAL_AUTH_USER": user,
         "OMI_LOCAL_AUTH_EMAIL": email,

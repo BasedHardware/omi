@@ -1,3 +1,5 @@
+import 'package:omi/backend/preferences.dart';
+
 enum ButtonAction { askQuestion, endConversation, toggleMute, starConversation, none }
 
 const int maxButtonTapCount = 3;
@@ -69,4 +71,15 @@ class ButtonTapDispatcher {
     final action = _actionForCount(count);
     return action == ButtonAction.none ? null : action;
   }
+}
+
+/// What a single and a triple tap do, stored beside doubleTapAction.
+extension ButtonTapPreferences on SharedPreferencesUtil {
+  int get singleTapAction => getInt('singleTapAction');
+
+  set singleTapAction(int value) => saveInt('singleTapAction', value);
+
+  int get tripleTapAction => getInt('tripleTapAction');
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
 }

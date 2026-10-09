@@ -54,6 +54,54 @@ ingress:
   tls: []
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  # Cohort admission uses a separate Redis connection from reservation evidence.
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: based-hardware
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  # Reservation evidence retains its optional pre-Phase-A store.
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-reservation-runtime-config
+        key: REDIS_DB_HOST
+        optional: true
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: VERTEX_RESERVATION_REDIS_PASSWORD
+        optional: true
+  - name: REDIS_DB_PORT
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-reservation-runtime-config
+        key: REDIS_DB_PORT
+        optional: true
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -104,8 +152,6 @@ env:
     value: "1"
   - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
     value: "1000"
-  - name: OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS
-    value: "public_shared_conversation_chat"
 
 resources:
   requests:

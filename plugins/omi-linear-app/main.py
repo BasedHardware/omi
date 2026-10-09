@@ -37,6 +37,8 @@ from models import (
     WorkflowState,
 )
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 # Linear API Configuration
@@ -95,6 +97,7 @@ def refresh_access_token(refresh_token: str) -> Optional[Dict[str, Any]]:
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code == 200:
@@ -141,7 +144,8 @@ def linear_graphql_request(
         response = requests.post(
             LINEAR_API_URL,
             headers=headers,
-            json={"query": query, "variables": variables or {}}
+            json={"query": query, "variables": variables or {}},
+            timeout=REQUEST_TIMEOUT,
         )
         
         if response.status_code >= 400:
@@ -495,6 +499,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
         },
+        timeout=REQUEST_TIMEOUT,
     )
     
     if response.status_code != 200:

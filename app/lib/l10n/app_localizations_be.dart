@@ -21,14 +21,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcriptTab => 'Транскрыпцыя';
 
   @override
-  String get actionItemsTab => 'Пункты дзеяння';
+  String get actionItemsTab => 'Задачы';
 
   @override
   String get deleteConversationTitle => 'Выдаліць размову?';
 
   @override
-  String get deleteConversationMessage =>
-      'Гэта таксама выдаліць звязаныя ўспаміны, задачы і аўдыёфайлы. Гэта дзеянне нельга адмяніць.';
+  String get deleteConversationMessage => 'Гэта таксама выдаліць звязаныя ўспаміны, задачы і аўдыёфайлы.';
 
   @override
   String get confirm => 'Пацвердзіць';
@@ -112,10 +111,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get remaining => 'Звесткі';
 
   @override
-  String get loading => 'Загрузка...';
+  String get loading => 'Загрузка…';
 
   @override
-  String get loadingDuration => 'Загрузка тычасалікі...';
+  String get loadingDuration => 'Загрузка тычасалікі…';
 
   @override
   String secondsCount(int count) {
@@ -135,7 +134,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get createPersonHint => 'Стварыце новую асобу і навучыце Omi распазнаваць яе голас!';
 
   @override
-  String get speechProfile => 'Профіль голасу';
+  String get speechProfile => 'Галасавы профіль';
 
   @override
   String sampleNumber(int number) {
@@ -152,7 +151,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get selectLanguage => 'Выберыце мову';
 
   @override
-  String get deleting => 'Выданне...';
+  String get deleting => 'Выданне…';
 
   @override
   String get pleaseCompleteAuthentication => 'Завершыце аўтэнтыфікацыю ў браўзеры. Пасля гэтага вярніцеся ў дадатак.';
@@ -179,7 +178,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get disconnected => 'Адключана';
 
   @override
-  String get searching => 'Поіск...';
+  String get searching => 'Поіск';
 
   @override
   String get connectDevice => 'Падключыць прыладу';
@@ -239,7 +238,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get starConversationHint => 'Каб адзначыць размову, адкрыйце яе і націсніце значок зоркі ў загаловку.';
 
   @override
-  String get searchConversations => 'Поіск размоў...';
+  String get searchConversations => 'Поіск размоў';
 
   @override
   String selectedCount(int count) {
@@ -270,7 +269,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noMessagesYet => 'Пакі нета паведамленняў!\nЧаму б вам не пачаць размову?';
 
   @override
-  String get deletingMessages => 'Выданне вашых паведамленняў з памяці Omi...';
+  String get deletingMessages => 'Выданне вашых паведамленняў з памяці Omi…';
 
   @override
   String get messageCopied => '✨ Паведамленне скапіяванае ў буфер абмену';
@@ -282,7 +281,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reportMessage => 'Скаржыцца на паведамленне';
 
   @override
-  String get reportMessageConfirm => 'Вы ўпэўнены, што хочаце скаржыцца на гэта паведамленне?';
+  String get reportMessageConfirm => 'Паскардзіцца на гэта паведамленне?';
 
   @override
   String get messageReported => 'Паведамленне скаржыцца паспяхова.';
@@ -294,7 +293,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearChat => 'Ачысціць чат';
 
   @override
-  String get clearChatConfirm => 'Вы ўпэўнены, што хочаце ачысціць чат? Гэта дзеянне нельга адмяніць.';
+  String get clearChatConfirm => 'Усе паведамленні ў гэтым чаце будуць выдалены. Гэта нельзя адмяніць.';
 
   @override
   String get maxFilesLimit => 'Вы можаце загрузіць толькі 4 файлы адначасова';
@@ -318,7 +317,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get buildAndShareApp => 'Стварыце і раздзеліцеся сваім дадатком';
 
   @override
-  String get searchApps => 'Поіск дадатаў...';
+  String get searchApps => 'Поіск дадатаў';
 
   @override
   String get myApps => 'Створана мной';
@@ -358,10 +357,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get cannotBeUndone => 'Гэта нельга адмяніць.';
 
   @override
-  String get allDataErased => 'Усе вашы ўспаміны і размовы будуць безвяртана выданы.';
+  String get allDataErased => 'Вашы ўспаміны і размовы будуць сцёртыя.';
 
   @override
-  String get appsDisconnected => 'Вашы дадатыі і інтэграцыі будуць адключаны адразу.';
+  String get appsDisconnected => 'Вашы праграмы і інтэграцыі будуць адключаныя.';
 
   @override
   String get exportBeforeDelete =>
@@ -477,7 +476,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'У Omi мы адданы абаронцы вашай прыватнасці. Гэта старонка дазваляе вам кантраляваць, як вашы дадзеныя захоўваюцца і выкарыстоўваюцца.';
 
   @override
-  String get learnMore => 'Даведацца больш...';
+  String get learnMore => 'Даведацца больш…';
 
   @override
   String get dataProtectionLevel => 'Ўзровень абароны дадзеных';
@@ -663,7 +662,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get developerSettingsTitle => 'Параметры распрацоўніка';
 
   @override
-  String get saving => 'Захаванне...';
+  String get saving => 'Захаванне…';
 
   @override
   String get beta => 'БЕТА';
@@ -742,7 +741,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get providing => 'Абеспячэнне';
 
   @override
-  String get providingSubtitle => 'Пункты дзеяння і заметкі аўтаматычна захопленыя.';
+  String get providingSubtitle => 'Задачы і нататкі, захопленыя аўтаматычна.';
 
   @override
   String get remembering => 'Запамінанне';
@@ -784,16 +783,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get shareStatsMessage => 'Раздзеляюся мая статыстыкай Omi! (omi.me - ваш заўсёды ўключаны AI ассістэнт)';
 
   @override
-  String get sharePeriodToday => 'Сёння, omi:';
+  String get sharePeriodToday => 'Сёння, Omi:';
 
   @override
-  String get sharePeriodMonth => 'Гэты месяц, omi:';
+  String get sharePeriodMonth => 'Гэты месяц, Omi:';
 
   @override
-  String get sharePeriodYear => 'Гэты год, omi:';
+  String get sharePeriodYear => 'Гэты год, Omi:';
 
   @override
-  String get sharePeriodAllTime => 'Да гэтага пункта, omi:';
+  String get sharePeriodAllTime => 'Да гэтага пункта, Omi:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -843,7 +842,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get debugLogCleared => 'Лог адладкі ачышчены';
 
   @override
-  String get exportStarted => 'Экспорт пачаўся. Гэта можа заняць нешто секунд...';
+  String get exportStarted => 'Экспорт пачаўся. Гэта можа заняць нешто секунд…';
 
   @override
   String get exportAllData => 'Экспартаваць усе дадзеныя';
@@ -946,9 +945,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get claudeDesktop => 'Claude Desktop';
-
-  @override
-  String get addToClaudeConfig => 'Дадаць у claude_desktop_config.json';
 
   @override
   String get copyConfig => 'Скапіяваць канфіг';
@@ -1055,7 +1051,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String disconnectAppMessage(String appName) {
-    return 'Вы ўпэўнены, што хочаце адключыцца ад $appName? Вы можаце переадключыцца ў любы час.';
+    return 'Вы можаце зноў падключыць $appName у любы час.';
   }
 
   @override
@@ -1342,7 +1338,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return 'Ваша элементы дзеяння будуць сінхранізаваны з вашым ліком $appName';
+    return 'Вашы задачы будуць сінхранізаваны з вашым уліковым запісам $appName';
   }
 
   @override
@@ -1637,7 +1633,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get viewTemplate => 'Прагледаць шаблон';
 
   @override
-  String get trySomethingLike => 'Спробуйце зробіць штось падобнае...';
+  String get trySomethingLike => 'Спробуйце зробіць штось падобнае…';
 
   @override
   String get tryIt => 'Спробуйце';
@@ -1664,10 +1660,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get features => 'Функцыі';
 
   @override
-  String get creatingYourApp => 'Стварэнне вашага прыкладання...';
+  String get creatingYourApp => 'Стварэнне вашага прыкладання…';
 
   @override
-  String get generatingIcon => 'Генерацыя значка...';
+  String get generatingIcon => 'Генерацыя значка…';
 
   @override
   String get whatShouldWeMake => 'Што мы павінны стварыць?';
@@ -1718,13 +1714,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get perMonthLabel => '/ месяц';
 
   @override
-  String get creating => 'Стварэнне...';
+  String get creating => 'Стварэнне…';
 
   @override
   String get createApp => 'Стварыць прыкладанне';
 
   @override
-  String get searchingForDevices => 'Пошук прылад...';
+  String get searchingForDevices => 'Пошук прылад';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1771,26 +1767,27 @@ class AppLocalizationsBe extends AppLocalizations {
   String get backgroundActivity => 'Дзейнасць у фоне';
 
   @override
-  String get backgroundActivityDesc => 'Дайцюе Omi працаваць у фоне для лучшай стабільнасці';
+  String get backgroundActivityDesc =>
+      'Каб Omi працягваў запіс, калі экран выключаны або вы пераключаецеся на іншую праграму.';
 
   @override
   String get locationAccess => 'Доступ да месцазнаходжання';
 
   @override
-  String get locationAccessDesc => 'Уключыце фонавое месцазнаходжанне для поўнага вопыту';
+  String get locationAccessDesc => 'Каб Omi мог адзначаць, дзе адбываліся вашы размовы.';
 
   @override
   String get notifications => 'Паведамленні';
 
   @override
-  String get notificationsDesc => 'Уключыце паведамленні, каб быць інфармаваным';
+  String get notificationsDesc =>
+      'Каб Omi мог дасылаць вам зводкі размоў, напаміны пра задачы і адказы ад вашых праграм.';
 
   @override
   String get locationServiceDisabled => 'Сервіс месцазнаходжання адключаны';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Сервіс месцазнаходжання адключаны. Калі ласка, перайдзіце ў Налады > Прыватнасць і безпека > Сервісы месцазнаходжання і уключыце яго';
+  String get locationServiceDisabledDesc => 'Службы геалакацыі выключаны на гэтай прыладзе. Уключыце іх у Наладах.';
 
   @override
   String get backgroundLocationDenied => 'Доступ да фонавога месцазнаходжання адказаны';
@@ -1960,7 +1957,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get personalGrowthJourney => 'Ваш персаніфічны шлях росту з AI, які слухае кожнае вашае слова.';
 
   @override
-  String get actionItemsTitle => 'Да-зроб';
+  String get actionItemsTitle => 'Задачы';
 
   @override
   String get actionItemsDescription => 'Дакніце для редагавання • Доўгі націк для выбара • Провядзіце для дзеяння';
@@ -1975,7 +1972,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tabOld => 'Старыя';
 
   @override
-  String get emptyTodoMessage => '🎉 Усё зроблена!\nНяма очаківаючых дзеяння';
+  String get emptyTodoMessage => '🎉 Усё зроблена!\nНяма задач у чаканні';
 
   @override
   String get emptyDoneMessage => 'Завершаных элементаў яшчэ нету';
@@ -1987,37 +1984,37 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noItems => 'Няма элементаў';
 
   @override
-  String get actionItemMarkedIncomplete => 'Дзеянне адзначана як незавершана';
+  String get actionItemMarkedIncomplete => 'Задача адзначана як незавершаная';
 
   @override
-  String get actionItemCompleted => 'Дзеянне завершана';
+  String get actionItemCompleted => 'Задача завершана';
 
   @override
-  String get deleteActionItemTitle => 'Выдаліць дзеянне';
+  String get deleteActionItemTitle => 'Выдаліць задачу';
 
   @override
-  String get deleteActionItemMessage => 'Вы ўпэўнены, што хочаце выдаліць гэтае дзеянне?';
+  String get deleteActionItemMessage => 'Выдаліць гэту задачу?';
 
   @override
   String get deleteSelectedItemsTitle => 'Выдаліць выбраныя элементы';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return 'Вы ўпэўнены, што хочаце выдаліць $count выбранае дзеянне$s?';
+    return 'Выдаліць выбраныя задачы ($count)$s?';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return 'Дзеянне \"$description\" выдалена';
+    return 'Задача \"$description\" выдалена';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count дзеянне$s выдалена';
+    return '$count задач$s выдалена';
   }
 
   @override
-  String get failedToDeleteItem => 'Не вдалося выдаліць дзеянне';
+  String get failedToDeleteItem => 'Не ўдалося выдаліць задачу';
 
   @override
   String get failedToDeleteItems => 'Не вдалося выдаліць элементы';
@@ -2026,11 +2023,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get failedToDeleteSomeItems => 'Не вдалося выдаліць некалькі элементаў';
 
   @override
-  String get welcomeActionItemsTitle => 'Готовы да дзеяння';
+  String get welcomeActionItemsTitle => 'Гатовы да задач';
 
   @override
   String get welcomeActionItemsDescription =>
-      'Ваш AI аўтаматычна выцягне задачы і да-зробы з вашых разговораў. Яны будуць адлюстравацца тут пры стварэнні.';
+      'Ваш AI аўтаматычна выцягне задачы з вашых размоў. Яны з\'явяцца тут пасля стварэння.';
 
   @override
   String get autoExtractionFeature => 'Аўтаматычна выцягнута з разговораў';
@@ -2050,10 +2047,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deleteSelected => 'Выдаліць выбранае';
 
   @override
-  String get searchMemories => 'Пошук спамінаў...';
+  String get searchMemories => 'Пошук спамінаў';
 
   @override
-  String get memoryDeleted => 'Спамін выдалена.';
+  String get memoryDeleted => 'Спамін выдалена';
 
   @override
   String get memoryHistoryPartial => 'Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.';
@@ -2071,7 +2068,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get undo => 'Адмяніць';
 
   @override
-  String get noMemoriesYet => '🧠 Спамінаў яшчэ нету';
+  String get noMemoriesYet => 'Спамінаў яшчэ нету';
 
   @override
   String get noAutoMemories => 'Автоматычна выцягнутых спамінаў яшчэ нету';
@@ -2083,7 +2080,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noMemoriesInCategories => 'Спамінаў у гэтых катэгорыях нету';
 
   @override
-  String get noMemoriesFound => '🔍 Спамінаў не знойдзена';
+  String get noMemoriesFound => 'Спамінаў не знойдзена';
 
   @override
   String get addFirstMemory => 'Дадайце ваш першы спамін';
@@ -2092,7 +2089,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearMemoryTitle => 'Вычысціць памяць Omi';
 
   @override
-  String get clearMemoryMessage => 'Вы ўпэўнены, што хочаце вычысціць памяць Omi? Гэтае дзеянне нельга адмяніць.';
+  String get clearMemoryMessage => 'Усе вашы ўспаміны будуць выдалены. Гэта нельзя адмяніць.';
 
   @override
   String get clearMemoryButton => 'Вычысціць памяць';
@@ -2107,7 +2104,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get createMemoryTooltip => 'Стварыць новы спамін';
 
   @override
-  String get createActionItemTooltip => 'Стварыць новае дзеянне';
+  String get createActionItemTooltip => 'Стварыць новую задачу';
 
   @override
   String get memoryManagement => 'Кіраванне спамінамі';
@@ -2160,7 +2157,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get alwaysInContext => 'Заўсёды ў кантэксце';
 
   @override
-  String get memoryContentHint => 'Мне нравіцца есці мароженае...';
+  String get memoryContentHint => 'Я аддаю перавагу ранішнім сустрэчам.';
 
   @override
   String get failedToSaveMemory => 'Не вдалося захаваць. Калі ласка, праверыце вашу злучэнне.';
@@ -2172,28 +2169,28 @@ class AppLocalizationsBe extends AppLocalizations {
   String get retry => 'Спробаваць яшчэ раз';
 
   @override
-  String get createActionItem => 'Стварыць дзеянне';
+  String get createActionItem => 'Стварыць задачу';
 
   @override
-  String get editActionItem => 'Редагаваць дзеянне';
+  String get editActionItem => 'Рэдагаваць задачу';
 
   @override
   String get actionItemDescriptionHint => 'Што трэба зробіць?';
 
   @override
-  String get actionItemDescriptionEmpty => 'Апісанне дзеяння не можа быць пустым.';
+  String get actionItemDescriptionEmpty => 'Апісанне задачы не можа быць пустым.';
 
   @override
-  String get actionItemUpdated => 'Дзеянне абноўлена';
+  String get actionItemUpdated => 'Задача абноўлена';
 
   @override
-  String get failedToUpdateActionItem => 'Не вдалося абнавіць дзеянне';
+  String get failedToUpdateActionItem => 'Не ўдалося абнавіць задачу';
 
   @override
-  String get actionItemCreated => 'Дзеянне створана';
+  String get actionItemCreated => 'Задача створана';
 
   @override
-  String get failedToCreateActionItem => 'Не вдалося стварыць дзеянне';
+  String get failedToCreateActionItem => 'Не ўдалося стварыць задачу';
 
   @override
   String get dueDate => 'Тэрмін выканання';
@@ -2229,29 +2226,29 @@ class AppLocalizationsBe extends AppLocalizations {
   String get markComplete => 'Адзначыць як завершана';
 
   @override
-  String get actionItemDeleted => 'Дзеянне выдалена';
+  String get actionItemDeleted => 'Задача выдалена';
 
   @override
-  String get failedToDeleteActionItem => 'Не вдалося выдаліць дзеянне';
+  String get failedToDeleteActionItem => 'Не ўдалося выдаліць задачу';
 
   @override
-  String get deleteActionItemConfirmTitle => 'Выдаліць дзеянне';
+  String get deleteActionItemConfirmTitle => 'Выдаліць задачу';
 
   @override
-  String get deleteActionItemConfirmMessage => 'Вы ўпэўнены, што хочаце выдаліць гэтае дзеянне?';
+  String get deleteActionItemConfirmMessage => 'Выдаліць гэту задачу?';
 
   @override
   String get appLanguage => 'Мова прыкладання';
 
   @override
-  String get appInterfaceSectionTitle => 'ІНТЭРФЕЙС ПРЫКЛАДАННЯ';
+  String get appInterfaceSectionTitle => 'Інтэрфейс прыкладання';
 
   @override
-  String get speechTranscriptionSectionTitle => 'МОВ І РАСШЫФРОЎКА';
+  String get speechTranscriptionSectionTitle => 'Маўленне і расшыфроўка';
 
   @override
   String get languageSettingsHelperText =>
-      'Мова прыкладання змяняе меню і кнопкі. Мова маўлення влывае на тое, як вашы запісы расшыфроўваюцца.';
+      'Мова прыкладання змяняе меню і кнопкі. Першасная мова ўплывае на тое, як вашы запісы расшыфроўваюцца.';
 
   @override
   String get translationNotice => 'Паведамленне аб перакладе';
@@ -2267,7 +2264,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get pleaseSelectReason => 'Калі ласка, выберыце прычыну';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Скажыце нам больш аб тым, што пайшло не так...';
+  String get tellUsMoreWhatWentWrong => 'Скажыце нам больш аб тым, што пайшло не так…';
 
   @override
   String get selectText => 'Выбраць тэкст';
@@ -2327,7 +2324,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get exportButton => 'Экспартаваць';
 
   @override
-  String get actionItemsCopiedToClipboard => 'Пункты дзеяння скапіраваны ў буфер абмену';
+  String get actionItemsCopiedToClipboard => 'Задачы скапіраваны ў буфер абмену';
 
   @override
   String get summarize => 'Рэзюмаваць';
@@ -2342,7 +2339,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deleteMemory => 'Выдаліць памяць';
 
   @override
-  String get thisActionCannotBeUndone => 'Гэта дзеянне невозможна адмяніць.';
+  String get thisActionCannotBeUndone => 'Гэта нельзя адмяніць.';
 
   @override
   String memoriesCount(int count) {
@@ -2481,7 +2478,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Дапамагае дыягнаставаць праблемы';
 
   @override
-  String get exportStartedMessage => 'Экспартацыя пачалася. Гэта может заняць некалькі секунд...';
+  String get exportStartedMessage => 'Экспартацыя пачалася. Гэта может заняць некалькі секунд…';
 
   @override
   String get exportConversationsToJson => 'Экспартаваць разнамовы ў JSON файл';
@@ -2498,13 +2495,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Очыстіць усе вузлы і злучэнні';
 
   @override
-  String get addToClaudeDesktopConfig => 'Дадайце да claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Падлучыце AI асістэнтаў да вашых дадзеных';
-
-  @override
-  String get useYourMcpApiKey => 'Выкарыстоўвайце ваш MCP ключ API';
 
   @override
   String get realTimeTranscript => 'Стэнаграма ў рэальным часе';
@@ -2519,12 +2510,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Дэтальныя дыягностычныя паведамленні';
 
   @override
-  String get autoCreateSpeakers => 'Аўтаматычна ствараць дыктарыў';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Аўтаматычна ствараць пры выяўленні імя';
-
-  @override
   String get followUpQuestions => 'Наступныя пытанні';
 
   @override
@@ -2537,7 +2522,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Отстёгивайте свои личные цели на главной странице';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Апісанне пункту дзеяння не можа быць пусты';
+  String get actionItemDescriptionCannotBeEmpty => 'Апісанне задачы не можа быць пустым';
 
   @override
   String get saved => 'Захавана';
@@ -2619,7 +2604,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get toggleControlBar => 'Пераключыць панель кіравання';
 
   @override
-  String get pressKeys => 'Націскайце клавішы...';
+  String get pressKeys => 'Націскайце клавішы…';
 
   @override
   String get cmdRequired => '⌘ абавязкова';
@@ -2634,7 +2619,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get search => 'Пошук';
 
   @override
-  String get searchPlaceholder => 'Пошук...';
+  String get searchPlaceholder => 'Пошук';
 
   @override
   String get untitledConversation => 'Безназванная разнамова';
@@ -2707,7 +2692,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get searchResults => 'Вынікі пошуку';
 
   @override
-  String get actionItems => 'Пункты дзеяння';
+  String get actionItems => 'Задачы';
 
   @override
   String get tasksToday => 'Сёння';
@@ -2722,7 +2707,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tasksLater => 'Позней';
 
   @override
-  String get loadingTasks => 'Загрузка задач...';
+  String get loadingTasks => 'Загрузка задач…';
 
   @override
   String get tasks => 'Задачы';
@@ -2783,23 +2768,22 @@ class AppLocalizationsBe extends AppLocalizations {
   String get timeAM => 'ПП';
 
   @override
-  String get actionItemUpdatedSuccessfully => 'Пункт дзеяння паспяхово абнаўлены';
+  String get actionItemUpdatedSuccessfully => 'Задача паспяхова абноўлена';
 
   @override
-  String get actionItemCreatedSuccessfully => 'Пункт дзеяння паспяхово створаны';
+  String get actionItemCreatedSuccessfully => 'Задача паспяхова створана';
 
   @override
-  String get actionItemDeletedSuccessfully => 'Пункт дзеяння паспяхова выдалены';
+  String get actionItemDeletedSuccessfully => 'Задача паспяхова выдалена';
 
   @override
-  String get deleteActionItem => 'Выдаліць пункт дзеяння';
+  String get deleteActionItem => 'Выдаліць задачу';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Вы ўпэўнены, што хочаце выдаліць гэты пункт дзеяння? Гэта дзеянне невозможна адмяніць.';
+  String get deleteActionItemConfirmation => 'Выдаліць гэту задачу? Гэта нельзя адмяніць.';
 
   @override
-  String get enterActionItemDescription => 'Увядзіце апісанне пункту дзеяння...';
+  String get enterActionItemDescription => 'Увядзіце апісанне задачы';
 
   @override
   String get markAsCompleted => 'Пазначыць як завершанае';
@@ -2808,10 +2792,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get setDueDateAndTime => 'Установіць дату і час выконання';
 
   @override
-  String get reloadingApps => 'Перагрузка прыбордаў...';
+  String get reloadingApps => 'Перагрузка прыбордаў…';
 
   @override
-  String get loadingApps => 'Загрузка прыбордаў...';
+  String get loadingApps => 'Загрузка прыбордаў…';
 
   @override
   String get browseInstallCreateApps => 'Праглядайце, ўстанаўлівайце і стварайце прыбордаў';
@@ -2847,10 +2831,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get buildSubmitCustomOmiApp => 'Збудуйце і падайце ваш другасны Omi прыбор';
 
   @override
-  String get submittingYourApp => 'Адпраўка вашага прыбора...';
+  String get submittingYourApp => 'Адпраўка вашага прыбора…';
 
   @override
-  String get preparingFormForYou => 'Падрыхтоўка формы для вас...';
+  String get preparingFormForYou => 'Падрыхтоўка формы для вас…';
 
   @override
   String get appDetails => 'Дэталі прыбора';
@@ -2872,13 +2856,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get chatPromptPlaceholder =>
-      'Вы чудасны прыбор, ваша праца - адказаць на пытанні карыстальніка і заставіць яго адчуць сябе добра...';
+      'Вы чудасны прыбор, ваша праца - адказаць на пытанні карыстальніка і заставіць яго адчуць сябе добра…';
 
   @override
   String get conversationPrompt => 'Падказка разнамовы';
 
   @override
-  String get conversationPromptPlaceholder => 'Вы чудасны прыбор, вам будзе дадзена трансцыпцыя і рэзюмэ разнамовы...';
+  String get conversationPromptPlaceholder => 'Вы чудасны прыбор, вам будзе дадзена трансцыпцыя і рэзюмэ разнамовы…';
 
   @override
   String get notificationScopes => 'Сферы паведамленняў';
@@ -3036,7 +3020,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get pricingPaid => 'Платная';
 
   @override
-  String get loadingCapabilities => 'Загрузка магчымасцей...';
+  String get loadingCapabilities => 'Загрузка магчымасцей…';
 
   @override
   String get filterInstalled => 'Ўстаноўлена';
@@ -3134,7 +3118,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get messageReportedSuccessfully => '✅ Паведамленне паспяхова паведамлена';
 
   @override
-  String get confirmReportMessage => 'Вы ўпэўнены, што хочаце паведаміць аб гэтым паведамленні?';
+  String get confirmReportMessage => 'Паскардзіцца на гэта паведамленне?';
 
   @override
   String get selectChatAssistant => 'Выберыце асістэнта чата';
@@ -3149,7 +3133,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearChatTitle => 'Очыстіць чат?';
 
   @override
-  String get confirmClearChat => 'Вы ўпэўнены, што хочаце очыстіць чат? Гэта дзеянне невозможна адмяніць.';
+  String get confirmClearChat => 'Ачысціць гэты чат? Гэта нельзя адмяніць.';
 
   @override
   String get copy => 'Копіяваць';
@@ -3176,7 +3160,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get failedToTranscribeAudio => 'Не ўдалося трансцыбаваць аўдыё';
 
   @override
-  String get transcribing => 'Трансцыпцыя...';
+  String get transcribing => 'Трансцыпцыя…';
 
   @override
   String get discardedConversation => 'Адкінутая разнамова';
@@ -3188,7 +3172,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get from => 'з';
 
   @override
-  String get copied => 'Скапіравана!';
+  String get copied => 'Скапіравана';
 
   @override
   String get copyLink => 'Копіяваць спасылку';
@@ -3226,7 +3210,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get failedToGenerateShareLink => 'Не ўдалося ствараць спасылку для абмену';
 
   @override
-  String get reloadingConversations => 'Перагрузка разнамоў...';
+  String get reloadingConversations => 'Перагрузка разнамоў…';
 
   @override
   String get user => 'Карыстальнік';
@@ -3285,7 +3269,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get wearableAiCompanion => 'Надзеваны AI асістэнт';
 
   @override
-  String get loadingMemories => 'Загрузка памятак...';
+  String get loadingMemories => 'Загрузка памятак…';
 
   @override
   String get allMemories => 'Усе памяткі';
@@ -3297,7 +3281,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get manual => 'Ручны';
 
   @override
-  String get loadingYourMemories => 'Загрузка вашых памятак...';
+  String get loadingYourMemories => 'Загрузка вашых памятак…';
 
   @override
   String get createYourFirstMemory => 'Ствварыце вашу першую памяць, каб пачаць';
@@ -3321,8 +3305,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get createMemory => 'Ствараць памяць';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Вы ўпэўнены, што хочаце выдаліць гэту памяць? Гэта дзеянне невозможна адмяніць.';
+  String get deleteMemoryConfirmation => 'Выдаліць гэты ўспамін? Гэта нельзя адмяніць.';
 
   @override
   String get makePrivate => 'Ўчыніць прыватнай';
@@ -3359,7 +3342,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Вы ўпэўнены, што хочаце очыстіць памяць Omi? Гэта дзеянне невозможна адмяніць і назаўсёды выдаліць усе $count памяткі.';
+    return 'Усе ўспаміны ($count) будуць выдалены. Гэта нельзя адмяніць.';
   }
 
   @override
@@ -3415,7 +3398,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => 'Выберыце вашу аддаленую мову для лепшага вопыту Omi';
 
   @override
-  String get searchLanguages => 'Шукаць мовы...';
+  String get searchLanguages => 'Шукаць мовы';
 
   @override
   String get selectALanguage => 'Выберыце мову';
@@ -3472,13 +3455,13 @@ class AppLocalizationsBe extends AppLocalizations {
       'Omi патрабуе дазвол на доступнасць для выявлення, калі вы ўдзельнічаеце ў сустрэчах Zoom, Meet або Teams у вашым браўзеры.';
 
   @override
-  String get pleaseWait => 'Пачакайце...';
+  String get pleaseWait => 'Пачакайце…';
 
   @override
   String get joinTheCommunity => 'Приєднайцеся да суполкі!';
 
   @override
-  String get loadingProfile => 'Загрузка профіля...';
+  String get loadingProfile => 'Загрузка профіля…';
 
   @override
   String get profileSettings => 'Параметры профіля';
@@ -3604,7 +3587,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get saveSettings => 'Захаваць параметры';
 
   @override
-  String get syncingDeveloperSettings => 'Сінхранізацыя параметраў распрацоўніка...';
+  String get syncingDeveloperSettings => 'Сінхранізацыя параметраў распрацоўніка…';
 
   @override
   String get summary => 'Зводка';
@@ -3651,14 +3634,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Дозвольце Omi выбраць най­лепшае прыкладанне аўтаматычна';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Вы сапраўды хочаце выдаліць гэтую размову? Гэта дзеянне не можна адмяніць.';
+  String get deleteConversationConfirmation => 'Выдаліць гэту размову? Гэта нельзя адмяніць.';
 
   @override
   String get conversationDeleted => 'Размова выдалена';
 
   @override
-  String get generatingLink => 'Генеруецца спасылка...';
+  String get generatingLink => 'Генеруецца спасылка…';
 
   @override
   String get editConversation => 'Рэдагаваць размову';
@@ -3679,7 +3661,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get conversationTitle => 'Назва размовы';
 
   @override
-  String get enterConversationTitle => 'Увядзіце назву размовы...';
+  String get enterConversationTitle => 'Увядзіце назву размовы…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => 'Назва размовы паспяхова абноўлена';
@@ -3691,7 +3673,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get errorUpdatingConversationTitle => 'Памылка пры абнаўленні назвы размовы';
 
   @override
-  String get settingUp => 'Наладка...';
+  String get settingUp => 'Наладка…';
 
   @override
   String get startYourFirstRecording => 'Пачніце сваю першую запіс';
@@ -3700,7 +3682,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Падрыхтоўка захопу сістэмнага аўдыё';
 
   @override
-  String get reconnecting => 'Перападключэнне...';
+  String get reconnecting => 'Перападключэнне…';
 
   @override
   String get recordingPaused => 'Запіс паўзаваны';
@@ -3713,14 +3695,14 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return 'Възнаўленне праз $countdownс...';
+    return 'Възнаўленне праз $countdownс…';
   }
 
   @override
   String get tapPlayToResume => 'Клацніце прайграўванне для вознаўлення';
 
   @override
-  String get listeningForAudio => 'Слуша аўдыё...';
+  String get listeningForAudio => 'Слуша аўдыё…';
 
   @override
   String get preparingAudioCapture => 'Падрыхтоўка захопу аўдыё';
@@ -3748,7 +3730,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paused => 'Паўзаванна';
 
   @override
-  String get initializing => 'Ініцыалізацыя...';
+  String get initializing => 'Ініцыалізацыя…';
 
   @override
   String get recording => 'Запіс';
@@ -3776,7 +3758,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'перавязана omi';
+  String get translatedByOmi => 'перавязана Omi';
 
   @override
   String get backToConversations => 'Вяртаюцца да размаў';
@@ -3801,7 +3783,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get selectAudioInput => 'Выберыце аўдыё ўвод';
 
   @override
-  String get loadingDevices => 'Загрузка прыстасаванняў...';
+  String get loadingDevices => 'Загрузка прыстасаванняў…';
 
   @override
   String get settingsHeader => 'ПАРАМЕТРЫ';
@@ -3831,7 +3813,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String get signOutQuestion => 'Выйсці?';
 
   @override
-  String get signOutConfirmation => 'Вы сапраўды хочаце выйсці?';
+  String get signOutConfirmation =>
+      'Каб убачыць размовы, трэба будзе ўвайсці зноў. Спалучаная прылада і налады праграмы застануцца на гэтым тэлефоне.';
 
   @override
   String get customVocabularyHeader => 'АДВОЛЬНЫ СЛОЎНІК';
@@ -3910,7 +3893,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get exportConversationsDescription => 'Экспартуйце размовы ў JSON';
 
   @override
-  String get exportingConversations => 'Экспарт размаў...';
+  String get exportingConversations => 'Экспарт размаў…';
 
   @override
   String get clearNodesDescription => 'Очысціць ўсе вузлы і злучэнні';
@@ -3977,8 +3960,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get updateAppQuestion => 'Абнавіць прыкладанне?';
 
   @override
-  String get updateAppConfirmation =>
-      'Вы сапраўды хочаце абнавіць вашае прыкладанне? Змяненні будуць адлюстраны пасля рэцэнзіі нашай каманды.';
+  String get updateAppConfirmation => 'Змяненні з\'явяцца пасля праверкі нашай камандай.';
 
   @override
   String get updateApp => 'Абнавіць прыкладанне';
@@ -4000,9 +3982,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Публічныя прыкладанні ($count)';
   }
-
-  @override
-  String get newVersionAvailable => 'Даступна новая версія 🎉';
 
   @override
   String get no => 'Не';
@@ -4045,14 +4024,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Скасаваць падпіску?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Вы сапраўды хочаце скасаваць вашу падпіску? Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.';
+  String get cancelSubscriptionConfirmation => 'Вы будзеце мець доступ да конца цякучага біллінгавога перыяду.';
 
   @override
   String get cancelSubscriptionButton => 'Скасаваць падпіску';
 
   @override
-  String get cancelling => 'Скасаванне...';
+  String get cancelling => 'Скасаванне…';
 
   @override
   String get betaTesterMessage =>
@@ -4171,7 +4149,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return 'Дадаванне да $serviceName...';
+    return 'Дадаванне да $serviceName…';
   }
 
   @override
@@ -4208,7 +4186,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API ключы выкарыстоўваюцца для аўтэнтыфікацыі, калі ваша прыкладанне зносіцца з сервером OMI. Яны дазваляюць вашаму прыкладанню стварыць спогады і бяспечна атрымаць доступ да іншых сервісаў OMI.';
+      'API ключы выкарыстоўваюцца для аўтэнтыфікацыі, калі ваша прыкладанне зносіцца з сервером Omi. Яны дазваляюць вашаму прыкладанню стварыць спогады і бяспечна атрымаць доступ да іншых сервісаў Omi.';
 
   @override
   String get aboutOmiApiKeys => 'Аб API ключах Omi';
@@ -4233,7 +4211,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get revokeApiKeyWarning =>
-      'Гэта дзеянне не можна адмяніць. Любыя прыкладанні, якія выкарыстоўваюць гэты ключ, больш не зможуць мець доступ да API.';
+      'Праграмы, якія выкарыстоўваюць гэты ключ, страцяць доступ да API. Гэта нельзя адмяніць.';
 
   @override
   String get revoke => 'Адкліклаць';
@@ -4290,7 +4268,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String deleteItemConfirmation(String item) {
-    return 'Вы сапраўды хочаце выдаліць гэты $item? Гэта дзеянне не можна адмяніць.';
+    return '$item будзе выдалена. Гэта нельга адмяніць.';
   }
 
   @override
@@ -4298,7 +4276,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String revokeKeyConfirmation(String keyName) {
-    return 'Вы сапраўды хочаце адкліклаць ключ \"$keyName\"? Гэта дзеянне не можна адмяніць.';
+    return 'Усё, што выкарыстоўвае \"$keyName\", страціць доступ. Гэта нельзя адмяніць.';
   }
 
   @override
@@ -4476,7 +4454,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String planRemainsActiveUntil(String date) {
-    return 'Ваш план застанецца актыўным да $date. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый. Вы сапраўды?';
+    return 'Ваш план застанецца актыўным да $date. Пасля гэтага вы страцяеце доступ да вашых неабмежаваных функцый.';
   }
 
   @override
@@ -4569,7 +4547,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get askOmiAnything => 'Запытайцеся у Omi ўсё аб вашым жыцці';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Разблакуйце бясконцую память Omi';
+  String get unlockOmiInfiniteMemory => 'Неабмежаваныя ўспаміны';
 
   @override
   String get youreOnAnnualPlan => 'Вы на Гадавым Плане';
@@ -4581,7 +4559,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get unableToLoadPlans => 'Немагчыма загрузіць планы';
 
   @override
-  String get checkConnectionTryAgain => 'Праверце падключэнне і паспрабуйце зноў';
+  String get checkConnectionTryAgain => 'Праверце злучэнне і паспрабуйце яшчэ раз.';
 
   @override
   String get useFreePlan => 'Выкарыстаць Бясплатны План';
@@ -4688,14 +4666,14 @@ class AppLocalizationsBe extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'Граф Ведаў Успешна Удалены';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Экспорт пачаўся. Гэта можа заняць некалькі секунд...';
+  String get exportStartedMayTakeFewSeconds => 'Экспорт пачаўся. Гэта можа заняць некалькі секунд…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
       'Гэта удаліт усе дадзеныя дэрыванага графа ведаў (вузлы і злучэнні). Ваша арыгінальная память застанецца ў безпеце. Граф будзе адбудаваны з часам або пры наступным запыце.';
 
   @override
-  String get configureDailySummaryDigest => 'Канфігураваць ваш дзённы дайджэст элементаў дзеяння';
+  String get configureDailySummaryDigest => 'Наладзьце штодзённы дайджэст задач';
 
   @override
   String accessesDataTypes(String dataTypes) {
@@ -4763,7 +4741,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deleteAllLimitlessWarning =>
-      'Гэта перманентна удаліт усе разговоры, імпартаваныя з Limitless. Гэта дзеяннне нельга адмяніць.';
+      'Усе размовы, імпартаваныя з Limitless, будуць выдалены. Гэта нельзя адмяніць.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4804,7 +4782,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String deleteSampleConfirmation(String name) {
-    return 'Вы ўпэўнены, што хочаце удаліць ўзор $name?';
+    return 'Узор голасу $name будзе выдалены. Гэта нельзя адмяніць.';
   }
 
   @override
@@ -4812,7 +4790,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String deletePersonConfirmation(String name) {
-    return 'Вы ўпэўнены, што хочаце удаліць $name? Гэта таксама выдаліт усе звязаныя ўзоры мовы.';
+    return 'Гэта выдаліць узоры голасу $name, і гэта нельга адмяніць. Рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.';
   }
 
   @override
@@ -4927,7 +4905,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get checkingForUpdates => 'Праверка Абнаўленняў';
 
   @override
-  String get checkingFirmwareVersion => 'Праверка версіі прашыўкі...';
+  String get checkingFirmwareVersion => 'Праверка версіі прашыўкі…';
 
   @override
   String get firmwareUpdate => 'Абнаўленне Прашыўкі';
@@ -5091,8 +5069,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.';
+  String get tasksEmptyStateMessage => 'Пачніце размову, каб стварыць задачу.';
 
   @override
   String get clearChatAction => 'Очыстіць Чат';
@@ -5110,19 +5087,19 @@ class AppLocalizationsBe extends AppLocalizations {
   String get showLess => 'Паказаць менш ↑';
 
   @override
-  String get loadingYourRecording => 'Загрузка вашага запісу...';
+  String get loadingYourRecording => 'Загрузка вашага запісу…';
 
   @override
   String get photoDiscardedMessage => 'Гэта фота было адкінута, так як яно не было значнае.';
 
   @override
-  String get analyzing => 'Аналіз...';
+  String get analyzing => 'Аналіз…';
 
   @override
   String get searchCountries => 'Пошук краін';
 
   @override
-  String get checkingAppleWatch => 'Праверка Apple Watch...';
+  String get checkingAppleWatch => 'Праверка Apple Watch…';
 
   @override
   String get installOmiOnAppleWatch => 'Ўстаноўьце Omi на ваш\nApple Watch';
@@ -5170,7 +5147,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get finishedConversation => 'Завяршыць Разговор?';
 
   @override
-  String get stopRecordingConfirmation => 'Вы ўпэўнены, што хочаце спыніць запіс і рэзюміраваць разговор зараз?';
+  String get stopRecordingConfirmation => 'Спыніць запіс і падсумаваць размову зараз?';
 
   @override
   String get conversationEndsManually => 'Разговор буде скончцацца толькі ручнічна.';
@@ -5184,7 +5161,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dontAskAgain => 'Не пытайцеся мне яшчэ раз';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Чаканне на транскрыпцыю ці фота...';
+  String get waitingForTranscriptOrPhotos => 'Чаканне на транскрыпцыю ці фота…';
 
   @override
   String get noSummaryYet => 'Рэзюмэ яшчэ няма';
@@ -5231,7 +5208,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noSummary => 'Нема рэзюмэ';
 
   @override
-  String get updateOmiFirmware => 'Абнавіць прашыўку omi';
+  String get updateOmiFirmware => 'Абнавіць прашыўку Omi';
 
   @override
   String get anErrorOccurredTryAgain => 'Здарылася ошибка. Калі ласка, спробуйце яшчэ раз.';
@@ -5291,7 +5268,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get wrappedYouTalkedAbout => 'Вы Гаварыў Аб';
 
   @override
-  String get wrappedActionItems => 'Элементы Дзеяння';
+  String get wrappedActionItems => 'Задачы';
 
   @override
   String get wrappedTasksCreated => 'задачы створаны';
@@ -5383,10 +5360,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get wrappedGenerateMyWrapped => 'Генерыраваць Мой Wrapped';
 
   @override
-  String get wrappedProcessingDefault => 'Апрацоўка...';
+  String get wrappedProcessingDefault => 'Апрацоўка…';
 
   @override
-  String get wrappedCreatingYourStory => 'Стварэнне вашага\n2025 аповеда...';
+  String get wrappedCreatingYourStory => 'Стварэнне вашага\n2025 аповеда…';
 
   @override
   String get wrappedSomethingWentWrong => 'Што-то пайшло не так';
@@ -5416,7 +5393,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Не ўдалось пачаць генерацыю. Калі ласка, спробуйце яшчэ раз.';
 
   @override
-  String get wrappedStarting => 'Пачатак...';
+  String get wrappedStarting => 'Пачатак…';
 
   @override
   String get wrappedShare => 'Дзелік';
@@ -5624,13 +5601,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get somethingWentWrongTryAgain => 'Нешто палося не так! Пожалуйста, паспрабуйце яшчэ раз пазней.';
 
   @override
-  String get uploadingVoiceProfile => 'Загрузка вашага профіля голаса....';
+  String get uploadingVoiceProfile => 'Загрузка вашага профіля голаса….';
 
   @override
-  String get memorizingYourVoice => 'Запамінанне вашага голаса...';
+  String get memorizingYourVoice => 'Запамінанне вашага голаса…';
 
   @override
-  String get personalizingExperience => 'Персаналізацыя вашага досведу...';
+  String get personalizingExperience => 'Персаналізацыя вашага досведу…';
 
   @override
   String get keepSpeakingUntil100 => 'Гавораце, пакуль вы не атрымаеце 100%.';
@@ -5756,7 +5733,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearChatQuestion => 'Ачысціць чат?';
 
   @override
-  String get syncingMessages => 'Синхранізацыя паведамленняў з сервером...';
+  String get syncingMessages => 'Синхранізацыя паведамленняў з сервером…';
 
   @override
   String get chatAppsTitle => 'Прыкладанні чата';
@@ -5917,10 +5894,10 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Рэзюмаванне разговора...\nГэта можа занять некалькі секунд';
+  String get summarizingConversation => 'Рэзюмаванне разговора…\nГэта можа занять некалькі секунд';
 
   @override
-  String get resummarizingConversation => 'Пераўтварэнне разговора...\nГэта можа занять некалькі секунд';
+  String get resummarizingConversation => 'Пераўтварэнне разговора…\nГэта можа занять некалькі секунд';
 
   @override
   String get nothingInterestingRetry => 'Нічога цікавага не знойдзена,\nхочаце паспрабаваць яшчэ раз?';
@@ -6017,7 +5994,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
+      '300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі.';
 
   @override
   String get viewUsage => 'Прагляд выкарыстання';
@@ -6053,7 +6030,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doNotCloseApp => 'Пожалуйста, не закрывайце прыкладанне.';
 
   @override
-  String get downloading => 'Загрузка...';
+  String get downloading => 'Загрузка…';
 
   @override
   String get downloadModel => 'Загрузіць мадэль';
@@ -6099,7 +6076,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
+      '300 прэміум-хвілін у месяц. Выберыце «На прыладзе» для неабмежаванай бясплатнай расшыфроўкі. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6134,7 +6111,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return 'Падрыхтоўка $model...';
+    return 'Падрыхтоўка $model…';
   }
 
   @override
@@ -6154,7 +6131,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Убудаваная жывая транскрыпцыя Omi аптымізавана для разговораў у рэальным часе з аўтаматычным распазнаваннем дыктарыў і дыяризацыяй.';
+      'Жывая расшыфроўка Omi створана для размоў у рэальным часе і пазначае, хто што сказаў.';
 
   @override
   String get reset => 'Скінуць';
@@ -6163,7 +6140,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get useTemplateFrom => 'Выкарыстоўваць шаблон з';
 
   @override
-  String get selectProviderTemplate => 'Абраць шаблон пастаўшчыка...';
+  String get selectProviderTemplate => 'Абраць шаблон пастаўшчыка…';
 
   @override
   String get quicklyPopulateResponse => 'Хутка запоўніце вядомым фарматам адказу пастаўшчыка';
@@ -6365,13 +6342,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get signUpSuccess => 'Рэгістрацыя паспяхова!';
 
   @override
-  String get loadingKnowledgeGraph => 'Загрузка графіка ведаў...';
+  String get loadingKnowledgeGraph => 'Загрузка графіка ведаў…';
 
   @override
   String get noKnowledgeGraphYet => 'Графіка ведаў яшчэ нема';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Пабудова графіка ведаў з памяці...';
+  String get buildingKnowledgeGraphFromMemories => 'Пабудова графіка ведаў з памяці…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6388,7 +6365,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return 'Адкрыванне $appName...';
+    return 'Адкрыванне $appName…';
   }
 
   @override
@@ -6422,7 +6399,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get moneyEarned => 'Зарабіены грошы';
 
   @override
-  String get writeYourReply => 'Напішыце ваш адказ...';
+  String get writeYourReply => 'Напішыце ваш адказ…';
 
   @override
   String get replySentSuccessfully => 'Адказ адправлены паспяхово';
@@ -6569,7 +6546,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get selectContactsToShareSummary => 'Абярыце контакты, каб дзелініцца рэзюмэ разговара';
 
   @override
-  String get searchContactsHint => 'Шукаць контакты...';
+  String get searchContactsHint => 'Шукаць контакты';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6658,7 +6635,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Пераноса...';
+  String get transferring => 'Пераноса…';
 
   @override
   String get transferRequired => 'Пераноса патрэбна';
@@ -6683,14 +6660,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get recordingInfo => 'Інфармацыя запісу';
 
   @override
-  String get transferInProgress => 'Пераноска выконваецца...';
+  String get transferInProgress => 'Пераноска выконваецца…';
 
   @override
   String get shareRecording => 'Абагуліць запіс';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Вы ўпэўнены, што хочаце назаўсёды выдаліць гэты запіс? Гэта не можна адмяніць.';
+  String get deleteRecordingConfirmation => 'Гэта нельзя адмяніць.';
 
   @override
   String get recordingIdLabel => 'ID запісу';
@@ -6803,7 +6779,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Адбылася памылка пры абнаўленні стану дадатка.';
 
   @override
-  String get calculatingETA => 'Разлічваецца...';
+  String get calculatingETA => 'Разлічваецца…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6814,29 +6790,29 @@ class AppLocalizationsBe extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Прыблізна хвіліна да канца';
 
   @override
-  String get almostDone => 'Амаль скончана...';
+  String get almostDone => 'Амаль скончана…';
 
   @override
   String get omiSays => 'Omi кажа';
 
   @override
-  String get analyzingYourData => 'Аналіз вашых даных...';
+  String get analyzingYourData => 'Аналіз вашых даных…';
 
   @override
   String migratingToProtection(String level) {
-    return 'Пераносяцца да $level абаронячу...';
+    return 'Пераносяцца да $level абаронячу…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Няма даных для пераносу. Завяршаюцца...';
+  String get noDataToMigrateFinalizing => 'Няма даных для пераносу. Завяршаюцца…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Пераносяцца $itemType... $percentage%';
+    return 'Пераносяцца $itemType… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Ўсе аб\'екты перанесены. Завяршаюцца...';
+  String get allObjectsMigratedFinalizing => 'Ўсе аб\'екты перанесены. Завяршаюцца…';
 
   @override
   String get migrationErrorOccurred => 'Адбылася памылка пры міграцыі. Спрабуйце яшчэ раз.';
@@ -6872,14 +6848,14 @@ class AppLocalizationsBe extends AppLocalizations {
   String get templateName => 'Назва шаблёна';
 
   @override
-  String get templateNameHint => 'напрыклад, Іспаўнялец элементаў дзеяння наездак';
+  String get templateNameHint => 'напрыклад, Экстрактар задач з сустрэч';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Назва павінна быць не менш за 3 сімвалы';
 
   @override
   String get conversationPromptHint =>
-      'напрыклад, Выняць элементы дзеяння, рашэнні, прынятыя і ключавыя моменты з прадстаўленай размовы.';
+      'напрыклад, Вылучыце задачы, прынятыя рашэнні і ключавыя высновы з прадстаўленай размовы.';
 
   @override
   String get pleaseEnterAppPrompt => 'Калі ласка, введзіце запіт да вашага дадатка';
@@ -6894,13 +6870,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onlyYouCanUseTemplate => 'Толькі вы можаце выкарыстаць гэты шаблён';
 
   @override
-  String get generatingDescription => 'Генерацыя апісання...';
+  String get generatingDescription => 'Генерацыя апісання…';
 
   @override
-  String get creatingAppIcon => 'Стварэнне значка дадатка...';
+  String get creatingAppIcon => 'Стварэнне значка дадатка…';
 
   @override
-  String get installingApp => 'Ўстанаўленне дадатка...';
+  String get installingApp => 'Ўстанаўленне дадатка…';
 
   @override
   String get appCreatedAndInstalled => 'Дадатак створаны і ўстаноўлены!';
@@ -7030,7 +7006,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get aiGenPleaseEnterDescription => 'Калі ласка, введзіце апісанне для вашага дадатка';
 
   @override
-  String get aiGenCreatingAppIcon => 'Стварэнне значка дадатка...';
+  String get aiGenCreatingAppIcon => 'Стварэнне значка дадатка…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -7063,7 +7039,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'Вы мяняеце ваш Unlimite план на $title. Вы ўпэўнены, што хочаце адкіць?';
+    return 'Вы мяняеце ваш план Unlimited на $title.';
   }
 
   @override
@@ -7087,7 +7063,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Не вдалося запусціць старонку паўпшасцэння. Спрабуйце яшчэ раз.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Вставіце вашу кагфіўрацыю JSON тут...';
+  String get transcriptionJsonPlaceholder => 'Вставіце вашу кагфіўрацыю JSON тут…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7157,7 +7133,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingYoureAllSet => 'Вы ўсё гатовы';
 
   @override
-  String get searchTranscriptOrSummary => 'Пошук транскрыпцыі або рэзюмэ...';
+  String get searchTranscriptOrSummary => 'Пошук транскрыпцыі або рэзюмэ';
 
   @override
   String get myGoal => 'Моя мета';
@@ -7389,10 +7365,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get msgUploadFileFailed => 'Не вдалося загрузіць файл, спрабуйце яшчэ раз позней';
 
   @override
-  String get msgReadingMemories => 'Чытанне вашых успамінаў...';
+  String get msgReadingMemories => 'Чытанне вашых успамінаў…';
 
   @override
-  String get msgLearningMemories => 'Навучанне ад вашых успамінаў...';
+  String get msgLearningMemories => 'Навучанне ад вашых успамінаў…';
 
   @override
   String get msgUploadAttachedFileFailed => 'Не вдалося загрузіць прыкладзены файл.';
@@ -7450,7 +7426,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Новая 🚀';
+  String get conversationNewIndicator => 'Новая';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7458,7 +7434,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Злучанне...';
+  String get mergingStatus => 'Злучанне…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7553,10 +7529,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get color => 'Колер';
 
   @override
-  String get waitingForDevice => 'Чаканне прыстасавання...';
+  String get waitingForDevice => 'Чаканне прыстасавання…';
 
   @override
-  String get saySomething => 'Расказыце што-небудзь...';
+  String get saySomething => 'Расказыце што-небудзь…';
 
   @override
   String get initialisingSystemAudio => 'Ініцыялізацыя сістэмнага аўдыё';
@@ -7605,7 +7581,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get audioDownloadFailed => 'Не вдалося загрузіць аўдыё';
 
   @override
-  String get downloadingAudio => 'Загрузка аўдыё...';
+  String get downloadingAudio => 'Загрузка аўдыё…';
 
   @override
   String get shareAudio => 'Абагуліць аўдыё';
@@ -7614,7 +7590,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get preparingAudio => 'Падрыхтоўка аўдыё';
 
   @override
-  String get gettingAudioFiles => 'Атрыманне файлаў аўдыё...';
+  String get gettingAudioFiles => 'Атрыманне файлаў аўдыё…';
 
   @override
   String get downloadingAudioProgress => 'Загрузка аўдыё';
@@ -7623,13 +7599,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingAudio => 'Апрацоўка аўдыё';
 
   @override
-  String get combiningAudioFiles => 'Комбініраванне файлаў аўдыё...';
+  String get combiningAudioFiles => 'Комбініраванне файлаў аўдыё…';
 
   @override
   String get audioReady => 'Аўдыё гатова';
 
   @override
-  String get openingShareSheet => 'Адкрыццё аркуша абагулення...';
+  String get openingShareSheet => 'Адкрыццё аркуша абагулення…';
 
   @override
   String get audioShareFailed => 'Абагуленне не атрымалася';
@@ -7814,7 +7790,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get mcpConnectionFailed => 'Не ўдалося падключыцца да MCP-сервера';
 
   @override
-  String get authorizingMcpServer => 'Аўтарызацыя...';
+  String get authorizingMcpServer => 'Аўтарызацыя…';
 
   @override
   String get whereDidYouHearAboutOmi => 'Як вы пра нас даведаліся?';
@@ -7949,7 +7925,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get downloadingFromDevice => 'Загрузка з прыстасавання';
 
   @override
-  String get reconnectingToInternet => 'Перасяданне да Інтэрнету...';
+  String get reconnectingToInternet => 'Перасяданне да Інтэрнету…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7957,11 +7933,11 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => 'Апрацоўка на сервері...';
+  String get processingOnServer => 'Апрацоўка на сервері…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return 'Апрацоўка... $current/$total сегментаў';
+    return 'Апрацоўка… $current/$total сегментаў';
   }
 
   @override
@@ -8143,7 +8119,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get followTheVoiceInstructions => 'Следуйце голасавым інструкцыям';
 
   @override
-  String get statusCalling => 'Звязванне...';
+  String get statusCalling => 'Звязванне…';
 
   @override
   String get statusCallInProgress => 'Вызоў у прагрэсе';
@@ -8188,10 +8164,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get failedToStartCall => 'Не ўдалося пачаць вызоў';
 
   @override
-  String get callStateConnecting => 'Па\'яданне...';
+  String get callStateConnecting => 'Па\'яданне…';
 
   @override
-  String get callStateRinging => 'Звянелла...';
+  String get callStateRinging => 'Звянелла…';
 
   @override
   String get callStateEnded => 'Вызоў завершаны';
@@ -8200,7 +8176,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get callStateFailed => 'Вызоў сабрал';
 
   @override
-  String get transcriptPlaceholder => 'Трансляцыя з\'явіцца тут...';
+  String get transcriptPlaceholder => 'Трансляцыя з\'явіцца тут…';
 
   @override
   String get phoneUnmute => 'Ўвічыўіць гук';
@@ -8298,7 +8274,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => 'Трансляцыя кожнага вызова у рэжыме рэальнага часу';
 
   @override
-  String get phoneCallsUpsellFeature2 => 'Аўтаматычныя аніяцыі вызваў і элементы дзеяння';
+  String get phoneCallsUpsellFeature2 => 'Аўтаматычныя зводкі званкоў і задачы';
 
   @override
   String get phoneCallsUpsellFeature3 => 'Адпраўляючы яны бачаць вашы сапраўдны нумар, а не выпадковы';
@@ -8438,7 +8414,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcriptionPaused => 'Запіс, перасяданне';
 
   @override
-  String get transcriptionPausedReconnecting => 'Запіс усё яшчэ працяглідаецца — перасяданне да трансляцыі...';
+  String get transcriptionPausedReconnecting => 'Запіс усё яшчэ працяглідаецца — перасяданне да трансляцыі…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8526,7 +8502,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tipAutoSync => 'Запісы сінхранізуюцца аўтаматычна';
 
   @override
-  String get storageSection => 'СХОВІШЧА';
+  String get storageSection => 'Сховішча';
 
   @override
   String get permissions => 'Дазволы';
@@ -8591,7 +8567,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tellUsMore => 'Скажыце больш (апцыёнальна)';
 
   @override
-  String get cancelReasonDetailHint => 'Мы оцэнім любыя адгуку...';
+  String get cancelReasonDetailHint => 'Мы оцэнім любыя адгуку…';
 
   @override
   String get justAMoment => 'Толькі адну хвілінку, калі ласка';
@@ -8686,7 +8662,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get diagnostics => 'Дыягностыка';
 
   @override
-  String get waitingForData => 'Чаканне дадзеных...';
+  String get waitingForData => 'Чаканне дадзеных…';
 
   @override
   String get liveRssiOverTime => 'Жывая RSSI на працягу часу';
@@ -8695,7 +8671,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noRssiDataYet => 'Дадзеных RSSI яшчэ няма';
 
   @override
-  String get collectingData => 'Зборка дадзеных...';
+  String get collectingData => 'Зборка дадзеных…';
 
   @override
   String get cleanDisconnect => 'Чыстае адлучэнне';
@@ -8776,7 +8752,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get stableFirmware => 'Стабільная прошыўка';
 
   @override
-  String get fetchingStableFirmware => 'Загрузка апошняй стабільнай прошыўкі...';
+  String get fetchingStableFirmware => 'Загрузка апошняй стабільнай прошыўкі…';
 
   @override
   String get noStableFirmwareFound => 'Не ўдалося знайсці стабільную версію прошыўкі для вашага прыстасавання.';
@@ -8794,40 +8770,40 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return 'Запампоўка аўдыя працягласцю $duration для транскрыпцыі…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return 'Паўторная спроба запампоўкі… аўдыя працягласцю $duration захавана на вашым тэлефоне';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return 'Не ўдалося запампаваць — аўдыя працягласцю $duration захавана на вашым тэлефоне. Націсніце, каб паўтарыць.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return 'Не ўдалося запампаваць — аўдыя працягласцю $duration захавана на вашым тэлефоне.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => 'Слухаю… тут з\'явіцца транскрыпцыя.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+      'Запіс па-за сеткай — транскрыпцыя абновіцца, калі вы зноў будзеце ў сетцы.';
 
   @override
   String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+      'Транскрыпцыя недаступная — запіс працягваецца, і ваша аўдыя захоўваецца.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => 'Запіс';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => 'Здымка фота';
 
   @override
   String get willSyncAutomatically => 'будзе сінхранізавана аўтаматычна';
@@ -8843,10 +8819,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get voiceRecordingFound => 'Запіс знойдзены';
 
   @override
-  String get transcriptionConnecting => 'Падключэнне трансляцыі...';
+  String get transcriptionConnecting => 'Падключэнне трансляцыі…';
 
   @override
-  String get transcriptionReconnecting => 'Перасяданне трансляцыі...';
+  String get transcriptionReconnecting => 'Перасяданне трансляцыі…';
 
   @override
   String get transcriptionUnavailable => 'Трансляцыя недаступна';
@@ -8953,10 +8929,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deleteFlowFeedbackHint => 'Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.';
 
   @override
-  String get deleteFlowConfirmTitle => 'Гэта назаўсёды';
+  String get deleteFlowConfirmTitle => 'Выдаліць ваш уліковы запіс?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Пасля выдалення ўліковага запісу аднавіць яго немагчыма.';
+  String get deleteFlowConfirmSubtitle => 'Гэта нельга адмяніць, нават службе падтрымкі.';
 
   @override
   String get deleteConsequenceSubscription => 'Любая актыўная падпіска будзе скасавана.';
@@ -8981,10 +8957,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get planUpdate => 'Абнаўленне плана';
-
-  @override
-  String get planDeprecationMessage =>
-      'Ваш план Unlimited спыняецца. Пераключыцеся на план Operator — тыя ж выдатныя магчымасці за \$49/мес. Ваш бягучы план будзе працягваць працаваць тым часам.';
 
   @override
   String get upgradeYourPlan => 'Палепшыце свой план';
@@ -9155,7 +9127,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get phoneCallSubtitle => 'Запіс званка з жывой транскрыпцыяй';
 
   @override
-  String get searchActionItems => 'Шукаць элементы дзеянняў';
+  String get searchActionItems => 'Шукаць задачы';
 
   @override
   String get selectActionItems => 'Выбраць некалькі';
@@ -9326,6 +9298,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncCardDownloadingTitle => 'Загрузка з вашага прыбора';
 
   @override
+  String syncCardDownloadPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String syncCardDownloadPercentSpeed(int percent, String speed) {
+    return '$percent% · $speed KB/s';
+  }
+
+  @override
   String syncCardProgressOf(int current, int total) {
     return '$current з $total';
   }
@@ -9406,7 +9388,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterDescription =>
-      'Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.';
+      'Запісвайце зараз, расшыфроўвайце, калі захочаце. Да таго часу аўдыя застаецца на тэлефоне.';
 
   @override
   String get transcribeLaterNote =>
@@ -9469,7 +9451,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Выдатна!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Пачніце гаварыць...';
+  String get deviceOnboardingStartSpeaking => 'Пачніце гаварыць…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Задайце Omi пытанне';
@@ -9479,10 +9461,10 @@ class AppLocalizationsBe extends AppLocalizations {
       'Націсніце кнопку адзін раз, задайце пытанне, а пасля скончыўшы націсніце зноў';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Апрацоўка вашага пытання...';
+  String get deviceOnboardingProcessingQuestion => 'Апрацоўка вашага пытання…';
 
   @override
-  String get deviceOnboardingListening => 'Слухаю...';
+  String get deviceOnboardingListening => 'Слухаю…';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Выключыць';
@@ -9509,7 +9491,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Адключана';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Выключэнне...';
+  String get deviceOnboardingStatusTurningOff => 'Выключэнне…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Налада двайнога націску';
@@ -9689,7 +9671,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deleteOnDeviceModel => 'Выдаліць мадэль';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Вы сапраўды хочаце выдаліць гэту мадэль?';
+  String get deleteOnDeviceModelConfirm => 'Выдаліць гэту мадэль?';
 
   @override
   String get onDeviceModelDownloaded => 'Загружана';
@@ -9817,7 +9799,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get copyMessage => 'Капіяваць паведамленне';
 
   @override
-  String get searchSettings => 'Пошук у параметрах…';
+  String get searchSettings => 'Пошук у параметрах';
 
   @override
   String get errorLoadingAudio => 'Памылка загрузкі аўдыя';
@@ -9845,7 +9827,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncStatusTooOld => 'Занадта старое для сінхранізацыі — Omi не можа яго прыняць';
 
   @override
-  String get planSheetChooseYourPlan => 'Выберыце свой план, каб адкрыць безмежны Omi.';
+  String get planSheetChooseYourPlan => 'Выберыце план, які вам падыходзіць.';
 
   @override
   String get availableOnMacMobileWeb => 'Даступна на Mac, мабільным і ў вэбе';
@@ -9982,11 +9964,6 @@ class AppLocalizationsBe extends AppLocalizations {
       'Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.';
 
   @override
-  String conversationsNotCapturedCount(int count) {
-    return 'Не запісана ($count)';
-  }
-
-  @override
   String speechProfileOwnerTitle(String name) {
     return 'Галасавы профіль: $name';
   }
@@ -10013,7 +9990,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 
   @override
-  String get tapPlusToStartRecording => 'Націсніце +, каб пачаць запіс';
+  String get tapPlusToStartRecording => 'Націсніце кнопку запісу, каб пачаць запіс';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10094,27 +10071,26 @@ class AppLocalizationsBe extends AppLocalizations {
         'food': 'My favorite food is ___.',
         'remember': 'Something I would like help remembering is ___.',
         'day': 'A good day for me includes ___.',
-        'another': 'Try another prompt',
-        'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'another': 'Try Another Prompt',
+        'start': 'Start Speaking',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint':
-            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
-        'saveVoice': 'Save voice profile',
+        'reviewHint': 'Uncheck anything you don\'t want saved.',
+        'saveVoice': 'Save Voice Profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set up my voice later',
-        'keep': 'Save selected answers',
-        'without': 'Continue without saving answers',
+        'voiceLater': 'Set Up My Voice Later',
+        'keep': 'Save Selected Answers',
+        'without': 'Continue Without Saving Answers',
         'savedMemories': 'Your memories are saved',
         'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add another sentence',
+        'addSample': 'Add Another Sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -10124,13 +10100,13 @@ class AppLocalizationsBe extends AppLocalizations {
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
         'voiceUnavailable':
             'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and finish',
-        'retryRemaining': 'Retry remaining',
+        'saveFinish': 'Save and Finish',
+        'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
         'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue with what is saved',
-        'reviewAnswers': 'Review answers',
-        'originalGoal': 'Use original wording',
+        'continueSaved': 'Continue With What Is Saved',
+        'reviewAnswers': 'Review Answers',
+        'originalGoal': 'Use Original Wording',
         'savingAnswers': 'Saving your answers…',
         'other': '',
       },
@@ -10162,8 +10138,2714 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
+  String chatStarterPrompt(String kind) {
+    String _temp0 = intl.Intl.selectLogic(
+      kind,
+      {
+        'capabilities': 'Што ты можаш зрабіць для мяне?',
+        'goal': 'Дапамажы мне паставіць мэту',
+        'activity': 'Падсумуй маю нядаўнюю дзейнасць',
+        'improve': 'Як я магу палепшыцца?',
+        'other': '',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
-  String get conversationReprocess => 'Reprocess';
+  String get nextWeek => 'На наступным тыдні';
+
+  @override
+  String get clearSearch => 'Ачысціць пошук';
+
+  @override
+  String get filterBySpeaker => 'Фільтр па суразмоўцы';
+
+  @override
+  String get notNow => 'Не зараз';
+
+  @override
+  String get discard => 'Адхіліць';
+
+  @override
+  String get keepEditing => 'Працягнуць рэдагаванне';
+
+  @override
+  String get discardChangesTitle => 'Адхіліць змены?';
+
+  @override
+  String get discardChangesMessage => 'Вашы незахаваныя змены будуць страчаны.';
+
+  @override
+  String get pause => 'Паўза';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць размовы ($count)?',
+      one: 'Выдаліць 1 размову?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => 'Гэта таксама выдаліць іх успаміны, задачы і аўдыёфайлы.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдалена размоў: $count',
+      one: '1 размова выдалена',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Перамешчана размоў: $count',
+      one: 'Перамешчана 1 размова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => 'Не ўдалося перамясціць размовы';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return 'Адкінута · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage =>
+      'Тут з\'яўляюцца размовы, якія вы запісваеце. Націсніце кнопку запісу на галоўнай, каб запісаць першую.';
+
+  @override
+  String get conversationMap => 'Карта размоў';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Размоў: $count',
+      one: '1 размова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Задач: $count',
+      one: '1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => 'Назад на 10 секунд';
+
+  @override
+  String get skipForward10Seconds => 'Наперад на 10 секунд';
+
+  @override
+  String get failedToShareRecap => 'Не ўдалося падзяліцца зводкай';
+
+  @override
+  String get captureOfflineBuffering => 'Па-за сеткай, буферызацыя';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return 'Па-за сеткай, буферызацыя · $minutes хв';
+  }
+
+  @override
+  String get memoryDetailsTitle => 'Успамін';
+
+  @override
+  String get editMemoryTitle => 'Рэдагаваць успамін';
+
+  @override
+  String get newMemoryTitle => 'Новы ўспамін';
+
+  @override
+  String get memoryReadOnlyHint => 'Гэты ўспамін захоўваецца як гісторыя і не можа быць зменены.';
+
+  @override
+  String get openConversation => 'Адкрыць размову';
+
+  @override
+  String get memoryGraphTitle => 'Граф успамінаў';
+
+  @override
+  String get memoryReviewTitle => 'Што я даведаўся сёння';
+
+  @override
+  String get memoryReviewRight => 'Дакладна';
+
+  @override
+  String get memoryReviewWrong => 'Няправільна';
+
+  @override
+  String get memoryReviewFix => 'Выправіць';
+
+  @override
+  String get memoryReviewConfirmed => 'Пацверджана. Я буду гэта ўлічваць.';
+
+  @override
+  String get memoryReviewDropped => 'Адкінута. Я буду пазбягаць падобных фактаў.';
+
+  @override
+  String get memoryReviewUpdated => 'Абноўлена.';
+
+  @override
+  String get memoryReviewSaveFailed => 'Не ўдалося захаваць, паспрабуйце яшчэ раз';
+
+  @override
+  String get indentTask => 'Павялічыць водступ';
+
+  @override
+  String get outdentTask => 'Паменшыць водступ';
+
+  @override
+  String get goalDeleted => 'Мэта выдалена';
+
+  @override
+  String get sharedTasksAcceptFailed => 'Не ўдалося прыняць гэтыя задачы. Магчыма, вы ўжо прынялі гэты доступ.';
+
+  @override
+  String get pausePlayback => 'Паўза';
+
+  @override
+  String get deleteSample => 'Выдаліць узор';
+
+  @override
+  String get deletePersonTitle => 'Выдаліць чалавека?';
+
+  @override
+  String get deletePersonLabel => 'Выдаліць чалавека';
+
+  @override
+  String get noPeopleYet => 'Пакуль няма людзей';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць задачы: $count?',
+      one: 'Выдаліць 1 задачу?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Задач: $count',
+      one: '1 задача',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дададзена задач у ваш спіс: $count',
+      one: 'Дададзена 1 задача ў ваш спіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дадаць задачы: $count',
+      one: 'Дадаць 1 задачу',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'задачамі: $count',
+      one: '1 задачай',
+    );
+    return '$name падзяліўся(-лася) $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return 'Экспартавана ў $platform';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return 'Тэрмін: $date';
+  }
+
+  @override
+  String get linkEvent => 'Звязаць падзею';
+
+  @override
+  String get noCalendarEventsNearby => 'Каля гэтага часу падзей у календары не знойдзена.';
+
+  @override
+  String get suggestedEvent => 'Прапанавана';
+
+  @override
+  String get openInGoogleCalendar => 'Адкрыць у Google Календары';
+
+  @override
+  String get shareWithAttendees => 'Падзяліцца з удзельнікамі';
+
+  @override
+  String get unlinkCalendarEvent => 'Адвязаць падзею календара';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return 'Нататкі: $title';
+  }
+
+  @override
+  String get previousResult => 'Папярэдні вынік';
+
+  @override
+  String get nextResult => 'Наступны вынік';
+
+  @override
+  String get playFromHere => 'Прайграць адсюль';
+
+  @override
+  String get shareConversationQuestion => 'Падзяліцца размовай?';
+
+  @override
+  String get conversationTasksEmptyMessage => 'Задачы з гэтай размовы з\'явяцца тут.';
+
+  @override
+  String get noPendingTasks => 'Няма невыкананых задач';
+
+  @override
+  String nCompleted(int count) {
+    return 'Выканана: $count';
+  }
+
+  @override
+  String get identifySpeaker => 'Вызначыць удзельніка';
+
+  @override
+  String get couldNotLoadCheckout => 'Не ўдалося загрузіць старонку аплаты. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String get phoneFreeCallLimitReached =>
+      'Месячны ліміт бясплатных званкоў вычарпаны. Ён абнавіцца ў наступным месяцы.';
+
+  @override
+  String get couldNotLoadImportHistory => 'Не ўдалося загрузіць гісторыю імпарту';
+
+  @override
+  String get phoneCallButton => 'Патэлефанаваць';
+
+  @override
+  String get searchContacts => 'Пошук кантактаў';
+
+  @override
+  String get phoneContactsAccessTitle => 'Дазволіць доступ да кантактаў';
+
+  @override
+  String get phoneSelectCountryTitle => 'Выберыце краіну';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => 'Няма пацверджаных нумароў';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Пацвердзіце свой нумар, каб тэлефанаваць праз Omi.';
+
+  @override
+  String get phoneDeleteNumberFailed => 'Не ўдалося выдаліць гэты нумар';
+
+  @override
+  String get forgetDeviceConfirmTitle => 'Забыць прыладу?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi перастане падключацца да гэтай прылады.';
+
+  @override
+  String get deviceForgottenMessage => 'Прылада забыта';
+
+  @override
+  String get unpairDeviceConfirmTitle => 'Разарваць спалучэнне з прыладай?';
+
+  @override
+  String get rollBack => 'Адкаціць';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate кбіт/с';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Дыягностыка прылады Omi';
+
+  @override
+  String get diagnosticsFailBadge => 'Збой';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return 'перападключана за $duration';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$countд';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration таму';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => 'Ідзе за вашай асноўнай мовай';
+
+  @override
+  String get creatorPayouts => 'Выплаты стваральнікам';
+
+  @override
+  String get sttLanguageOverride => 'Змяніць';
+
+  @override
+  String get sttUsePrimaryLanguage => 'Выкарыстоўваць асноўную мову';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return 'Гэты пастаўшчык не падтрымлівае $language, таму выкарыстоўваецца $fallback.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return 'Выяўлена RAM: $ram ГБ. Рэкамендаваны мінімум: 4 ГБ.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return 'Выяўленая мадэль: $model (старэйшая за iPhone XS). Распазнаванне на прыладзе можа быць павольнейшым.';
+  }
+
+  @override
+  String get copyLogs => 'Скапіраваць журналы';
+
+  @override
+  String get openProviderDocs => 'Адкрыць дакументацыю';
+
+  @override
+  String get getApiKey => 'Атрымаць ключ API';
+
+  @override
+  String get showApiKey => 'Паказаць ключ API';
+
+  @override
+  String get hideApiKey => 'Схаваць ключ API';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return 'Выдаліць $word';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count слоў',
+      one: '1 слова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return 'Засталося $remaining з $limit бясплатных званкоў у гэтым месяцы';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return 'Засталося $remaining з $limit бясплатных званкоў у гэтым месяцы · да $minutes хв кожны';
+  }
+
+  @override
+  String get appCreators => 'Стваральнікі праграм';
+
+  @override
+  String get homeScreen => 'Галоўны экран';
+
+  @override
+  String get phoneCalls => 'Тэлефонныя выклікі';
+
+  @override
+  String get vadGate => 'VAD Gate';
+
+  @override
+  String get vadGateDescription => 'Фільтрацыя голасу на серверы, каб знізіць выдаткі на распазнаванне маўлення';
+
+  @override
+  String get flashCustomFirmware => 'Усталяваць уласную прашыўку';
+
+  @override
+  String get flashCustomFirmwareDescription => 'Усталёўвайце ўласныя зборкі прашыўкі';
+
+  @override
+  String get selectFirmwareZip => 'Выберыце ZIP-файл прашыўкі';
+
+  @override
+  String get customFirmwareWarning =>
+      'Уласная прашыўка можа вывесці прыладу са строю. Пераканайцеся, што гэта сапраўдная зборка прашыўкі Omi, і не адключайце прыладу падчас абнаўлення.';
+
+  @override
+  String get firmwareFlashed => 'Прашыўка ўсталявана';
+
+  @override
+  String get deviceWillRestart => 'Прылада перазапусціцца.';
+
+  @override
+  String get exportFailedTryAgain => 'Не ўдалося экспартаваць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return 'Прылада: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => 'Захаваць падпіску';
+
+  @override
+  String get couldNotLoadPage => 'Не ўдалося загрузіць старонку. Праверце падключэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return 'Крок $current з $total';
+  }
+
+  @override
+  String get sharedTasksLinkExpired => 'Гэтыя агульныя задачы не знойдзены або спасылка састарэла.';
+
+  @override
+  String get sharedTasksUnknownSender => 'Нехта';
+
+  @override
+  String get allow => 'Дазволіць';
+
+  @override
+  String get permissionAllowed => 'Дазволена';
+
+  @override
+  String get permissionBlockedHint => 'Выключана ў Наладах. Дазвольце гэта там, каб карыстацца.';
+
+  @override
+  String get useDifferentAccount => 'Выкарыстаць іншы ўліковы запіс';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Крок $current з $total';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Пакіньце Omi працаваць у фоне 2 дні, і ён пачне даваць вам карысныя парады.';
+
+  @override
+  String get cantFindDeviceHint =>
+      'Не можаце знайсці прыладу? Пераканайцеся, што яна ўключана і побач з тэлефонам, і пашукайце зноў.';
+
+  @override
+  String get scanAgain => 'Шукаць зноў';
+
+  @override
+  String get howToPair => 'Як спалучыць';
+
+  @override
+  String get contactSupportAction => 'Звязацца з падтрымкай';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName па-за сеткай. Націсніце яе кнопку, каб абудзіць, і паспрабуйце зноў.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return 'Батарэя $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'Абнавіць прашыўку OmiGlass';
+
+  @override
+  String get deviceConnecting => 'Падключэнне…';
+
+  @override
+  String get recordOptionsTip => 'Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.';
+
+  @override
+  String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      'Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.';
+
+  @override
+  String get firmwareDownloadFailedMessage =>
+      'Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return 'Зарад батарэі $level%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.';
+  }
+
+  @override
+  String get startUpdate => 'Пачаць абнаўленне';
+
+  @override
+  String get otaNotSupported => 'Гэтую прашыўку нельга абнавіць праз Wi-Fi.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return 'Не ўдалося падключыцца да $deviceName. Трымайце прыладу ўключанай і побач, потым паспрабуйце зноў.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => 'Гэтае абнаўленне зараз недаступнае. Паспрабуйце пазней.';
+
+  @override
+  String get otaStarting => 'Пачатак абнаўлення…';
+
+  @override
+  String get otaStartFailed => 'Не ўдалося пачаць абнаўленне. Праверце назву і пароль Wi-Fi, потым паспрабуйце зноў.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName перазапускаецца з новай прашыўкай.';
+  }
+
+  @override
+  String get otaUpdateCancelled => 'Абнаўленне скасавана';
+
+  @override
+  String get cancelUpdate => 'Скасаваць абнаўленне';
+
+  @override
+  String get otaKeepNearby => 'Падчас абнаўлення трымайце прыладу ўключанай і побач і не закрывайце праграму.';
+
+  @override
+  String get otaWifiConnecting => 'Падключэнне да Wi-Fi…';
+
+  @override
+  String get otaWifiConnected => 'Падключана да Wi-Fi';
+
+  @override
+  String get otaWifiFailed => 'Не ўдалося падключыцца да Wi-Fi. Праверце назву сеткі і пароль.';
+
+  @override
+  String get otaDownloadFailed => 'Не ўдалося спампаваць прашыўку. Праверце падключэнне Wi-Fi і паспрабуйце зноў.';
+
+  @override
+  String get otaInstallFailed => 'Усталяванне не ўдалося. Прылада працуе на бягучай прашыўцы.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName абноўлена і перазапусціцца сама.';
+  }
+
+  @override
+  String get showPassword => 'Паказаць пароль';
+
+  @override
+  String get hidePassword => 'Схаваць пароль';
+
+  @override
+  String get appNotFoundOrRemoved => 'Гэта праграма больш недаступная';
+
+  @override
+  String get startupFailedTitle => 'Не ўдалося запусціць Omi';
+
+  @override
+  String get startupFailedMessage =>
+      'Падчас запуску Omi нешта пайшло не так. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String get startupFailedConfigMessage =>
+      'У гэтай зборцы Omi ёсць праблема з канфігурацыяй. Гэта не праблема з вашай прыладай. Звярніцеся ў падтрымку і дадайце дадзеныя ніжэй.';
+
+  @override
+  String get discardRecordingTitle => 'Адхіліць запіс?';
+
+  @override
+  String get discardRecordingMessage => 'Ваш узор голасу яшчэ не захаваны. Калі вы выйдзеце зараз, ён будзе адхілены.';
+
+  @override
+  String get keepRecording => 'Працягнуць запіс';
+
+  @override
+  String get view => 'Прагляд';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return 'Дазволіць доступ $appName?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName атрымае вашы размовы, успаміны і запісы на сервер свайго распрацоўшчыка. Omi не адказвае за тое, як там выкарыстоўваюцца гэтыя даныя.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName адключана';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ацэнак: $count',
+      one: '1 ацэнка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return 'Здымак экрана $index з $total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return 'Чат з $appName';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return 'Налады $appName';
+  }
+
+  @override
+  String get appOptions => 'Параметры праграмы';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => 'Доступ захаваецца да канца бягучага разліковага перыяду.';
+
+  @override
+  String get chatSendMessage => 'Адправіць паведамленне';
+
+  @override
+  String get chatAddAttachment => 'Дадаць укладанне';
+
+  @override
+  String get removeAttachment => 'Выдаліць укладанне';
+
+  @override
+  String get chatRemoveSelectedText => 'Выдаліць цытату';
+
+  @override
+  String get chatOfflineHint => 'Вы па-за сеткай. Падключыцеся, каб адпраўляць паведамленні.';
+
+  @override
+  String get chatReplyFailed => 'Omi не змог адказаць. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return 'Адключыць $appName';
+  }
+
+  @override
+  String get whatWentWrong => 'Што пайшло не так?';
+
+  @override
+  String get selectAReason => 'Выберыце прычыну';
+
+  @override
+  String get submit => 'Адправіць';
+
+  @override
+  String get feedbackReasonTooVerbose => 'Занадта шматслоўна';
+
+  @override
+  String get feedbackReasonIncorrect => 'Памылкова або выдумана';
+
+  @override
+  String get feedbackReasonNotHelpful => 'Бескарысна або недарэчна';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => 'Не выканаў інструкцыі';
+
+  @override
+  String get additionalFeedbackOptional => 'Дадатковы водгук (неабавязкова)';
+
+  @override
+  String get helpful => 'Карысна';
+
+  @override
+  String daySummaryForDate(String date) {
+    return 'Вынікі дня · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => 'Што я рабіў учора?';
+
+  @override
+  String get chatStarterDoDifferently => 'Што я магу зрабіць інакш сёння?';
+
+  @override
+  String get chatStarterTeachMe => 'Можаш навучыць мяне чамусьці новаму?';
+
+  @override
+  String get thinking => 'Думаю';
+
+  @override
+  String get couldNotLoadWhatsNew => 'Не ўдалося загрузіць навінкі';
+
+  @override
+  String get githubRepositoryUrl => 'URL рэпазіторыя GitHub';
+
+  @override
+  String get githubRepositoryUrlHint => 'Спасылка на рэпазіторый зыходнага кода праграмы';
+
+  @override
+  String get triggerEvents => 'Падзеі запуску';
+
+  @override
+  String get noAppsInCategoryYet => 'У гэтай катэгорыі пакуль няма праграм';
+
+  @override
+  String get scopes => 'Вобласці доступу';
+
+  @override
+  String get aiAppGeneratorBannerTitle => 'Стварыце праграму з ШІ адным дотыкам';
+
+  @override
+  String get refreshManifest => 'Абнавіць маніфест';
+
+  @override
+  String versionLabel(String version) {
+    return 'Версія $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '$count+ карыстальнікаў';
+  }
+
+  @override
+  String get discovery => 'Адкрыццё';
+
+  @override
+  String get chatBlockShowMore => 'Паказаць больш';
+
+  @override
+  String get chatBlockShowLess => 'Паказаць менш';
+
+  @override
+  String get triggerEvent => 'Падзея запуску';
+
+  @override
+  String get webhookUrl => 'URL вэбхука';
+
+  @override
+  String get appHomeUrl => 'URL галоўнай старонкі праграмы';
+
+  @override
+  String get authUrl => 'URL аўтэнтыфікацыі';
+
+  @override
+  String get setupCompletedUrl => 'URL завяршэння наладжвання';
+
+  @override
+  String get chatToolsManifestUrl => 'URL маніфеста інструментаў чата';
+
+  @override
+  String get invalidWebhookUrlError => 'Увядзіце сапраўдны URL вэбхука';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Патрэбны URL рэпазіторыя GitHub';
+
+  @override
+  String get removeScreenshot => 'Выдаліць здымак экрана';
+
+  @override
+  String get addScreenshot => 'Дадаць здымак экрана';
+
+  @override
+  String get aiGenRegenerateIcon => 'Згенераваць значок нанова';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дадаткаў: $count',
+      one: '1 дадатак',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => 'Стварыць апісанне';
+
+  @override
+  String get selectImageFileTitle => 'Абраць файл выявы';
+
+  @override
+  String get selectThumbnailImageTitle => 'Абраць мініяцюру';
+
+  @override
+  String get appIdNotFoundError => 'ID прыбора не знойдзены';
+
+  @override
+  String get manifestRefreshedSuccess => 'Маніфест паспяхова абноўлены';
+
+  @override
+  String get manifestRefreshFailed => 'Не ўдалося абнавіць маніфест';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Запісы гэтай размовы';
+
+  @override
+  String get captureRecordingSeparate => 'Аддзяліць…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Аддзяліць гэты запіс?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording будзе паказвацца як асобная размова і больш не будзе аб\'ядноўвацца з гэтай падзеяй.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Аддзяліць';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Не ўдалося аддзяліць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Не ўдалося адкрыць гэты запіс.';
+
+  @override
+  String get captureRecordingViewing => 'Вы праглядаеце гэты запіс';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Запісана: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Камп\'ютар';
+
+  @override
+  String get renameConversation => 'Перайменаваць';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Запісаў: $count',
+      one: '1 запіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => 'Кулон';
+
+  @override
+  String get conversationDeveloperTools => 'Інструменты распрацоўшчыка ў размовах';
+
+  @override
+  String get conversationDeveloperToolsDescription =>
+      'Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'яшчэ $count',
+      many: 'яшчэ $count',
+      few: 'яшчэ $count',
+      one: 'яшчэ 1',
+    );
+    return '$name + $_temp0';
+  }
+
+  @override
+  String get recordingAndTranscription => 'Запіс і транскрыпцыя';
+
+  @override
+  String get notificationsAndDisplay => 'Паведамленні і адлюстраванне';
+
+  @override
+  String get helpAndAbout => 'Дапамога і пра праграму';
+
+  @override
+  String get speakerTagPromptTitle => 'Дапамажыце Omi распазнаваць галасы';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Хуткая праверка галасоў за апошнія два дні';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Гэта вы?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Гэта $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Хто гэта?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Гэта я';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не я';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Хтосьці новы';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Незнаёмы чалавек';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не ўпэўнены';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Прайграць фрагмент';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запамінаць галасы людзей, якіх вы назвалі';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi захоўвае кароткі ўзор голасу, каб пазнаць іх наступным разам. Гэта можна змяніць у любы час у Наладах.';
+
+  @override
+  String get speakerTagPromptThanks => 'Дзякуй! Omi будзе лепш распазнаваць галасы.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Імя';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Не ўдалося прайграць гэты фрагмент';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не ўдалося захаваць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Прасіць мяне пазначаць галасы';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам';
+
+  @override
+  String get leaveBlank => 'Пакіньце пустым';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Дадайце да ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрыпцый у чаканні $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрыпцый у чаканні $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Званок';
+
+  @override
+  String get captureSourcePhoneMic => 'Мікрафон тэлефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Працягнуць';
+
+  @override
+  String get finish => 'Завяршыць';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паўзе · працягне пасля завяршэння';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слухае';
+
+  @override
+  String get oneSourceAtATime => 'Omi запісвае толькі з адной крыніцы за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Запісаць тэлефонам замест кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паўзе да завяршэння запісу';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паўзе падчас званка';
+
+  @override
+  String get keepUsingPendant => 'Працягнуць з кулонам';
+
+  @override
+  String get recordWith => 'Запісаць праз';
+
+  @override
+  String get moreWaysToRecord => 'Іншыя спосабы запісу';
+
+  @override
+  String get openCall => 'Адкрыць званок';
+
+  @override
+  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
+
+  @override
+  String get captureNotTranscribing => 'Няма транскрыпцыі';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
+
+  @override
+  String get captureStillRecording => 'Запіс працягваецца';
+
+  @override
+  String get captureMicInUseElsewhere => 'Мікрафон заняты іншай праграмай';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Званок або іншая праграма заняла мікрафон, таму Omi зараз не чуе. Omi адновіць запіс сам, калі мікрафон вызваліцца. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш уласны сэрвіс распазнавання маўлення недаступны. Omi захоўвае аўдыя на гэтым тэлефоне і адправіць яго, калі сэрвіс вернецца. Нічога не страціцца.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Памяць тэлефона запоўнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi перападключыцца сам';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name і іншыя';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Слухайце адказы Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Усё гатова';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Націсніце на радок, каб праглядзець або змяніць яго.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Калі вы пытаецеся з дапамогай кнопкі, Omi можа прачытаць свой адказ услых.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Слухайце свой апошні адказ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Прайграванне вашага апошняга адказу...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Праз $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Праз дынамік тэлефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Праз бягучы гукавы выхад';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Адказы застаюцца на экране. Нічога не гавораць.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Прыватны. Размаўляе толькі праз AirPods, Bluetooth або праз правадныя навушнікі.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Выкарыстоўвае дынамік тэлефона, калі навушнікі не падключаны.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi будзе маўчаць. Адказы па-ранейшаму з\'яўляюцца ў праграме.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device падлучаны. Тут будзе гаварыць Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Навушнікі не падключаны. Omi маўчыць, пакуль вы не падключыце некаторыя.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Гуляе праз $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Прайграванне ўслых праз дынамік тэлефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Вы можаце змяніць гэта ў любы час у $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Паўтарыце гэты тур у любы час у $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушнікі';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'хвіліны';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачы';
+
+  @override
+  String get usageMonth => 'Гэты месяц';
+
+  @override
+  String get usageYear => 'Гэты год';
+
+  @override
+  String get usageAll => 'Ўсё час';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Выгляд';
+
+  @override
+  String get appearanceSystem => 'Сістэма';
+
+  @override
+  String get appearanceLight => 'Светлы';
+
+  @override
+  String get appearanceDark => 'Цёмны';
+
+  @override
+  String get chatDiscardRecording => 'Адхіліць';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не ўдалося распазнаць — паспрабуйце яшчэ раз';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Пошук людзей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Дадаць «$query» як новага чалавека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Паказаць усіх людзей ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Прывітанне, $name, пытайся пра што заўгодна';
+  }
+
+  @override
+  String get activity => 'Актыўнасць';
+
+  @override
+  String get places => 'Месцы';
+
+  @override
+  String get recaps => 'Зводкі';
+
+  @override
+  String get recent => 'Нядаўнія';
+
+  @override
+  String get searchPartialFailure => 'Не ўдалося загрузіць некаторыя вынікі';
+
+  @override
+  String get peopleSearchPlaceholder => 'Пошук людзей';
+
+  @override
+  String get peopleNotHeardYet => 'Пакуль не чутыя';
+
+  @override
+  String get peopleRecent => 'Нядаўнія';
+
+  @override
+  String get deletePeopleMessage =>
+      'Гэта выдаліць узоры іх голасу, і гэта нельга скасаваць. Іх рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.';
+
+  @override
+  String get personTalkTime => 'Час размовы';
+
+  @override
+  String get personLastHeard => 'Апошні раз чутны';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць людзей: $count?',
+      one: 'Выдаліць 1 чалавека?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Патрэбны голас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей: $count',
+      one: '1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма адпаведных людзей';
+
+  @override
+  String get deselectAll => 'Зняць выбар з усіх';
+
+  @override
+  String get voiceRecognitionSettings => 'Распазнаванне голасу';
+
+  @override
+  String get greetingMorning => 'Добрай раніцы';
+
+  @override
+  String get greetingAfternoon => 'Добры дзень';
+
+  @override
+  String get greetingEvening => 'Добры вечар';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Што вы хочаце даведацца?';
+
+  @override
+  String get askSuggestDecide => 'Што я вырашыў сёння?';
+
+  @override
+  String get askSuggestOwe => 'Што я яшчэ павінен людзям?';
+
+  @override
+  String get askSuggestNotice => 'Што заўважыў Omi?';
+
+  @override
+  String get pastChats => 'Мінулыя чаты';
+
+  @override
+  String get newChat => 'Новы чат';
+
+  @override
+  String get startFresh => 'Пачаць нанова';
+
+  @override
+  String get noPastChats => 'Вашы чаты з Omi з\'явяцца тут.';
+
+  @override
+  String get deleteChatQuestion => 'Выдаліць гэты чат?';
+
+  @override
+  String get deleteChatMessage => 'Ён знікне з мінулых чатаў назаўсёды.';
+
+  @override
+  String get deleteChat => 'Выдаліць чат';
+
+  @override
+  String get appsAskWith => 'Пытайцеся ў Omi з';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count размоў сёння.',
+      one: '1 размова сёння.',
+      zero: 'Сёння размоў няма.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Што было на экране';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Здымак экрана з гэтай сустрэчы';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Выдаліць здымак экрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.';
+
+  @override
+  String get conversationSummaryFailed => 'Не ўдалося стварыць зводку';
+
+  @override
+  String get reconnectionsRecent => 'Перазлучэнні (апошнія 7 дзён)';
+
+  @override
+  String get failedConnections => 'Няўдалыя злучэнні';
+
+  @override
+  String get failedConnectionsRecent => 'Няўдалыя злучэнні (апошнія 7 дзён)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count з моманту спарвання';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Нізкая ўпэўненасць';
+
+  @override
+  String get peopleFilterPinned => 'Замацаваныя';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Замацавана: $count',
+      one: 'Замацавана: 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Пацверджана';
+
+  @override
+  String get confidenceLikely => 'Верагодна';
+
+  @override
+  String get confidenceUnverified => 'Не праверана';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Упэўненасць: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы назвалі разоў: $count',
+      one: 'Вы назвалі адзін раз',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Абрана ў падказках: $count',
+      one: 'Абрана ў 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы пацвердзілі супадзенняў: $count',
+      one: 'Вы пацвердзілі 1 супадзенне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Толькі аўтаматычнае супадзенне, без пацвярджэння';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Без пацвярджэння';
+
+  @override
+  String get confidenceReasonCorrected => 'Вы выправілі супадзенне';
+
+  @override
+  String get confidenceReasonVoiceReady => 'голас гатовы';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'патрэбны голас';
+
+  @override
+  String get confidenceReasonNotHeard => 'пакуль не чуваць';
+
+  @override
+  String get confidenceSheetTitle => 'Упэўненасць';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi распазнае голас $name, і вы гэта пацвердзілі.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi звычайна распазнае голас $name, але вы пацвердзілі гэта толькі некалькі разоў.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Пакуль нішто з вашых дзеянняў не пацвярджае $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Доказы';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы назвалі ў размовах: $count',
+      one: 'Вы назвалі ў 1 размове',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '«Так» у падказках: $count',
+      one: '«Так» у 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Абрана ў падказках: $count',
+      one: 'Абрана ў 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пацверджана аўтаматычных супадзенняў: $count',
+      one: 'Пацверджана 1 аўтаматычнае супадзенне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Супадзенняў перанесена да іншых: $count',
+      one: '1 супадзенне перанесена да іншага чалавека',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Аўтаматычных супадзенняў без пацвярджэння: $count',
+      one: '1 аўтаматычнае супадзенне без пацвярджэння',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Узор голасу гатовы';
+
+  @override
+  String get evidenceNoVoice => 'Узору голасу пакуль няма';
+
+  @override
+  String get evidenceNotHeard => 'Яшчэ не было ў размовах';
+
+  @override
+  String get evidenceNothing => 'Вы яшчэ не называлі і не пацвярджалі';
+
+  @override
+  String get effectCountsALot => 'Вельмі дапамагае';
+
+  @override
+  String get effectCounts => 'Дапамагае';
+
+  @override
+  String get effectCountsALittle => 'Крыху дапамагае';
+
+  @override
+  String get effectBarelyCounts => 'Амаль не дапамагае';
+
+  @override
+  String get effectCountsAgainst => 'Шкодзіць';
+
+  @override
+  String get effectNeeded => 'Патрэбна для «Пацверджана»';
+
+  @override
+  String get confidenceToReachConfirmed => 'Як дасягнуць «Пацверджана»';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi патрэбны яшчэ ўзор голасу $name. Назавіце чалавека пры ўключаным «Запамінаць галасы».';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Статус $name: «Пацверджана». Omi працягвае вучыцца з кожнай пазнакі.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не дапамагаюць.';
+
+  @override
+  String get personWhyConfidence => 'Чаму?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Замацаваць $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Захаваць $name і чакаць у вашых размовах';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi пытаецца, перш чым супаставіць падобныя галасы.';
+
+  @override
+  String get pinAction => 'Замацаваць';
+
+  @override
+  String get unpinAction => 'Зняць замацаванне';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Замацавана: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Замацаванне знята: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Чаму $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Выдаліць $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Замацавана: $name. Узоры голасу будуць выдалены, Omi перастане распазнаваць гэтага чалавека, а ў ранейшых расшыфроўках ён будзе безымянным спікерам. Гэта нельга адрабіць.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Выдаліць $name';
+  }
+
+  @override
+  String get selectPeople => 'Выбраць людзей';
+
+  @override
+  String get cleanUpEllipsis => 'Ачысціць…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей, у якіх Omi не ўпэўнены: $count',
+      one: '1 чалавек, у якім Omi не ўпэўнены',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Часцей за ўсё гэта няправільна пачутыя імёны. Праглядзіце іх і выдаліце несапраўдныя.';
+
+  @override
+  String get reviewAction => 'Праглядзець';
+
+  @override
+  String get cleanUpTitle => 'Ачыстка';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi не ўпэўнены ў гэтых людзях: $count. Большасць — імёны, памылкова пачутыя ў расшыфроўках. Здыміце адзнаку з тых, каго хочаце пакінуць.',
+      one: 'Omi не ўпэўнены ў гэтым чалавеку. Здыміце адзнаку, каб пакінуць.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Замацаваныя людзі ніколі не трапляюць у ачыстку.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць людзей: $count',
+      one: 'Выдаліць 1 чалавека',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдалена людзей: $count',
+      one: 'Выдалены 1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Няма чаго ачышчаць';
+
+  @override
+  String get cleanUpNothingMessage => 'Цяпер Omi ва ўсіх упэўнены.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      '«Выбраць усё» прапускае замацаваных людзей. Выдаляйце іх па адным на іх старонках.';
+
+  @override
+  String get pinnedNotSelectable => 'Замацаваны, выбраць нельга';
+
+  @override
+  String get ignoredVoicesTitle => 'Ігнараваныя галасы';
+
+  @override
+  String get ignoredVoicesSubtitle => 'Тэлевізар, падкасты і іншыя галасы, пазначаныя «Не чалавек»';
+
+  @override
+  String get ignoredVoicesEmpty => 'Няма ігнараваных галасоў';
+
+  @override
+  String get restoreAction => 'Аднавіць';
+
+  @override
+  String get voiceRestoredToast => 'Omi можа зноў спытаць пра гэты голас';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Хтосьці іншы…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Не чалавек';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Не ведаю';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Гэта я';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Найбольш падобныя галасы';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Людзі, з якімі вы нядаўна размаўлялі';
+
+  @override
+  String get voiceMatchClose => 'Блізкае супадзенне';
+
+  @override
+  String get voiceMatchPossible => 'Магчымае супадзенне';
+
+  @override
+  String get voiceMatchWeak => 'Слабое супадзенне';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Супадзенне голасу: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '«Так» павышае ўпэўненасць у $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Захавана як $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Захавана як вы';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi больш не будзе пытацца пра гэты голас';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Пазначана як $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Пазначана як вы';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Пазначана як не чалавек';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Пазнаку выдалена';
+
+  @override
+  String get whoIsItTitle => 'Хто гэта?';
+
+  @override
+  String get newPersonEllipsis => 'Новы чалавек…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Дадаць “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Усе';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Датычыцца ўсіх радкоў гэтага спікера';
+
+  @override
+  String get collapseAction => 'Згарнуць';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Не я';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пазначце яго яшчэ ў $count размовах.',
+      one: 'Пазначце яго яшчэ ў 1 размове.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Уключыце Omi ў Камандах → Siri. Скажыце «$askPhrase» або «$questionPhrase», а затым задайце сваё пытанне.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Также можно сказать «$searchPhrase for what I did today».';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Даступнае абнаўленне';
+
+  @override
+  String get updateAvailableMessage => 'Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.';
+
+  @override
+  String get updateRequiredTitle => 'Патрабуецца абнаўленне';
+
+  @override
+  String get updateRequiredMessage =>
+      'Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.';
+
+  @override
+  String get exportingAllData =>
+      'Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удзельнікаў: $count',
+      one: '1 удзельнік',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Аўтаматычна выдаляць сінхранізаваныя копіі';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Сінхранізаваныя копіі выдаляюцца праз $days дзён';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Выдаляе лакальныя копіі праз $days дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.';
+  }
+
+  @override
+  String get localCopiesSection => 'Лакальныя копіі';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пазначана радкоў: $count',
+      one: 'Пазначаны 1 радок',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Голас запомнены',
+        'pending': 'Вывучэнне голасу…',
+        'disabled': 'Захаванне голасу выключана',
+        'other': 'Голас яшчэ не вывучаны',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi пазнае $name наступным разам.',
+        'pending': 'Гэта зойме некалькі секунд.',
+        'disabled': 'Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць $name.',
+        'other': 'Omi патрэбна больш выразнай мовы ад $name, і ён будзе працягваць спробы.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ёсць у ранейшых размовах: $count',
+      one: 'Ёсць у 1 ранейшай размове',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Магчыма',
+        'soundsLike': 'Падобна на $name',
+        'notPerson': 'Не $name',
+        'carried': 'Усё яшчэ $name. Перанесена з вашай апошняй размовы.',
+        'change': 'Змяніць',
+        'alsoTitle': 'Гэта таксама $name?',
+        'alsoBody': 'Omi знайшоў такі ж голас у ранейшых размовах.',
+        'confirmed': 'Вы пацвердзілі гэту пазнаку',
+        'other': 'Праглядзець',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration гэтага голасу';
+  }
+
+  @override
+  String get findDeviceNoneTitle => 'Omi не знойдзены';
+
+  @override
+  String get findDeviceNoneMessage => 'Уключыце яго і трымайце побач з тэлефонам.';
+
+  @override
+  String get startupFailedDetails => 'Падрабязнасці';
+
+  @override
+  String get couldNotLoadApiKeys => 'Не ўдалося загрузіць ключы API.';
+
+  @override
+  String get speakerTagPromptNoAction => 'Не…';
+
+  @override
+  String get diagnosticsRightNow => 'Зараз';
+
+  @override
+  String get diagnosticsLast7Days => 'Апошнія 7 дзён';
+
+  @override
+  String get diagnosticsConnectedFor => 'Падключана';
+
+  @override
+  String get diagnosticsVerdictReconnects => 'Перападключаецца сама';
+
+  @override
+  String diagnosticsVerdictReconnectsDetail(String duration) {
+    return 'Кароткія разрывы, кожны раз вяртаецца прыкладна за $duration';
+  }
+
+  @override
+  String get diagnosticsVerdictNoDrops => 'На гэтым тыдні разрываў не было';
+
+  @override
+  String get diagnosticsVerdictTrouble => 'Праблемы з падключэннем';
+
+  @override
+  String diagnosticsVerdictTroubleDetail(int count) {
+    return 'Няўдалыя злучэнні за апошнія 24 гадзіны: $count';
+  }
+
+  @override
+  String get diagnosticsDrops => 'Разрывы';
+
+  @override
+  String diagnosticsDropsPerHour(int count) {
+    return 'прыкладна $count у гадзіну';
+  }
+
+  @override
+  String get diagnosticsLongestGap => 'Найдаўжэйшы перапынак';
+
+  @override
+  String diagnosticsSincePairingSummary(int drops, int failed) {
+    return 'З моманту спарвання: разрываў — $drops, няўдалых злучэнняў — $failed.';
+  }
+
+  @override
+  String diagnosticsLastDuration(String duration) {
+    return 'Апошнія $duration';
+  }
+
+  @override
+  String get chatReplyOffline => 'Не ўдалося падключыцца. Праверце злучэнне і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyServerError => 'Нешта пайшло не так на нашым баку. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyTimeout => 'Адказ заняў занадта шмат часу. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatReplyNotSignedIn => 'Вы не ўвайшлі. Увайдзіце і паспрабуйце яшчэ раз.';
+
+  @override
+  String get chatAppsLoadFailed => 'Не ўдалося загрузіць праграмы чата. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get assistantVoiceSettingsTitle => 'Голас';
+
+  @override
+  String get assistantVoice => 'Голас памочніка';
+
+  @override
+  String get voiceSharedAcrossDevices => 'Выбраны вамі голас выкарыстоўваецца на мабільнай прыладзе і на камп\'ютары.';
+
+  @override
+  String get readChatRepliesAloud => 'Чытаць адказы ў чаце ўголас';
+
+  @override
+  String get readChatRepliesAloudDescription => 'Агучвае толькі тады, калі гэта дазваляе «Галасавы адказ».';
+
+  @override
+  String get voicePreviewSample => 'Прывітанне, я Omi. Гэта мой голас.';
+
+  @override
+  String get peopleStatsIncomplete => 'Колькасць можа быць няпоўнай.';
+
+  @override
+  String get previousDay => 'Папярэдні дзень';
+
+  @override
+  String get nextDay => 'Наступны дзень';
+
+  @override
+  String noTasksOnDate(Object date) {
+    return 'Няма задач на $date';
+  }
+
+  @override
+  String get reprocessingConversationProgress => 'Паўторная апрацоўка размовы…';
+
+  @override
+  String get conversationReprocessed => 'Размова абноўлена';
+
+  @override
+  String get loadingTranscript => 'Загрузка транскрыпцыі…';
+
+  @override
+  String get transcriptLoadFailed => 'Не ўдалося загрузіць транскрыпцыю.';
+
+  @override
+  String get processingConversationProgress => 'Апрацоўка размовы…';
+
+  @override
+  String get conversationProcessingFailedMessage => 'Не ўдалося апрацаваць гэту размову.';
+
+  @override
+  String get waitForReprocessing => 'Пачакайце, пакуль скончыцца паўторная апрацоўка.';
+
+  @override
+  String get unnamedSpeakerLabel => 'Дыктар';
+
+  @override
+  String get unresolvedSpeakersNotice => 'Спікары не падзелены паміж запісамі.';
+
+  @override
+  String get unresolvedSpeakersTitle => 'Пра пазнакі спікераў';
+
+  @override
+  String get unresolvedSpeakersMessage =>
+      'Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.';
+
+  @override
+  String get nameSpeakerTitle => 'Назваць дыктара';
+
+  @override
+  String get playbackPreparingAudio => 'Падрыхтоўка аўдыё…';
+
+  @override
+  String get playbackBackToCurrent => 'Назад да бягучага';
+
+  @override
+  String get playbackAudioUnavailable => 'Аўдыё недаступнае';
+
+  @override
+  String get playbackAudioLoadFailed => 'Не ўдалося загрузіць аўдыё';
+
+  @override
+  String get playbackAudioNetworkFailed => 'Праверце злучэнне';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Спыніць гэта';
+
+  @override
+  String get dismiss => 'Схаваць';
+
+  @override
+  String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
+
+  @override
+  String get accountDeletionInProgressSignInAgain =>
+      'Гэты ўліковы запіс выдаляецца. Увайдзіце з іншым уліковым запісам або пачакайце некалькі хвілін і паспрабуйце зноў.';
+
+  @override
+  String get onboardingSetupTitle => 'Налада вашага Omi';
+
+  @override
+  String get onboardingSetupSubtitle => 'Дайце Omi хвілінку, каб наладзіцца пад вас';
+
+  @override
+  String get onboardingSetupStepWorkspace => 'Падрыхтоўка вашай працоўнай прасторы';
+
+  @override
+  String get onboardingSetupStepLanguage => 'Налада транскрыпцыі пад вашу мову';
+
+  @override
+  String get onboardingSetupStepMemory => 'Налада вашай памяці';
+
+  @override
+  String get onboardingSetupStepDevices => 'Падключэнне вашых прылад';
+
+  @override
+  String get onboardingSetupStepPersonalize => 'Персаналізацыя вашага вопыту';
+
+  @override
+  String get onboardingRatingPromptTitle => 'Вам падабаецца Omi?';
+
+  @override
+  String get onboardingRatingPromptYes => 'Так';
+
+  @override
+  String get onboardingRatingPromptNo => 'Не';
+
+  @override
+  String get partialRecording => 'Частковы запіс';
+
+  @override
+  String get importTranscriptFiles => 'Файлы стэнаграм';
+
+  @override
+  String get importTranscriptFilesDescription => 'Выберыце стэнаграмы SRT, VTT або TXT ці ZIP-архіў з імі';
+
+  @override
+  String get importTooManyAttempts => 'Зараз занадта шмат імпартаванняў. Паспрабуйце пазней.';
+
+  @override
+  String get importFileTooLarge => 'Гэты файл занадта вялікі для імпарту.';
+
+  @override
+  String get importUnsupportedFileType => 'Файлы гэтага тыпу нельга імпартаваць.';
+
+  @override
+  String get reviewTitle => 'Агляд';
+
+  @override
+  String get reviewEntryTitle => 'Пытанні да вас';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Засталося $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Хто гэта сказаў?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Той самы чалавек, што і «$name»?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Як гэта пішацца?';
+
+  @override
+  String get reviewPlayClip => 'Прайграць фрагмент';
+
+  @override
+  String get reviewStopClip => 'Спыніць фрагмент';
+
+  @override
+  String get reviewOpenDetailsHint => 'Адкрывае падрабязнасці';
+
+  @override
+  String get reviewAnswerMe => 'Я';
+
+  @override
+  String get reviewAnswerOther => 'Іншы';
+
+  @override
+  String get reviewAddTask => 'Дадаць задачу';
+
+  @override
+  String get reviewAnswerFailed => 'Не ўдалося захаваць адказ. Паспрабуйце яшчэ раз.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Гэты адказ пазначае размоў: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Невядомы суразмоўца';
+
+  @override
+  String get reviewNewPersonName => 'Яго імя';
+
+  @override
+  String get reviewSomeoneElse => 'Хтосьці іншы…';
+
+  @override
+  String get reviewConfirm => 'Пацвердзіць';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Пацвердзіць: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Не ўпэўнены';
+
+  @override
+  String get reviewOpenConversation => 'Размова';
+
+  @override
+  String get reviewTaskField => 'Задача';
+
+  @override
+  String get reviewDue => 'Тэрмін';
+
+  @override
+  String get reviewNoDate => 'Няма';
+
+  @override
+  String get reviewProject => 'Праект';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Ужо зроблена';
+
+  @override
+  String get reviewReasonNotMine => 'Не мая';
+
+  @override
+  String get reviewReasonNotUseful => 'Не карысна';
+
+  @override
+  String get reviewYesMerge => 'Так, аб’яднаць';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Размоў: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Увесці ўручную';
+
+  @override
+  String get reviewLoadFailed => 'Не ўдалося загрузіць вашы пытанні.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Няма пытанняў';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi пакажа пытанне тут, толькі калі спатрэбіцца ваша дапамога.';
+
+  @override
+  String get reviewRecentChanges => 'Нядаўнія змены';
+
+  @override
+  String get reviewChangesIntro => 'Што Omi змяніў сам за апошнія 30 дзён. Скасуйце ўсё, што выглядае няправільна.';
+
+  @override
+  String get reviewChangeUndone => 'Скасавана. Omi не будзе паўтараць гэта сам.';
+
+  @override
+  String get reviewChangeFailed => 'Не ўдалося абнавіць гэту змену. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Не ўдалося загрузіць нядаўнія змены.';
+
+  @override
+  String get reviewNoChangesTitle => 'Змен пакуль няма';
+
+  @override
+  String get reviewNoChangesBody => 'Калі Omi наведзе парадак у нататках, змены з’явяцца тут.';
+
+  @override
+  String get reviewShowMore => 'Паказаць больш';
+
+  @override
+  String get entityKeptCurrent => 'Актуальнасць падтрымлівае Omi';
+
+  @override
+  String get entityNotRight => 'Не так?';
+
+  @override
+  String get entityCorrectionTitle => 'Што няправільна?';
+
+  @override
+  String get entityCorrectionHint => 'Скажыце Omi, што выправіць';
+
+  @override
+  String get entityCorrectionSaved => 'Дзякуй. Omi гэта выправіць.';
+
+  @override
+  String get entityCorrectionFailed => 'Не ўдалося адправіць выпраўленне. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get entityLoadFailed => 'Не ўдалося загрузіць гэту старонку.';
+
+  @override
+  String get entityProject => 'Праект';
+
+  @override
+  String get entityProjects => 'Праекты';
+
+  @override
+  String get entityDecisions => 'Рашэнні';
+
+  @override
+  String get entityOpenTasks => 'Адкрытыя задачы';
+
+  @override
+  String get entityOpenThreads => 'Адкрытыя пытанні';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Чакаем адказу ад: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Тэрмін: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Што ведае Omi';
+
+  @override
+  String get entityRecentConversations => 'Нядаўнія размовы';
+
+  @override
+  String get tasksNoProject => 'Без праекта';
+
+  @override
+  String get tasksGroupByProject => 'Групаваць па праектах';
+
+  @override
+  String get tasksGroupByDate => 'Групаваць па даце';
+
+  @override
+  String get dreamReportTitle => 'Справаздача Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Рэжым папярэдняга прагляду: Dream паказвае, што б змяніў, але ў вашым акаўнце пакуль нічога не мяняецца.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream прымяняе гэтыя змены сам. Адмяніць любую з іх можна ў раздзеле «Нядаўнія змены».';
+
+  @override
+  String get dreamReportRunNow => 'Запусціць зараз';
+
+  @override
+  String get dreamReportRunLimit => 'Ручныя запускі на сёння скончыліся';
+
+  @override
+  String get dreamReportRunInProgress => 'Запуск ужо выконваецца. Паўтарыце праз хвіліну.';
+
+  @override
+  String get dreamReportRunFailed => 'Не ўдалося запусціць Dream. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get dreamReportIdle => 'Пакуль няма нічога новага.';
+
+  @override
+  String get dreamReportLoadFailed => 'Не ўдалося загрузіць справаздачу Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Запускаў пакуль няма';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream правярае змены ў вашым акаўнце прыблізна раз на гадзіну.';
+
+  @override
+  String get dreamReportScheduled => 'Па раскладзе';
+
+  @override
+  String get dreamReportManual => 'Уручную';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Памылка ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Спынена з-за ліміту часу';
+
+  @override
+  String get dreamReportNothingFound => 'Няма чаго выпраўляць';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прачытана элементаў: $records · токенаў: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Выправіў бы';
+
+  @override
+  String get dreamReportFixed => 'Выпраўлена';
+
+  @override
+  String get dreamReportWouldAsk => 'Спытаў бы вас';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Прапанаваў бы задачы';
+
+  @override
+  String get dreamReportLearnedWords => 'Вывучаныя словы';
+
+  @override
+  String get dreamReportFeedback => 'Адпраўлена камандзе Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Выдалены элемент';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count з $limit запускаў сёння';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count змены чакаюць',
+      one: '1 змена чакае',
+      zero: 'Няма змен у чаканні',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Сёння засталося $count ручныя запускі',
+      one: 'Сёння застаўся 1 ручны запуск',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes выпраўленні',
+      one: '1 выпраўленне',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks прапановы',
+      one: '1 прапанова',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count больш старыя змены прапушчаны',
+      one: '1 больш старая змена прапушчана',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count справаздачы затрыманы з меркаванняў прыватнасці',
+      one: '1 справаздача затрымана з меркаванняў прыватнасці',
+    );
+    return '$_temp0';
+  }
 }

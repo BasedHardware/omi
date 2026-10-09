@@ -3,7 +3,9 @@ import inspect
 import io
 import json
 import os
+import re
 import threading
+import time
 import urllib.parse
 import wave as _wave
 from enum import Enum
@@ -30,14 +32,26 @@ from config.stt_provider_policy import (
     supports_live_multilingual_mode,
 )
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.live_health import health
+from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
+from utils.log_sanitizer import sanitize_provider_error
+from utils.stt.committed_words import remember_provider_word
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
+from config import live_stt_state
+from config.live_stt_registry import DEFAULT_IDS, Target
+from config.live_stt_replay import ReplayLimits
+from config.live_stt_recovery import recovery_enabled
+from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
+from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
+from utils.stt.live_router import target_circuit
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -50,12 +64,19 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
 )
 from utils.stt.speaker_clustering import select_speaker_cluster
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
     PROVIDER_BUDGET_EXHAUSTED,
+    PROVIDER_RATE_LIMITED,
     record_stt_stream_close,
+)
+from utils.stt.connect_metrics import (
+    CONNECT_FAILURE,
+    CONNECT_SUCCESS,
+    initialize_stt_provider_connect_children,
+    record_stt_provider_connect,
 )
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
@@ -82,8 +103,9 @@ class STTService(str, Enum):
 
 
 class ParakeetConnectionError(RuntimeError):
-    def __init__(self, reason: str, detail: str = '') -> None:
+    def __init__(self, reason: str, detail: str = '', *, capacity_subtype: str | None = None) -> None:
         self.reason = reason
+        self.capacity_subtype = capacity_subtype
         super().__init__(detail or reason)
 
 
@@ -132,11 +154,13 @@ def deepgram_rejection_status(error: BaseException) -> Optional[int]:
 _parakeet_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='parakeet',
 )
 
 _deepgram_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('DEEPGRAM_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('DEEPGRAM_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='deepgram',
 )
 
 
@@ -145,23 +169,59 @@ _modulate_circuit = ProviderCircuitBreaker(
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
     serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
     serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
+    provider_label='modulate',
 )
 _soniox_circuit = soniox_circuit_from_env()
 
+# Per-family selection identity (stage + that family's endpoint fingerprint)
+# each family breaker was built under; the credential is synced separately as
+# account identity. A replaced endpoint or stage change resets only that
+# family's selection benches, mirroring FleetHealth._check_identity and
+# live_router's identity-keyed _target_circuits; registry targets keep their
+# own circuits. One family's input change must not clear a sibling's evidence.
+_family_circuits_identity: dict[str, str] = {}
+_family_circuits_lock = threading.Lock()
+
+# Pre-create the always-emitted connect series so absence of a provider's
+# failures is queryable (and a dead emitter visible) from process start.
+initialize_stt_provider_connect_children()
+
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
+    global _family_circuits_identity
+    circuit = None
     if primary_service == STTService.parakeet:
-        return _parakeet_circuit
-    if primary_service == STTService.deepgram:
-        return _deepgram_circuit
-    if primary_service == STTService.modulate:
-        return _modulate_circuit
-    if primary_service == STTService.soniox:
-        return _soniox_circuit
-    raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
+        circuit = _parakeet_circuit
+    elif primary_service == STTService.deepgram:
+        circuit = _deepgram_circuit
+    elif primary_service == STTService.modulate:
+        circuit = _modulate_circuit
+    elif primary_service == STTService.soniox:
+        circuit = _soniox_circuit
+    else:
+        raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
+    family = primary_service.value
+    selection = live_stt_state.circuit_prefix(family)
+    account = live_stt_state.fleet_prefix(family, account=True)
+    with _family_circuits_lock:
+        seen = _family_circuits_identity.get(family)
+        if seen is None:
+            _family_circuits_identity[family] = selection
+        elif seen != selection:
+            # A replaced endpoint or stage change for THIS family invalidates
+            # its selection evidence (the same boundary the Redis views reset
+            # for in FleetHealth._check_identity). An unchanged credential
+            # keeps its account bench; a rotated credential clears only
+            # account state inside sync_account_identity. Sibling families
+            # keep their evidence; registry targets are keyed separately in
+            # live_router._target_circuits.
+            circuit.reset_selection()
+            _family_circuits_identity[family] = selection
+        circuit.sync_account_identity(account)
+    return circuit
 
 
-def open_provider_selection_circuit(provider: str | None, *, reason: str) -> bool:
+def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoint: str | None = None) -> bool:
     """Open a provider's process-local selection circuit after a serve-time death.
 
     Selection normally learns from connect-time outcomes alone, so a provider
@@ -171,6 +231,10 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     provider that just died for one cooldown window. Returns whether a known
     provider's circuit was opened; unknown provider names are tolerated
     (same shapes metrics accept) and simply report ``False``.
+
+    ``endpoint`` carries the selected target's serving endpoint when the
+    caller knows it, so a custom-endpoint death benches that endpoint's
+    selection state instead of poisoning the family default.
     """
     if not provider:
         return False
@@ -179,11 +243,34 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     except ValueError:
         return False
     circuit = _circuit_for_primary(service)
-    logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
         circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
     else:
+        if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
+            circuit = target_circuit(
+                Target(DEFAULT_IDS.get(service.value, service.value), service.value, 0, endpoint=endpoint),
+                circuit,
+            )
         circuit.record_serve_failure()
+    health.quarantine(
+        service.value,
+        'account' if reason in ACCOUNT_REJECTION_REASONS else 'selection',
+        (
+            circuit.account_cooldown_seconds_remaining
+            if reason in ACCOUNT_REJECTION_REASONS
+            else circuit.serve_error_bench_seconds
+        ),
+        endpoint=endpoint,
+    )
+    # Logged AFTER the record so bench_seconds is the window just armed — an
+    # outage keeps dying here from every rescue, and this is what makes the
+    # escalation ladder visible in logs instead of a flat repeating record.
+    logger.warning(
+        'Opening %s selection circuit after serve-time death reason=%s bench_seconds=%s',
+        provider,
+        reason,
+        circuit.serve_error_bench_seconds,
+    )
     return True
 
 
@@ -216,6 +303,8 @@ def is_stt_available() -> bool:
 
 def _fallback_failure_reason(error: BaseException) -> str:
     """Classify why a fallback provider could not serve, for the next leg's telemetry."""
+    if getattr(error, 'reason', None) == 'provider_rate_limited':
+        return 'provider_429'
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
         return 'timeout'
     detail = str(error).lower()
@@ -227,6 +316,51 @@ def _fallback_failure_reason(error: BaseException) -> str:
 # Deepgram and Parakeet refuse at connect time, so a returned socket is proof
 # enough. Velma-2 accepts the upgrade and only then answers "Monthly usage limit
 # reached.", so a Modulate socket is not evidence that the session is served.
+_DEEPGRAM_REJECTION_LOG_WINDOW_SECONDS: Final[float] = 10.0
+_last_deepgram_log_rejection: list = [0.0, '']  # [monotonic ts, newest SDK ERROR text]
+
+
+class _DeepgramRejectionCapture(logging.Handler):
+    """Remember the newest ERROR the Deepgram SDK emits (process-wide).
+
+    The SDK catches the WebSocket handshake failure internally: it logs
+    "server rejected WebSocket connection: HTTP 402" and ``start()`` just
+    returns ``False``, so the account-level rejection status is only visible
+    to logging. One slot is enough — consecutive connects overwrite it.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.ERROR:
+            _last_deepgram_log_rejection[:] = [time.monotonic(), record.getMessage()]
+
+
+logging.getLogger('deepgram').addHandler(_DeepgramRejectionCapture())
+
+
+class ProviderAccountRejection(RuntimeError):
+    """A provider refused this session for account-level reasons, not per-connect health.
+
+    HTTP 402 (payment required / balance exhausted) is deterministic for the whole
+    credential: no amount of connect retries can converge, so an account cooldown
+    (default 30m, vs the 30s connect cooldown) must hold the provider out of
+    selection instead of re-dialing a rejected account every session (#11695
+    recurrence 2026-09-14..18: a spent managed Deepgram key burned ~90k ERROR
+    lines/hour for 4 days).
+    """
+
+    def __init__(self, provider: str, status: str) -> None:
+        self.provider = provider
+        self.status = status
+        super().__init__(f'{provider} rejected the session at account level: {status}')
+
+
+def _classify_provider_account_rejection(provider: str, detail: str) -> Optional[ProviderAccountRejection]:
+    """Return a typed account rejection when the failure text is account-level (HTTP 402)."""
+    if re.search(r'HTTP\s*402(?!\d)', detail, re.IGNORECASE):
+        return ProviderAccountRejection(provider, 'HTTP 402 payment required')
+    return None
+
+
 _POST_CONNECT_REJECTING_PRIMARIES: Final = frozenset({STTService.modulate})
 
 
@@ -245,13 +379,40 @@ async def _connect_serving_fallback(
     connect: Callable[[], Awaitable[Optional[STTSocket]]], service: STTService
 ) -> STTSocket:
     """Connect a fallback provider and prove it is actually serving before adopting it."""
-    socket = await connect()
+
+    def _record_failure(reason: str) -> None:
+        record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
+
+    try:
+        socket = await connect()
+    except ProviderAccountRejection:
+        _record_failure('quota')
+        raise
+    except (asyncio.TimeoutError, TimeoutError):
+        _record_failure('timeout')
+        raise
+    except ParakeetConnectionError as error:
+        _record_failure(error.reason)
+        raise
+    except Exception as error:
+        _record_failure(_fallback_failure_reason(error))
+        raise
     if socket is None:
+        _record_failure('config_incomplete')
         raise RuntimeError(f'{service.value} returned no socket')
     if not await fallback_socket_is_serving(socket):
         detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+        typed = getattr(socket, 'typed_death_reason', None)
+        _record_failure(typed if isinstance(typed, str) else _fallback_failure_reason(RuntimeError(detail)))
         close_rejected_socket(socket)
         raise RuntimeError(f'{service.value} rejected the stream: {detail}')
+    # A serving leg is positive evidence about the provider: let its own
+    # circuit close (e.g. an account-rejection half-open probe that succeeds
+    # right after the bill was paid). ``serving=True`` because this helper
+    # only reaches here after proving the socket actually serves — evidence
+    # strong enough to close even a serve-death bench.
+    _circuit_for_primary(service).record_success(serving=True)
+    record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
     return socket
 
 
@@ -265,6 +426,11 @@ async def connect_stt_socket_with_fallback(
     connect_soniox: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     failed: Optional[set[str]] = None,
     use_config: Optional[bool] = None,
+    routing_uid: Optional[str] = None,
+    routing_language: Optional[str] = None,
+    routing_languages: tuple[str, ...] = (),
+    routing_models: dict[str, str | None] | None = None,
+    failed_targets: set[str] | None = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
@@ -281,26 +447,90 @@ async def connect_stt_socket_with_fallback(
             },
             failed=failed if failed is not None else set(),
             models=stt_service_models,
+            routing_uid=routing_uid,
+            routing_language=routing_language,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
         )
     circuit = _circuit_for_primary(primary_service)
 
+    def legacy_identity(service: STTService) -> str:
+        if service.value == 'parakeet':
+            return (routing_models or {}).get('parakeet') or 'parakeet'
+        return DEFAULT_IDS.get(service.value) or service.value
+
+    recovery_on = recovery_enabled()
+    recovery = current_recovery.get() if recovery_on else None
+
     reason = 'circuit_open'
-    if circuit.allow_request():
+    capacity_subtype: str | None = None
+    typed_connect_reason: Optional[str] = None
+    primary_identity = legacy_identity(primary_service)
+    if recovery is not None and not recovery.can_attempt(primary_identity):
+        primary_permitted = False
+    else:
+        primary_permitted = circuit.allow_request()
+    if primary_permitted:
         try:
-            socket = await connect_primary()
+            if recovery is not None:
+                recovery.reserve(primary_identity, primary_service.value)
+            dial_budget = recovery.dial_budget() if recovery is not None else None
+            if dial_budget is not None:
+                async with asyncio.timeout(dial_budget):
+                    socket = await connect_primary()
+            else:
+                socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
                 circuit.record_failure()
+            elif primary_service is STTService.modulate and circuit.state == 'half_open':
+                # This probe was admitted under a serve-error bench. The
+                # breaker must re-close on real serving evidence — a
+                # transcript segment or the stream's done frame — never on
+                # the 0.3s liveness grace alone, which a doomed stream passes
+                # before the provider fault kills it mid-session. Attached
+                # BEFORE the grace so a transcript arriving inside the grace
+                # still lands (the evidence must never fire into a noop).
+                attach = getattr(socket, 'set_health_callbacks', None)
+                if callable(attach):
+                    on_serving, _on_released = circuit.replacement_callbacks(serving=True)
+                    attach(on_serving, _on_released)
+                if await _primary_is_serving(primary_service, socket):
+                    circuit.record_success()
+                    record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
+                    return socket, primary_service
+                # The grace observed the probe dying: the same rejected-stream
+                # handling as the healthy path below.
+                detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_probe_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_probe_death, str):
+                    typed_connect_reason = typed_probe_death
+                close_rejected_socket(socket)
+                if recovery_on and typed_probe_death == PROVIDER_RATE_LIMITED:
+                    reason = 'provider_429'
+                    circuit.release_probe()
+                else:
+                    reason = _fallback_failure_reason(RuntimeError(detail))
+                    circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
+                record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
                 return socket, primary_service
             else:
                 # The primary took the session and then refused it. Release the
                 # socket and walk the chain instead of serving a dead stream.
                 detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_death, str):
+                    typed_connect_reason = typed_death
                 close_rejected_socket(socket)
-                reason = _fallback_failure_reason(RuntimeError(detail))
-                circuit.record_failure()
+                if recovery_on and typed_death == PROVIDER_RATE_LIMITED:
+                    reason = 'provider_429'
+                    circuit.release_probe()
+                else:
+                    reason = _fallback_failure_reason(RuntimeError(detail))
+                    circuit.record_failure()
         except DeepgramConnectionRejection:
             # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
             # its class for the fallback legs and the circuit: mapping it to
@@ -311,16 +541,37 @@ async def connect_stt_socket_with_fallback(
             circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
+            capacity_subtype = error.capacity_subtype if reason == 'capacity_full' else None
             if reason in EXPECTED_REJECTIONS:
                 circuit.record_rejection(reason)
             else:
                 circuit.record_failure()
+        except ProviderAccountRejection as error:
+            # A deepgram primary hitting its own account rejection: the primary
+            # circuit IS the rejected provider's, so the account cooldown holds
+            # here too, and selection walks the configured fallbacks.
+            reason = 'quota'
+            circuit.record_account_rejection()
+            logger.warning(
+                '%s is rejecting sessions at account level (%s); holding it out for the account cooldown',
+                error.provider,
+                error.status,
+            )
         except (asyncio.TimeoutError, TimeoutError):
             reason = 'timeout'
             circuit.record_failure()
-        except Exception:
-            reason = 'provider_5xx'
-            circuit.record_failure()
+        except Exception as error:
+            reason = _fallback_failure_reason(error)
+            if recovery_on and reason == 'provider_429':
+                circuit.release_probe()
+            else:
+                circuit.record_failure()
+        # One attempt, one increment: the not-serving branches left their typed
+        # death reason in typed_connect_reason, everything else lands here with
+        # the bounded `reason` the except chain already computed.
+        record_stt_provider_connect(
+            provider=primary_service.value, outcome=CONNECT_FAILURE, reason=typed_connect_reason or reason
+        )
 
     # Legacy order is retained while the configured chain is dark.
     ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
@@ -329,13 +580,54 @@ async def connect_stt_socket_with_fallback(
         (STTService.parakeet, connect_parakeet),
     ]
     candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
-        (service, connect) for service, connect in ordered if connect is not None and service != primary_service
+        (service, connect)
+        for service, connect in ordered
+        if connect is not None and service != primary_service
+        # A fallback leg whose credential is rejecting at account level
+        # (HTTP 402 — deterministic until the bill is paid) is skipped, not
+        # dialed: re-offering a provider the account bench condemned is what
+        # kept re-dialing a spent Deepgram key (#11695 recurrence 2026-09).
+        # Serve-death and connect benches stay ignorable here — the legacy
+        # lane's fixed-order contract dials through them. Read-only check: a
+        # leg dial must not claim the half-open probe slot that belongs to
+        # the primary path.
+        and _circuit_for_primary(service).account_cooldown_elapsed()
+        and (recovery is None or recovery.can_attempt(legacy_identity(service)))
     ]
 
     from_mode = primary_service.value
     for service, connect in candidates:
         try:
-            fallback_socket = await _connect_serving_fallback(connect, service)
+            if recovery is not None:
+                recovery.reserve(legacy_identity(service), service.value)
+            dial_budget = recovery.dial_budget() if recovery is not None else None
+            if dial_budget is not None:
+                async with asyncio.timeout(dial_budget):
+                    fallback_socket = await _connect_serving_fallback(connect, service)
+            else:
+                fallback_socket = await _connect_serving_fallback(connect, service)
+        except ProviderAccountRejection as error:
+            service_circuit = _circuit_for_primary(service)
+            service_circuit.record_account_rejection()
+            logger.warning(
+                '%s is rejecting sessions at account level (%s); holding it out of fallback for %ds',
+                error.provider,
+                error.status,
+                int(service_circuit.account_cooldown_seconds_remaining),
+            )
+            record_fallback(
+                component='stt_selection',
+                from_mode=from_mode,
+                to_mode=service.value,
+                reason=reason,
+                outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
+            )
+            if service == candidates[-1][0]:
+                raise
+            from_mode = service.value
+            reason = 'quota'
+            continue
         except Exception as error:
             record_fallback(
                 component='stt_selection',
@@ -343,11 +635,13 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
             from_mode = service.value
             reason = _fallback_failure_reason(error)
+            capacity_subtype = None
             continue
 
         record_fallback(
@@ -356,6 +650,7 @@ async def connect_stt_socket_with_fallback(
             to_mode=service.value,
             reason=reason,
             outcome='recovered',
+            **capacity_fallback_kwargs(capacity_subtype),
         )
         return fallback_socket, service
 
@@ -564,12 +859,7 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
 def _requested_stt_language(
     language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
 ) -> str:
-    """Resolve the provider language while retaining PTT's explicit input language.
-
-    Live sessions with multi-language enabled must select a provider's auto-detect
-    mode. PTT does not load the user's transcription preference, so it keeps its
-    explicit language unless the client itself sends the ``multi`` sentinel.
-    """
+    """Use auto-detect for live multi sessions; keep PTT's explicit language."""
     if base_lang == 'multi' or (
         surface == STTServingSurface.STREAMING
         and multi_lang_enabled
@@ -600,10 +890,9 @@ def get_stt_service_for_language(
     preferred_service: Optional[str] = None,
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
+    language_profile: LiveLanguageProfile | None = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
-    # Missing language metadata historically meant English. Preserve that
-    # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -611,6 +900,15 @@ def get_stt_service_for_language(
         multi_lang_enabled=multi_lang_enabled,
         surface=surface,
     )
+    if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
+        language_profile,
+        stt_service_models,
+        exclude,
+        lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
+        and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+        preferred_service=preferred_service,
+    ):
+        return STTService.soniox, requested_language, 'soniox'
 
     def select(
         models: List[str] | Tuple[str, ...],
@@ -655,8 +953,6 @@ def get_stt_service_for_language(
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
             if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
-                # Soniox identifies the language itself, so every requested language
-                # including 'multi' is serviceable.
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
@@ -713,11 +1009,7 @@ def get_stt_service_for_language(
 
 
 def should_preserve_filler_words(language: str) -> bool:
-    """Return True if filler words should be preserved for the given Deepgram language.
-
-    English filler sounds ("um", "uh") are safe to strip. But in other languages
-    those sounds are real words — e.g. Portuguese "um" means "a/one" (#6575).
-    """
+    """Keep non-English fillers: Portuguese "um" is a word (#6575)."""
     return not language.startswith('en')
 
 
@@ -848,11 +1140,12 @@ async def process_audio_dg(
                             'person_id': None,
                         }
                     )
+            remember_provider_word(segments[-1], word.start, word.end, word.punctuated_word)
 
         stream_transcript(segments)
 
     def on_error(self: Any, error: Any, **kwargs: Any) -> None:
-        logger.error(f"Deepgram error: {error}")
+        logger.error('Deepgram error: %s', sanitize_provider_error(error))
 
     logger.info("Connecting to Deepgram")  # Log before connection attempt
     dg_connection = await connect_to_deepgram_with_backoff(
@@ -868,12 +1161,12 @@ async def process_audio_dg(
     # Register close-reason handlers that feed into SafeDeepgramSocket
     def on_dg_close(self: Any, close: Any, **kwargs: Any) -> None:
         reason = f'DG close event: {close}'
-        logger.info('Deepgram connection closed: %s', close)
+        logger.info('Deepgram connection closed: %s', sanitize_provider_error(close))
         safe_conn.set_close_reason(reason)
 
     def on_dg_error(self: Any, error: Any, **kwargs: Any) -> None:
         reason = f'DG error event: {error}'
-        logger.warning('Deepgram error (close-reason capture): %s', error)
+        logger.warning('Deepgram error (close-reason capture): %s', sanitize_provider_error(error))
         safe_conn.set_close_reason(reason)
 
     dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)
@@ -899,6 +1192,18 @@ async def connect_to_deepgram_with_backoff(
             logger.warning("Session ended, aborting Deepgram retry")
             return None
         try:
+            # The SDK swallows the handshake status and start() just returns False, so the
+            # newest ERROR it logged is the only signal that this is an account-level
+            # rejection (HTTP 402) rather than a per-connect health failure.
+            logged_ts, logged_text = _last_deepgram_log_rejection
+            if time.monotonic() - logged_ts <= _DEEPGRAM_REJECTION_LOG_WINDOW_SECONDS:
+                rejection = _classify_provider_account_rejection('deepgram', logged_text)
+                if rejection is not None:
+                    logger.error(
+                        'Deepgram rejected the connect at account level (%s); not retrying',
+                        rejection.status,
+                    )
+                    raise rejection
             result = await run_blocking(
                 sync_executor,
                 connect_to_deepgram,
@@ -917,6 +1222,11 @@ async def connect_to_deepgram_with_backoff(
                 logger.error('Deepgram start() returned False on all %d attempts — giving up', retries)
                 return None
             logger.warning('Deepgram start() returned False (attempt %d/%d), retrying...', attempt + 1, retries)
+        except ProviderAccountRejection:
+            # Account-level rejections are deterministic (spent key / unpaid
+            # balance): retrying the same request cannot converge and only
+            # multiplies the error volume. Surface it to the fallback chain.
+            raise
         except DeepgramConnectionRejection as error:
             # A typed provider answer that no same-call retry can change
             # (HTTP 401/402/403 auth or billing refusal): retrying inside
@@ -926,10 +1236,14 @@ async def connect_to_deepgram_with_backoff(
             # prod: the account's hosted key answered HTTP 402 for 12+h and
             # this loop tripled every rejection into both SDK error lines
             # plus a start()-returned-False line per session).
-            logger.error('Deepgram connect rejected terminally after %d attempt(s): %s', attempt + 1, error)
+            logger.error(
+                'Deepgram connect rejected terminally after %d attempt(s): %s',
+                attempt + 1,
+                sanitize_provider_error(error),
+            )
             raise
         except Exception as error:
-            logger.error(f'An error occurred: {error}')
+            logger.error('An error occurred: %s', sanitize_provider_error(error))
             if attempt == retries - 1:  # Last attempt
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
@@ -985,7 +1299,7 @@ def connect_to_deepgram(
             logger.info("Connection Open")
 
         def on_metadata(self: Any, metadata: Any, **kwargs: Any) -> None:
-            logger.info(f"Metadata: {metadata}")
+            pass
 
         def on_speech_started(self: Any, speech_started: Any, **kwargs: Any) -> None:
             logger.info("Speech Started")
@@ -997,7 +1311,7 @@ def connect_to_deepgram(
             logger.info("Connection Closed")
 
         def on_unhandled(self: Any, unhandled: Any, **kwargs: Any) -> None:
-            logger.error(f"Unhandled Websocket Message: {unhandled}")
+            logger.error('Unhandled Websocket Message: %s', sanitize_provider_error(unhandled))
 
         dg_connection.on(LiveTranscriptionEvents.Open, on_open)
         dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
@@ -1102,10 +1416,15 @@ def modulate_death_reason(err: Any) -> Optional[str]:
         return PROVIDER_BUDGET_EXHAUSTED
     if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
         return MODULATE_DEATH_SERVE_ERROR
+    if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
+        return 'other'  # Our audio/request shape, never provider availability.
     return None
 
 
 class SafeModulateSocket(STTSocket):
+    max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    replay_limits = ReplayLimits()
+
     def __init__(
         self,
         ws: Any,
@@ -1126,7 +1445,12 @@ class SafeModulateSocket(STTSocket):
         self._lock = threading.Lock()
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
-        self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=2000)
+        self.recovery_enabled = recovery_enabled()
+        if self.recovery_enabled:
+            self._send_queue: Any = AudioSendQueue(maxsize=2000)
+        else:
+            self._send_queue = asyncio.Queue(maxsize=2000)
+        self._writer_pace: RecoveryWriterPace | None = None
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
@@ -1136,11 +1460,36 @@ class SafeModulateSocket(STTSocket):
         # single odd-length frame ends the session even after valid audio. Nothing upstream
         # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
         self._pending_odd_byte: bytes = b''
+        # Set by the selection layer for a probe admitted under a serve-error
+        # bench: fired once this socket has real serving evidence (a transcript
+        # segment or the provider's done frame) so the breaker may close.
+        self._health_success: Callable[[], None] = lambda: None
+        self._serving_observed = False
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
     def set_wav_header(self, header: bytes) -> None:
         self._wav_header = header
+
+    def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
+        """Attach the selection circuit's health callbacks (probe evidence seam).
+
+        Only ``on_success`` is used today: the breaker closes on real serving
+        evidence, not on socket teardown, so ``on_close`` is accepted and
+        ignored to keep the shared signature. The callback fires at most once,
+        at the first transcript segment or the provider's done frame.
+        """
+
+        self._health_success = on_success
+
+    def _observe_served(self) -> None:
+        if self._serving_observed:
+            return
+        self._serving_observed = True
+        try:
+            self._health_success()
+        except Exception:
+            pass
 
     @property
     def is_connection_dead(self) -> bool:
@@ -1158,9 +1507,9 @@ class SafeModulateSocket(STTSocket):
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
-                self._dead = True
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._dead = True  # Metadata must precede the latch read by death observers.
 
     def send(self, data: bytes) -> bool:
         """Synchronously accept audio only when it reaches the provider queue.
@@ -1208,19 +1557,37 @@ class SafeModulateSocket(STTSocket):
             # It remains a truthful immediate enqueue rather than a deferred
             # cross-loop callback. A live foreign loop is a terminal misuse.
             if current_loop is not None or self._loop.is_running():
-                self._mark_dead('send called outside provider event loop')
+                self._mark_dead('send called outside provider event loop', typed_reason='other')
                 return False
 
         try:
             self._send_queue.put_nowait(queued_data)
         except asyncio.QueueFull:
-            self._mark_dead('send queue full')
+            self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
 
         if prepend_header:
             with self._lock:
                 self._header_sent = True
         return True
+
+    def enable_writer_pacing(self, sample_rate: int, rate: float, budget: Any = None) -> None:
+        """Recovery legs only: pace wire writes at <=1x plus bounded jitter."""
+        if not self.recovery_enabled:
+            return
+        self._writer_pace = RecoveryWriterPace(sample_rate, rate, budget or (lambda: None))
+
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        if not self.recovery_enabled:
+            return not (self._dead or self._closed)
+        try:
+            await self._send_queue.wait_for_capacity(
+                limit=limit if limit is not None else self.replay_limits.queue_packets,
+                timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
+            )
+        except TimeoutError:
+            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+        return not (self._dead or self._closed)
 
     def finalize(self) -> None:
         pass
@@ -1268,13 +1635,54 @@ class SafeModulateSocket(STTSocket):
         try:
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
+                if not self.recovery_enabled:
+                    if data == b'':
+                        break
+                    if data == _EOS_SENTINEL:
+                        # Docs: send empty text frame ("") to signal end of audio stream
+                        await self._ws.send('')
+                        break
+                    await self._ws.send(data)
+                    continue
                 if data == b'':
+                    self._send_queue.discard(data)
                     break
                 if data == _EOS_SENTINEL:
+                    self._send_queue.discard(data)
                     # Docs: send empty text frame ("") to signal end of audio stream
-                    await self._ws.send('')
+                    pace = self._writer_pace
+                    if pace is not None:
+                        async with asyncio.timeout(pace.write_bound()):
+                            await self._ws.send('')
+                    else:
+                        await self._ws.send('')
                     break
-                await self._ws.send(data)
+                pace = self._writer_pace
+                deadline = getattr(self._send_queue, 'inflight_deadline', None) if type(data) is bytes else None
+                written = False
+                try:
+                    if pace is not None and type(data) is bytes:
+                        await pace.throttle(len(data), deadline=deadline)
+                        pace.note_write(len(data))
+                    if pace is not None:
+                        try:
+                            async with asyncio.timeout(pace.write_bound(deadline)):
+                                await self._ws.send(data)
+                        except TimeoutError:
+                            if deadline is not None and deadline <= clock():
+                                raise AudioDeliveryExpired('live audio delivery expired')
+                            raise
+                    else:
+                        await self._ws.send(data)
+                    self._send_queue.note_written(data)
+                    written = True
+                    if pace is not None and type(data) is bytes:
+                        pace.complete_write()
+                finally:
+                    if not written:
+                        self._send_queue.discard(data)
+        except AudioDeliveryExpired:
+            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}')
         except Exception as e:
@@ -1298,23 +1706,32 @@ class SafeModulateSocket(STTSocket):
                     err = msg.get('error', msg.get('message', 'unknown error'))
                     typed = modulate_death_reason(err)
                     record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
-                    if typed is not None:
+                    if typed in {MODULATE_DEATH_SERVE_ERROR, PROVIDER_BUDGET_EXHAUSTED}:
                         # The provider accepted the stream and then failed to
                         # serve it: a provider fault, and the outage signal an
                         # on-call needs (backend-listen #3 signature,
                         # 2026-08-31: ×11/30m "Internal server error", ×5/30m
                         # "Unable to complete the request").
-                        logger.error(f'Modulate streaming error: {err}')
+                        logger.error(
+                            'Modulate streaming error: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                        )
                     else:
                         # Client/session-caused frames (e.g. invalid audio we
                         # sent) are the protocol answering, not an outage.
-                        logger.warning(f'Modulate stream closed: {err}')
+                        logger.warning(
+                            'Modulate stream closed: reason=%s %s',
+                            typed,
+                            sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                        )
                     if self._prev_partial_text:
                         self._flush_partial()
                     self._done_event.set()
                     self._mark_dead(f'modulate error: {err}', typed_reason=typed)
                     break
                 elif msg_type == 'done':
+                    self._observe_served()
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
                     if self._prev_partial_text:
                         self._flush_partial()
@@ -1371,11 +1788,17 @@ class SafeModulateSocket(STTSocket):
         start = start_ms / 1000.0
         if self._preseconds and start < self._preseconds:
             return
+        # This dict is the only copy of the unfinalized tail (done/error with
+        # no utterance): the provider gives it no duration, but a zero-length
+        # interval is dropped by v2 translation. Give it the provider clock's
+        # smallest positive duration — 1 ms, a minimal capture window at any
+        # rate — so the text survives both persistence modes.
+        end = (start_ms + 1) / 1000.0
         segments = [
             {
                 'speaker': 'SPEAKER_00',
                 'start': start,
-                'end': start,
+                'end': end,
                 'text': text,
                 'is_user': False,
                 'person_id': None,
@@ -1388,6 +1811,7 @@ class SafeModulateSocket(STTSocket):
         if not text:
             return
 
+        self._observe_served()
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
 
@@ -1416,6 +1840,8 @@ class SafeModulateSocket(STTSocket):
                 'person_id': None,
             }
         ]
+        if msg.get('language'):
+            segments[0]['_provider_language'] = msg['language']
         self._stream_transcript(segments)
 
 
@@ -1471,6 +1897,8 @@ class ParakeetStreamingSocket(STTSocket):
     send/finish/finalize plus the is_connection_dead/death_reason properties. The real tail
     drain is async drain_and_close(), which the listen teardown awaits.
     """
+
+    replay_limits = ReplayLimits()
 
     def __init__(
         self,
@@ -1552,8 +1980,8 @@ class ParakeetStreamingSocket(STTSocket):
                 await pump
             except asyncio.CancelledError:
                 pass
-            except Exception:
-                logger.exception("Parakeet pump await error during drain")
+            except Exception as e:
+                logger.error('Parakeet pump await error during drain: %s', sanitize_provider_error(e))
         # Backstop: if the pump died early (and left audio buffered), drain it here so the
         # tail is never silently lost. No-op when the pump already emptied the buffer.
         await self._flush(force=True)
@@ -1570,7 +1998,7 @@ class ParakeetStreamingSocket(STTSocket):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.exception("Parakeet pump loop error")
+            logger.error('Parakeet pump loop error: %s', sanitize_provider_error(e))
             self._dead = True
             self._dead_reason = f'parakeet pump crashed: {e}'
 
@@ -1608,7 +2036,11 @@ class ParakeetStreamingSocket(STTSocket):
             wav = _pcm16_to_wav_bytes(seg_pcm, self._sample_rate)
             emb = await async_extract_embedding_from_bytes(wav)
         except Exception as e:
-            logger.warning(f"Parakeet diarization embed failed; reusing speaker {self._last_speaker}: {e}")
+            logger.warning(
+                'Parakeet diarization embed failed; reusing speaker %s: %s',
+                self._last_speaker,
+                sanitize_provider_error(e),
+            )
             return self._last_speaker
 
         best_i, create_new, _, capped = select_speaker_cluster(emb, self._spk_centroids, compare_embeddings)
@@ -1654,7 +2086,7 @@ class ParakeetStreamingSocket(STTSocket):
             resp.raise_for_status()
             loaded: object = resp.json()
         except Exception as e:
-            logger.error(f"Parakeet transcribe failed: {e}")
+            logger.error('Parakeet transcribe failed: %s', sanitize_provider_error(e))
             return []
 
         return await self._normalize_chunk(loaded, pcm, start, dur)
@@ -1705,6 +2137,8 @@ class ParakeetStreamingSocket(STTSocket):
 class ParakeetWebSocketSocket(STTSocket):
     """True streaming via Parakeet /v3/stream WebSocket with server-side VAD + diarization."""
 
+    replay_limits = ReplayLimits()
+
     def __init__(
         self,
         stream_transcript: Callable[[List[Dict[str, Any]]], None],
@@ -1737,7 +2171,7 @@ class ParakeetWebSocketSocket(STTSocket):
             self._cancel_task(self._sender_task)
             raise ParakeetConnectionError('timeout', self._dead_reason or 'Parakeet connect timeout')
         if not self._connected_event.is_set():
-            logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
+            logger.error('Parakeet WS failed before connection: %s', sanitize_provider_error(self._dead_reason))
             raise ParakeetConnectionError(
                 self._startup_failure_reason,
                 self._dead_reason or 'parakeet ws failed before connection',
@@ -1833,7 +2267,7 @@ class ParakeetWebSocketSocket(STTSocket):
                             break
                         continue
                     except Exception as e:
-                        logger.error(f"Parakeet WS send error: {e}")
+                        logger.error('Parakeet WS send error: %s', sanitize_provider_error(e))
                         self._mark_dead(f"parakeet ws send: {e}")
                         break
                 if self._closed and self._receiver_task and not self._receiver_task.done():
@@ -1843,7 +2277,7 @@ class ParakeetWebSocketSocket(STTSocket):
                         self._cancel_task(self._receiver_task)
 
         except Exception as e:
-            logger.error(f"Parakeet WS connection error: {e}")
+            logger.error('Parakeet WS connection error: %s', sanitize_provider_error(e))
             close_reason = str(getattr(e, 'reason', '') or '')
             if close_reason in EXPECTED_REJECTIONS:
                 self._startup_failure_reason = close_reason
@@ -1880,7 +2314,7 @@ class ParakeetWebSocketSocket(STTSocket):
                 self._mark_dead('parakeet ws closed cleanly by provider')
         except Exception as e:
             if not self._closed:
-                logger.error(f"Parakeet WS recv error: {e}")
+                logger.error('Parakeet WS recv error: %s', sanitize_provider_error(e))
                 self._mark_dead(f"parakeet ws recv: {e}")
 
 
