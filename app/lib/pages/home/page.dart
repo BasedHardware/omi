@@ -730,6 +730,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   Widget build(BuildContext context) {
+    // Home's build completed successfully: record that this process has painted
+    // Home so a later Home classifies as `resume`. Marking here (not in a
+    // post-frame callback) means a build exception skips the mark — Flutter
+    // catches rebuild errors and post-frame callbacks still fire after them.
+    BackgroundInterruptProcessLaunch.mark();
     return MyUpgradeAlert(
       upgrader: _upgrader,
       dialogStyle: Platform.isIOS ? UpgradeDialogStyle.cupertino : UpgradeDialogStyle.material,
