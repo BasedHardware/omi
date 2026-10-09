@@ -12250,16 +12250,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingSetupStepPersonalize => '맞춤 환경 설정 중';
 
   @override
-  String get onboardingRatingPromptTitle => '기다리는 동안 Omi가 마음에 드셨나요?';
+  String get onboardingRatingPromptTitle => 'Omi가 마음에 드시나요?';
 
   @override
-  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 ❤️';
+  String get onboardingRatingPromptYes => '예';
 
   @override
-  String get onboardingRatingPromptYes => '네, 응원할게요!';
-
-  @override
-  String get onboardingRatingPromptNo => '별로예요';
+  String get onboardingRatingPromptNo => '아니요';
 
   @override
   String get partialRecording => '부분 녹음';
@@ -12278,4 +12275,201 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => '이 파일 형식은 가져올 수 없습니다.';
+
+  @override
+  String get reviewTitle => '검토';
+
+  @override
+  String get reviewEntryTitle => '확인이 필요한 질문';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count개 남음';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => '누가 한 말인가요?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return '“$name”과(와) 같은 사람인가요?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => '이건 어떻게 쓰나요?';
+
+  @override
+  String get reviewPlayClip => '클립 재생';
+
+  @override
+  String get reviewStopClip => '클립 중지';
+
+  @override
+  String get reviewOpenDetailsHint => '세부 정보를 엽니다';
+
+  @override
+  String get reviewAnswerMe => '나';
+
+  @override
+  String get reviewAnswerOther => '기타';
+
+  @override
+  String get reviewAddTask => '작업 추가';
+
+  @override
+  String get reviewAnswerFailed => '답변을 저장하지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return '이 답변은 대화 $count개에 라벨을 붙여요';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => '알 수 없는 화자';
+
+  @override
+  String get reviewNewPersonName => '이름';
+
+  @override
+  String get reviewSomeoneElse => '다른 사람…';
+
+  @override
+  String get reviewConfirm => '확인';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return '$name 확인';
+  }
+
+  @override
+  String get reviewNotSure => '잘 모르겠어요';
+
+  @override
+  String get reviewOpenConversation => '대화';
+
+  @override
+  String get reviewTaskField => '작업';
+
+  @override
+  String get reviewDue => '마감일';
+
+  @override
+  String get reviewNoDate => '없음';
+
+  @override
+  String get reviewProject => '프로젝트';
+
+  @override
+  String get reviewReasonAlreadyDone => '이미 완료';
+
+  @override
+  String get reviewReasonNotMine => '내 것이 아님';
+
+  @override
+  String get reviewReasonNotUseful => '도움 안 됨';
+
+  @override
+  String get reviewYesMerge => '예, 병합';
+
+  @override
+  String reviewConversationCount(int count) {
+    return '대화: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => '직접 입력';
+
+  @override
+  String get reviewLoadFailed => '질문을 불러오지 못했어요.';
+
+  @override
+  String get reviewCaughtUpTitle => '답변할 질문이 없어요';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi는 도움이 필요할 때만 여기서 질문해요.';
+
+  @override
+  String get reviewRecentChanges => '최근 변경 사항';
+
+  @override
+  String get reviewChangesIntro => '지난 30일 동안 Omi가 자동으로 바꾼 내용이에요. 잘못된 것은 되돌리세요.';
+
+  @override
+  String get reviewChangeUndone => '되돌렸어요. Omi가 이를 다시 하지 않아요.';
+
+  @override
+  String get reviewChangeFailed => '이 변경 사항을 업데이트하지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String get reviewChangesLoadFailed => '최근 변경 사항을 불러오지 못했어요.';
+
+  @override
+  String get reviewNoChangesTitle => '아직 변경 사항이 없어요';
+
+  @override
+  String get reviewNoChangesBody => 'Omi가 노트를 정리하면 변경 사항이 여기에 표시돼요.';
+
+  @override
+  String get reviewShowMore => '더 보기';
+
+  @override
+  String get entityKeptCurrent => 'Omi가 최신 상태로 유지';
+
+  @override
+  String get entityNotRight => '틀렸나요?';
+
+  @override
+  String get entityCorrectionTitle => '무엇이 틀렸나요?';
+
+  @override
+  String get entityCorrectionHint => 'Omi에게 수정할 내용을 알려 주세요';
+
+  @override
+  String get entityCorrectionSaved => '감사합니다. Omi가 수정할게요.';
+
+  @override
+  String get entityCorrectionFailed => '수정 내용을 보내지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String get entityLoadFailed => '이 페이지를 불러오지 못했어요.';
+
+  @override
+  String get entityProject => '프로젝트';
+
+  @override
+  String get entityProjects => '프로젝트';
+
+  @override
+  String get entityDecisions => '결정';
+
+  @override
+  String get entityOpenTasks => '진행 중인 작업';
+
+  @override
+  String get entityOpenThreads => '열린 안건';
+
+  @override
+  String entityWaitingOn(String name) {
+    return '$name님 응답 대기 중';
+  }
+
+  @override
+  String entityDue(String date) {
+    return '마감일 $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Omi가 아는 내용';
+
+  @override
+  String get entityRecentConversations => '최근 대화';
+
+  @override
+  String get tasksNoProject => '프로젝트 없음';
+
+  @override
+  String get tasksGroupByProject => '프로젝트별로 그룹화';
+
+  @override
+  String get tasksGroupByDate => '날짜별로 그룹화';
 }

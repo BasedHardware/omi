@@ -1,7 +1,6 @@
-"""Where the summary-pipeline rollout flags are on, and where they are not.
+"""Summary context rollout declarations remain aligned across hosts.
 
-Notes v2 is the only summary path: `CONVERSATION_NOTES_V2_ENABLED` went prod-on 2026-09-01 and
-was retired after its four-week bake. The remaining flags still gate the same pipeline. The dev
+Notes v2 is unconditional; the remaining context gates retain deployment authority. The dev
 environment doubles as the Beta ring: the `mobile_beta` profile and the beta desktop bundle
 are pinned to the dev backend (`api.omiapi.com`) while authenticating against the production
 Firebase project, so a flag still dark in prod reaches Beta users by turning dev on.
@@ -91,8 +90,8 @@ def test_prod_keeps_basic_plan_eager_extraction_gate_dark():
 def test_reprocess_cannot_disagree_with_live_finalization():
     """The defect this guards is silent: flags declared on only one service.
 
-    Live capture and "regenerate" would quietly run different pipelines, which reads as a
-    model regression rather than a config gap.
+    Live capture would produce a v2 note and "regenerate" would quietly fall back to the
+    legacy pipeline, which reads as a model regression rather than a config gap.
     """
     for environment in _composed()['environments'].values():
         env_maps = _env_maps(environment)

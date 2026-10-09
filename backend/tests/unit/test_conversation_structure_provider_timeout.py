@@ -134,7 +134,7 @@ TEMPLATE_APP = App(
 
 
 def _app_result_with_notes_prefix():
-    """POST /reprocess?app_id= on the notes prompt prefix, which is how prod runs."""
+    """POST /reprocess?app_id= with the notes prefix used in production."""
     prefix = build_conversation_prompt_prefix(
         conversation_id='277d188e-9563-4fd1-bf1b-8a6bbcbe4b94',
         transcript=TRANSCRIPT,

@@ -29,6 +29,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from routers import (
+    dream_cohort,
     review,
     proactivity,
     chat,
@@ -214,6 +215,7 @@ app.add_middleware(
 )
 
 app.include_router(proactivity.router)
+app.include_router(dream_cohort.router)
 app.include_router(transcribe.router)
 app.include_router(static_map.router)
 app.include_router(omni_relay.router)

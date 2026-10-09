@@ -2,7 +2,7 @@
 
 import asyncio
 import copy
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -14,8 +14,11 @@ import pytest
 from langchain_openai import ChatOpenAI
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.conversation import ExternalIntegrationCreateConversation
+from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from testing.import_isolation import stub_modules
+from utils.conversations import process_conversation as pc
 from utils.conversations.meeting_context import merge_meeting_contexts, store_meeting_context, stored_meeting_context
 from utils.llm import conversation_processing as notes
 from utils.llm import shaped_agent as shaped
@@ -423,6 +426,31 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     assert captured[0][0].startswith('Original prompt bytes')
     assert captured[0][1] == [{'role': 'user', 'content': 'Today\n\nHello'}]
     forbidden.assert_not_awaited()
+
+
+@pytest.mark.parametrize('mode,expected', [('off', 'old'), ('on', 'new'), ('shadow', 'old')])
+def test_notes_v2_configuration_obeys_shaped_mode(monkeypatch, mode, expected):
+    uid = uid_in_bucket(monkeypatch, 'shadow') if mode == 'shadow' else 'test'
+    if mode != 'shadow':
+        monkeypatch.setenv(shaped.FLAG, mode)
+    monkeypatch.setattr(pc, '_proposes_task_candidates', lambda c: False)
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
+    calls = []
+    monkeypatch.setattr(
+        notes, '_get_conversation_notes_legacy', lambda *a, **k: calls.append('old') or Structured(title='old')
+    )
+    monkeypatch.setattr(
+        notes, '_get_shaped_conversation_notes', lambda *a, **k: calls.append('new') or Structured(title='new')
+    )
+    conversation = ExternalIntegrationCreateConversation(
+        text='Conversation evidence', started_at=datetime.now(timezone.utc)
+    )
+    result, discarded = pc._get_structured(uid, 'en', conversation)
+    assert not discarded and result.title == expected
+    assert calls == (['old', 'new'] if mode == 'shadow' else [expected])
 
 
 @pytest.mark.parametrize('opt_in', [False, True])

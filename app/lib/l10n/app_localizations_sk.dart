@@ -12433,16 +12433,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Prispôsobujeme váš zážitok';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kým čakáte, páči sa vám používanie Omi?';
+  String get onboardingRatingPromptTitle => 'Páči sa vám Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Hodnotenie 5 hviezdičiek nám naozaj veľmi pomáha ❤️';
+  String get onboardingRatingPromptYes => 'Áno';
 
   @override
-  String get onboardingRatingPromptYes => 'Áno, chcem vás podporiť!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Nie celkom';
+  String get onboardingRatingPromptNo => 'Nie';
 
   @override
   String get partialRecording => 'Čiastočná nahrávka';
@@ -12461,4 +12458,201 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Tento typ súboru nie je možné importovať.';
+
+  @override
+  String get reviewTitle => 'Kontrola';
+
+  @override
+  String get reviewEntryTitle => 'Otázky pre vás';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Zostáva $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kto to povedal?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Je to ten istý človek ako „$name“?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Ako sa to píše?';
+
+  @override
+  String get reviewPlayClip => 'Prehrať úryvok';
+
+  @override
+  String get reviewStopClip => 'Zastaviť úryvok';
+
+  @override
+  String get reviewOpenDetailsHint => 'Otvorí podrobnosti';
+
+  @override
+  String get reviewAnswerMe => 'Ja';
+
+  @override
+  String get reviewAnswerOther => 'Iné';
+
+  @override
+  String get reviewAddTask => 'Pridať úlohu';
+
+  @override
+  String get reviewAnswerFailed => 'Odpoveď sa nepodarilo uložiť. Skúste to znova.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Táto odpoveď označí konverzácie: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Neznámy rečník';
+
+  @override
+  String get reviewNewPersonName => 'Ich meno';
+
+  @override
+  String get reviewSomeoneElse => 'Niekto iný…';
+
+  @override
+  String get reviewConfirm => 'Potvrdiť';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Potvrdiť: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Neviem';
+
+  @override
+  String get reviewOpenConversation => 'Konverzácia';
+
+  @override
+  String get reviewTaskField => 'Úloha';
+
+  @override
+  String get reviewDue => 'Termín';
+
+  @override
+  String get reviewNoDate => 'Žiadny';
+
+  @override
+  String get reviewProject => 'Projekt';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Už hotovo';
+
+  @override
+  String get reviewReasonNotMine => 'Nie je moja';
+
+  @override
+  String get reviewReasonNotUseful => 'Nie je užitočné';
+
+  @override
+  String get reviewYesMerge => 'Áno, zlúčiť';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Konverzácie: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Zadať ručne';
+
+  @override
+  String get reviewLoadFailed => 'Vaše otázky sa nepodarilo načítať.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nie je na čo odpovedať';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi sa tu opýta, len keď vás bude potrebovať.';
+
+  @override
+  String get reviewRecentChanges => 'Nedávne zmeny';
+
+  @override
+  String get reviewChangesIntro => 'Čo Omi samo zmenilo za posledných 30 dní. Vráťte späť všetko, čo vyzerá zle.';
+
+  @override
+  String get reviewChangeUndone => 'Vrátené späť. Omi to samo znova neurobí.';
+
+  @override
+  String get reviewChangeFailed => 'Túto zmenu sa nepodarilo aktualizovať. Skúste to znova.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Nedávne zmeny sa nepodarilo načítať.';
+
+  @override
+  String get reviewNoChangesTitle => 'Zatiaľ žiadne zmeny';
+
+  @override
+  String get reviewNoChangesBody => 'Keď Omi upratá vaše poznámky, zmeny sa zobrazia tu.';
+
+  @override
+  String get reviewShowMore => 'Zobraziť viac';
+
+  @override
+  String get entityKeptCurrent => 'Aktuálnosť udržiava Omi';
+
+  @override
+  String get entityNotRight => 'Nie je to správne?';
+
+  @override
+  String get entityCorrectionTitle => 'Čo nie je správne?';
+
+  @override
+  String get entityCorrectionHint => 'Povedzte Omi, čo opraviť';
+
+  @override
+  String get entityCorrectionSaved => 'Vďaka. Omi to opraví.';
+
+  @override
+  String get entityCorrectionFailed => 'Opravu sa nepodarilo odoslať. Skúste to znova.';
+
+  @override
+  String get entityLoadFailed => 'Túto stránku sa nepodarilo načítať.';
+
+  @override
+  String get entityProject => 'Projekt';
+
+  @override
+  String get entityProjects => 'Projekty';
+
+  @override
+  String get entityDecisions => 'Rozhodnutia';
+
+  @override
+  String get entityOpenTasks => 'Otvorené úlohy';
+
+  @override
+  String get entityOpenThreads => 'Otvorené témy';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Čaká sa na: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Termín: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Čo Omi vie';
+
+  @override
+  String get entityRecentConversations => 'Nedávne konverzácie';
+
+  @override
+  String get tasksNoProject => 'Bez projektu';
+
+  @override
+  String get tasksGroupByProject => 'Zoskupiť podľa projektu';
+
+  @override
+  String get tasksGroupByDate => 'Zoskupiť podľa dátumu';
 }

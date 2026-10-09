@@ -49,10 +49,8 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
 
-# Declared on every finalization host with the same literal, or live capture
-# (backend-listen / pusher / backend-sync) and regenerate (cloud_run/backend)
-# silently run different pipelines. An omitted flag must fail admission, not
-# fall through to the process-local False default.
+# Remaining summary context flags must agree on every finalization host; an
+# omitted declaration must fail admission rather than use the code default.
 SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',

@@ -136,12 +136,18 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     )
     if not succeeded:
         raise RuntimeError('app fanout first-open effect failed')
-    if not conversation.apps_results:
-        authorize('app_fanout')
-        patch = {
+    patch = (
+        {
             'apps_results': [result.dict() for result in conversation.apps_results],
             'suggested_summarization_apps': conversation.suggested_summarization_apps,
         }
+        if processing.conversation_apps_opt_in_only()
+        or conversation.apps_results
+        or conversation.suggested_summarization_apps
+        else None
+    )
+    if patch and not conversation.apps_results:
+        authorize('app_fanout')
         if not processing.conversations_db.commit_first_open_conversation_patch(
             uid, conversation.id, token, 'app_fanout', patch
         ):

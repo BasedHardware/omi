@@ -79,7 +79,8 @@ def pipeline(monkeypatch):
     # visibly, rather than persisting an incoherent discard/keep combination.
     paid_notes = MagicMock(return_value=Structured())
     monkeypatch.setattr(pc, 'get_conversation_notes', paid_notes)
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args, **kwargs: [])
+    monkeypatch.setattr(pc, 'get_conversation_notes', paid_notes)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
     decisions = []
     decide = pc.decide_relevance
 

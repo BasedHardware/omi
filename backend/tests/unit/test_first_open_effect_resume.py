@@ -33,9 +33,6 @@ def _install_common(monkeypatch, conversation, completed: list[str]) -> None:
     monkeypatch.setattr(processing.conversations_db, "commit_first_open_app_result", lambda *_args: True)
     monkeypatch.setattr(processing.conversations_db, "commit_first_open_app_usage", lambda *_args: True)
     monkeypatch.setattr(
-        processing.conversations_db, "commit_first_open_conversation_patch", lambda *_args, **_kwargs: True
-    )
-    monkeypatch.setattr(
         processing,
         "resolve_authorized_first_open_plan",
         lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
@@ -48,6 +45,7 @@ def _install_common(monkeypatch, conversation, completed: list[str]) -> None:
         ),
     )
     monkeypatch.setattr(processing, "trigger_conversation_apps", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(processing, "conversation_apps_opt_in_only", lambda: False)
 
 
 def test_retry_skips_completed_effects_and_ignores_legacy_goal_rows(monkeypatch) -> None:
@@ -326,7 +324,6 @@ def test_first_open_app_retry_preserves_already_persisted_result(monkeypatch) ->
         description="summary",
         image="/app.png",
         capabilities={"memories"},
-        enabled=True,
     )
     conversation = SimpleNamespace(
         id="conversation",
@@ -336,8 +333,10 @@ def test_first_open_app_retry_preserves_already_persisted_result(monkeypatch) ->
         suggested_summarization_apps=["app-1"],
         source="desktop",
     )
-    monkeypatch.setattr(processing, "get_available_apps", lambda _uid: [app])
-    monkeypatch.setattr(processing.redis_db, "get_user_preferred_app", lambda _uid: "app-1")
+    monkeypatch.setattr(processing, "conversation_apps_opt_in_only", lambda: False)
+    monkeypatch.setattr(processing, "get_default_conversation_summarized_apps", lambda: [app])
+    monkeypatch.setattr(processing, "get_available_apps", lambda _uid: [])
+    monkeypatch.setattr(processing.redis_db, "get_user_preferred_app", lambda _uid: None)
     monkeypatch.setattr(
         processing,
         "get_app_result",
@@ -367,7 +366,6 @@ def test_first_open_app_result_is_persisted_before_usage(monkeypatch) -> None:
         description="summary",
         image="/app.png",
         capabilities={"memories"},
-        enabled=True,
     )
     conversation = SimpleNamespace(
         id="conversation",
@@ -378,8 +376,10 @@ def test_first_open_app_result_is_persisted_before_usage(monkeypatch) -> None:
         source="desktop",
     )
     calls: list[str] = []
-    monkeypatch.setattr(processing, "get_available_apps", lambda _uid: [app])
-    monkeypatch.setattr(processing.redis_db, "get_user_preferred_app", lambda _uid: "app-1")
+    monkeypatch.setattr(processing, "conversation_apps_opt_in_only", lambda: False)
+    monkeypatch.setattr(processing, "get_default_conversation_summarized_apps", lambda: [app])
+    monkeypatch.setattr(processing, "get_available_apps", lambda _uid: [])
+    monkeypatch.setattr(processing.redis_db, "get_user_preferred_app", lambda _uid: None)
     monkeypatch.setattr(processing, "conversation_transcript_for_llm", lambda *_args: "transcript")
     monkeypatch.setattr(processing, "get_app_result", lambda *_args, **_kwargs: "durable result")
 

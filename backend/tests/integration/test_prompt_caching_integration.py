@@ -37,7 +37,7 @@ MODEL = "gpt-5.1"
 
 # ---------------------------------------------------------------------------
 #  Production-length instruction text (must be >1024 tokens for caching)
-#  This mirrors the extract_action_items instructions from conversation_processing.py
+#  Historical action-item prompt fixture retained for cache comparison.
 # ---------------------------------------------------------------------------
 
 ACTION_ITEMS_INSTRUCTIONS = """You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
@@ -233,9 +233,8 @@ Speaker 0: Good point. I'll add that to my list. Also, remind me to pick up the 
 class TestSameUserSameConversation:
     """Test intra-conversation caching: same user calls structure + action_items on the same transcript.
 
-    Each conversation could trigger two sequential LLM calls (structure
-    then extract_action_items). Since both share the same static instruction prefix, the second
-    call should get a cache hit on that prefix even though the instructions differ after the prefix.
+    The notes writer now performs summary and action-item extraction together; this
+    historical two-call cache fixture remains a comparison of prefix behavior.
 
     More importantly, calling the SAME function twice with identical messages should produce
     a near-complete cache hit (all tokens cached).

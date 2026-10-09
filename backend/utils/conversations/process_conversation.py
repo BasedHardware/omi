@@ -38,7 +38,7 @@ from database.vector_db import (
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
 )
-from database.apps import record_app_usage, get_omi_personas_by_uid_db
+from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
@@ -174,9 +174,10 @@ from utils.executors import llm_executor, postprocess_executor, submit_with_cont
 from utils.llm.conversation_processing import (
     get_app_result,
     should_discard_conversation,
+    get_suggested_apps_for_conversation,
     get_conversation_notes,
+    validate_structured_source_segment_ids,
 )
-from utils.llm.meeting_notes_validation import validate_structured_source_segment_ids
 from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
@@ -306,6 +307,11 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     """
 
 
+def conversation_apps_opt_in_only() -> bool:
+    """Summarization apps require explicit selection on the notes v2 path."""
+    return True
+
+
 def _calendar_context_read_enabled() -> bool:
     return _flag_enabled('CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED')
 
@@ -387,6 +393,7 @@ def _get_structured(
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
+
                 roster: Optional[MeetingRoster] = None
                 meeting_context_block: Optional[str] = None
                 episode_enabled = _meeting_notes_episode_evidence_enabled(uid)
@@ -582,6 +589,7 @@ def _get_structured(
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
+
         roster: Optional[MeetingRoster] = None
         meeting_context_block: Optional[str] = None
         desktop_capture, screen_frames = False, ()
@@ -715,6 +723,38 @@ def _get_conversation_obj(
         return main_conv
 
 
+# Function to get conversation summary apps from Redis
+def get_default_conversation_summarized_apps() -> List[App]:
+    """
+    Get conversation summary apps from Redis.
+    Falls back to environment variable if Redis is empty.
+    """
+    default_apps: List[App] = []
+
+    # Try to get from Redis first
+    redis_app_ids = redis_db.get_conversation_summary_app_ids()
+
+    if redis_app_ids:
+        # Use apps from Redis. A malformed/legacy stored app doc must be skipped, not fail the
+        # whole conversation's processing (same class as the chat/app fetch guards).
+        for app_id in redis_app_ids:
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
+    else:
+        # Fallback to environment variable for backward compatibility
+        env_app_ids = os.getenv(
+            'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
+        ).split(',')
+
+        for app_id in env_app_ids:
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
+
+    return default_apps
+
+
 def trigger_conversation_apps(
     uid: str,
     conversation: Conversation,
@@ -734,12 +774,21 @@ def trigger_conversation_apps(
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
 
-    # User's installed apps (only used for preferred app lookup and reprocessing)
+    # Get default apps for auto-selection
+    opt_in_only = conversation_apps_opt_in_only()
+    default_apps = [] if opt_in_only else get_default_conversation_summarized_apps()
+    default_apps_dict = {app.id: app for app in default_apps}
+
+    # Also get user's installed apps (only used for preferred app lookup and reprocessing)
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
 
-    # Dict for looking up preferred apps or specific app_id requests
+    # Combined dict for looking up preferred apps or specific app_id requests
     all_apps_dict = {app.id: app for app in conversation_apps}
+    all_apps_dict.update(default_apps_dict)
+
+    # Combined list for suggestions: default apps + user's installed apps (no duplicates)
+    all_suggestion_apps = list(all_apps_dict.values())
 
     app_to_run: Optional[App] = None
 
@@ -749,7 +798,7 @@ def trigger_conversation_apps(
             raise ValueError('explicit app selection must be validated before conversation processing')
         app_to_run = explicit_app
     else:
-        # Summarization apps are opt-in: only a usable preferred app runs automatically.
+        # Check preferred app first — skip the suggestion LLM call if user has one
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
@@ -770,9 +819,26 @@ def trigger_conversation_apps(
             else:
                 logger.warning(
                     f"Preferred app {preferred_app_id} is set but unusable "
-                    f"(missing={candidate is None}); skipping automatic app selection {uid}"
+                    f"(missing={candidate is None}); falling back to suggestions {uid}"
                 )
-        if app_to_run is None:
+        if app_to_run is None and not opt_in_only:
+            # Only run suggestion LLM call when no usable preferred app is set
+            if not conversation.suggested_summarization_apps:
+                if resumable_effect_authorizer is not None:
+                    resumable_effect_authorizer()
+                with track_usage(uid, Features.CONVERSATION_APPS):
+                    suggested_apps, _reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+                conversation.suggested_summarization_apps = suggested_apps
+                logger.info(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+
+            if conversation.suggested_summarization_apps:
+                first_suggested_app_id = conversation.suggested_summarization_apps[0]
+                app_to_run = all_apps_dict.get(first_suggested_app_id)
+                if app_to_run:
+                    logger.info(f"Using first suggested app: {app_to_run.name}")
+                else:
+                    logger.warning(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+        elif app_to_run is None:
             logger.info('Summarization apps are opt-in only; skipping automatic app selection')
 
     completed_app_ids = {result.app_id for result in conversation.apps_results} if preserve_existing_results else set()

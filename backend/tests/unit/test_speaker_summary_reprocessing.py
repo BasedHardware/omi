@@ -36,10 +36,9 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *a, **k: 'Owner')
     monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
     prompts = []
 
-    def summarize(prefix, **_kwargs):
+    def summarize(prefix, *a, **k):
         prompts.append(prefix.context)
         return Structured(overview='Updated summary')
 
@@ -52,5 +51,4 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
         trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
     assert not discarded and result.overview == 'Updated summary'
-    # Notes deliver identity once through the speaker map, not as a `Name:` dialogue label.
     assert len(prompts) == 1 and 'Correct Name' in prompts[0] and 'Synthetic meeting text' in prompts[0]

@@ -12431,16 +12431,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Sinu kogemuse isikupärastamine';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kuni ootad, kas Omi kasutamine on meeldiv olnud?';
+  String get onboardingRatingPromptTitle => 'Kas Omi meeldib sulle?';
 
   @override
-  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+  String get onboardingRatingPromptYes => 'Jah';
 
   @override
-  String get onboardingRatingPromptYes => 'Jah, tahan teid toetada!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Pigem mitte';
+  String get onboardingRatingPromptNo => 'Ei';
 
   @override
   String get partialRecording => 'Osaline salvestus';
@@ -12459,4 +12456,202 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Seda failitüüpi ei saa importida.';
+
+  @override
+  String get reviewTitle => 'Ülevaatus';
+
+  @override
+  String get reviewEntryTitle => 'Küsimused sulle';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Jäänud $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kes seda ütles?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Sama inimene mis „$name“?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Kuidas seda kirjutatakse?';
+
+  @override
+  String get reviewPlayClip => 'Esita klipp';
+
+  @override
+  String get reviewStopClip => 'Peata klipp';
+
+  @override
+  String get reviewOpenDetailsHint => 'Avab üksikasjad';
+
+  @override
+  String get reviewAnswerMe => 'Mina';
+
+  @override
+  String get reviewAnswerOther => 'Muu';
+
+  @override
+  String get reviewAddTask => 'Lisa ülesanne';
+
+  @override
+  String get reviewAnswerFailed => 'Vastust ei õnnestunud salvestada. Proovi uuesti.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'See vastus märgistab vestlusi: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Tundmatu kõneleja';
+
+  @override
+  String get reviewNewPersonName => 'Nende nimi';
+
+  @override
+  String get reviewSomeoneElse => 'Keegi teine…';
+
+  @override
+  String get reviewConfirm => 'Kinnita';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Kinnita: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Pole kindel';
+
+  @override
+  String get reviewOpenConversation => 'Vestlus';
+
+  @override
+  String get reviewTaskField => 'Ülesanne';
+
+  @override
+  String get reviewDue => 'Tähtaeg';
+
+  @override
+  String get reviewNoDate => 'Puudub';
+
+  @override
+  String get reviewProject => 'Projekt';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Juba tehtud';
+
+  @override
+  String get reviewReasonNotMine => 'Pole minu oma';
+
+  @override
+  String get reviewReasonNotUseful => 'Pole kasulik';
+
+  @override
+  String get reviewYesMerge => 'Jah, ühenda';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Vestlusi: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Sisesta ise';
+
+  @override
+  String get reviewLoadFailed => 'Sinu küsimusi ei õnnestunud laadida.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Pole midagi vastata';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi küsib siin ainult siis, kui tal on sind vaja.';
+
+  @override
+  String get reviewRecentChanges => 'Hiljutised muudatused';
+
+  @override
+  String get reviewChangesIntro =>
+      'Mida Omi on viimase 30 päeva jooksul ise muutnud. Võta tagasi kõik, mis tundub vale.';
+
+  @override
+  String get reviewChangeUndone => 'Tagasi võetud. Omi ei tee seda ise uuesti.';
+
+  @override
+  String get reviewChangeFailed => 'Muudatust ei õnnestunud värskendada. Proovi uuesti.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Hiljutisi muudatusi ei õnnestunud laadida.';
+
+  @override
+  String get reviewNoChangesTitle => 'Muudatusi pole veel';
+
+  @override
+  String get reviewNoChangesBody => 'Kui Omi su märkmeid korrastab, ilmuvad muudatused siia.';
+
+  @override
+  String get reviewShowMore => 'Näita rohkem';
+
+  @override
+  String get entityKeptCurrent => 'Omi hoiab ajakohasena';
+
+  @override
+  String get entityNotRight => 'Pole õige?';
+
+  @override
+  String get entityCorrectionTitle => 'Mis pole õige?';
+
+  @override
+  String get entityCorrectionHint => 'Ütle Omile, mida parandada';
+
+  @override
+  String get entityCorrectionSaved => 'Aitäh. Omi parandab selle.';
+
+  @override
+  String get entityCorrectionFailed => 'Parandust ei õnnestunud saata. Proovi uuesti.';
+
+  @override
+  String get entityLoadFailed => 'Seda lehte ei õnnestunud laadida.';
+
+  @override
+  String get entityProject => 'Projekt';
+
+  @override
+  String get entityProjects => 'Projektid';
+
+  @override
+  String get entityDecisions => 'Otsused';
+
+  @override
+  String get entityOpenTasks => 'Avatud ülesanded';
+
+  @override
+  String get entityOpenThreads => 'Avatud teemad';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Ootab: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Tähtaeg $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Mida Omi teab';
+
+  @override
+  String get entityRecentConversations => 'Hiljutised vestlused';
+
+  @override
+  String get tasksNoProject => 'Projekti pole';
+
+  @override
+  String get tasksGroupByProject => 'Rühmita projekti järgi';
+
+  @override
+  String get tasksGroupByDate => 'Rühmita kuupäeva järgi';
 }

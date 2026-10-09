@@ -45,6 +45,7 @@ _STUBBED = [
     'av',
     'database._client',
     'database.firestore_read_metrics',
+    'database.review_store',
     'database.cache',
     'database.redis_db',
     'database.conversations',

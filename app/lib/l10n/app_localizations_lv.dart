@@ -12465,16 +12465,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Tiek personalizēta jūsu pieredze';
 
   @override
-  String get onboardingRatingPromptTitle => 'Kamēr gaidāt, vai Omi ir bijis patīkami lietot?';
+  String get onboardingRatingPromptTitle => 'Vai jums patīk Omi?';
 
   @override
-  String get onboardingRatingPromptBody => '5 zvaigžņu vērtējums mums ļoti palīdz ❤️';
+  String get onboardingRatingPromptYes => 'Jā';
 
   @override
-  String get onboardingRatingPromptYes => 'Jā, es vēlos jūs atbalstīt!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Ne gluži';
+  String get onboardingRatingPromptNo => 'Nē';
 
   @override
   String get partialRecording => 'Daļējs ieraksts';
@@ -12493,4 +12490,202 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Šāda veida failu nevar importēt.';
+
+  @override
+  String get reviewTitle => 'Pārskatīšana';
+
+  @override
+  String get reviewEntryTitle => 'Jautājumi jums';
+
+  @override
+  String reviewRemaining(int count) {
+    return 'Atlikuši: $count';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Kas to teica?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Vai tā ir tā pati persona, kas „$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Kā tas tiek rakstīts?';
+
+  @override
+  String get reviewPlayClip => 'Atskaņot fragmentu';
+
+  @override
+  String get reviewStopClip => 'Apturēt fragmentu';
+
+  @override
+  String get reviewOpenDetailsHint => 'Atver detaļas';
+
+  @override
+  String get reviewAnswerMe => 'Es';
+
+  @override
+  String get reviewAnswerOther => 'Cits';
+
+  @override
+  String get reviewAddTask => 'Pievienot uzdevumu';
+
+  @override
+  String get reviewAnswerFailed => 'Neizdevās saglabāt atbildi. Mēģiniet vēlreiz.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Šī atbilde atzīmē sarunas: $count';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Nezināms runātājs';
+
+  @override
+  String get reviewNewPersonName => 'Viņu vārds';
+
+  @override
+  String get reviewSomeoneElse => 'Kāds cits…';
+
+  @override
+  String get reviewConfirm => 'Apstiprināt';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Apstiprināt: $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Neesmu pārliecināts';
+
+  @override
+  String get reviewOpenConversation => 'Saruna';
+
+  @override
+  String get reviewTaskField => 'Uzdevums';
+
+  @override
+  String get reviewDue => 'Termiņš';
+
+  @override
+  String get reviewNoDate => 'Nav';
+
+  @override
+  String get reviewProject => 'Projekts';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Jau izdarīts';
+
+  @override
+  String get reviewReasonNotMine => 'Nav mans';
+
+  @override
+  String get reviewReasonNotUseful => 'Nav noderīgs';
+
+  @override
+  String get reviewYesMerge => 'Jā, apvienot';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Sarunas: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'Ievadīt';
+
+  @override
+  String get reviewLoadFailed => 'Neizdevās ielādēt jūsu jautājumus.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Nav, uz ko atbildēt';
+
+  @override
+  String get reviewCaughtUpBody => 'Omi šeit jautās tikai tad, kad būs vajadzīgs jūsu padoms.';
+
+  @override
+  String get reviewRecentChanges => 'Nesenās izmaiņas';
+
+  @override
+  String get reviewChangesIntro =>
+      'Ko Omi pats ir mainījis pēdējo 30 dienu laikā. Atceliet visu, kas izskatās nepareizi.';
+
+  @override
+  String get reviewChangeUndone => 'Atcelts. Omi to pats neatkārtos.';
+
+  @override
+  String get reviewChangeFailed => 'Neizdevās atjaunināt šo izmaiņu. Mēģiniet vēlreiz.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Neizdevās ielādēt nesenās izmaiņas.';
+
+  @override
+  String get reviewNoChangesTitle => 'Izmaiņu vēl nav';
+
+  @override
+  String get reviewNoChangesBody => 'Kad Omi sakārtos jūsu piezīmes, izmaiņas parādīsies šeit.';
+
+  @override
+  String get reviewShowMore => 'Rādīt vairāk';
+
+  @override
+  String get entityKeptCurrent => 'Aktuālu uztur Omi';
+
+  @override
+  String get entityNotRight => 'Nav pareizi?';
+
+  @override
+  String get entityCorrectionTitle => 'Kas nav pareizi?';
+
+  @override
+  String get entityCorrectionHint => 'Pastāstiet Omi, kas jālabo';
+
+  @override
+  String get entityCorrectionSaved => 'Paldies. Omi to izlabos.';
+
+  @override
+  String get entityCorrectionFailed => 'Neizdevās nosūtīt labojumu. Mēģiniet vēlreiz.';
+
+  @override
+  String get entityLoadFailed => 'Neizdevās ielādēt šo lapu.';
+
+  @override
+  String get entityProject => 'Projekts';
+
+  @override
+  String get entityProjects => 'Projekti';
+
+  @override
+  String get entityDecisions => 'Lēmumi';
+
+  @override
+  String get entityOpenTasks => 'Atvērtie uzdevumi';
+
+  @override
+  String get entityOpenThreads => 'Atvērtie jautājumi';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Gaida: $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Termiņš: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Ko Omi zina';
+
+  @override
+  String get entityRecentConversations => 'Nesenās sarunas';
+
+  @override
+  String get tasksNoProject => 'Nav projekta';
+
+  @override
+  String get tasksGroupByProject => 'Grupēt pēc projekta';
+
+  @override
+  String get tasksGroupByDate => 'Grupēt pēc datuma';
 }

@@ -208,7 +208,6 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
             patch.object(pc, 'track_usage', lambda *args, **kwargs: nullcontext()),
             patch.object(pc, 'should_discard_conversation', gate),
             patch.object(pc, 'get_conversation_notes', MagicMock(return_value=_structured('Release probe reading'))),
-            patch.object(pc, '_fetch_dedup_candidates_for_query', MagicMock(return_value=[])),
             patch.object(pc.calendar_db, 'get_meetings_in_time_range', MagicMock(return_value=[])),
             patch.object(pc, 'get_overlapping_calendar_event', AsyncMock(return_value=None)),
         ):

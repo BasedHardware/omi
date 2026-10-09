@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -617,9 +618,12 @@ def _stub_sync_enrichment(monkeypatch, store):
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
     monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', _persist)
-    # Summarization apps are opt-in only, so the apps_results write-back always runs.
-    monkeypatch.setattr(module.conversations_db, 'update_conversation', lambda *args, **kwargs: True)
     monkeypatch.setattr(module.users_db, 'get_people_by_ids', lambda *args, **kwargs: [])
+
+    def _update(uid, conversation_id, updates):
+        store.rows[('users', uid, 'conversations', conversation_id)].update(updates)
+
+    monkeypatch.setattr(module.conversations_db, 'update_conversation', _update)
     monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2, 0.3])
     monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
 
@@ -784,8 +788,8 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
-    # Summarization apps are opt-in only, so the apps_results write-back always runs.
-    monkeypatch.setattr(module.conversations_db, 'update_conversation', lambda *args, **kwargs: True)
+    monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
+    monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 
 def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch):

@@ -12538,16 +12538,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingSetupStepPersonalize => 'Pini-personalize ang iyong karanasan';
 
   @override
-  String get onboardingRatingPromptTitle => 'Habang naghihintay, masarap bang gamitin ang Omi?';
+  String get onboardingRatingPromptTitle => 'Nag-e-enjoy ka ba sa Omi?';
 
   @override
-  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
+  String get onboardingRatingPromptYes => 'Oo';
 
   @override
-  String get onboardingRatingPromptYes => 'Oo, gusto ko kayong suportahan!';
-
-  @override
-  String get onboardingRatingPromptNo => 'Hindi masyado';
+  String get onboardingRatingPromptNo => 'Hindi';
 
   @override
   String get partialRecording => 'Bahagyang pagrekord';
@@ -12566,4 +12563,202 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get importUnsupportedFileType => 'Hindi ma-import ang ganitong uri ng file.';
+
+  @override
+  String get reviewTitle => 'Review';
+
+  @override
+  String get reviewEntryTitle => 'Mga tanong para sa iyo';
+
+  @override
+  String reviewRemaining(int count) {
+    return '$count na lang';
+  }
+
+  @override
+  String get reviewQuestionSpeaker => 'Sino ang nagsabi nito?';
+
+  @override
+  String reviewQuestionSamePerson(String name) {
+    return 'Siya rin ba si “$name”?';
+  }
+
+  @override
+  String get reviewQuestionSpelling => 'Paano ito ibabaybay?';
+
+  @override
+  String get reviewPlayClip => 'I-play ang clip';
+
+  @override
+  String get reviewStopClip => 'Ihinto ang clip';
+
+  @override
+  String get reviewOpenDetailsHint => 'Binubuksan ang mga detalye';
+
+  @override
+  String get reviewAnswerMe => 'Ako';
+
+  @override
+  String get reviewAnswerOther => 'Iba pa';
+
+  @override
+  String get reviewAddTask => 'Magdagdag ng Task';
+
+  @override
+  String get reviewAnswerFailed => 'Hindi na-save ang sagot mo. Subukan ulit.';
+
+  @override
+  String reviewAnswersConversations(int count) {
+    return 'Nilalagyan ng label ng sagot na ito ang $count usapan';
+  }
+
+  @override
+  String get reviewUnknownSpeaker => 'Hindi kilalang nagsasalita';
+
+  @override
+  String get reviewNewPersonName => 'Pangalan nila';
+
+  @override
+  String get reviewSomeoneElse => 'May iba pa…';
+
+  @override
+  String get reviewConfirm => 'Kumpirmahin';
+
+  @override
+  String reviewConfirmPerson(String name) {
+    return 'Kumpirmahin si $name';
+  }
+
+  @override
+  String get reviewNotSure => 'Hindi sigurado';
+
+  @override
+  String get reviewOpenConversation => 'Usapan';
+
+  @override
+  String get reviewTaskField => 'Task';
+
+  @override
+  String get reviewDue => 'Takdang petsa';
+
+  @override
+  String get reviewNoDate => 'Wala';
+
+  @override
+  String get reviewProject => 'Proyekto';
+
+  @override
+  String get reviewReasonAlreadyDone => 'Tapos na';
+
+  @override
+  String get reviewReasonNotMine => 'Hindi akin';
+
+  @override
+  String get reviewReasonNotUseful => 'Hindi nakatutulong';
+
+  @override
+  String get reviewYesMerge => 'Oo, pagsamahin';
+
+  @override
+  String reviewConversationCount(int count) {
+    return 'Mga usapan: $count';
+  }
+
+  @override
+  String get reviewSpellingCustom => 'I-type';
+
+  @override
+  String get reviewLoadFailed => 'Hindi na-load ang mga tanong mo.';
+
+  @override
+  String get reviewCaughtUpTitle => 'Walang sasagutin';
+
+  @override
+  String get reviewCaughtUpBody => 'Magtatanong lang ang Omi dito kapag kailangan ka niya.';
+
+  @override
+  String get reviewRecentChanges => 'Mga Kamakailang Pagbabago';
+
+  @override
+  String get reviewChangesIntro =>
+      'Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.';
+
+  @override
+  String get reviewChangeUndone => 'Na-undo na. Hindi na ito uulitin ng Omi nang mag-isa.';
+
+  @override
+  String get reviewChangeFailed => 'Hindi na-update ang pagbabagong ito. Subukan ulit.';
+
+  @override
+  String get reviewChangesLoadFailed => 'Hindi na-load ang mga kamakailang pagbabago.';
+
+  @override
+  String get reviewNoChangesTitle => 'Wala pang pagbabago';
+
+  @override
+  String get reviewNoChangesBody => 'Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.';
+
+  @override
+  String get reviewShowMore => 'Magpakita Pa';
+
+  @override
+  String get entityKeptCurrent => 'Pinananatiling napapanahon ng Omi';
+
+  @override
+  String get entityNotRight => 'Mali ba?';
+
+  @override
+  String get entityCorrectionTitle => 'Ano ang mali?';
+
+  @override
+  String get entityCorrectionHint => 'Sabihin sa Omi kung ano ang aayusin';
+
+  @override
+  String get entityCorrectionSaved => 'Salamat. Aayusin ito ng Omi.';
+
+  @override
+  String get entityCorrectionFailed => 'Hindi naipadala ang pagwawasto mo. Subukan ulit.';
+
+  @override
+  String get entityLoadFailed => 'Hindi na-load ang page na ito.';
+
+  @override
+  String get entityProject => 'Proyekto';
+
+  @override
+  String get entityProjects => 'Mga proyekto';
+
+  @override
+  String get entityDecisions => 'Mga desisyon';
+
+  @override
+  String get entityOpenTasks => 'Mga bukas na task';
+
+  @override
+  String get entityOpenThreads => 'Mga bukas na usapin';
+
+  @override
+  String entityWaitingOn(String name) {
+    return 'Naghihintay kay $name';
+  }
+
+  @override
+  String entityDue(String date) {
+    return 'Takdang petsa: $date';
+  }
+
+  @override
+  String get entityWhatOmiKnows => 'Ang alam ng Omi';
+
+  @override
+  String get entityRecentConversations => 'Mga kamakailang usapan';
+
+  @override
+  String get tasksNoProject => 'Walang proyekto';
+
+  @override
+  String get tasksGroupByProject => 'I-group ayon sa Proyekto';
+
+  @override
+  String get tasksGroupByDate => 'I-group ayon sa Petsa';
 }

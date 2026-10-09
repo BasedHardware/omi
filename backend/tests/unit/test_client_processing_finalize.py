@@ -184,6 +184,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
+        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
@@ -1202,7 +1203,7 @@ def _capture_segment_write(monkeypatch: pytest.MonkeyPatch, conv: Any) -> dict[s
     return captured
 
 
-# red-proof: skip `_invalidate_client_processing` so the text write leaves client_processing attached
+# red-proof: skip `invalidate_client_processing` so the text write leaves client_processing attached
 def test_segment_text_edit_clears_projection_in_the_same_write(monkeypatch) -> None:
     snapshot = {
         'data_protection_level': 'standard',
@@ -1247,7 +1248,7 @@ def test_segment_text_edit_without_projection_does_not_touch_other_fields(monkey
     assert {segment['id']: segment['text'] for segment in _decoded_segments(payload)} == {'s1': 'new text'}
 
 
-# red-proof: still call `_invalidate_client_processing` on the not-found path
+# red-proof: still call `invalidate_client_processing` on the not-found path
 def test_segment_text_edit_does_not_clear_when_mutation_does_not_write(monkeypatch) -> None:
     snapshot = {
         'data_protection_level': 'standard',
@@ -1263,7 +1264,7 @@ def test_segment_text_edit_does_not_clear_when_mutation_does_not_write(monkeypat
     assert ref.update_calls == []
 
 
-# red-proof: skip `_invalidate_client_processing` when the flag is set
+# red-proof: skip `invalidate_client_processing` when the flag is set
 def test_attribution_segment_write_clears_projection_in_the_same_write(monkeypatch) -> None:
     monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     client = _SegmentWriteClient(

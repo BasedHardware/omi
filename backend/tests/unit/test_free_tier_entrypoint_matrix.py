@@ -159,6 +159,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
+        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())

@@ -36,6 +36,7 @@ backend/tests/unit/test_conversation_hybrid_search.py
 backend/tests/unit/test_conversation_redact_enrich.py
 backend/tests/unit/test_conversation_render_factory.py
 backend/tests/unit/test_conversation_source_unknown.py
+backend/tests/unit/test_conversation_structure_timezone.py
 backend/tests/unit/test_conversations_to_string.py
 backend/tests/unit/test_daily_notification_timezone_selection.py
 backend/tests/unit/test_dev_api_action_items_poison.py
