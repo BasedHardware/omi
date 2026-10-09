@@ -4,13 +4,16 @@ Calendar onboarding router.
 Guides new users through Google Calendar connection during onboarding.
 """
 
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import database.users as users_db
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -67,7 +70,12 @@ def _calendar_onboarding_state(integration: Optional[dict]) -> dict:
 def get_calendar_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """Return the calendar onboarding state, including whether a previously-connected calendar now
     needs reconnecting (its OAuth token expired)."""
-    return _calendar_onboarding_state(users_db.get_integration(uid, 'google_calendar'))
+    try:
+        integration = users_db.get_integration(uid, 'google_calendar')
+    except Exception as e:
+        logger.error(f'Failed to get calendar onboarding integration for {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to retrieve calendar onboarding status') from e
+    return _calendar_onboarding_state(integration)
 
 
 @router.post(
@@ -77,7 +85,11 @@ def get_calendar_onboarding_status(uid: str = Depends(auth.get_current_user_uid)
 )
 def skip_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     """Mark calendar onboarding as skipped so the prompt is not shown again."""
-    users_db.set_integration(uid, 'google_calendar', {'onboarding_skipped': True})
+    try:
+        users_db.set_integration(uid, 'google_calendar', {'onboarding_skipped': True})
+    except Exception as e:
+        logger.error(f'Failed to skip calendar onboarding for {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to skip calendar onboarding') from e
     return {'skipped': True}
 
 
@@ -90,7 +102,11 @@ class CalendarOnboardingResetResponse(BaseModel):
 )
 def reset_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     """Clear the skipped / reauth flags so the connect-calendar prompt is shown again."""
-    users_db.set_integration(
-        uid, 'google_calendar', {'onboarding_skipped': False, 'reauth_required': False, 'reauth_reason': None}
-    )
+    try:
+        users_db.set_integration(
+            uid, 'google_calendar', {'onboarding_skipped': False, 'reauth_required': False, 'reauth_reason': None}
+        )
+    except Exception as e:
+        logger.error(f'Failed to reset calendar onboarding for {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to reset calendar onboarding') from e
     return {'reset': True}
