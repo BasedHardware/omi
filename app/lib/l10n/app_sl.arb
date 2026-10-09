@@ -11054,7 +11054,7 @@
     "helpAndAbout": "Pomoč in o aplikaciji",
     "speakerTagPromptTitle": "Pomagajte Omiju prepoznavati glasove",
     "speakerTagPromptSubtitle": "Hiter pregled glasov iz zadnjih dveh dni",
-    "speakerTagPromptIsThisYou": "Ste to vi?",
+    "speakerTagPromptIsThisYou": "Ste bili to vi?",
     "speakerTagPromptIsThisPerson": "Je to {name}?",
     "speakerTagPromptWhoIsThis": "Kdo je to?",
     "speakerTagPromptThatsMe": "To sem jaz",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Ujemanje glasu: {level}",
     "speakerTagPromptHintIdentify": "Vsak odgovor nauči Omi glasu in poveča zanesljivost te osebe.",
     "speakerTagPromptHintConfirm": "Da poveča zanesljivost osebe {name}.",
-    "speakerTagPromptHintOwner": "Ohranja vaš glasovni profil natančen, da vas Omi nikoli ne poimenuje kot koga drugega.",
+    "speakerTagPromptHintOwner": "Vaš odgovor označi samo predvajani odlomek.",
     "speakerTagPromptSavedAs": "Shranjeno kot {name}",
     "speakerTagPromptSavedAsYou": "Shranjeno kot vi",
     "speakerTagPromptIgnoredNote": "Omi vas o tem glasu ne bo več spraševal",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "Nedavni pogovori",
     "tasksNoProject": "Brez projekta",
     "tasksGroupByProject": "Združi po projektu",
-    "tasksGroupByDate": "Združi po datumu"
+    "tasksGroupByDate": "Združi po datumu",
+    "speakerTagPromptExcerptSaved": "Odgovor shranjen za ta odlomek."
 }

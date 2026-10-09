@@ -11091,7 +11091,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Greita paskutinių dviejų dienų balsų patikra';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ar tai jūs?';
+  String get speakerTagPromptIsThisYou => 'Ar tai buvote jūs?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12063,8 +12063,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Palaiko jūsų balso profilį tikslų, kad Omi niekada nepavadintų jūsų kitu asmeniu.';
+  String get speakerTagPromptHintOwner => 'Jūsų atsakymas žymi tik paleistą ištrauką.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12682,4 +12681,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Grupuoti pagal datą';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Atsakymas išsaugotas šiai ištraukai.';
 }

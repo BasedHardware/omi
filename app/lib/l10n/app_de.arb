@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Hilfe & Info",
     "speakerTagPromptTitle": "Hilf Omi, Stimmen zu erkennen",
     "speakerTagPromptSubtitle": "Ein kurzer Check der Stimmen der letzten zwei Tage",
-    "speakerTagPromptIsThisYou": "Bist du das?",
+    "speakerTagPromptIsThisYou": "Warst du das?",
     "speakerTagPromptIsThisPerson": "Ist das {name}?",
     "speakerTagPromptWhoIsThis": "Wer ist das?",
     "speakerTagPromptThatsMe": "Das bin ich",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Stimmübereinstimmung: {level}",
     "speakerTagPromptHintIdentify": "Jede Antwort bringt Omi eine Stimme bei und erhöht die Sicherheit für diese Person.",
     "speakerTagPromptHintConfirm": "Ja erhöht die Sicherheit für {name}.",
-    "speakerTagPromptHintOwner": "Hält dein eigenes Stimmprofil präzise, damit Omi dich nie als jemand anderen benennt.",
+    "speakerTagPromptHintOwner": "Deine Antwort kennzeichnet nur den abgespielten Ausschnitt.",
     "speakerTagPromptSavedAs": "Gespeichert als {name}",
     "speakerTagPromptSavedAsYou": "Als deine Stimme gespeichert",
     "speakerTagPromptIgnoredNote": "Omi fragt nicht mehr nach dieser Stimme",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Letzte Gespräche",
     "tasksNoProject": "Kein Projekt",
     "tasksGroupByProject": "Nach Projekt gruppieren",
-    "tasksGroupByDate": "Nach Datum gruppieren"
+    "tasksGroupByDate": "Nach Datum gruppieren",
+    "speakerTagPromptExcerptSaved": "Antwort für diesen Ausschnitt gespeichert."
 }

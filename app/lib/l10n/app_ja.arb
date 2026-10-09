@@ -3497,7 +3497,7 @@
     "helpAndAbout": "ヘルプとアプリについて",
     "speakerTagPromptTitle": "Omiが声を聞き分けられるようにしましょう",
     "speakerTagPromptSubtitle": "過去2日間の声をさっと確認",
-    "speakerTagPromptIsThisYou": "これはあなたですか？",
+    "speakerTagPromptIsThisYou": "これはあなたでしたか？",
     "speakerTagPromptIsThisPerson": "これは {name} さんですか？",
     "speakerTagPromptWhoIsThis": "これは誰ですか？",
     "speakerTagPromptThatsMe": "自分です",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "声の一致度: {level}",
     "speakerTagPromptHintIdentify": "回答するたびにOmiが声を覚え、その人の信頼度が上がります。",
     "speakerTagPromptHintConfirm": "「はい」で{name}さんの信頼度が上がります。",
-    "speakerTagPromptHintOwner": "あなた自身の声プロファイルを正確に保ち、Omiがあなたを別の人と判断しないようにします。",
+    "speakerTagPromptHintOwner": "回答は再生した抜粋にのみ適用されます。",
     "speakerTagPromptSavedAs": "{name}として保存しました",
     "speakerTagPromptSavedAsYou": "自分として保存しました",
     "speakerTagPromptIgnoredNote": "Omiはこの声について今後尋ねません",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "最近の会話",
     "tasksNoProject": "プロジェクトなし",
     "tasksGroupByProject": "プロジェクト別にグループ化",
-    "tasksGroupByDate": "日付別にグループ化"
+    "tasksGroupByDate": "日付別にグループ化",
+    "speakerTagPromptExcerptSaved": "この抜粋への回答を保存しました。"
 }

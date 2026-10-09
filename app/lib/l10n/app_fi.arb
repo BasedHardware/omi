@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Ohje ja tietoja",
     "speakerTagPromptTitle": "Auta Omia tunnistamaan äänet",
     "speakerTagPromptSubtitle": "Nopea tarkistus kahden viime päivän äänistä",
-    "speakerTagPromptIsThisYou": "Oletko tämä sinä?",
+    "speakerTagPromptIsThisYou": "Olitko tämä sinä?",
     "speakerTagPromptIsThisPerson": "Onko tämä {name}?",
     "speakerTagPromptWhoIsThis": "Kuka tämä on?",
     "speakerTagPromptThatsMe": "Se olen minä",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Äänen osuma: {level}",
     "speakerTagPromptHintIdentify": "Jokainen vastaus opettaa Omille äänen ja nostaa henkilön varmuutta.",
     "speakerTagPromptHintConfirm": "Kyllä nostaa henkilön {name} varmuutta.",
-    "speakerTagPromptHintOwner": "Pitää oman ääniprofiilisi tarkkana, jotta Omi ei koskaan nimeä sinua joksikin toiseksi.",
+    "speakerTagPromptHintOwner": "Vastauksesi merkitsee vain toistetun katkelman.",
     "speakerTagPromptSavedAs": "Tallennettu nimellä {name}",
     "speakerTagPromptSavedAsYou": "Tallennettu sinuksi",
     "speakerTagPromptIgnoredNote": "Omi ei kysy tästä äänestä enää",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Viimeisimmät keskustelut",
     "tasksNoProject": "Ei projektia",
     "tasksGroupByProject": "Ryhmittele projektin mukaan",
-    "tasksGroupByDate": "Ryhmittele päivämäärän mukaan"
+    "tasksGroupByDate": "Ryhmittele päivämäärän mukaan",
+    "speakerTagPromptExcerptSaved": "Vastaus tallennettu tälle katkelmalle."
 }

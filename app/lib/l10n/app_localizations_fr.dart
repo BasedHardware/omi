@@ -11164,7 +11164,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Une vérification rapide des voix des deux derniers jours';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Est-ce vous ?';
+  String get speakerTagPromptIsThisYou => 'Était-ce toi ?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12142,8 +12142,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Garde votre profil vocal précis pour qu\'Omi ne vous prenne jamais pour quelqu\'un d\'autre.';
+  String get speakerTagPromptHintOwner => 'Ta réponse identifie uniquement l’extrait écouté.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12763,4 +12762,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Grouper par date';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Réponse enregistrée pour cet extrait.';
 }

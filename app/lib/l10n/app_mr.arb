@@ -11054,7 +11054,7 @@
     "helpAndAbout": "मदत आणि माहिती",
     "speakerTagPromptTitle": "Omi ला आवाज ओळखायला मदत करा",
     "speakerTagPromptSubtitle": "गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी",
-    "speakerTagPromptIsThisYou": "हे तुम्ही आहात का?",
+    "speakerTagPromptIsThisYou": "हे तुम्ही होता का?",
     "speakerTagPromptIsThisPerson": "हे {name} आहेत का?",
     "speakerTagPromptWhoIsThis": "हे कोण आहे?",
     "speakerTagPromptThatsMe": "हा मी आहे",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "आवाज जुळणी: {level}",
     "speakerTagPromptHintIdentify": "प्रत्येक उत्तर Omi ला एक आवाज शिकवते आणि त्या व्यक्तीची खात्री वाढवते.",
     "speakerTagPromptHintConfirm": "होय म्हटल्याने {name} बद्दलची खात्री वाढते.",
-    "speakerTagPromptHintOwner": "तुमचे स्वतःचे आवाज प्रोफाइल अचूक ठेवते, जेणेकरून Omi तुम्हाला कधीही दुसरे कोणी म्हणून नाव देणार नाही.",
+    "speakerTagPromptHintOwner": "तुमचे उत्तर फक्त ऐकवलेल्या उताऱ्याला लेबल करते.",
     "speakerTagPromptSavedAs": "{name} म्हणून सेव्ह केले",
     "speakerTagPromptSavedAsYou": "तुम्ही म्हणून सेव्ह केले",
     "speakerTagPromptIgnoredNote": "Omi या आवाजाबद्दल पुन्हा विचारणार नाही",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "अलीकडील संभाषणे",
     "tasksNoProject": "प्रोजेक्ट नाही",
     "tasksGroupByProject": "प्रोजेक्टनुसार गटबद्ध करा",
-    "tasksGroupByDate": "तारखेनुसार गटबद्ध करा"
+    "tasksGroupByDate": "तारखेनुसार गटबद्ध करा",
+    "speakerTagPromptExcerptSaved": "या उताऱ्यासाठी उत्तर जतन केले."
 }

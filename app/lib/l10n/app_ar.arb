@@ -3497,7 +3497,7 @@
     "helpAndAbout": "المساعدة وحول التطبيق",
     "speakerTagPromptTitle": "ساعد Omi على التعرّف على الأصوات",
     "speakerTagPromptSubtitle": "مراجعة سريعة للأصوات من آخر يومين",
-    "speakerTagPromptIsThisYou": "هل هذا أنت؟",
+    "speakerTagPromptIsThisYou": "هل كان هذا صوتك؟",
     "speakerTagPromptIsThisPerson": "هل هذا {name}؟",
     "speakerTagPromptWhoIsThis": "من هذا؟",
     "speakerTagPromptThatsMe": "هذا أنا",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "تطابق الصوت: {level}",
     "speakerTagPromptHintIdentify": "كل إجابة تعلّم Omi صوتًا وترفع الثقة بذلك الشخص.",
     "speakerTagPromptHintConfirm": "\"نعم\" ترفع الثقة في {name}.",
-    "speakerTagPromptHintOwner": "يُبقي بصمة صوتك دقيقة، فلا يسمّيك Omi أبدًا باسم شخص آخر.",
+    "speakerTagPromptHintOwner": "إجابتك تحدد هوية المتحدث في المقطع المشغّل فقط.",
     "speakerTagPromptSavedAs": "تم الحفظ باسم {name}",
     "speakerTagPromptSavedAsYou": "تم الحفظ باسمك",
     "speakerTagPromptIgnoredNote": "لن يسأل Omi عن هذا الصوت مرة أخرى",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "المحادثات الأخيرة",
     "tasksNoProject": "بدون مشروع",
     "tasksGroupByProject": "التجميع حسب المشروع",
-    "tasksGroupByDate": "التجميع حسب التاريخ"
+    "tasksGroupByDate": "التجميع حسب التاريخ",
+    "speakerTagPromptExcerptSaved": "تم حفظ الإجابة لهذا المقطع."
 }

@@ -3532,7 +3532,7 @@
     "helpAndAbout": "Aide et à propos",
     "speakerTagPromptTitle": "Aidez Omi à reconnaître les voix",
     "speakerTagPromptSubtitle": "Une vérification rapide des voix des deux derniers jours",
-    "speakerTagPromptIsThisYou": "Est-ce vous ?",
+    "speakerTagPromptIsThisYou": "Était-ce toi ?",
     "speakerTagPromptIsThisPerson": "Est-ce {name} ?",
     "speakerTagPromptWhoIsThis": "Qui est-ce ?",
     "speakerTagPromptThatsMe": "C’est moi",
@@ -3782,7 +3782,7 @@
     "voiceMatchMeterLabel": "Correspondance vocale : {level}",
     "speakerTagPromptHintIdentify": "Chaque réponse apprend une voix à Omi et renforce la confiance envers cette personne.",
     "speakerTagPromptHintConfirm": "Répondre oui renforce la confiance envers {name}.",
-    "speakerTagPromptHintOwner": "Garde votre profil vocal précis pour qu'Omi ne vous prenne jamais pour quelqu'un d'autre.",
+    "speakerTagPromptHintOwner": "Ta réponse identifie uniquement l’extrait écouté.",
     "speakerTagPromptSavedAs": "Enregistré comme {name}",
     "speakerTagPromptSavedAsYou": "Enregistré comme vous",
     "speakerTagPromptIgnoredNote": "Omi ne posera plus de questions sur cette voix",
@@ -3951,5 +3951,6 @@
     "entityRecentConversations": "Conversations récentes",
     "tasksNoProject": "Aucun projet",
     "tasksGroupByProject": "Grouper par projet",
-    "tasksGroupByDate": "Grouper par date"
+    "tasksGroupByDate": "Grouper par date",
+    "speakerTagPromptExcerptSaved": "Réponse enregistrée pour cet extrait."
 }

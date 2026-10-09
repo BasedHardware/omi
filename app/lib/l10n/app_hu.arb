@@ -3593,7 +3593,7 @@
     "helpAndAbout": "Súgó és névjegy",
     "speakerTagPromptTitle": "Segíts az Ominak felismerni a hangokat",
     "speakerTagPromptSubtitle": "Gyors ellenőrzés az elmúlt két nap hangjairól",
-    "speakerTagPromptIsThisYou": "Ez te vagy?",
+    "speakerTagPromptIsThisYou": "Te voltál ez?",
     "speakerTagPromptIsThisPerson": "Ez {name}?",
     "speakerTagPromptWhoIsThis": "Ki ez?",
     "speakerTagPromptThatsMe": "Ez én vagyok",
@@ -3843,7 +3843,7 @@
     "voiceMatchMeterLabel": "Hangegyezés: {level}",
     "speakerTagPromptHintIdentify": "Minden válasz egy hangot tanít Ominak, és növeli az illető megbízhatóságát.",
     "speakerTagPromptHintConfirm": "Az Igen növeli {name} megbízhatóságát.",
-    "speakerTagPromptHintOwner": "Pontosan tartja a saját hangprofilodat, így Omi soha nem nevez el valaki másnak.",
+    "speakerTagPromptHintOwner": "A válaszod csak a lejátszott részletet jelöli meg.",
     "speakerTagPromptSavedAs": "Mentve mint {name}",
     "speakerTagPromptSavedAsYou": "Mentve mint te",
     "speakerTagPromptIgnoredNote": "Omi nem kérdez rá többé erre a hangra",
@@ -4012,5 +4012,6 @@
     "entityRecentConversations": "Legutóbbi beszélgetések",
     "tasksNoProject": "Nincs projekt",
     "tasksGroupByProject": "Csoportosítás projekt szerint",
-    "tasksGroupByDate": "Csoportosítás dátum szerint"
+    "tasksGroupByDate": "Csoportosítás dátum szerint",
+    "speakerTagPromptExcerptSaved": "Válasz mentve ehhez a részlethez."
 }

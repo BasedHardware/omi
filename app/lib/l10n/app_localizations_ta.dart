@@ -11148,7 +11148,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'கடந்த இரண்டு நாட்களின் குரல்களை விரைவாகச் சரிபார்க்கவும்';
 
   @override
-  String get speakerTagPromptIsThisYou => 'இது நீங்களா?';
+  String get speakerTagPromptIsThisYou => 'இது நீங்கள் தானா?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12125,8 +12125,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.';
+  String get speakerTagPromptHintOwner => 'உங்கள் பதில் இயக்கப்பட்ட பகுதியை மட்டுமே குறிக்கும்.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12745,4 +12744,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'தேதிப்படி குழுவாக்கு';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'இந்தப் பகுதிக்கான பதில் சேமிக்கப்பட்டது.';
 }

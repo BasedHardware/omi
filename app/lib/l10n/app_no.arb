@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Hjelp og om",
     "speakerTagPromptTitle": "Hjelp Omi med å kjenne igjen stemmer",
     "speakerTagPromptSubtitle": "En rask sjekk av stemmer fra de siste to dagene",
-    "speakerTagPromptIsThisYou": "Er dette deg?",
+    "speakerTagPromptIsThisYou": "Var dette deg?",
     "speakerTagPromptIsThisPerson": "Er dette {name}?",
     "speakerTagPromptWhoIsThis": "Hvem er dette?",
     "speakerTagPromptThatsMe": "Det er meg",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Stemmetreff: {level}",
     "speakerTagPromptHintIdentify": "Hvert svar lærer Omi en stemme og øker sikkerheten for den personen.",
     "speakerTagPromptHintConfirm": "Ja øker sikkerheten for {name}.",
-    "speakerTagPromptHintOwner": "Holder din egen stemmeprofil skarp, så Omi aldri kaller deg noen andre.",
+    "speakerTagPromptHintOwner": "Svaret ditt merker bare det avspilte utdraget.",
     "speakerTagPromptSavedAs": "Lagret som {name}",
     "speakerTagPromptSavedAsYou": "Lagret som deg",
     "speakerTagPromptIgnoredNote": "Omi spør ikke om denne stemmen igjen",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Nylige samtaler",
     "tasksNoProject": "Ingen prosjekt",
     "tasksGroupByProject": "Grupper etter prosjekt",
-    "tasksGroupByDate": "Grupper etter dato"
+    "tasksGroupByDate": "Grupper etter dato",
+    "speakerTagPromptExcerptSaved": "Svaret er lagret for dette utdraget."
 }

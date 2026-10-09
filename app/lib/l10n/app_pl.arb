@@ -3532,7 +3532,7 @@
     "helpAndAbout": "Pomoc i informacje",
     "speakerTagPromptTitle": "Pomóż Omi rozpoznawać głosy",
     "speakerTagPromptSubtitle": "Szybkie sprawdzenie głosów z ostatnich dwóch dni",
-    "speakerTagPromptIsThisYou": "Czy to Ty?",
+    "speakerTagPromptIsThisYou": "Czy to był Twój głos?",
     "speakerTagPromptIsThisPerson": "Czy to {name}?",
     "speakerTagPromptWhoIsThis": "Kto to jest?",
     "speakerTagPromptThatsMe": "To ja",
@@ -3782,7 +3782,7 @@
     "voiceMatchMeterLabel": "Dopasowanie głosu: {level}",
     "speakerTagPromptHintIdentify": "Każda odpowiedź uczy Omi głosu i zwiększa pewność co do tej osoby.",
     "speakerTagPromptHintConfirm": "Odpowiedź „Tak” zwiększa pewność co do osoby {name}.",
-    "speakerTagPromptHintOwner": "Utrzymuje dokładność Twojego profilu głosowego, dzięki czemu Omi nigdy nie uzna Cię za kogoś innego.",
+    "speakerTagPromptHintOwner": "Twoja odpowiedź oznacza tylko odtworzony fragment.",
     "speakerTagPromptSavedAs": "Zapisano jako {name}",
     "speakerTagPromptSavedAsYou": "Zapisano jako Ty",
     "speakerTagPromptIgnoredNote": "Omi nie zapyta ponownie o ten głos",
@@ -3951,5 +3951,6 @@
     "entityRecentConversations": "Ostatnie rozmowy",
     "tasksNoProject": "Bez projektu",
     "tasksGroupByProject": "Grupuj według projektu",
-    "tasksGroupByDate": "Grupuj według daty"
+    "tasksGroupByDate": "Grupuj według daty",
+    "speakerTagPromptExcerptSaved": "Odpowiedź zapisana dla tego fragmentu."
 }

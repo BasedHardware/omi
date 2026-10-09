@@ -27886,6 +27886,17 @@
       },
       "SpeakerTagPrompt": {
         "properties": {
+          "audio_capture_run": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Capture Run"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/SpeakerTagCandidate"
@@ -27924,6 +27935,17 @@
             "title": "Conversation Title",
             "type": "string"
           },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
           "excerpt": {
             "default": "",
             "title": "Excerpt",
@@ -27939,6 +27961,17 @@
           "origin": {
             "$ref": "#/components/schemas/SpeakerTagPromptOrigin"
           },
+          "receipt_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Generation"
+          },
           "segment_ids": {
             "items": {
               "type": "string"
@@ -27949,6 +27982,17 @@
           "speaker_id": {
             "title": "Speaker Id",
             "type": "integer"
+          },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
           },
           "suggested_person_id": {
             "anyOf": [
@@ -28017,6 +28061,18 @@
             "minLength": 1,
             "title": "Conversation Id",
             "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
           },
           "first_time": {
             "default": false,
@@ -28101,6 +28157,17 @@
       },
       "SpeakerTagPromptAnswerResponse": {
         "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -28114,6 +28181,13 @@
           },
           "quality_outcome": {
             "$ref": "#/components/schemas/SpeakerTagPromptQualityOutcome"
+          },
+          "segment_identities": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerTagPromptSegmentIdentity"
+            },
+            "title": "Segment Identities",
+            "type": "array"
           },
           "status": {
             "default": "ok",
@@ -28192,6 +28266,35 @@
         "title": "SpeakerTagPromptQualityOutcome",
         "type": "string"
       },
+      "SpeakerTagPromptSegmentIdentity": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          }
+        },
+        "required": [
+          "id",
+          "is_user"
+        ],
+        "title": "SpeakerTagPromptSegmentIdentity",
+        "type": "object"
+      },
       "SpeakerTagPromptsResponse": {
         "properties": {
           "first_time": {
@@ -28242,6 +28345,11 @@
             "maxItems": 10,
             "title": "Prompt Ids",
             "type": "array"
+          },
+          "set_shown": {
+            "default": true,
+            "title": "Set Shown",
+            "type": "boolean"
           }
         },
         "title": "SpeakerTagPromptsShownRequest",
@@ -61857,6 +61965,16 @@
         "operationId": "get_speaker_tag_prompts_v1_speaker_tag_prompts_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "owner_excerpt",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Owner Excerpt",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -62050,6 +62168,40 @@
               "exclusiveMinimum": 0,
               "title": "End",
               "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prompt_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "evidence_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Id"
             }
           },
           {

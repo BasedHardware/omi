@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Palīdzība un par lietotni",
     "speakerTagPromptTitle": "Palīdziet Omi atpazīt balsis",
     "speakerTagPromptSubtitle": "Ātra pēdējo divu dienu balsu pārbaude",
-    "speakerTagPromptIsThisYou": "Vai tas esat jūs?",
+    "speakerTagPromptIsThisYou": "Vai tas bijāt jūs?",
     "speakerTagPromptIsThisPerson": "Vai tas ir {name}?",
     "speakerTagPromptWhoIsThis": "Kas tas ir?",
     "speakerTagPromptThatsMe": "Tas esmu es",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Balss atbilstība: {level}",
     "speakerTagPromptHintIdentify": "Katra atbilde māca Omi balsi un palielina šīs personas pārliecību.",
     "speakerTagPromptHintConfirm": "Jā palielina pārliecību par {name}.",
-    "speakerTagPromptHintOwner": "Uztur jūsu balss profilu precīzu, lai Omi nekad nenosauktu jūs par kādu citu.",
+    "speakerTagPromptHintOwner": "Jūsu atbilde atzīmē tikai atskaņoto fragmentu.",
     "speakerTagPromptSavedAs": "Saglabāts kā {name}",
     "speakerTagPromptSavedAsYou": "Saglabāts kā jūs",
     "speakerTagPromptIgnoredNote": "Omi vairs nejautās par šo balsi",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Nesenās sarunas",
     "tasksNoProject": "Nav projekta",
     "tasksGroupByProject": "Grupēt pēc projekta",
-    "tasksGroupByDate": "Grupēt pēc datuma"
+    "tasksGroupByDate": "Grupēt pēc datuma",
+    "speakerTagPromptExcerptSaved": "Atbilde saglabāta šim fragmentam."
 }

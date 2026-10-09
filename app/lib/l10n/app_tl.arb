@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Tugma ng boses: {level}",
     "speakerTagPromptHintIdentify": "Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.",
     "speakerTagPromptHintConfirm": "Ang Oo ay nagpapataas ng kumpiyansa kay {name}.",
-    "speakerTagPromptHintOwner": "Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.",
+    "speakerTagPromptHintOwner": "Ang sagot mo ay para lang sa pinatugtog na bahagi.",
     "speakerTagPromptSavedAs": "Na-save bilang {name}",
     "speakerTagPromptSavedAsYou": "Na-save bilang ikaw",
     "speakerTagPromptIgnoredNote": "Hindi na magtatanong si Omi tungkol sa boses na ito",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "Mga kamakailang usapan",
     "tasksNoProject": "Walang proyekto",
     "tasksGroupByProject": "I-group ayon sa Proyekto",
-    "tasksGroupByDate": "I-group ayon sa Petsa"
+    "tasksGroupByDate": "I-group ayon sa Petsa",
+    "speakerTagPromptExcerptSaved": "Na-save ang sagot para sa bahaging ito."
 }

@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Aiuto e informazioni",
     "speakerTagPromptTitle": "Aiuta Omi a riconoscere le voci",
     "speakerTagPromptSubtitle": "Un rapido controllo delle voci degli ultimi due giorni",
-    "speakerTagPromptIsThisYou": "Sei tu?",
+    "speakerTagPromptIsThisYou": "Eri tu?",
     "speakerTagPromptIsThisPerson": "È {name}?",
     "speakerTagPromptWhoIsThis": "Chi è?",
     "speakerTagPromptThatsMe": "Sono io",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Corrispondenza vocale: {level}",
     "speakerTagPromptHintIdentify": "Ogni risposta insegna una voce a Omi e aumenta l'affidabilità di quella persona.",
     "speakerTagPromptHintConfirm": "Sì aumenta l'affidabilità di {name}.",
-    "speakerTagPromptHintOwner": "Mantiene preciso il tuo profilo vocale, così Omi non ti scambia mai per qualcun altro.",
+    "speakerTagPromptHintOwner": "La tua risposta etichetta solo il brano riprodotto.",
     "speakerTagPromptSavedAs": "Salvato come {name}",
     "speakerTagPromptSavedAsYou": "Salvato come te",
     "speakerTagPromptIgnoredNote": "Omi non chiederà più di questa voce",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Conversazioni recenti",
     "tasksNoProject": "Nessun progetto",
     "tasksGroupByProject": "Raggruppa per progetto",
-    "tasksGroupByDate": "Raggruppa per data"
+    "tasksGroupByDate": "Raggruppa per data",
+    "speakerTagPromptExcerptSaved": "Risposta salvata per questo brano."
 }

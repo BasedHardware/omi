@@ -11099,7 +11099,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Una revisión rápida de las voces de los últimos dos días';
 
   @override
-  String get speakerTagPromptIsThisYou => '¿Eres tú?';
+  String get speakerTagPromptIsThisYou => '¿Eras tú?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12077,8 +12077,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Mantiene preciso tu perfil de voz para que Omi nunca te nombre como otra persona.';
+  String get speakerTagPromptHintOwner => 'Tu respuesta solo etiqueta el fragmento reproducido.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12696,4 +12695,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Agrupar por fecha';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Respuesta guardada para este fragmento.';
 }

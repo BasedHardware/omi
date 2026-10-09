@@ -11054,7 +11054,7 @@
     "helpAndAbout": "راهنما و درباره",
     "speakerTagPromptTitle": "به Omi در شناختن صداها کمک کنید",
     "speakerTagPromptSubtitle": "بررسی سریع صداهای دو روز گذشته",
-    "speakerTagPromptIsThisYou": "این شما هستید؟",
+    "speakerTagPromptIsThisYou": "این صدای شما بود؟",
     "speakerTagPromptIsThisPerson": "این {name} است؟",
     "speakerTagPromptWhoIsThis": "این کیست؟",
     "speakerTagPromptThatsMe": "این من هستم",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "تطبیق صدا: {level}",
     "speakerTagPromptHintIdentify": "هر پاسخ یک صدا را به Omi یاد می‌دهد و اطمینان درباره آن فرد را بالا می‌برد.",
     "speakerTagPromptHintConfirm": "پاسخ «بله» اطمینان درباره {name} را بالا می‌برد.",
-    "speakerTagPromptHintOwner": "پروفایل صدای خودتان را دقیق نگه می‌دارد تا Omi هرگز شما را با نام کس دیگری صدا نزند.",
+    "speakerTagPromptHintOwner": "پاسخ شما فقط بخش پخش‌شده را برچسب‌گذاری می‌کند.",
     "speakerTagPromptSavedAs": "به‌عنوان {name} ذخیره شد",
     "speakerTagPromptSavedAsYou": "به‌عنوان شما ذخیره شد",
     "speakerTagPromptIgnoredNote": "Omi دیگر درباره این صدا نمی‌پرسد",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "گفتگوهای اخیر",
     "tasksNoProject": "بدون پروژه",
     "tasksGroupByProject": "گروه‌بندی بر اساس پروژه",
-    "tasksGroupByDate": "گروه‌بندی بر اساس تاریخ"
+    "tasksGroupByDate": "گروه‌بندی بر اساس تاریخ",
+    "speakerTagPromptExcerptSaved": "پاسخ برای این بخش ذخیره شد."
 }

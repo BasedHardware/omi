@@ -12092,8 +12092,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'మీ స్వంత వాయిస్ ప్రొఫైల్‌ను కచ్చితంగా ఉంచుతుంది, కాబట్టి Omi మిమ్మల్ని మరొకరిగా పేర్కొనదు.';
+  String get speakerTagPromptHintOwner => 'మీ సమాధానం ప్లే చేసిన భాగాన్ని మాత్రమే గుర్తిస్తుంది.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12711,4 +12710,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'తేదీ ప్రకారం సమూహపరచండి';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'ఈ భాగానికి సమాధానం సేవ్ చేయబడింది.';
 }

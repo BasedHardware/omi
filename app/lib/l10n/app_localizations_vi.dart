@@ -12037,8 +12037,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Giữ hồ sơ giọng nói của bạn chính xác, để Omi không bao giờ gọi bạn là người khác.';
+  String get speakerTagPromptHintOwner => 'Câu trả lời của bạn chỉ gắn nhãn đoạn trích đã phát.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12654,4 +12653,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Nhóm theo ngày';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Đã lưu câu trả lời cho đoạn trích này.';
 }

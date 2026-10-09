@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Khớp giọng nói: {level}",
     "speakerTagPromptHintIdentify": "Mỗi câu trả lời dạy Omi một giọng nói và tăng độ tin cậy của người đó.",
     "speakerTagPromptHintConfirm": "Chọn Có sẽ tăng độ tin cậy của {name}.",
-    "speakerTagPromptHintOwner": "Giữ hồ sơ giọng nói của bạn chính xác, để Omi không bao giờ gọi bạn là người khác.",
+    "speakerTagPromptHintOwner": "Câu trả lời của bạn chỉ gắn nhãn đoạn trích đã phát.",
     "speakerTagPromptSavedAs": "Đã lưu là {name}",
     "speakerTagPromptSavedAsYou": "Đã lưu là bạn",
     "speakerTagPromptIgnoredNote": "Omi sẽ không hỏi lại về giọng nói này",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Cuộc trò chuyện gần đây",
     "tasksNoProject": "Không có dự án",
     "tasksGroupByProject": "Nhóm theo dự án",
-    "tasksGroupByDate": "Nhóm theo ngày"
+    "tasksGroupByDate": "Nhóm theo ngày",
+    "speakerTagPromptExcerptSaved": "Đã lưu câu trả lời cho đoạn trích này."
 }

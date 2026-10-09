@@ -27,6 +27,11 @@ from utils.conversations.transcript_hash import (
 )
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
+from utils.speaker_tag_prompts.owner_confirmation import (
+    FIELD as OWNER_CONFIRMATION_FIELD,
+    StaleOwnerConfirmation,
+    validate_binding as validate_owner_confirmation,
+)
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     replay_receipt_commits,
@@ -2787,6 +2792,8 @@ def assign_conversation_speaker(
     rejection=None,
     owner_segment_ids=None,
     time_range=None,
+    segment_only=False,
+    owner_confirmation=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
@@ -2801,6 +2808,8 @@ def assign_conversation_speaker(
     def assign(transaction, bookkeeping):
         if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
+        if owner_confirmation is not None and source.get('deleted'):
+            raise StaleOwnerConfirmation('Owner question conversation changed')
         source_segments = None
         selected_segment_ids, selected_speaker_id, selected_segment_index = segment_ids, speaker_id, segment_index
         current_id, raw, seen = conversation_id, source, set()
@@ -2839,6 +2848,16 @@ def assign_conversation_speaker(
         current['manual_speaker_assignments'] = decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
+        if owner_confirmation is not None:
+            binding = validate_owner_confirmation(
+                current,
+                owner_confirmation['prompt_id'],
+                owner_confirmation['evidence_id'],
+                selected_segment_ids,
+                require_played=True,
+            )
+            if not segment_only or selected_speaker_id != binding['speaker_id'] or owner_segment_ids:
+                raise StaleOwnerConfirmation('Owner excerpt cannot authorize whole-voice assignment or learning')
         before = copy.deepcopy(current['transcript_segments'])
         if source_segments is not None:
             before_ids = {s.get('id') for s in before}
@@ -2854,7 +2873,7 @@ def assign_conversation_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
             time_range=time_range if source_segments is None else None,
-            segment_only=time_range is not None,
+            segment_only=segment_only or time_range is not None,
         )
         removed, relabeled = persist_assignment_effects(
             transaction,
@@ -2877,6 +2896,10 @@ def assign_conversation_speaker(
         )
         extract_learning_receipt_markers(receipt, current)
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+        if owner_confirmation is not None:
+            answered_binding = dict(binding, answered='yes' if is_user else 'no')
+            written[OWNER_CONFIRMATION_FIELD] = answered_binding
+            current[OWNER_CONFIRMATION_FIELD] = answered_binding
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         clear_client_processing(payload)
         _guard_match_score_size(payload, raw, getattr(ref, 'path', None))

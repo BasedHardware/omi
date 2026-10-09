@@ -4565,18 +4565,22 @@ export interface SpeakerTagCandidate {
 }
 
 export interface SpeakerTagPrompt {
+  audio_capture_run?: number | null;
   candidates?: Array<SpeakerTagCandidate>;
   clip_end: number;
   clip_start: number;
   conversation_id: string;
   conversation_started_at?: string | null;
   conversation_title?: string;
+  evidence_id?: string | null;
   excerpt?: string;
   id: string;
   kind: SpeakerTagPromptKind;
   origin: SpeakerTagPromptOrigin;
+  receipt_generation?: number | null;
   segment_ids: Array<string>;
   speaker_id: number;
+  speaker_id_scope?: string | null;
   suggested_person_id?: string | null;
   suggested_person_ids?: Array<string>;
   suggested_person_name?: string | null;
@@ -4587,6 +4591,7 @@ export type SpeakerTagPromptAnswer = "me" | "not_me" | "person" | "new_person" |
 export interface SpeakerTagPromptAnswerRequest {
   answer: SpeakerTagPromptAnswer;
   conversation_id: string;
+  evidence_id?: string | null;
   first_time?: boolean;
   kind: SpeakerTagPromptKind;
   name?: string | null;
@@ -4599,8 +4604,10 @@ export interface SpeakerTagPromptAnswerRequest {
 }
 
 export interface SpeakerTagPromptAnswerResponse {
+  conversation_id?: string | null;
   person_id?: string | null;
   quality_outcome: SpeakerTagPromptQualityOutcome;
+  segment_identities?: Array<SpeakerTagPromptSegmentIdentity>;
   status?: string;
   voice_sample_queued?: boolean;
 }
@@ -4617,6 +4624,12 @@ export type SpeakerTagPromptOrigin = "auto_user" | "auto_person" | "unnamed";
 
 export type SpeakerTagPromptQualityOutcome = "owner_auto_confirmed" | "owner_auto_rejected" | "owner_missed" | "owner_unmatched_not_owner" | "person_auto_confirmed" | "person_auto_corrected" | "person_missed_known" | "person_not_enrolled" | "unknown_voice" | "skipped";
 
+export interface SpeakerTagPromptSegmentIdentity {
+  id: string;
+  is_user: boolean;
+  person_id?: string | null;
+}
+
 export interface SpeakerTagPromptsResponse {
   first_time?: boolean;
   next_eligible_at?: string | null;
@@ -4627,6 +4640,7 @@ export interface SpeakerTagPromptsResponse {
 
 export interface SpeakerTagPromptsShownRequest {
   prompt_ids?: Array<string>;
+  set_shown?: boolean;
 }
 
 export interface SpeakerTagPromptsShownResponse {
@@ -6277,6 +6291,7 @@ export interface OmiApiSchemas {
   "SpeakerTagPromptKind": SpeakerTagPromptKind;
   "SpeakerTagPromptOrigin": SpeakerTagPromptOrigin;
   "SpeakerTagPromptQualityOutcome": SpeakerTagPromptQualityOutcome;
+  "SpeakerTagPromptSegmentIdentity": SpeakerTagPromptSegmentIdentity;
   "SpeakerTagPromptsResponse": SpeakerTagPromptsResponse;
   "SpeakerTagPromptsShownRequest": SpeakerTagPromptsShownRequest;
   "SpeakerTagPromptsShownResponse": SpeakerTagPromptsShownResponse;
@@ -17496,10 +17511,13 @@ export async function get_search_overview_v1_search_overview_get(header: { autho
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_speaker_tag_prompts_v1_speaker_tag_prompts_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeakerTagPromptsResponse> {
+export async function get_speaker_tag_prompts_v1_speaker_tag_prompts_get(query: { owner_excerpt?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeakerTagPromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/speaker-tag-prompts`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
@@ -17536,7 +17554,7 @@ export async function answer_speaker_tag_prompt_v1_speaker_tag_prompts_answer_po
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_speaker_tag_prompt_clip_v1_speaker_tag_prompts_clip_get(query: { conversation_id: string, start: number, end: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeakerTagPromptClip> {
+export async function get_speaker_tag_prompt_clip_v1_speaker_tag_prompts_clip_get(query: { conversation_id: string, start: number, end: number, prompt_id?: string | null, evidence_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeakerTagPromptClip> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/speaker-tag-prompts/clip`;
   const _params = query ? Object.entries(query)

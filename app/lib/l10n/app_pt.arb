@@ -3532,7 +3532,7 @@
     "helpAndAbout": "Ajuda e sobre",
     "speakerTagPromptTitle": "Ajude o Omi a reconhecer vozes",
     "speakerTagPromptSubtitle": "Uma checagem rápida das vozes dos últimos dois dias",
-    "speakerTagPromptIsThisYou": "É você?",
+    "speakerTagPromptIsThisYou": "Era você?",
     "speakerTagPromptIsThisPerson": "É {name}?",
     "speakerTagPromptWhoIsThis": "Quem é?",
     "speakerTagPromptThatsMe": "Sou eu",
@@ -3782,7 +3782,7 @@
     "voiceMatchMeterLabel": "Correspondência de voz: {level}",
     "speakerTagPromptHintIdentify": "Cada resposta ensina uma voz a Omi e aumenta a confiança nessa pessoa.",
     "speakerTagPromptHintConfirm": "Sim aumenta a confiança em {name}.",
-    "speakerTagPromptHintOwner": "Mantém seu perfil de voz preciso, para Omi nunca chamar você de outra pessoa.",
+    "speakerTagPromptHintOwner": "Sua resposta identifica apenas o trecho reproduzido.",
     "speakerTagPromptSavedAs": "Salvo como {name}",
     "speakerTagPromptSavedAsYou": "Salvo como você",
     "speakerTagPromptIgnoredNote": "Omi não vai perguntar sobre esta voz de novo",
@@ -3951,5 +3951,6 @@
     "entityRecentConversations": "Conversas recentes",
     "tasksNoProject": "Sem projeto",
     "tasksGroupByProject": "Agrupar por projeto",
-    "tasksGroupByDate": "Agrupar por data"
+    "tasksGroupByDate": "Agrupar por data",
+    "speakerTagPromptExcerptSaved": "Resposta salva para este trecho."
 }

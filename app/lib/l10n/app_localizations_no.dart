@@ -11070,7 +11070,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'En rask sjekk av stemmer fra de siste to dagene';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Er dette deg?';
+  String get speakerTagPromptIsThisYou => 'Var dette deg?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12043,7 +12043,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner => 'Holder din egen stemmeprofil skarp, så Omi aldri kaller deg noen andre.';
+  String get speakerTagPromptHintOwner => 'Svaret ditt merker bare det avspilte utdraget.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12659,4 +12659,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Grupper etter dato';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Svaret er lagret for dette utdraget.';
 }

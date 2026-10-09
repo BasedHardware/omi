@@ -13128,7 +13128,7 @@
     "@speakerTagPromptSubtitle": {
         "description": "Card subtitle for the speaker tagging prompt"
     },
-    "speakerTagPromptIsThisYou": "Is this you?",
+    "speakerTagPromptIsThisYou": "Was this you?",
     "@speakerTagPromptIsThisYou": {
         "description": "Question shown under a short audio clip of a speaker"
     },
@@ -14361,7 +14361,7 @@
             }
         }
     },
-    "speakerTagPromptHintOwner": "Keeps your own voice profile sharp, so Omi never names you as someone else.",
+    "speakerTagPromptHintOwner": "Your answer labels only the played excerpt.",
     "@speakerTagPromptHintOwner": {
         "description": "Hint at the bottom of the 'Is this you?' card."
     },
@@ -15182,5 +15182,6 @@
     "tasksGroupByDate": "Group by Date",
     "@tasksGroupByDate": {
         "description": "Menu item (Title Case)"
-    }
+    },
+    "speakerTagPromptExcerptSaved": "Answer saved for this excerpt."
 }

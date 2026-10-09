@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Nápověda a o aplikaci",
     "speakerTagPromptTitle": "Pomozte Omi rozpoznávat hlasy",
     "speakerTagPromptSubtitle": "Rychlá kontrola hlasů z posledních dvou dnů",
-    "speakerTagPromptIsThisYou": "Jste to vy?",
+    "speakerTagPromptIsThisYou": "Byli jste to vy?",
     "speakerTagPromptIsThisPerson": "Je to {name}?",
     "speakerTagPromptWhoIsThis": "Kdo je to?",
     "speakerTagPromptThatsMe": "To jsem já",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Shoda hlasu: {level}",
     "speakerTagPromptHintIdentify": "Každá odpověď naučí Omi hlas a zvýší jistotu u dané osoby.",
     "speakerTagPromptHintConfirm": "Ano zvýší jistotu u osoby {name}.",
-    "speakerTagPromptHintOwner": "Udržuje váš vlastní hlasový profil přesný, aby vás Omi nikdy nepojmenovalo jako někoho jiného.",
+    "speakerTagPromptHintOwner": "Vaše odpověď označí pouze přehrané úryvky.",
     "speakerTagPromptSavedAs": "Uloženo jako {name}",
     "speakerTagPromptSavedAsYou": "Uloženo jako váš hlas",
     "speakerTagPromptIgnoredNote": "Omi se na tento hlas už nebude ptát",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Nedávné konverzace",
     "tasksNoProject": "Bez projektu",
     "tasksGroupByProject": "Seskupit podle projektu",
-    "tasksGroupByDate": "Seskupit podle data"
+    "tasksGroupByDate": "Seskupit podle data",
+    "speakerTagPromptExcerptSaved": "Odpověď uložena pro tento úryvek."
 }

@@ -11144,7 +11144,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Γρήγορος έλεγχος φωνών από τις δύο τελευταίες ημέρες';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Είστε εσείς;';
+  String get speakerTagPromptIsThisYou => 'Ήσουν εσύ;';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12121,8 +12121,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Διατηρεί το δικό σας φωνητικό προφίλ ακριβές, ώστε το Omi να μη σας ονομάζει ποτέ κάποιον άλλο.';
+  String get speakerTagPromptHintOwner => 'Η απάντησή σου επισημαίνει μόνο το απόσπασμα που ακούστηκε.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12740,4 +12739,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Ομαδοποίηση ανά ημερομηνία';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Η απάντηση αποθηκεύτηκε για αυτό το απόσπασμα.';
 }

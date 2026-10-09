@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Помощ и информация",
     "speakerTagPromptTitle": "Помогнете на Omi да разпознава гласове",
     "speakerTagPromptSubtitle": "Бърза проверка на гласовете от последните два дни",
-    "speakerTagPromptIsThisYou": "Това вие ли сте?",
+    "speakerTagPromptIsThisYou": "Това бяхте ли вие?",
     "speakerTagPromptIsThisPerson": "Това {name} ли е?",
     "speakerTagPromptWhoIsThis": "Кой е това?",
     "speakerTagPromptThatsMe": "Това съм аз",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Съвпадение на гласа: {level}",
     "speakerTagPromptHintIdentify": "Всеки отговор учи Omi на глас и повишава сигурността за този човек.",
     "speakerTagPromptHintConfirm": "„Да“ повишава сигурността за {name}.",
-    "speakerTagPromptHintOwner": "Поддържа вашия гласов профил точен, така че Omi никога да не ви посочва като някой друг.",
+    "speakerTagPromptHintOwner": "Отговорът ви обозначава само пуснатия откъс.",
     "speakerTagPromptSavedAs": "Запазено като {name}",
     "speakerTagPromptSavedAsYou": "Запазено като вас",
     "speakerTagPromptIgnoredNote": "Omi няма да пита повече за този глас",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Скорошни разговори",
     "tasksNoProject": "Без проект",
     "tasksGroupByProject": "Групиране по проект",
-    "tasksGroupByDate": "Групиране по дата"
+    "tasksGroupByDate": "Групиране по дата",
+    "speakerTagPromptExcerptSaved": "Отговорът е запазен за този откъс."
 }

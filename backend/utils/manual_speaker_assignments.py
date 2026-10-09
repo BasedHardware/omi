@@ -46,9 +46,9 @@ def _receipt_section(receipt: object, key: str) -> Mapping:
 
 
 def manual_owner_reserved(receipt: Mapping) -> bool:
-    """An explicit owner decision reserves the owner even without a voiceprint."""
+    """Whole-voice owner decisions reserve the owner; excerpt decisions do not."""
     return any(
-        isinstance(entry, dict) and entry.get('is_user') is True
+        isinstance(entry, dict) and entry.get('is_user') is True and not entry.get('segment_only')
         for entries in (_receipt_section(receipt, 'speakers'), _receipt_section(receipt, 'segments'))
         for entry in entries.values()
     )
@@ -98,6 +98,14 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
         if not decisions:
             continue
         decision = max(decisions, key=lambda value: value.get('generation', 0))
+        if (
+            decision.get('segment_only')
+            and (decision.get('rejection') or {}).get('kind') == 'not_me'
+            and not segment.get('is_user')
+            and segment.get('person_id')
+        ):
+            # A binary owner rejection neither names nor rejects somebody else.
+            continue
         is_user = bool(decision.get('is_user', False))
         person_id = decision.get('person_id')
         status = 'user' if is_user else 'not_user' if person_id else 'unknown'
@@ -351,6 +359,12 @@ def manual_assignment(
     if not receipt['speakers']:
         receipt.pop('speakers', None)
     applied = apply_manual_assignments(segments, receipt)
+    if segment_only and rejection is not None and rejection.get('kind') == 'not_me':
+        previous = {
+            segments[i]['person_id']
+            for i in indices
+            if segments[i].get('person_id') and segments[i].get('person_id') != applied[i].get('person_id')
+        }
     if rejection is not None:
         chosen = set(indices)
         rejected = manual_rejected_speakers(receipt)

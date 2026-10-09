@@ -2022,20 +2022,63 @@ no overflow speaker ID is invented. Backend-side defaults use
 `SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
 Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 
-### 4.1 Speaker tag prompts ("Is this you?" / "Who is this?")
+### 4.1 Speaker tag prompts ("Was this you?" / "Who is this?")
 
-`routers/speaker_tag_prompts.py` serves a small daily set of voices to confirm,
-chosen by `utils/speaker_tag_prompts/selection.py` from conversations
-started in the last **48 hours** that have stored audio (`audio_files`, i.e.
-private cloud sync was on). A candidate is one diarized speaker's longest clean
-stretch: consecutive segments with no other voice between them, at least 5 s,
-clipped to 10 s, never already decided by a manual receipt. Kinds:
-`owner_check` (free: an automatic owner label, or the loudest unnamed voice in a
-conversation with no owner segments or when the owner has no voiceprint),
-`confirm_person` (an unreviewed automatic person match) and `identify` (an
-unnamed voice); the last two need a paid plan (named speaker-ID). At most 4
-prompts, 2 per conversation, 2 owner checks; answered prompt ids are remembered
-for 7 days in `users/{uid}/speaker_tag_prompts/state`.
+`routers/speaker_tag_prompts.py` serves a small daily set from completed,
+unlocked conversations started in the last **48 hours** with stored audio.
+`owner_check` is free on every plan and asks only **Was this you? — Yes / No /
+Skip**. `confirm_person` and `identify` remain paid automatic non-owner naming
+cards; manually naming a voice through the tag sheet remains free.
+
+Owner cards require `GET /v1/speaker-tag-prompts?owner_excerpt=true`. The updated
+Flutter client declares that capability; default false withholds owner cards from
+older clients. Existing voice-profile settings still gate prompts. There is no
+server rollout environment flag: client capability is the enablement boundary.
+Legacy owner answers without excerpt evidence reject with 409 rather than assign
+a whole speaker. Paid cards keep their existing protocol.
+
+Owner selection loads only the enrolled owner's print. It embeds complete,
+placed, source-consistent 5–10 second constituent windows (at most 16 per
+conversation, inside the existing 8 second list budget), pools each scoped voice,
+and chooses the group whose cosine owner distance is closest to .50. It plays
+the constituent closest to that centroid. Current diagnostic score rows use
+`min_constituent_v1`, so they do not substitute for pooled evidence. Labels never
+rank a question. No enrollment, incomplete evidence, long segments requiring a
+crop, mixed capture/source windows or overlapping unselected audio mean no owner
+card. No threshold or voice model changes.
+
+At most four cards, two per conversation and two owner cards per daily set remain;
+**at most one owner card can ever be issued per conversation**. Issuance claims
+`owner_confirmation_prompt` atomically on that conversation. This durable quota
+survives Skip, refresh, concurrent list requests and the seven-day answered-ID
+retention; a lost list response can consume the opportunity. Deleted or merged
+cards are not retargeted. Existing shown/dismissed cooldowns remain.
+
+The server stores the selected segment IDs, exact complete bounds, speaker scope,
+capture run, receipt generation, roster/audio fingerprint and PCM digest. The
+clip request carries `prompt_id` and `evidence_id`, must use those exact bounds,
+and stamps delivery only when the bytes match selection. Flutter enables Yes/No
+after complete playback; Skip needs no playback. The server can prove delivery,
+not human listening. It validates the current binding inside the assignment
+transaction, so regrouping, deletion, locking, audio replacement, receipt changes
+or a consumed card reject atomically with 409. Yes/No pass `segment_ids` and
+`segment_only=True` through the shared manual receipt/effects path. No creates
+only an excerpt-local `not_me` rejection, without a name or print; existing
+non-owner labels in that excerpt are preserved. Answers return
+only changed IDs for client reconciliation, never all equal speaker numbers.
+
+Explicit segment-only owner decisions do not reserve the owner conversation-wide
+or become a whole-voice anchor/rejection in listen, sync or post resolution.
+Legacy whole-voice Me receipts retain their reservation. Owner-card decisions
+set `use_for_speech_training=False`; even a matching legacy `card_generation`
+cannot override that opt-out on segment-only receipts. Enrollment remains a
+separate explicit-consent tag/enrollment action with its existing purity gates.
+
+Desktop coverage is retained for the two-channel path: `channels>=2` uses mic
+channel 0x01 as owner and system/remote channel 0x02 as non-owner through receiver
+callbacks and transcript persistence. Mono desktop source alone grants no owner
+identity. Shared microphones, echo and someone else at the mic remain risks;
+no incremental desktop lift or fleet coverage is claimed.
 
 Before offering a prompt, selection checks the exact clip window against v2
 validated chunk spans or conservative legacy `audio_files` bounds. Legacy file
@@ -2058,8 +2101,8 @@ for 2 h so repeated app opens do not rescan 30 conversations.
 Answers apply through the same `assign_conversation_speaker` transaction as the
 transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
 writes that same ledger (optionally per `segment_ids` of that speaker).
-`someone_else` with a `person_id`/`name` labels that person. Every negative
-answer writes `rejection: {kind, person_id}` on the receipt decision —
+`someone_else` with a `person_id`/`name` labels that person on paid naming
+cards. Their negative answers write `rejection: {kind, person_id}` on the receipt decision —
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
 stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
 filtered from live matching, resolution, and prompt selection until a newer
@@ -2088,7 +2131,8 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
   that function now returns early when the user turned off
   `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
   sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
-- **Owner** ("That's me" prompt or `is_user` tag-sheet assignment): the
+- **Owner** (explicit-consent `is_user` tag-sheet assignment or enrollment;
+  excerpt owner checks do not teach): the
   confirmed clip is the longest clean same-voice run, 5-10 s of distinct owner
   speech, passing `verify_and_transcribe_sample`; its embedding pools into
   `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
@@ -2099,10 +2143,15 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
 privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,skipped,sets,answers,
 quality,voice_samples}_total` and `omi_voice_profile_setting_changes_total`
-carry only closed-enum labels. `quality` turns answers into precision
+carry only closed-enum labels. `omi_owner_confirmation_events_total` counts
+`shown|yes|no|skip|stale_rejected`, without identifiers or content. `quality` turns answers into precision
 (`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall
 (`owner_missed`, `person_missed_known`) observations — biased toward what was
 asked, so compare trends per kind rather than reading absolute accuracy.
+
+The updated client reports the current visible question, once per card; subsequent owner cards
+use `set_shown=false` to retain the original set cooldown and set-count semantics. Unbound
+owner cards from an older backend are withheld by the client.
 
 ### People-stats aggregate cache
 

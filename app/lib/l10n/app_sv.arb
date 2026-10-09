@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Hjälp och om",
     "speakerTagPromptTitle": "Hjälp Omi att känna igen röster",
     "speakerTagPromptSubtitle": "En snabb koll på röster från de senaste två dagarna",
-    "speakerTagPromptIsThisYou": "Är det här du?",
+    "speakerTagPromptIsThisYou": "Var det här du?",
     "speakerTagPromptIsThisPerson": "Är det här {name}?",
     "speakerTagPromptWhoIsThis": "Vem är det här?",
     "speakerTagPromptThatsMe": "Det är jag",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Röstmatchning: {level}",
     "speakerTagPromptHintIdentify": "Varje svar lär Omi en röst och ökar personens säkerhet.",
     "speakerTagPromptHintConfirm": "Ja ökar säkerheten för {name}.",
-    "speakerTagPromptHintOwner": "Håller din egen röstprofil skarp, så att Omi aldrig döper dig till någon annan.",
+    "speakerTagPromptHintOwner": "Ditt svar märker bara det spelade utdraget.",
     "speakerTagPromptSavedAs": "Sparad som {name}",
     "speakerTagPromptSavedAsYou": "Sparad som du",
     "speakerTagPromptIgnoredNote": "Omi frågar inte om den här rösten igen",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Senaste konversationer",
     "tasksNoProject": "Inget projekt",
     "tasksGroupByProject": "Gruppera efter projekt",
-    "tasksGroupByDate": "Gruppera efter datum"
+    "tasksGroupByDate": "Gruppera efter datum",
+    "speakerTagPromptExcerptSaved": "Svaret har sparats för detta utdrag."
 }

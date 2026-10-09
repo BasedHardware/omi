@@ -11054,7 +11054,7 @@
     "helpAndAbout": "Дапамога і пра праграму",
     "speakerTagPromptTitle": "Дапамажыце Omi распазнаваць галасы",
     "speakerTagPromptSubtitle": "Хуткая праверка галасоў за апошнія два дні",
-    "speakerTagPromptIsThisYou": "Гэта вы?",
+    "speakerTagPromptIsThisYou": "Гэта былі вы?",
     "speakerTagPromptIsThisPerson": "Гэта {name}?",
     "speakerTagPromptWhoIsThis": "Хто гэта?",
     "speakerTagPromptThatsMe": "Гэта я",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Супадзенне голасу: {level}",
     "speakerTagPromptHintIdentify": "Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.",
     "speakerTagPromptHintConfirm": "«Так» павышае ўпэўненасць у {name}.",
-    "speakerTagPromptHintOwner": "Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.",
+    "speakerTagPromptHintOwner": "Ваш адказ пазначае толькі праслуханы ўрывак.",
     "speakerTagPromptSavedAs": "Захавана як {name}",
     "speakerTagPromptSavedAsYou": "Захавана як вы",
     "speakerTagPromptIgnoredNote": "Omi больш не будзе пытацца пра гэты голас",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "Нядаўнія размовы",
     "tasksNoProject": "Без праекта",
     "tasksGroupByProject": "Групаваць па праектах",
-    "tasksGroupByDate": "Групаваць па даце"
+    "tasksGroupByDate": "Групаваць па даце",
+    "speakerTagPromptExcerptSaved": "Адказ захаваны для гэтага ўрыўка."
 }

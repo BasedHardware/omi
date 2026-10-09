@@ -11133,7 +11133,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Una revisió ràpida de les veus dels últims dos dies';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ets tu?';
+  String get speakerTagPromptIsThisYou => 'Éreu vosaltres?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12111,8 +12111,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Manté precís el teu perfil de veu, perquè Omi mai et confongui amb algú altre.';
+  String get speakerTagPromptHintOwner => 'La resposta només etiqueta el fragment reproduït.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12730,4 +12729,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Agrupa per data';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Resposta desada per a aquest fragment.';
 }

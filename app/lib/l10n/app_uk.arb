@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Допомога і про програму",
     "speakerTagPromptTitle": "Допоможіть Omi розпізнавати голоси",
     "speakerTagPromptSubtitle": "Швидка перевірка голосів за останні два дні",
-    "speakerTagPromptIsThisYou": "Це ви?",
+    "speakerTagPromptIsThisYou": "Це були ви?",
     "speakerTagPromptIsThisPerson": "Це {name}?",
     "speakerTagPromptWhoIsThis": "Хто це?",
     "speakerTagPromptThatsMe": "Це я",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Збіг голосу: {level}",
     "speakerTagPromptHintIdentify": "Кожна відповідь навчає Omi голосу й підвищує впевненість щодо цієї людини.",
     "speakerTagPromptHintConfirm": "«Так» підвищує впевненість щодо {name}.",
-    "speakerTagPromptHintOwner": "Підтримує точність вашого голосового профілю, щоб Omi ніколи не називав вас кимось іншим.",
+    "speakerTagPromptHintOwner": "Ваша відповідь позначає лише відтворений уривок.",
     "speakerTagPromptSavedAs": "Збережено як {name}",
     "speakerTagPromptSavedAsYou": "Збережено як ви",
     "speakerTagPromptIgnoredNote": "Omi більше не питатиме про цей голос",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Нещодавні розмови",
     "tasksNoProject": "Без проєкту",
     "tasksGroupByProject": "Групувати за проєктом",
-    "tasksGroupByDate": "Групувати за датою"
+    "tasksGroupByDate": "Групувати за датою",
+    "speakerTagPromptExcerptSaved": "Відповідь збережено для цього уривка."
 }

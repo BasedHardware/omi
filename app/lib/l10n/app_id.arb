@@ -3532,7 +3532,7 @@
     "helpAndAbout": "Bantuan & Tentang",
     "speakerTagPromptTitle": "Bantu Omi mengenali suara",
     "speakerTagPromptSubtitle": "Pemeriksaan singkat suara dari dua hari terakhir",
-    "speakerTagPromptIsThisYou": "Apakah ini Anda?",
+    "speakerTagPromptIsThisYou": "Apakah ini kamu?",
     "speakerTagPromptIsThisPerson": "Apakah ini {name}?",
     "speakerTagPromptWhoIsThis": "Siapa ini?",
     "speakerTagPromptThatsMe": "Itu saya",
@@ -3782,7 +3782,7 @@
     "voiceMatchMeterLabel": "Kecocokan suara: {level}",
     "speakerTagPromptHintIdentify": "Setiap jawaban mengajari Omi sebuah suara dan menaikkan keyakinan pada orang itu.",
     "speakerTagPromptHintConfirm": "Ya menaikkan keyakinan pada {name}.",
-    "speakerTagPromptHintOwner": "Menjaga profil suaramu tetap akurat, sehingga Omi tidak pernah menamaimu sebagai orang lain.",
+    "speakerTagPromptHintOwner": "Jawabanmu hanya menandai cuplikan yang diputar.",
     "speakerTagPromptSavedAs": "Disimpan sebagai {name}",
     "speakerTagPromptSavedAsYou": "Disimpan sebagai kamu",
     "speakerTagPromptIgnoredNote": "Omi tidak akan menanyakan suara ini lagi",
@@ -3951,5 +3951,6 @@
     "entityRecentConversations": "Percakapan terbaru",
     "tasksNoProject": "Tanpa proyek",
     "tasksGroupByProject": "Kelompokkan menurut Proyek",
-    "tasksGroupByDate": "Kelompokkan menurut Tanggal"
+    "tasksGroupByDate": "Kelompokkan menurut Tanggal",
+    "speakerTagPromptExcerptSaved": "Jawaban disimpan untuk cuplikan ini."
 }

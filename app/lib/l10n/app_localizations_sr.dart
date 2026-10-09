@@ -11081,7 +11081,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Брза провера гласова из последња два дана';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Да ли сте ово ви?';
+  String get speakerTagPromptIsThisYou => 'Да ли сте то били ви?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12053,8 +12053,7 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Одржава ваш гласовни профил прецизним, па вас Omi никад не назива туђим именом.';
+  String get speakerTagPromptHintOwner => 'Ваш одговор означава само пуштени исечак.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12671,4 +12670,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Групиши по датуму';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Одговор је сачуван за овај исечак.';
 }

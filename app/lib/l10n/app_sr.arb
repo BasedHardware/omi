@@ -11054,7 +11054,7 @@
     "helpAndAbout": "Помоћ и о апликацији",
     "speakerTagPromptTitle": "Помозите Omi-ју да препознаје гласове",
     "speakerTagPromptSubtitle": "Брза провера гласова из последња два дана",
-    "speakerTagPromptIsThisYou": "Да ли сте ово ви?",
+    "speakerTagPromptIsThisYou": "Да ли сте то били ви?",
     "speakerTagPromptIsThisPerson": "Да ли је ово {name}?",
     "speakerTagPromptWhoIsThis": "Ко је ово?",
     "speakerTagPromptThatsMe": "То сам ја",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Подударање гласа: {level}",
     "speakerTagPromptHintIdentify": "Сваки одговор учи Omi гласу и повећава поузданост те особе.",
     "speakerTagPromptHintConfirm": "Да повећава поузданост особе {name}.",
-    "speakerTagPromptHintOwner": "Одржава ваш гласовни профил прецизним, па вас Omi никад не назива туђим именом.",
+    "speakerTagPromptHintOwner": "Ваш одговор означава само пуштени исечак.",
     "speakerTagPromptSavedAs": "Сачувано као {name}",
     "speakerTagPromptSavedAsYou": "Сачувано као ви",
     "speakerTagPromptIgnoredNote": "Omi вас више неће питати за овај глас",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "Скорашњи разговори",
     "tasksNoProject": "Без пројекта",
     "tasksGroupByProject": "Групиши по пројекту",
-    "tasksGroupByDate": "Групиши по датуму"
+    "tasksGroupByDate": "Групиши по датуму",
+    "speakerTagPromptExcerptSaved": "Одговор је сачуван за овај исечак."
 }

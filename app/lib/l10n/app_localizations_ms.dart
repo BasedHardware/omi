@@ -12072,8 +12072,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Memastikan profil suara anda tepat, supaya Omi tidak pernah menamakan anda sebagai orang lain.';
+  String get speakerTagPromptHintOwner => 'Jawapan anda hanya melabel petikan yang dimainkan.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12691,4 +12690,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'Kumpulkan mengikut Tarikh';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Jawapan disimpan untuk petikan ini.';
 }

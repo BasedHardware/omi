@@ -11054,7 +11054,7 @@
     "helpAndAbout": "עזרה ואודות",
     "speakerTagPromptTitle": "עזרו ל-Omi לזהות קולות",
     "speakerTagPromptSubtitle": "בדיקה מהירה של קולות מהיומיים האחרונים",
-    "speakerTagPromptIsThisYou": "זה אתה?",
+    "speakerTagPromptIsThisYou": "זה היה הקול שלך?",
     "speakerTagPromptIsThisPerson": "זה {name}?",
     "speakerTagPromptWhoIsThis": "מי זה?",
     "speakerTagPromptThatsMe": "זה אני",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "התאמת קול: {level}",
     "speakerTagPromptHintIdentify": "כל תשובה מלמדת את Omi קול ומעלה את רמת הביטחון באותו אדם.",
     "speakerTagPromptHintConfirm": "\"כן\" מעלה את רמת הביטחון ב-{name}.",
-    "speakerTagPromptHintOwner": "שומר על פרופיל הקול שלך מדויק, כך ש-Omi לעולם לא יתייג אותך כמישהו אחר.",
+    "speakerTagPromptHintOwner": "התשובה שלך מתייגת רק את הקטע שהושמע.",
     "speakerTagPromptSavedAs": "נשמר בשם {name}",
     "speakerTagPromptSavedAsYou": "נשמר כקול שלך",
     "speakerTagPromptIgnoredNote": "Omi לא ישאל שוב על הקול הזה",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "שיחות אחרונות",
     "tasksNoProject": "ללא פרויקט",
     "tasksGroupByProject": "קבץ לפי פרויקט",
-    "tasksGroupByDate": "קבץ לפי תאריך"
+    "tasksGroupByDate": "קבץ לפי תאריך",
+    "speakerTagPromptExcerptSaved": "התשובה נשמרה עבור קטע זה."
 }

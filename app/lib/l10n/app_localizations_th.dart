@@ -11009,7 +11009,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'ตรวจสอบเสียงจากสองวันที่ผ่านมาแบบรวดเร็ว';
 
   @override
-  String get speakerTagPromptIsThisYou => 'นี่คือคุณใช่ไหม?';
+  String get speakerTagPromptIsThisYou => 'นี่เป็นคุณหรือเปล่า?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11978,7 +11978,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner => 'ช่วยให้โปรไฟล์เสียงของคุณแม่นยำ Omi จะได้ไม่เรียกคุณเป็นคนอื่น';
+  String get speakerTagPromptHintOwner => 'คำตอบของคุณจะระบุเฉพาะส่วนที่เล่นเท่านั้น';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12593,4 +12593,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'จัดกลุ่มตามวันที่';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'บันทึกคำตอบสำหรับส่วนนี้แล้ว';
 }

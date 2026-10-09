@@ -11065,7 +11065,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'بررسی سریع صداهای دو روز گذشته';
 
   @override
-  String get speakerTagPromptIsThisYou => 'این شما هستید؟';
+  String get speakerTagPromptIsThisYou => 'این صدای شما بود؟';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12039,8 +12039,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'پروفایل صدای خودتان را دقیق نگه می‌دارد تا Omi هرگز شما را با نام کس دیگری صدا نزند.';
+  String get speakerTagPromptHintOwner => 'پاسخ شما فقط بخش پخش‌شده را برچسب‌گذاری می‌کند.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12658,4 +12657,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get tasksGroupByDate => 'گروه‌بندی بر اساس تاریخ';
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'پاسخ برای این بخش ذخیره شد.';
 }

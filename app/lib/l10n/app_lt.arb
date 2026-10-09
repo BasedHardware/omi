@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Pagalba ir apie",
     "speakerTagPromptTitle": "Padėkite Omi atpažinti balsus",
     "speakerTagPromptSubtitle": "Greita paskutinių dviejų dienų balsų patikra",
-    "speakerTagPromptIsThisYou": "Ar tai jūs?",
+    "speakerTagPromptIsThisYou": "Ar tai buvote jūs?",
     "speakerTagPromptIsThisPerson": "Ar tai {name}?",
     "speakerTagPromptWhoIsThis": "Kas tai?",
     "speakerTagPromptThatsMe": "Tai aš",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Balso atitikimas: {level}",
     "speakerTagPromptHintIdentify": "Kiekvienas atsakymas moko Omi balso ir didina to žmogaus tikrumą.",
     "speakerTagPromptHintConfirm": "Taip padidina {name} tikrumą.",
-    "speakerTagPromptHintOwner": "Palaiko jūsų balso profilį tikslų, kad Omi niekada nepavadintų jūsų kitu asmeniu.",
+    "speakerTagPromptHintOwner": "Jūsų atsakymas žymi tik paleistą ištrauką.",
     "speakerTagPromptSavedAs": "Išsaugota kaip {name}",
     "speakerTagPromptSavedAsYou": "Išsaugota kaip jūs",
     "speakerTagPromptIgnoredNote": "Omi daugiau nebeklaus apie šį balsą",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Naujausi pokalbiai",
     "tasksNoProject": "Be projekto",
     "tasksGroupByProject": "Grupuoti pagal projektą",
-    "tasksGroupByDate": "Grupuoti pagal datą"
+    "tasksGroupByDate": "Grupuoti pagal datą",
+    "speakerTagPromptExcerptSaved": "Atsakymas išsaugotas šiai ištraukai."
 }

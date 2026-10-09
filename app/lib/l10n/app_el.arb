@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Βοήθεια & σχετικά",
     "speakerTagPromptTitle": "Βοηθήστε το Omi να αναγνωρίζει φωνές",
     "speakerTagPromptSubtitle": "Γρήγορος έλεγχος φωνών από τις δύο τελευταίες ημέρες",
-    "speakerTagPromptIsThisYou": "Είστε εσείς;",
+    "speakerTagPromptIsThisYou": "Ήσουν εσύ;",
     "speakerTagPromptIsThisPerson": "Είναι ο/η {name};",
     "speakerTagPromptWhoIsThis": "Ποιος είναι αυτός;",
     "speakerTagPromptThatsMe": "Είμαι εγώ",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Αντιστοίχιση φωνής: {level}",
     "speakerTagPromptHintIdentify": "Κάθε απάντηση διδάσκει στο Omi μια φωνή και αυξάνει τη βεβαιότητα για το άτομο.",
     "speakerTagPromptHintConfirm": "Το «Ναι» αυξάνει τη βεβαιότητα για το άτομο {name}.",
-    "speakerTagPromptHintOwner": "Διατηρεί το δικό σας φωνητικό προφίλ ακριβές, ώστε το Omi να μη σας ονομάζει ποτέ κάποιον άλλο.",
+    "speakerTagPromptHintOwner": "Η απάντησή σου επισημαίνει μόνο το απόσπασμα που ακούστηκε.",
     "speakerTagPromptSavedAs": "Αποθηκεύτηκε ως {name}",
     "speakerTagPromptSavedAsYou": "Αποθηκεύτηκε ως εσείς",
     "speakerTagPromptIgnoredNote": "Το Omi δεν θα ρωτήσει ξανά για αυτή τη φωνή",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Πρόσφατες συνομιλίες",
     "tasksNoProject": "Χωρίς έργο",
     "tasksGroupByProject": "Ομαδοποίηση ανά έργο",
-    "tasksGroupByDate": "Ομαδοποίηση ανά ημερομηνία"
+    "tasksGroupByDate": "Ομαδοποίηση ανά ημερομηνία",
+    "speakerTagPromptExcerptSaved": "Η απάντηση αποθηκεύτηκε για αυτό το απόσπασμα."
 }

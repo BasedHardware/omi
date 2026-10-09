@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Padanan suara: {level}",
     "speakerTagPromptHintIdentify": "Setiap jawapan mengajar Omi satu suara dan meningkatkan keyakinan terhadap orang itu.",
     "speakerTagPromptHintConfirm": "Ya meningkatkan keyakinan terhadap {name}.",
-    "speakerTagPromptHintOwner": "Memastikan profil suara anda tepat, supaya Omi tidak pernah menamakan anda sebagai orang lain.",
+    "speakerTagPromptHintOwner": "Jawapan anda hanya melabel petikan yang dimainkan.",
     "speakerTagPromptSavedAs": "Disimpan sebagai {name}",
     "speakerTagPromptSavedAsYou": "Disimpan sebagai anda",
     "speakerTagPromptIgnoredNote": "Omi tidak akan bertanya tentang suara ini lagi",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Perbualan terkini",
     "tasksNoProject": "Tiada projek",
     "tasksGroupByProject": "Kumpulkan mengikut Projek",
-    "tasksGroupByDate": "Kumpulkan mengikut Tarikh"
+    "tasksGroupByDate": "Kumpulkan mengikut Tarikh",
+    "speakerTagPromptExcerptSaved": "Jawapan disimpan untuk petikan ini."
 }

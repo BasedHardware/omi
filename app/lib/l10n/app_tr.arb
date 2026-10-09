@@ -3532,7 +3532,7 @@
     "helpAndAbout": "Yardım ve Hakkında",
     "speakerTagPromptTitle": "Omi'nin sesleri tanımasına yardım edin",
     "speakerTagPromptSubtitle": "Son iki günün seslerine hızlı bir bakış",
-    "speakerTagPromptIsThisYou": "Bu siz misiniz?",
+    "speakerTagPromptIsThisYou": "Bu sen miydin?",
     "speakerTagPromptIsThisPerson": "Bu {name} mi?",
     "speakerTagPromptWhoIsThis": "Bu kim?",
     "speakerTagPromptThatsMe": "Bu benim",
@@ -3782,7 +3782,7 @@
     "voiceMatchMeterLabel": "Ses eşleşmesi: {level}",
     "speakerTagPromptHintIdentify": "Her yanıt Omi'ye bir ses öğretir ve o kişiye duyulan güveni artırır.",
     "speakerTagPromptHintConfirm": "Evet, {name} kişisine duyulan güveni artırır.",
-    "speakerTagPromptHintOwner": "Kendi ses profilinizi keskin tutar; böylece Omi sizi asla başkası olarak adlandırmaz.",
+    "speakerTagPromptHintOwner": "Yanıtın yalnızca oynatılan bölümü etiketler.",
     "speakerTagPromptSavedAs": "{name} olarak kaydedildi",
     "speakerTagPromptSavedAsYou": "Siz olarak kaydedildi",
     "speakerTagPromptIgnoredNote": "Omi bu ses hakkında bir daha sormayacak",
@@ -3951,5 +3951,6 @@
     "entityRecentConversations": "Son konuşmalar",
     "tasksNoProject": "Proje yok",
     "tasksGroupByProject": "Projeye göre grupla",
-    "tasksGroupByDate": "Tarihe göre grupla"
+    "tasksGroupByDate": "Tarihe göre grupla",
+    "speakerTagPromptExcerptSaved": "Bu bölüm için yanıt kaydedildi."
 }

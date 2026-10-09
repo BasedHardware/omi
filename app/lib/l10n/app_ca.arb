@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Ajuda i informació",
     "speakerTagPromptTitle": "Ajuda l’Omi a reconèixer veus",
     "speakerTagPromptSubtitle": "Una revisió ràpida de les veus dels últims dos dies",
-    "speakerTagPromptIsThisYou": "Ets tu?",
+    "speakerTagPromptIsThisYou": "Éreu vosaltres?",
     "speakerTagPromptIsThisPerson": "És {name}?",
     "speakerTagPromptWhoIsThis": "Qui és?",
     "speakerTagPromptThatsMe": "Sóc jo",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Coincidència de veu: {level}",
     "speakerTagPromptHintIdentify": "Cada resposta ensenya una veu a Omi i augmenta la confiança en aquesta persona.",
     "speakerTagPromptHintConfirm": "Dir que sí augmenta la confiança en {name}.",
-    "speakerTagPromptHintOwner": "Manté precís el teu perfil de veu, perquè Omi mai et confongui amb algú altre.",
+    "speakerTagPromptHintOwner": "La resposta només etiqueta el fragment reproduït.",
     "speakerTagPromptSavedAs": "Desat com a {name}",
     "speakerTagPromptSavedAsYou": "Desat com a tu",
     "speakerTagPromptIgnoredNote": "Omi no tornarà a preguntar per aquesta veu",
@@ -3916,5 +3916,6 @@
     "entityRecentConversations": "Converses recents",
     "tasksNoProject": "Sense projecte",
     "tasksGroupByProject": "Agrupa per projecte",
-    "tasksGroupByDate": "Agrupa per data"
+    "tasksGroupByDate": "Agrupa per data",
+    "speakerTagPromptExcerptSaved": "Resposta desada per a aquest fragment."
 }

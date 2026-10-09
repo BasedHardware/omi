@@ -20184,7 +20184,7 @@ abstract class AppLocalizations {
   /// Question shown under a short audio clip of a speaker
   ///
   /// In en, this message translates to:
-  /// **'Is this you?'**
+  /// **'Was this you?'**
   String get speakerTagPromptIsThisYou;
 
   /// Question under an audio clip; {name} is a person's name
@@ -21690,7 +21690,7 @@ abstract class AppLocalizations {
   /// Hint at the bottom of the 'Is this you?' card.
   ///
   /// In en, this message translates to:
-  /// **'Keeps your own voice profile sharp, so Omi never names you as someone else.'**
+  /// **'Your answer labels only the played excerpt.'**
   String get speakerTagPromptHintOwner;
 
   /// Answered state of the voice card after the user named the voice.
@@ -22688,6 +22688,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Group by Date'**
   String get tasksGroupByDate;
+
+  /// No description provided for @speakerTagPromptExcerptSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer saved for this excerpt.'**
+  String get speakerTagPromptExcerptSaved;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

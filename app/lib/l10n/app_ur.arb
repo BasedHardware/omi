@@ -11054,7 +11054,7 @@
     "helpAndAbout": "مدد اور تعارف",
     "speakerTagPromptTitle": "Omi کو آوازیں پہچاننے میں مدد کریں",
     "speakerTagPromptSubtitle": "پچھلے دو دنوں کی آوازوں کا فوری جائزہ",
-    "speakerTagPromptIsThisYou": "کیا یہ آپ ہیں؟",
+    "speakerTagPromptIsThisYou": "کیا یہ آپ تھے؟",
     "speakerTagPromptIsThisPerson": "کیا یہ {name} ہیں؟",
     "speakerTagPromptWhoIsThis": "یہ کون ہے؟",
     "speakerTagPromptThatsMe": "یہ میں ہوں",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "آواز کا میچ: {level}",
     "speakerTagPromptHintIdentify": "ہر جواب Omi کو ایک آواز سکھاتا ہے اور اس شخص کا اعتماد بڑھاتا ہے۔",
     "speakerTagPromptHintConfirm": "ہاں کہنے سے {name} کا اعتماد بڑھتا ہے۔",
-    "speakerTagPromptHintOwner": "آپ کے اپنے آواز کے پروفائل کو درست رکھتا ہے، تاکہ Omi آپ کو کبھی کسی اور کے نام سے نہ پکارے۔",
+    "speakerTagPromptHintOwner": "آپ کا جواب صرف چلائے گئے اقتباس کو لیبل کرتا ہے۔",
     "speakerTagPromptSavedAs": "{name} کے طور پر محفوظ کیا گیا",
     "speakerTagPromptSavedAsYou": "آپ کے طور پر محفوظ کیا گیا",
     "speakerTagPromptIgnoredNote": "Omi اس آواز کے بارے میں دوبارہ نہیں پوچھے گا",
@@ -11473,5 +11473,6 @@
     "entityRecentConversations": "حالیہ گفتگوئیں",
     "tasksNoProject": "کوئی پروجیکٹ نہیں",
     "tasksGroupByProject": "پروجیکٹ کے لحاظ سے گروپ کریں",
-    "tasksGroupByDate": "تاریخ کے لحاظ سے گروپ کریں"
+    "tasksGroupByDate": "تاریخ کے لحاظ سے گروپ کریں",
+    "speakerTagPromptExcerptSaved": "اس اقتباس کے لیے جواب محفوظ ہو گیا۔"
 }
