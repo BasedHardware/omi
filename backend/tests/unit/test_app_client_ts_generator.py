@@ -187,3 +187,21 @@ def test_typescript_generator_cli_uses_utf8_when_the_process_locale_does_not(tmp
 
     assert completed.returncode == 0, completed.stderr
     assert 'export interface Price_ {' in output_path.read_text(encoding='utf-8')
+
+
+def test_empty_object_models_preserve_closed_and_open_wire_contracts():
+    spec = {
+        'paths': {},
+        'components': {
+            'schemas': {
+                'ClosedRequest': {'type': 'object', 'properties': {}, 'additionalProperties': False},
+                'OpenRequest': {'type': 'object', 'properties': {}},
+                'TypedMap': {'type': 'object', 'properties': {}, 'additionalProperties': {'type': 'integer'}},
+            }
+        },
+    }
+    generated = generate_ts_openapi_types.generate(spec, 'test-openapi.json')
+    assert 'export type ClosedRequest = Record<string, never>;' in generated
+    assert 'export type OpenRequest = Record<string, unknown>;' in generated
+    assert 'export type TypedMap = Record<string, number>;' in generated
+    assert 'export interface ClosedRequest' not in generated
