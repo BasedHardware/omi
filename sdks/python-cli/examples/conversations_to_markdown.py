@@ -270,9 +270,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Progress messages include filenames, which may contain non-ASCII text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     # Read input with UTF-8 BOM protection
     if args.input == "-":
-        raw_data = sys.stdin.read().lstrip("\ufeff")
+        raw_data = sys.stdin.buffer.read().decode("utf-8-sig")
     else:
         raw_data = Path(args.input).read_text(encoding="utf-8-sig")
 
