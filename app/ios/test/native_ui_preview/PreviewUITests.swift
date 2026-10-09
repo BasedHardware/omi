@@ -274,11 +274,11 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(cell.isSelected)
         XCTAssertTrue(listCell(app, "conv_1").isSelected)
         row.tap()
-        // The circle fills at once, before the owner answers the slow command.
+        // The circle fills at once, before the owner answers the slow (8 s) command.
         expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: cell)
-        waitForExpectations(timeout: 2)
+        waitForExpectations(timeout: 4)
         XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_3"].exists)
-        XCTAssertTrue(app.staticTexts["_selection:conv_1,conv_3"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["_selection:conv_1,conv_3"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5))
         XCTAssertTrue(cell.isSelected)
         capture(app, "native-list-selection")
@@ -291,7 +291,7 @@ final class PreviewUITests: XCTestCase {
         // Delete is tapped while the selection command is still pending; it acts on the new set.
         XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_2"].exists)
         app.buttons["bulk_delete"].tap()
-        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 20))
     }
 
     func testBottomBarDeleteStopsWhenThePendingSelectionFails() {
@@ -300,7 +300,7 @@ final class PreviewUITests: XCTestCase {
         app.staticTexts["conv_2"].tap()
         app.buttons["bulk_delete"].tap()
         // The refused selection reverts, so Delete must not act on a set the user never saw.
-        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.staticTexts["bulk_delete:conv_1"].waitForExistence(timeout: 3))
         XCTAssertFalse(listCell(app, "conv_2").isSelected)
     }

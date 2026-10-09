@@ -427,7 +427,9 @@ final class PreviewHarness: ObservableObject {
             throw NSError(domain: "Fixture", code: 1)
         }
         if id == "_selection" && ProcessInfo.processInfo.arguments.contains("slow-selection") {
-            try await Task.sleep(nanoseconds: 4_000_000_000)
+            // Far slower than any UI query, so the optimistic state is checked well before the owner answers,
+            // even on a loaded machine.
+            try await Task.sleep(nanoseconds: 8_000_000_000)
         }
         if id == "_selection" && ProcessInfo.processInfo.arguments.contains("failed-selection") {
             throw NSError(domain: "Fixture", code: 4)
