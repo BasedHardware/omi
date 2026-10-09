@@ -276,9 +276,18 @@ def test_prod_scheduler_and_writer_env_contract():
         assert service['env']['DREAM_AGENT_UID_ALLOWLIST']['value'] == allowlist
         assert 'DREAM_AGENT_TESTFLIGHT_ENABLED' not in service['env']
         assert not any(
-            key.startswith('DREAM_AGENT_') and key not in {'DREAM_AGENT_MODE', 'DREAM_AGENT_UID_ALLOWLIST'}
+            key.startswith('DREAM_AGENT_')
+            and key not in {'DREAM_AGENT_MODE', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_AGENT_PASSES_PER_DAY'}
             for key in service['env']
         )
+    # Only the sweep host admits passes; the dogfood cohort gets four per day there and defaults elsewhere.
+    sync_env = prod['cloud_run']['services']['backend-sync']['env']
+    assert sync_env['DREAM_AGENT_PASSES_PER_DAY']['value'] == '4'
+    assert all(
+        'DREAM_AGENT_PASSES_PER_DAY' not in service['env']
+        for name, service in prod['cloud_run']['services'].items()
+        if name != 'backend-sync'
+    )
     chart = load_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     env = {entry['name']: entry.get('value') for entry in chart['env']}
     assert env['DREAM_AGENT_MODE'] == 'shadow'
