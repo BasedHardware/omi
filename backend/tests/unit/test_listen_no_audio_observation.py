@@ -37,7 +37,7 @@ def test_no_audio_threshold_once_and_recovery(observed, caplog):
     assert value(gauge) == 1
     assert len(caplog.records) == 1
     assert 'no_upstream_audio' in caplog.text
-    observation.observe(has_audio=True)
+    observation.observe(has_audio=True, audio_received_at=300)
     assert value(gauge) == 0
     observation.close()
     assert value(gauge) == 0
@@ -63,7 +63,9 @@ async def test_control_activity_does_not_hide_zero_audio_and_teardown_failure_cl
     clock, gauge, observation = observed
     runtime = object.__new__(ListenSessionRuntime)
     runtime._no_audio_observation = observation
-    runtime.state = SimpleNamespace(active=True, last_activity_time=10**20, first_audio_byte_timestamp=None)
+    runtime.state = SimpleNamespace(
+        active=True, last_activity_time=10**20, first_audio_byte_timestamp=None, last_audio_received_time=0
+    )
     runtime.request = SimpleNamespace(
         websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED),
         owner_persistence_blocked=SimpleNamespace(is_set=lambda: True),
@@ -86,9 +88,30 @@ async def test_first_audio_clears_live_observation(observed):
     observation.observe(has_audio=False)
     runtime = object.__new__(ListenSessionRuntime)
     runtime._no_audio_observation = observation
-    runtime.state = SimpleNamespace(active=True, last_activity_time=10**20, first_audio_byte_timestamp=1)
+    runtime.state = SimpleNamespace(
+        active=True, last_activity_time=10**20, first_audio_byte_timestamp=1, last_audio_received_time=300
+    )
     runtime.request = SimpleNamespace(websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED))
     runtime._send_ping = AsyncMock(return_value=True)
     runtime.wait = AsyncMock(return_value=True)
     await runtime._heartbeat()
+    assert value(gauge) == 0
+
+
+def test_audio_stops_after_first_frame_and_resumes(observed):
+    clock, gauge, observation = observed
+    observation.observe(has_audio=True, audio_received_at=10)
+    clock[0] = 299
+    observation.observe(has_audio=True, audio_received_at=10)
+    assert value(gauge) == 0
+    clock[0] = 300
+    observation.observe(has_audio=True, audio_received_at=10)
+    assert value(gauge) == 1
+    clock[0] = 310
+    observation.observe(has_audio=True, audio_received_at=310)
+    assert value(gauge) == 0
+    clock[0] = 610
+    observation.observe(has_audio=True, audio_received_at=310)
+    assert value(gauge) == 1
+    observation.close()
     assert value(gauge) == 0

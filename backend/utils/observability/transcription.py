@@ -385,13 +385,17 @@ class ListenNoAudioObservation:
 
     def __init__(self) -> None:
         self.started_at = monotonic()
+        self.last_audio_at: float | None = None
         self.counted = False
         self.closed = False
 
-    def observe(self, *, has_audio: bool) -> None:
+    def observe(self, *, has_audio: bool, audio_received_at: float | None = None) -> None:
         if self.closed:
             return
-        stalled = not has_audio and monotonic() - self.started_at >= 300
+        if has_audio and audio_received_at != self.last_audio_at:
+            self.last_audio_at = audio_received_at
+            self.started_at = monotonic()
+        stalled = monotonic() - self.started_at >= 300
         if stalled != self.counted:
             OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS.inc(1 if stalled else -1)
             self.counted = stalled

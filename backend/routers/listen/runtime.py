@@ -690,7 +690,10 @@ class ListenSessionRuntime:
                 break
             observation = getattr(self, '_no_audio_observation', None)
             if observation is not None:
-                observation.observe(has_audio=self.state.first_audio_byte_timestamp is not None)
+                observation.observe(
+                    has_audio=self.state.first_audio_byte_timestamp is not None,
+                    audio_received_at=self.state.last_audio_received_time,
+                )
             if not await self._send_ping():
                 break
             if self.state.last_activity_time and time.time() - self.state.last_activity_time > 90:

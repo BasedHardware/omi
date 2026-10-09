@@ -3860,12 +3860,14 @@ immediately. Recovery never regenerates admitted audio from old chunk snapshots.
 ### Live capture inactivity observation
 
 `omi_listen_live_no_audio_sessions` counts open backend-STT sockets that have
-received no usable upstream audio frame for 300 seconds, sampled by the 10-second
-heartbeat. Control messages do not reset it. First audio or teardown removes the
+received no usable upstream audio frame for 300 seconds, or have stopped sending
+upstream audio for 300 seconds after first audio, sampled by the 10-second
+heartbeat. Control messages do not reset it. Audio resumption or teardown removes the
 socket; custom STT is excluded because it sends client transcripts. The gauge has
 no customer labels and starts at zero. A transition emits
 `omi_listen_capture_idle reason=no_upstream_audio`. This is an observation, not a
 forced disconnect: intentional idle clients can contribute. It cannot detect a
-pendant wedge when the app never opens a backend socket, or a stall after audio
-has already arrived. Fleet alert thresholds should be calibrated against this
+pendant wedge when the app never opens a backend socket. The raw receive
+timestamp is used after the first validated frame, so later undecodable frames
+still count as upstream activity; decode-failure counters cover that case. Fleet alert thresholds should be calibrated against this
 baseline before paging.
