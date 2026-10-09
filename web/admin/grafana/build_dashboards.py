@@ -457,9 +457,10 @@ def device_health_panels() -> list[dict]:
             PENDANT_DRAIN_TITLE,
             "Median and 90th-percentile pendant battery drain in percent per hour, "
             "by firmware and phone platform, over the last 7 days. Rows need at "
-            "least 20 people; empty and Unknown firmware are omitted. The median "
-            "uses only samples whose drain is between 0.1 and 100. Hover a bar "
-            "for the number of people.",
+            "least 20 people. Empty, Unknown, and watchOS firmware (a two-digit "
+            "major such as 26.6) are omitted. Original Friend hardware (1.0.4) "
+            "stays, labeled Friend v1. The median uses only samples whose drain "
+            "is between 0.1 and 100. Hover a bar for the number of people.",
             "pendant_health",
             [
                 {"selector": "firmware_label", "text": "Firmware", "type": "string"},

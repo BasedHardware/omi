@@ -39,10 +39,15 @@ export function parseDeviceHealthDays(raw: string | null): number {
   return Math.min(parsed, DEVICE_HEALTH_MAX_DAYS);
 }
 
+// Watch firmware leaks in from connected non-pendant devices: the stored
+// label is a watchOS version (26.6, 27.0, 27.0.1). Pendant majors are a
+// single digit (1, 2, 3), so a two-digit major is not a pendant. 1.0.4
+// stays — it is the original Friend pendant, and the label names it.
 export function pendantHealthQuery(days: number): string {
   return `
-    SELECT properties.firmware AS firmware,
+    SELECT trim(properties.firmware) AS firmware,
            coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
+           any(properties.device_model) AS device_model,
            count() AS events,
            uniqExact(person_id) AS users,
            countIf(toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100) AS n_valid_drain,
@@ -52,8 +57,9 @@ export function pendantHealthQuery(days: number): string {
            countIf(toFloat(properties.cliff_count) > 0) AS n_with_cliffs
     FROM events
     WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
-      AND coalesce(properties.firmware,'') != ''
-      AND properties.firmware NOT IN ('Unknown','unknown')
+      AND nullIf(trim(properties.firmware),'') IS NOT NULL
+      AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
+      AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
     GROUP BY firmware, os
     HAVING uniqExact(person_id) >= 20
     ORDER BY users DESC
@@ -67,8 +73,9 @@ export function pendantHealthQuery(days: number): string {
 // bounded — a filter that exists only inside the CTE 504s.
 // Unknown charging counts as drain on either endpoint; only an explicit
 // true excludes the interval. `!= true` drops NULL and would hide those pairs.
-// app_version is aggregated with any() so the bar label can show it without
-// adding a GROUP BY key — one OS + build stays one row.
+// app_version is aggregated with max() so the bar label can show it without
+// adding a GROUP BY key — one OS + build stays one row. String max is
+// deterministic; these versions are 1.0.558-style, not zero-padded.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (
@@ -92,7 +99,7 @@ export function phoneHealthQuery(days: number): string {
       FROM samples
     )
     SELECT os, build,
-           any(app_version) AS app_version,
+           max(app_version) AS app_version,
            count() AS n_pairs,
            uniqExact(person_id) AS users,
            round(quantile(0.5)(toFloat(level_drop) / greatest(elapsed_s/3600.0, 0.01)),2) AS p50_drain_per_hour,
@@ -123,6 +130,7 @@ export function phoneEventCountQuery(days: number): string {
 export interface PendantHealthRow {
   firmware: string;
   os: string;
+  device_model: string;
   firmware_label: string;
   events: number;
   users: number;
@@ -198,9 +206,20 @@ function asRows(results: unknown[]): unknown[][] {
   return results.filter((row): row is unknown[] => Array.isArray(row));
 }
 
-function firmwareLabel(firmware: string, os: string): string {
+function firmwareLabel(
+  firmware: string,
+  os: string,
+  deviceModel: string
+): string {
+  // 1.0.4 is the original Friend pendant. Name it so the bar is not read as
+  // a current Omi build. device_model is on the row; a blank any() still
+  // means Friend v1 because that firmware is the hardware.
+  const model = deviceModel.trim();
+  const friendV1 =
+    firmware === "1.0.4" && (model.length === 0 || /^friend\b/i.test(model));
+  const version = friendV1 ? `${firmware} (Friend v1)` : firmware;
   const platform = os.trim();
-  return platform.length > 0 ? `${firmware} · ${platform}` : firmware;
+  return platform.length > 0 ? `${version} · ${platform}` : version;
 }
 
 function phoneLabel(os: string, build: string, appVersion: string): string {
@@ -214,17 +233,19 @@ function mapPendant(rows: unknown[][]): PendantHealthRow[] {
   return rows.map((row) => {
     const firmware = text(row[0]) || "unknown";
     const os = text(row[1]);
+    const deviceModel = text(row[2]);
     return {
       firmware,
       os,
-      firmware_label: firmwareLabel(firmware, os),
-      events: count(row[2]),
-      users: count(row[3]),
-      n_valid_drain: count(row[4]),
-      p50_drain_valid: finiteNumber(row[5]),
-      p90_drain_valid: finiteNumber(row[6]),
-      avg_connected_frac: finiteNumber(row[7]),
-      n_with_cliffs: count(row[8]),
+      device_model: deviceModel,
+      firmware_label: firmwareLabel(firmware, os, deviceModel),
+      events: count(row[3]),
+      users: count(row[4]),
+      n_valid_drain: count(row[5]),
+      p50_drain_valid: finiteNumber(row[6]),
+      p90_drain_valid: finiteNumber(row[7]),
+      avg_connected_frac: finiteNumber(row[8]),
+      n_with_cliffs: count(row[9]),
     };
   });
 }
