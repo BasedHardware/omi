@@ -74,7 +74,7 @@ describe("device health stats route", () => {
     configure();
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
       if (query.includes("Mobile Device Health Daily")) {
-        return [["3.0.21", 10, 4, 3, 5.03, 9.61, 0.26, 1]];
+        return [["3.0.21", "iOS", 10, 4, 3, 5.03, 9.61, 0.26, 1]];
       }
       if (query.includes("SELECT count() AS n")) return [[0]];
       return [];
@@ -90,6 +90,8 @@ describe("device health stats route", () => {
     expect(body.pendant_health).toEqual([
       {
         firmware: "3.0.21",
+        os: "iOS",
+        firmware_label: "3.0.21 · iOS",
         events: 10,
         users: 4,
         n_valid_drain: 3,
@@ -132,21 +134,23 @@ describe("device health stats route", () => {
     configure();
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
       if (query.includes("Mobile Device Health Daily")) {
-        return [["3.0.18", 154, 129, 0, null, null, 0.03, 0]];
+        return [["3.0.18", "Android", 154, 129, 0, null, null, 0.03, 0]];
       }
-      return [["iOS", "992", 4, 2, 3.5, 8.1]];
+      return [["iOS", "1347", "1.0.558", 4, 2, 3.5, 8.1]];
     });
 
     const body = await (await GET(request("?days=14"))).json();
     expect(body.pendant_health[0].p50_drain_valid).toBeNull();
     expect(body.pendant_health[0].p90_drain_valid).toBeNull();
+    expect(body.pendant_health[0].firmware_label).toBe("3.0.18 · Android");
     expect(body.phone_health).toEqual({
       status: "ok",
       series: [
         {
           os: "iOS",
-          build: "992",
-          label: "iOS 992",
+          build: "1347",
+          app_version: "1.0.558",
+          label: "iOS 1.0.558 (1347)",
           n_pairs: 4,
           users: 2,
           p50_drain_per_hour: 3.5,
@@ -177,6 +181,56 @@ describe("device health stats route", () => {
     expect(phone).toContain("FROM pairs");
     expect(phone).toContain("lagInFrame");
     expect(phone).not.toContain("quantileIf");
+    expect(pendant).toContain(
+      "coalesce(nullIf(properties.$os_name,''), properties.platform) AS os"
+    );
+    expect(pendant).toContain("coalesce(properties.firmware,'') != ''");
+    expect(pendant).toContain(
+      "properties.firmware NOT IN ('Unknown','unknown')"
+    );
+    expect(pendant).toContain("GROUP BY firmware, os");
+    expect(pendant).toContain("HAVING uniqExact(person_id) >= 20");
+    expect(pendant).toContain("ORDER BY users DESC");
+    expect(pendant).not.toContain("LIMIT");
+    expect(phone).toContain(
+      "coalesce(nullIf(properties.$app_version,''), nullIf(properties.app_version,''), '') AS app_version"
+    );
+    expect(phone).toContain("any(app_version) AS app_version");
+    expect(phone).toContain("GROUP BY os, build");
+    expect(phone).not.toContain("GROUP BY os, build, app_version");
+    expect(phone).toContain("p90_drain_per_hour");
+    expect(phone).toContain("AS users");
+    expect(phone).toContain("AS n_pairs");
+  });
+
+  it("labels a phone build without a version as OS (build)", async () => {
+    configure();
+    posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
+      if (query.includes("Mobile Device Health Daily")) {
+        return [["2.0.10", "", 40, 22, 20, 58.2, 70.1, 0.4, 0]];
+      }
+      return [["Android", "900", "", 3, 21, 2.2, 4.4]];
+    });
+
+    const body = await (await GET(request("?days=7"))).json();
+    expect(body.days).toBe(7);
+    expect(body.pendant_health[0].os).toBe("");
+    expect(body.pendant_health[0].firmware_label).toBe("2.0.10");
+    expect(body.phone_health).toEqual({
+      status: "ok",
+      series: [
+        {
+          os: "Android",
+          build: "900",
+          app_version: "",
+          label: "Android (900)",
+          n_pairs: 3,
+          users: 21,
+          p50_drain_per_hour: 2.2,
+          p90_drain_per_hour: 4.4,
+        },
+      ],
+    });
   });
 
   it("treats unknown charging as drain on both endpoints", async () => {

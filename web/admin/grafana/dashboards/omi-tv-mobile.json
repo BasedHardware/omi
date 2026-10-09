@@ -4723,8 +4723,8 @@
     {
       "id": 1101,
       "type": "barchart",
-      "title": "Pendant battery drain (%/h, p50 by firmware)",
-      "description": "Median pendant battery drain in percent per hour, by firmware, over the last 14 days. The median uses only samples whose drain is between 0.1 and 100; an unfiltered median is 0 because most daily events report no drain.",
+      "title": "Pendant battery drain %/h \u2014 p50 by firmware \u00d7 platform (7d)",
+      "description": "Median and 90th-percentile pendant battery drain in percent per hour, by firmware and phone platform, over the last 7 days. Rows need at least 20 people; empty and Unknown firmware are omitted. The median uses only samples whose drain is between 0.1 and 100. Hover a bar for the number of people.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -4733,7 +4733,7 @@
         "x": 0,
         "y": 117,
         "w": 12,
-        "h": 8
+        "h": 12
       },
       "fieldConfig": {
         "defaults": {
@@ -4747,25 +4747,76 @@
           "custom": {
             "axisPlacement": "auto",
             "fillOpacity": 80,
-            "lineWidth": 0
+            "lineWidth": 0,
+            "barWidth": 0.62
           },
           "noValue": "n/a"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p90 drain %/h"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 28
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.barWidthFactor",
+                "value": 0.35
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#93c5fd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "users"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": false,
+                  "viz": true,
+                  "legend": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
-        "orientation": "auto",
+        "orientation": "horizontal",
         "showValue": "never",
         "stacking": "none",
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         },
+        "barWidth": 0.62,
+        "groupWidth": 0.75,
         "xTickLabelRotation": 0
       },
       "targets": [
@@ -4779,7 +4830,7 @@
           "source": "url",
           "parser": "backend",
           "format": "table",
-          "url": "http://127.0.0.1:8899/api/omi/stats/device-health?days=14",
+          "url": "http://127.0.0.1:8899/api/omi/stats/device-health?days=7",
           "url_options": {
             "method": "GET",
             "data": ""
@@ -4787,13 +4838,23 @@
           "root_selector": "pendant_health",
           "columns": [
             {
-              "selector": "firmware",
+              "selector": "firmware_label",
               "text": "Firmware",
               "type": "string"
             },
             {
               "selector": "p50_drain_valid",
               "text": "p50 drain %/h",
+              "type": "number"
+            },
+            {
+              "selector": "p90_drain_valid",
+              "text": "p90 drain %/h",
+              "type": "number"
+            },
+            {
+              "selector": "users",
+              "text": "users",
               "type": "number"
             }
           ]
@@ -4803,8 +4864,8 @@
     {
       "id": 1102,
       "type": "barchart",
-      "title": "Phone battery drain (%/h, p50 by build)",
-      "description": "Median phone battery drain in percent per hour, by OS and app build, over the last 14 days. Empty until Phone Battery Sample events exist (shipping in a parallel app PR).",
+      "title": "Phone battery drain %/h \u2014 p50 by build (14d)",
+      "description": "Median and 90th-percentile phone battery drain in percent per hour, by OS, app version, and build, over the last 14 days. Hover a bar for the number of people. Empty until Phone Battery Sample events exist.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -4813,7 +4874,7 @@
         "x": 12,
         "y": 117,
         "w": 12,
-        "h": 8
+        "h": 12
       },
       "fieldConfig": {
         "defaults": {
@@ -4827,25 +4888,76 @@
           "custom": {
             "axisPlacement": "auto",
             "fillOpacity": 80,
-            "lineWidth": 0
+            "lineWidth": 0,
+            "barWidth": 0.62
           },
           "noValue": "awaiting instrumentation"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p90 drain %/h"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 28
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.barWidthFactor",
+                "value": 0.35
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#93c5fd"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "users"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": false,
+                  "viz": true,
+                  "legend": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
-        "orientation": "auto",
+        "orientation": "horizontal",
         "showValue": "never",
         "stacking": "none",
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         },
+        "barWidth": 0.62,
+        "groupWidth": 0.75,
         "xTickLabelRotation": 0
       },
       "targets": [
@@ -4874,6 +4986,16 @@
             {
               "selector": "p50_drain_per_hour",
               "text": "p50 drain %/h",
+              "type": "number"
+            },
+            {
+              "selector": "p90_drain_per_hour",
+              "text": "p90 drain %/h",
+              "type": "number"
+            },
+            {
+              "selector": "users",
+              "text": "users",
               "type": "number"
             }
           ]
