@@ -1,6 +1,7 @@
 """Synthetic-only keep-rescue contract and offline benchmark acceptance."""
 
 import importlib.util
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -124,6 +125,23 @@ def test_fixtures_and_generator():
     assert generator.generate() == rows
 
 
+@pytest.mark.parametrize('status', [None, '', 'reviewed', 'ground_truth', 'agent_proposed_unreviewed '])
+def test_fixture_labels_must_be_provisional(tmp_path, monkeypatch, status):
+    h = harness()
+    row = json.loads(h.FIXTURES.read_text().splitlines()[0])
+    if status is None:
+        row.pop('label_status')
+    else:
+        row['label_status'] = status
+    path = tmp_path / 'fixtures.jsonl'
+    path.write_text(json.dumps(row) + '\n')
+    baseline = Mock()
+    monkeypatch.setattr(h, 'baseline', baseline)
+    with pytest.raises(ValueError, match='label_status must be agent_proposed_unreviewed'):
+        h.load_fixtures(path)
+    baseline.assert_not_called()
+
+
 def test_matrix_and_calendar_counterfactual():
     h = harness()
     rows = h.load_fixtures()
@@ -136,6 +154,8 @@ def test_matrix_and_calendar_counterfactual():
     assert results[2]['final'] == results[2]['baseline']
     assert results[2]['without_calendar']['rescued']
     summary = h.summarize(results)
+    assert summary['label_status'] == 'agent_proposed_unreviewed'
+    assert all(result['label_status'] == summary['label_status'] for result in results)
     assert summary['totals']['false_discard_delta'] == -1
     assert summary['totals']['false_keep_delta'] == 1
     assert sum(cell['families'] for cell in summary['matrix']) == 3

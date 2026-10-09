@@ -19,6 +19,7 @@ from unittest.mock import patch
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 FIXTURES = HERE / 'fixtures/manifest.jsonl'
+LABEL_STATUS = 'agent_proposed_unreviewed'
 BASE_HEAD = '7ba0b9a8e94093f553f902f24b74cff4e30a1558'
 
 
@@ -109,6 +110,8 @@ def load_fixtures(path=FIXTURES):
         if row['family_id'] in seen:
             raise ValueError('duplicate family_id')
         seen.add(row['family_id'])
+        if row.get('label_status') != LABEL_STATUS:
+            raise ValueError(f"fixture {row['family_id']}: label_status must be {LABEL_STATUS}")
         if row['provenance'] != 'synthetic' or row['keep_label'] not in {'keep', 'discard', 'uncertain'}:
             raise ValueError('pilot accepts synthetic labeled fixtures only')
         if row['source_kind'] not in {'live', 'sync'} or row['trigger'] != 'capture_end':
@@ -231,7 +234,12 @@ def summarize(results):
         for row in results
         if 'without_calendar' in row
     ]
-    return {'totals': _counts(results), 'matrix': matrix, 'R16_without_calendar': _counts(counterfactual)}
+    return {
+        'label_status': LABEL_STATUS,
+        'totals': _counts(results),
+        'matrix': matrix,
+        'R16_without_calendar': _counts(counterfactual),
+    }
 
 
 def print_summary(summary):
