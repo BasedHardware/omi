@@ -121,9 +121,10 @@ Future<String> getAuthHeader({
       jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = storedToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -176,6 +177,11 @@ Future<Map<String, String>> buildHeaders({
   AuthSessionSnapshot? sessionSnapshot,
   AuthService? authService,
 }) async {
+  final effectiveAuthCheck = shouldHonorRequestedOmiAuth(
+    requested: requireAuthCheck,
+    customBackendActive: Env.hasApiBaseUrlOverride,
+    url: url,
+  );
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
     'X-App-Platform': PlatformManager.instance.platform,
@@ -185,10 +191,20 @@ Future<Map<String, String>> buildHeaders({
     ...fromHeaders,
   };
 
+  // `fromHeaders` is used by older callers and may itself contain credentials.
+  // Treat the override as a hard boundary for every header source, including
+  // multipart/custom callers. Official Omi destinations remain explicitly
+  // trusted while an override is active.
+  if (Env.hasApiBaseUrlOverride && (url == null || !shouldAttachOmiCredentials(url))) {
+    headers.removeWhere(
+      (name, _) => name.toLowerCase() == 'authorization' || name.toLowerCase() == 'x-account-generation',
+    );
+  }
+
   if (shouldAttachAccountGenerationHeader(
     url: url,
     method: method,
-    requireAuthCheck: requireAuthCheck,
+    requireAuthCheck: effectiveAuthCheck,
     forWebSocket: forWebSocket,
   )) {
     final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
@@ -199,7 +215,7 @@ Future<Map<String, String>> buildHeaders({
     }
   }
 
-  if (requireAuthCheck) {
+  if (effectiveAuthCheck) {
     // Authenticated requests must never degrade into anonymous traffic. A
     // typed exception stops the request before it reaches the network.
     headers['Authorization'] = await getAuthHeader(
@@ -224,8 +240,11 @@ String normalizeOmiApiUrlForHostMatch(String url) {
 }
 
 bool _isRequiredAuthCheck(String url) {
-  // Agent VM endpoints always hit prod even when app uses dev
-  if (url.contains('api.omi.me')) return true;
+  if (shouldAttachOmiCredentials(url)) return true;
+  // A runtime override is a separate trust boundary. Never send the user's
+  // Omi credential to it, even when it happens to share a path with the
+  // configured API base URL.
+  if (Env.hasApiBaseUrlOverride) return false;
   final base = Env.apiBaseUrl;
   if (base != null && base.isNotEmpty) {
     final normalizedUrl = normalizeOmiApiUrlForHostMatch(url);
@@ -235,6 +254,25 @@ bool _isRequiredAuthCheck(String url) {
     }
   }
   return false;
+}
+
+/// Omi credentials are scoped to Omi-owned product API authorities. Hostname
+/// parsing avoids substring matches such as `api.omi.me.attacker.example`.
+@visibleForTesting
+bool shouldAttachOmiCredentials(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
+  return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
+}
+
+/// Central guard for callers that historically requested auth unconditionally.
+/// A custom backend remains credential-free, while explicit calls to an
+/// official Omi authority (such as the agent VM) retain authentication.
+@visibleForTesting
+bool shouldHonorRequestedOmiAuth({required bool requested, required bool customBackendActive, String? url}) {
+  if (!requested) return false;
+  if (!customBackendActive) return true;
+  return url != null && shouldAttachOmiCredentials(url);
 }
 
 const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};
@@ -431,9 +469,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-        reason: AuthSessionExpirationReason.terminalTokenFailure,
-        code: code,
-      ),
+      reason: AuthSessionExpirationReason.terminalTokenFailure,
+      code: code,
+    ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -991,7 +1029,8 @@ Stream<String> makeStreamingApiCall({
   try {
     final requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: method, headers: headers, body: body);
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1085,7 +1124,8 @@ Stream<String> makeMultipartStreamingApiCall({
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     final apiRequest = ApiRequest(url: url, method: 'POST', headers: headers, body: '');
-    final send = seams?.transport ??
+    final send =
+        seams?.transport ??
         (request) => HttpPoolManager.instance.sendStreaming(request, timeout: ApiClient.streamSetupTimeout);
     Future<Map<String, String>> requestHeaders() => seams?.headers != null
         ? seams!.headers!(apiRequest)
@@ -1100,14 +1140,14 @@ Stream<String> makeMultipartStreamingApiCall({
     Map<String, String> builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
 
     Future<http.MultipartRequest> buildRequest() => _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: 'POST',
-          abortTrigger: setupAbort.future,
-        );
+      url: url,
+      files: files,
+      headers: builtHeaders,
+      fields: fields,
+      fileFieldName: fileFieldName,
+      method: 'POST',
+      abortTrigger: setupAbort.future,
+    );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
 

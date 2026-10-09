@@ -16,7 +16,7 @@ from database import dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.support.dream_firestore import DreamFirestore
 from utils import cloud_tasks, dream_agent, dream_tools
 
 UID = 'synthetic-owner'
@@ -104,7 +104,7 @@ def test_route_returns_counts_only(client, monkeypatch, caplog):
 
 @pytest.fixture
 def store(monkeypatch):
-    db = StrictFirestore()
+    db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
@@ -160,7 +160,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         frames=[FrameQuestion(screen_ref='screen/1', question='What image?')],
         feedback=[feedback],
     )
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, 1))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -214,7 +214,9 @@ def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeyp
     monkeypatch.setattr(
         dream_agent, 'plan_pass', stall if stalled_stage == 'plan' else AsyncMock(return_value=(Plan(), 0))
     )
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: ({}, 1))
+    monkeypatch.setattr(
+        dream_agent.dream_reads, 'read_changes', lambda *a: ({'conversations/c1': {'content': 'synthetic'}}, [])
+    )
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
@@ -238,9 +240,9 @@ def test_shadow_write_hooks_dirty_queue(collection, store):
     writer = dream_dirty.after_write(collection)(lambda uid, data: data['id'])
     writer(UID, {'id': 'synthetic-record'})
     assert store.rows[('dream_users', UID)]['score'] == 2
-    assert store.rows[('dream_users', UID, 'events', '2')]['refs'] == [
-        {'collection': collection, 'id': 'synthetic-record'}
-    ]
+    dirty = store.rows[('dream_users', UID, 'dirty', dream_store.dirty_id(collection, 'synthetic-record'))]
+    assert dirty['collection'] == collection and dirty['id'] == 'synthetic-record'
+    assert dirty['change_count'] == 1
 
 
 def test_write_outside_cohort_reads_nothing(store, monkeypatch):

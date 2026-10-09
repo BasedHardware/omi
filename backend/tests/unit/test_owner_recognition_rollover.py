@@ -61,6 +61,8 @@ async def test_automatic_owner_rollover_transcript(
     matcher._voice_centroids = {0: owner}
     matcher.speaker_evidence = {0: deque([(owner, 5.0)])}
     matcher._covered_audio = {0: [(0.0, 5.0)]}
+    matcher._embedding_attempts = {0: 12, 1: 12}
+    matcher._socket_embedding_tokens = 0.0
 
     async def load():
         matcher.person_embeddings = {
@@ -89,6 +91,11 @@ async def test_automatic_owner_rollover_transcript(
     assert incoming[0].is_user is (not (restart or rejected or changed_profile or late_rejection or competing_print))
     if incoming[0].is_user:
         assert matcher._covered_audio[0] == [(0.0, 5.0)]
+        assert matcher._embedding_attempts[0] == 12
+    else:
+        assert matcher._embedding_attempts.get(0, 0) == 0
+    assert 1 not in matcher._embedding_attempts
+    assert matcher._socket_embedding_tokens == 0.0
     assert not row.get('manual_speaker_assignments') or rejected
     assert matcher.segment_assignments == {}
     assert automatic._value.get() == automatic_before + int(incoming[0].is_user)
