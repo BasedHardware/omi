@@ -1466,3 +1466,86 @@ def test_building_index_failure_is_the_historical_unavailable_detail(service_mod
     assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
     assert exc_info.value.stream == "historical"
     assert isinstance(exc_info.value.__cause__, gcloud_exceptions.FailedPrecondition)
+
+
+def test_offset_canonical_failure_with_empty_historical_propagates(service_mod):
+    """A canonical outage plus an empty historical merge is not an empty account.
+
+    The offset route only reads ``budget.truncated``. Returning ``[]`` with the
+    budget still open is a 200 the client treats as "No Memories Yet".
+    """
+    from fastapi import HTTPException
+
+    from utils.other.list_budget import ListReadBudget
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    service.history.read = lambda *_args, **_kwargs: []
+    service.canonical_statuses = MagicMock(return_value={})
+    budget = ListReadBudget.for_request(None, route="memories", seconds=60)
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.read("uid-test", offset=1, limit=8, budget=budget)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Canonical memory unavailable"
+    assert budget.truncated is False
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_offset_canonical_failure_returns_historical_rows_and_marks_truncated(service_mod):
+    """Historical rows survive a canonical outage only as an explicit partial page."""
+    from utils.other.list_budget import ListReadBudget
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+    service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
+    historical = _dated_historical(service_mod, "h-kept", day=4)
+    service.history.read = lambda *_args, **_kwargs: [historical]
+    service.canonical_statuses = MagicMock(return_value={})
+    budget = ListReadBudget.for_request(None, route="memories", seconds=60)
+
+    rows = service.read("uid-test", offset=0, limit=8, budget=budget)
+
+    assert [memory.id for memory in rows] == ["h-kept"]
+    assert budget.truncated is True
+    service_mod.read_canonical_memories.assert_not_called()
+
+
+def test_lookahead_budget_exhaustion_keeps_the_filled_page(service_mod, monkeypatch):
+    """limit=1 fills the page, then the next-chunk peek hits the scan budget.
+
+    That peek used to escape ``read_page``. The first-page route then answered
+    empty-truncated and dropped the row already accepted.
+    """
+    service = service_mod.MemoryService(db_client=_Db())
+    _install_streams(
+        service,
+        service_mod,
+        canonical=[
+            _dated_memory(service_mod, "c-0", day=3),
+            _dated_memory(service_mod, "c-1", day=2),
+        ],
+        historical=[],
+    )
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_CHUNK_SIZE", 1)
+    original_check = service_mod._ScanRowBudget.check
+    calls = {"n": 0}
+
+    def check(self, stream="historical"):
+        calls["n"] += 1
+        if calls["n"] > 3:
+            raise service_mod.MemoryBackingStoreUnavailable(
+                service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL,
+                stream=stream,
+            )
+        return original_check(self, stream)
+
+    monkeypatch.setattr(service_mod._ScanRowBudget, "check", check)
+
+    page = service.read_page("uid-test", limit=1, cursor=None)
+
+    assert [memory.id for memory in page.memories] == ["c-0"]
+    assert page.truncated is True
+    assert page.next_cursor is None

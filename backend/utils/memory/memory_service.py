@@ -612,6 +612,20 @@ class CanonicalMemoryBackend:
                 except ListReadBudgetExhausted:
                     stopped_early = True
                     break
+                except Exception as exc:
+                    # A later chunk failed after this window already accepted
+                    # rows. Keep that prefix and tell the route it is partial.
+                    # An empty walk still raises so the caller cannot turn a
+                    # total canonical outage into a successful empty page.
+                    if not collected:
+                        raise
+                    logger.warning(
+                        "canonical keyset window stopped after a walked prefix: %s: %s",
+                        type(exc).__name__,
+                        exc,
+                    )
+                    stopped_early = True
+                    break
                 if not slots:
                     break
                 scanned += len(slots)
@@ -2575,6 +2589,10 @@ class MemoryService:
         if window > HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW:
             raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
         truncated = False
+        # Set only when the canonical leg failed and this read continued with
+        # historical rows. An empty continuation must re-raise instead of
+        # looking like a complete empty account.
+        canonical_unavailable: Optional[Exception] = None
         try:
             canonical_kwargs: Dict[str, Any] = {
                 "limit": window,
@@ -2608,11 +2626,13 @@ class MemoryService:
                 "canonical list keyset unavailable; merging historical rows only detail=%s",
                 exc.detail,
             )
+            canonical_unavailable = exc
             canonical = []
         except HTTPException as exc:
             if authoritative or exc.status_code != 503 or exc.detail != "Canonical memory unavailable":
                 raise
             logger.warning("canonical list keyset unavailable; merging historical rows only")
+            canonical_unavailable = exc
             canonical = []
         canonical_ids = {memory.id for memory in canonical}
         # Adaptive historical scan: a suppressed newest-first prefix must not
@@ -2703,6 +2723,11 @@ class MemoryService:
             # the last completed round so the page stays an honest prefix.
             truncated = True
 
+        if canonical_unavailable is not None and historical_kept == 0 and not canonical:
+            # No historical rows and no canonical prefix. A bare [] here is a
+            # false-complete empty account (#11831 follow-up).
+            raise canonical_unavailable
+
         # Emit telemetry once for the final scan only — retries must not
         # double-count origin or suppression counters.
         MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin="canonical").inc(len(canonical))
@@ -2712,6 +2737,10 @@ class MemoryService:
         if state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
         page = merged[bounded_offset : bounded_offset + bounded_limit]
+        if canonical_unavailable is not None:
+            truncated = True
+            if budget is not None and not budget.truncated:
+                budget.mark_exhausted('documents')
         if truncated:
             # An unhydrated stub ships empty content; a truncated page must
             # stay an honest prefix of fully-known rows instead.
@@ -3048,27 +3077,41 @@ class MemoryService:
         if historical.state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(historical.state_suppressed)
 
-        has_more = (not truncated) and (canonical.peek() is not None or historical.peek() is not None)
+        # Continuation lookahead and cursor-state reads fetch the next chunk.
+        # Budget exhaustion there must keep the rows already accepted instead
+        # of raising into the route, which would replace them with an empty
+        # truncated response.
         next_cursor = None
-        if has_more:
-            next_state = UniversalListCursorState(
-                uid=uid,
-                include_archive=bool(include_archive),
-                include_pending_processing=bool(include_pending_processing),
-                device_scope=device_scope,
-                client_device_id=client_device_id,
-                canonical=canonical.emitted_keyset,
-                canonical_scan=canonical.scan_keyset,
-                historical=historical.consumed_keyset,
-                historical_updated_scan=historical.updated_scan_keyset,
-                historical_created_scan=historical.created_scan_keyset,
-                canonical_exhausted=canonical.exhausted and canonical.peek() is None,
-                historical_updated_exhausted=historical.updated_exhausted,
-                historical_created_exhausted=historical.created_exhausted,
-                view=temporal_view,
-                as_of=temporal_as_of_iso,
-            )
-            next_cursor = encode_universal_list_cursor(next_state, secret=secret)
+        if not truncated:
+            try:
+                has_more = canonical.peek() is not None or historical.peek() is not None
+                if has_more:
+                    next_state = UniversalListCursorState(
+                        uid=uid,
+                        include_archive=bool(include_archive),
+                        include_pending_processing=bool(include_pending_processing),
+                        device_scope=device_scope,
+                        client_device_id=client_device_id,
+                        canonical=canonical.emitted_keyset,
+                        canonical_scan=canonical.scan_keyset,
+                        historical=historical.consumed_keyset,
+                        historical_updated_scan=historical.updated_scan_keyset,
+                        historical_created_scan=historical.created_scan_keyset,
+                        canonical_exhausted=canonical.exhausted and canonical.peek() is None,
+                        historical_updated_exhausted=historical.updated_exhausted,
+                        historical_created_exhausted=historical.created_exhausted,
+                        view=temporal_view,
+                        as_of=temporal_as_of_iso,
+                    )
+                    next_cursor = encode_universal_list_cursor(next_state, secret=secret)
+            except ListReadBudgetExhausted:
+                truncated = True
+                next_cursor = None
+            except MemoryBackingStoreUnavailable as exc:
+                if exc.detail != MEMORY_LIST_SCAN_BUDGET_DETAIL:
+                    raise
+                truncated = True
+                next_cursor = None
         return UniversalMemoryListPage(memories=page, next_cursor=next_cursor, truncated=truncated)
 
     def read_pinned(
