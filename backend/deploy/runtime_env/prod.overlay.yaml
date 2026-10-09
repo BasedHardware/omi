@@ -700,6 +700,8 @@ overlay:
             category: rollout
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Shadow dogfood: infra failures on 2026-10-09 consumed the default 2 passes/day.
+          DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
           SYNC_PHASE_METRICS_PROJECT: {value: based-hardware, category: telemetry}
