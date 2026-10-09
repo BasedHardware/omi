@@ -5,9 +5,14 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    PlatformManager.initializeForLocalHarness();
+  });
 
   tearDown(Env.clearApiBaseUrlOverrideForTesting);
 
@@ -93,6 +98,37 @@ void main() {
         shouldHonorRequestedOmiAuth(requested: true, customBackendActive: true, url: 'https://api.omi.me/v1/agents'),
         isTrue,
       );
+    });
+
+    test('caller supplied credentials are stripped from override authorities', () async {
+      Env.overrideApiBaseUrl('https://self-hosted.example.test/');
+
+      final headers = await buildHeaders(
+        requireAuthCheck: false,
+        url: 'https://self-hosted.example.test/v1/users/me',
+        method: 'POST',
+        fromHeaders: const {
+          'authorization': 'Bearer leaked',
+          'X-Account-Generation': '42',
+          'X-Request-Id': 'preserved',
+        },
+      );
+
+      expect(headers.keys.map((key) => key.toLowerCase()), isNot(contains('authorization')));
+      expect(headers.keys.map((key) => key.toLowerCase()), isNot(contains('x-account-generation')));
+      expect(headers['X-Request-Id'], 'preserved');
+    });
+
+    test('explicit official Omi destinations retain caller supplied credentials', () async {
+      Env.overrideApiBaseUrl('https://self-hosted.example.test/');
+
+      final headers = await buildHeaders(
+        requireAuthCheck: false,
+        url: 'https://API.OMI.ME/v1/agent',
+        fromHeaders: const {'Authorization': 'Bearer explicit'},
+      );
+
+      expect(headers['Authorization'], 'Bearer explicit');
     });
   });
 }

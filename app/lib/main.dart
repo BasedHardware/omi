@@ -240,11 +240,6 @@ Future _init() async {
 
   FlutterForegroundTask.initCommunicationPort();
 
-  // Service manager
-  if (!_serviceManagerInitialized) {
-    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
-    _serviceManagerInitialized = true;
-  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -299,8 +294,15 @@ Future _init() async {
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
   // Persisted override must be live before auth resolution and product traffic.
-  // ServiceManager.init runs earlier and does not snapshot Env.apiBaseUrl.
   BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+  // ConnectivityService snapshots its health-check URLs when ServiceManager
+  // initializes, so initialize it only after restoring (or clearing) the
+  // persisted override. This also makes release builds pin their flavor URL
+  // before the first connectivity probe.
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   await PhysicalQualification.startupStage(
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,

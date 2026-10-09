@@ -190,6 +190,15 @@ Future<Map<String, String>> buildHeaders({
     ...fromHeaders,
   };
 
+  // `fromHeaders` is used by older callers and may itself contain credentials.
+  // Treat the override as a hard boundary for every header source, including
+  // multipart/custom callers. Official Omi destinations remain explicitly
+  // trusted while an override is active.
+  if (Env.hasApiBaseUrlOverride && (url == null || !shouldAttachOmiCredentials(url))) {
+    headers.removeWhere(
+        (name, _) => name.toLowerCase() == 'authorization' || name.toLowerCase() == 'x-account-generation');
+  }
+
   if (shouldAttachAccountGenerationHeader(
     url: url,
     method: method,
