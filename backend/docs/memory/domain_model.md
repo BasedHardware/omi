@@ -86,7 +86,7 @@ owned by their existing boundaries.
 | Use of "archive" | Means | Canonical handling |
 |------------------|-------|--------------------|
 | **`layer=archive`** | Aged-out long-term memory, kept for recall, hidden by default | The **only** product meaning of "archive" |
-| `L1MemoryArchiveItem` / working-memory "archive" | A **processing-pipeline** extraction artifact (`working_memory.py`) | Internal only; rename per terminology retirement; **not** the product Archive layer |
+| `L1MemoryArchiveItem` / working-memory "archive" | A **processing-pipeline** extraction artifact (`working_observations.py`) | Internal only; rename per terminology retirement; **not** the product Archive layer |
 | Audio / conversation retention "archive" | Raw-input storage/retention policy | Upstream (not memory); never `layer=archive` |
 
 ### Boundary rules
@@ -171,8 +171,8 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 
 | Internal term (retire in product/docs) | Code locations | Means | Canonical term |
 |----------------------------------------|----------------|-------|----------------|
-| **L1**, `L1MemoryArchiveItem`, `WorkingMemoryObservation` | `working_memory.py`, `memory_contracts.py` | Working-memory / archive extraction candidates | **Working observation** or **short-term candidate** |
-| **L2**, `L2MemoryRoute`, `durable_memory_patch*` | `l2_memory_routes.py`, `durable_memory_patches.py` | Durable synthesis / promotion routing | **Promotion proposal** / **consolidation route** |
+| **L1**, `L1MemoryArchiveItem`, `WorkingMemoryObservation` | `working_observations.py`, `memory_contracts.py` | Working-memory / archive extraction candidates | **Working observation** or **short-term candidate** |
+| **L2**, `L2MemoryRoute`, `durable_memory_patch*` | `canonical_consolidation.py`, `short_term_promotion.py` | Durable synthesis / promotion routing | **Promotion proposal** / **consolidation route** |
 | **`LifecycleState.working`** | `memory_contracts.py` | In-flight extraction state | Internal only; not a product layer |
 | **`context_only`** | projections, route hints | Processing outcome | **Not a tier** — normalize to **Archive** or non-default outcome |
 | **`processing_state`** | `pending` / `processed` / `blocked` | Item processing pipeline | **Keep** internal; separate from `layer` |
