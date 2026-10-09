@@ -108,6 +108,43 @@ def test_manual_idle_refunds_correct_allowance(store, client, monkeypatch):
     state = store.rows[('dream_users', UID)]
     assert state['manual_runs'] == state['passes'] == 0
     assert store.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert client.get('/v1/dream/runs').json()['runs'] == []
+
+
+def test_projection_strips_evidence_reproductions_and_extra_diagnostics(store, client):
+    source = {
+        'status': 'complete',
+        'proposed': {
+            'questions': [{'kind': 'same_person', 'title': 'Are these the same robot?', 'item_id': 'private-id'}],
+            'slow_tasks': [{'description': 'Send the synthetic proposal', 'evidence': ['private-ref']}],
+            'vocabulary': [{'kind': 'jargon', 'spelling': 'Qorbi', 'aliases': ['Qorby'], 'evidence': ['private-ref']}],
+            'feedback': [
+                Feedback(
+                    component='notes',
+                    failure_class='spelling',
+                    severity='warning',
+                    count=3,
+                    latency_ms=2,
+                    error_rate=0.1,
+                    reproduction='private-reproduction',
+                ).model_dump()
+            ],
+        },
+        'outcomes': [{'tool': 'feedback', 'status': 'privacy_rejected'}],
+        'usage_unknown': True,
+    }
+    store.rows[('users', UID, 'dream_runs', 'report')] = {
+        **review_store.encode_doc(UID, {'source': source}),
+        'created_at': datetime.now(timezone.utc),
+    }
+    response = client.get('/v1/dream/runs')
+    run = response.json()['runs'][0]
+    assert run['questions'] == [{'kind': 'same_person', 'text': 'Are these the same robot?'}]
+    assert run['privacy_rejected'] == 1
+    assert run['feedback'] == [{'component': 'notes', 'failure_class': 'spelling', 'severity': 'warning', 'count': 3}]
+    assert (
+        'private-' not in response.text and 'usage_unknown' not in response.text and 'latency_ms' not in response.text
+    )
 
 
 def test_run_now_and_list_decrypt_same_contract_without_refs(store, client, monkeypatch):

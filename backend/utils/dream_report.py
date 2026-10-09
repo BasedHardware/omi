@@ -112,6 +112,7 @@ def list_runs(uid, limit):
     caps = Caps.from_env()
     state = dream_store.own_state(uid)
     today = state.get('day') == datetime.now(timezone.utc).date().isoformat()
+    runs = [project_run(uid, run_id, doc) for run_id, doc in dream_store.own_runs(uid, limit=limit)]
     return DreamRunsResponse.model_validate(
         dict(
             mode=mode(),
@@ -120,7 +121,7 @@ def list_runs(uid, limit):
             manual_runs_today=int(state.get('manual_runs', 0)) if today else 0,
             manual_runs_limit=caps.manual_runs,
             queued_changes=dream_store.dirty_count(uid),
-            runs=[project_run(uid, run_id, doc) for run_id, doc in dream_store.own_runs(uid, limit=limit)],
+            runs=[run for run in runs if run.status != 'idle'],
         )
     )
 
