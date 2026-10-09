@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-dream-report.png",
+      "platform": "mobile-ios",
+      "description": "Dream Report with generated wire fixtures, preview fixes and suggestions",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-dream-report-empty.png",
+      "platform": "mobile-ios",
+      "description": "Dream Report before the first pass",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
