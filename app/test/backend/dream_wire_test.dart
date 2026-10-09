@@ -2,45 +2,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/gen/dream_wire.g.dart';
 
 Map<String, dynamic> completedRun() => {
-  'run_id': 'synthetic-run',
-  'created_at': '2026-10-09T11:00:47Z',
-  'trigger': 'schedule',
-  'status': 'complete',
-  'error_type': null,
-  'records_read': 20,
-  'records_queued_after': 108,
-  'dirty_dropped': 1,
-  'tokens': 5400,
-  'cost_usd': 0.0108,
-  'edits': [
-    {
-      'kind': 'spelling',
-      'target_label': 'Conversation · Synthetic sync',
-      'before': 'Qorby',
-      'after': 'Qorbi',
-      'reason': 'Repeated spelling evidence',
-      'evidence_count': 3,
-      'outcome': 'shadow',
-    },
-  ],
-  'questions': [
-    {'kind': 'same_person', 'text': 'Are these the same invented robot?'},
-  ],
-  'slow_tasks': [
-    {'description': 'Send the synthetic notes'},
-  ],
-  'vocabulary': [
-    {
-      'kind': 'person',
-      'spelling': 'Qorbi',
-      'aliases': ['Qorby'],
-    },
-  ],
-  'feedback': [
-    {'component': 'transcription', 'failure_class': 'spelling', 'severity': 'warning', 'count': 3},
-  ],
-  'privacy_rejected': 1,
-};
+      'run_id': 'synthetic-run',
+      'created_at': '2026-10-09T11:00:47Z',
+      'trigger': 'schedule',
+      'status': 'complete',
+      'error_type': null,
+      'records_read': 20,
+      'records_queued_after': 108,
+      'dirty_dropped': 1,
+      'tokens': 5400,
+      'cost_usd': 0.0108,
+      'edits': [
+        {
+          'kind': 'spelling',
+          'target_label': 'Conversation · Synthetic sync',
+          'before': 'Qorby',
+          'after': 'Qorbi',
+          'reason': 'Repeated spelling evidence',
+          'evidence_count': 3,
+          'outcome': 'shadow',
+        },
+      ],
+      'questions': [
+        {'kind': 'same_person', 'text': 'Are these the same invented robot?'},
+      ],
+      'slow_tasks': [
+        {'description': 'Send the synthetic notes'},
+      ],
+      'vocabulary': [
+        {
+          'kind': 'person',
+          'spelling': 'Qorbi',
+          'aliases': ['Qorby']
+        },
+      ],
+      'feedback': [
+        {'component': 'transcription', 'failure_class': 'spelling', 'severity': 'warning', 'count': 3},
+      ],
+      'privacy_rejected': 1,
+    };
 
 void main() {
   test('generated GET response decodes allowance and every nested report model', () {
