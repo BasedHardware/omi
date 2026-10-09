@@ -1218,7 +1218,12 @@ def _resolve(
         placement = placements.get(sid)
         placeable = placement is not None and placement.window is not None
         if placeable:
-            return not cache_hit(keys[sid])
+            key = keys[sid]
+            # Legacy v1 vectors remain useful for grouping, but their nominal
+            # transcript duration is not measured owner evidence. Verified PCM
+            # must get a bounded fresh embedding before that vector can identify.
+            measured = clip_seconds.get(key, 0.0)
+            return not cache_hit(key) or not math.isfinite(measured) or measured <= 0.0
         if segment.audio_capture_start is not None or segment.audio_capture_end is not None:
             return True
         scope = segment.speaker_id_scope or ''

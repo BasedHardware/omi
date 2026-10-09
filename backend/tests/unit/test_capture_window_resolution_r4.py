@@ -140,7 +140,7 @@ def test_randomized_base_embedding_is_byte_identical(env, verified_audio, base_s
 
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 @pytest.mark.parametrize('extents', [[(0, 1.3), (1.3005, 2.4)], [(0, 6), (6, 12)]])
-def test_base_resolved_identity_survives_cache_hit_and_miss(
+def test_base_resolved_identity_survives_legacy_evidence_refresh_and_cache_miss(
     env, verified_audio, base_stage, monkeypatch, scope, extents
 ):
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
@@ -166,18 +166,16 @@ def test_base_resolved_identity_survives_cache_hit_and_miss(
     env[0].update(store)
     cached = old.model_copy(deep=True)
     stage.resolve_speakers_for_processing('offline', cached)
-    assert not candidate.clips
-    expected_cached = old.model_copy(deep=True)
-    if extents[-1][1] == 12:
-        # A bare historical cache cannot claim enough owner seconds for a new
-        # negative either. Grouping, transcript attribution and capture proof
-        # remain byte-for-byte unchanged; only confidence becomes unknown.
-        expected_cached.transcript_segments[0].speaker_identity_status = 'unknown'
-    assert cached.model_dump() == expected_cached.model_dump()
+    # Legacy grouping vectors have no measured identity evidence. Refresh the
+    # exact original clip, never replace it with the concatenated bystander.
+    assert candidate.clips == diarizer.clips
+    assert cached.model_dump() == old.model_dump()
+    stage.resolve_speakers_for_processing('offline', cached)
+    assert candidate.clips == diarizer.clips  # measured warm hit needs no refresh
+    assert cached.model_dump() == old.model_dump()
     env[0].clear()  # download returns no bytes: ordinary miss, no invalidation
     stage.resolve_speakers_for_processing('offline', cached)
-    assert len(candidate.clips) == len(diarizer.clips)
-    assert all(a == b for a, b in zip(candidate.clips, diarizer.clips))
+    assert candidate.clips == diarizer.clips * 2
     assert cached.model_dump() == old.model_dump()
     # Evidence duration was already an optional v1 header field. It now serves
     # identity policy even with score instrumentation off; all embedding bytes,

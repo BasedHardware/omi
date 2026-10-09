@@ -3682,6 +3682,12 @@ known coverage holes and raced blobs still refuse globally. Identity eligibility
 uses actual distinct embedded duration independently of optional score logging.
 Version-1 caches remain readable for grouping; entries without duration metadata
 claim no owner evidence until verified audio supplies it.
+When a segment has a proven audio window, an otherwise valid cache hit with
+missing, zero or invalid measured evidence is refreshed from verified PCM under
+the existing attempt/time limits. Nominal transcript duration is never promoted
+to owner evidence. Unplaceable historical grouping remains cache-readable; a
+failed refresh cannot claim new owner evidence. Valid measured cache entries
+remain reusable without another embedding.
 
 New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
 under the same encrypted, deletion-owned audio prefix. New readers prefer it,
