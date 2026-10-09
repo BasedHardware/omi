@@ -284,19 +284,31 @@ def test_prod_scheduler_and_writer_env_contract():
                 'DREAM_AGENT_MODE',
                 'DREAM_AGENT_UID_ALLOWLIST',
                 'DREAM_AGENT_PASSES_PER_DAY',
+                'DREAM_AGENT_MANUAL_RUNS_PER_DAY',
+                'DREAM_AGENT_DAILY_USD',
                 'DREAM_AGENT_CANARY_UID',
             }
             for key in service['env']
         )
     services = prod['cloud_run']['services']
     # The sweep host and the report host present the same daily allowance; no other host declares one.
+    dogfood_caps = {
+        'DREAM_AGENT_PASSES_PER_DAY': '24',
+        'DREAM_AGENT_MANUAL_RUNS_PER_DAY': '20',
+        'DREAM_AGENT_DAILY_USD': '60',
+    }
     for name in ('backend-sync', 'backend'):
-        assert services[name]['env']['DREAM_AGENT_PASSES_PER_DAY']['value'] == '4'
-    assert all(
-        'DREAM_AGENT_PASSES_PER_DAY' not in service['env']
-        for name, service in services.items()
-        if name not in {'backend-sync', 'backend'}
-    )
+        for key, value in dogfood_caps.items():
+            assert services[name]['env'][key]['value'] == value
+        assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
+            'secret': 'DREAM_AGENT_FEEDBACK_SALT',
+            'version': 'latest',
+        }
+    for service in writers:
+        if service not in (services['backend'], services['backend-sync']):
+            assert dogfood_caps.keys().isdisjoint(service['env'])
+            assert 'DREAM_AGENT_FEEDBACK_SALT' not in service.get('secrets', {})
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service['env']
     # Owner reports/Run Now are served by backend only; the synthetic canary runs on the sweep host only,
     # in the reserved namespace, and never through the user allowlist.
     assert [n for n, s in services.items() if 'DREAM_SELF_REPORT_MODE' in s['env']] == ['backend']
@@ -312,3 +324,6 @@ def test_prod_scheduler_and_writer_env_contract():
     dev = manifest['environments']['dev']
     for service in [dev['gke']['backend-listen'], *dev['cloud_run']['services'].values()]:
         assert service['env'].get('DREAM_AGENT_MODE', {}).get('value', 'off') == 'off'
+        assert dogfood_caps.keys().isdisjoint(service['env'])
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service.get('secrets', {})
+        assert 'DREAM_AGENT_FEEDBACK_SALT' not in service['env']

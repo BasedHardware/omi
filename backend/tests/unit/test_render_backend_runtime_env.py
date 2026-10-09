@@ -857,9 +857,9 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     }
 
 
-def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
-    # Main's declared mounts at cd3326b3a58d. Preserve the resource, env alias,
-    # and version together: a new alias can also introduce a startup dependency.
+def test_prod_cloud_run_secret_refs_match_approved_bindings():
+    # Base mounts plus 2026-10-09's prod-only dream salt on report/sweep hosts.
+    # Preserve resource, env alias and version: aliases can introduce startup dependencies.
     common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
     baseline = {
         'backend': common
@@ -871,8 +871,9 @@ def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
             'BETA_PROMOTION_TOKEN',
             'MCP_OAUTH_CLIENTS_JSON',
             'SCREEN_FRAME_SIGNING_SECRET',
+            'DREAM_AGENT_FEEDBACK_SALT',
         },
-        'backend-sync': common | {'GOOGLE_MAPS_API_KEY'},
+        'backend-sync': common | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }

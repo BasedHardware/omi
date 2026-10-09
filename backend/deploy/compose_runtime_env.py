@@ -184,6 +184,7 @@ def main() -> int:
         sort_keys=False,
         default_flow_style=False,
         allow_unicode=True,
+        width=120,  # Avoid wrapping compact rollout maps in the oversized generated manifest.
     )
     if args.check:
         current = args.output.read_text(encoding='utf-8') if args.output.exists() else ''

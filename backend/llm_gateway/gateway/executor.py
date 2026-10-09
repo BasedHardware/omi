@@ -50,6 +50,7 @@ from llm_gateway.gateway.schemas import (
     RouteArtifact,
     RouteServingClass,
 )
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
 from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
@@ -528,17 +529,18 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            response, error = await _attempt_provider(
-                resolved_route,
-                route,
-                provider,
-                provider_ref,
-                credential_context,
-                attempt_trace=attempt_trace,
-                max_provider_attempts=max_provider_attempts,
-                fallback_reason=current_fallback_reason,
-                deadline_monotonic=deadline_monotonic,
-            )
+            with vertex_attempt_scope(route, provider_ref):
+                response, error = await _attempt_provider(
+                    resolved_route,
+                    route,
+                    provider,
+                    provider_ref,
+                    credential_context,
+                    attempt_trace=attempt_trace,
+                    max_provider_attempts=max_provider_attempts,
+                    fallback_reason=current_fallback_reason,
+                    deadline_monotonic=deadline_monotonic,
+                )
             if error is None:
                 if response is None:
                     raise GatewayProviderFailureError(

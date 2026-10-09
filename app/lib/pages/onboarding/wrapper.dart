@@ -462,7 +462,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           }
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
-          SharedPreferencesUtil().firstSummaryRatingPending = true;
           SharedPreferencesUtil().remove(_resumeKey);
           _completeOnboardingTelemetry();
           PlatformManager.instance.analytics.onboardingCompleted();

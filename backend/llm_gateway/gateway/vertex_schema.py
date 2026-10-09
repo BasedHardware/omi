@@ -15,6 +15,12 @@ from llm_gateway.gateway.schemas import FailureClass
 
 # https://cloud.google.com/java/docs/reference/google-cloud-vertexai/latest/com.google.cloud.vertexai.api.GenerationConfig
 # Unlike responseSchema, this field understands $defs/$ref and type: null.
+# Omit minItems/maxItems even though Vertex supports them syntactically. The
+# real dream Plan elicited: "The specified schema produces a constraint that
+# has too many states for serving." Removing only array bounds made it pass;
+# nested bounds can multiply grammar states even at small limits. See the live
+# bisection evidence in backend/docs/llm/dream-canary-vertex-audit.md. Callers
+# retain their original schemas for validation (dream caps arrays beforehand).
 _VALUE_KEYS = frozenset(
     {
         '$id',
@@ -24,8 +30,6 @@ _VALUE_KEYS = frozenset(
         'title',
         'description',
         'enum',
-        'minItems',
-        'maxItems',
         'minimum',
         'maximum',
         'required',

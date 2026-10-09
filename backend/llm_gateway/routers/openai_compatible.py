@@ -62,6 +62,7 @@ from llm_gateway.gateway.metrics import (
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
 from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.resolver import ResolvedRoute, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
@@ -514,7 +515,8 @@ async def _prepared_streaming_iterator(
         )
         try:
             while True:
-                first_chunk = await anext(stream)
+                with vertex_attempt_scope(route, provider_ref):
+                    first_chunk = await anext(stream)
                 if first_chunk:
                     break
         except StopAsyncIteration:
