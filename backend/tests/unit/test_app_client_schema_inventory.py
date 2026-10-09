@@ -36,6 +36,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     # action_item.dart was fully migrated to typedefs (no fromJson/toJson), so it's
     # correctly absent from manual_files entirely — neither generated_backed nor remaining.
     assert 'app/lib/backend/schema/folder.dart' in generated_backed_paths
+    assert 'app/lib/backend/schema/dream_report.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/apps.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/users.dart' in generated_backed_paths
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
@@ -448,3 +449,36 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     assert formerly_dirty_result.returncode == 0
     assert 'getApps' not in clean_result.stdout
     assert 'OpenAPI route functions with raw Dart decode sites:' not in formerly_dirty_result.stdout
+
+
+def test_display_adapter_requires_generated_values_at_every_rest_consumer(tmp_path, monkeypatch):
+    schema_dir, api_dir = tmp_path / 'schema', tmp_path / 'api'
+    schema_dir.mkdir()
+    api_dir.mkdir()
+    model = schema_dir / 'report.dart'
+    model.write_text('class Report { static Report fromJson(Map json) => Report(); }')
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    consumer = api_dir / 'reports.dart'
+    prefix = "import 'package:omi/backend/schema/report.dart';\n"
+    consumer.write_text(prefix + 'Report read(body) => Report.fromJson(wire.GeneratedReport.fromJson(body).toJson());')
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'return Report.fromJson(decoded); }'
+    )
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw = api_dir / 'raw.dart'
+    raw.write_text(prefix + 'Report read(body) => Report.fromJson(jsonDecode(body));')
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw.unlink()
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'decoded = jsonDecode(body); return Report.fromJson(decoded); }'
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'void earlier(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); } '
+        'Report read(decoded) => Report.fromJson(decoded);'
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
