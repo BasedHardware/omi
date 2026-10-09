@@ -119,7 +119,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
                 } else { throw PresentationError.invalid }
             }
             state = form
-            controller = UIHostingController(rootView: NativeSurfaceView(state: form))
+            controller = UIHostingController(rootView: NativeSurfaceView(state: form)
+                .environment(\.nativeSheetCancelID, cancelID))
             controller.modalPresentationStyle = .pageSheet
             controller.isModalInPresentation = args["dismissible"] as? Bool == false
             controller.sheetPresentationController?.prefersGrabberVisible = args["dismissible"] as? Bool != false
@@ -311,26 +312,46 @@ struct NativeActivityView: View {
         .accessibilityAddTraits(.isModal)
     }
 
+    /// A compact HUD, like the system's: the spinner above the label, hugging a short label and
+    /// wrapping a long one at 280 pt.
     private var card: some View {
-        ProgressView {
-            Text(request.label).font(.headline).multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+        ViewThatFits(in: .horizontal) {
+            hud.fixedSize()
+            hud
         }
-        .controlSize(.large)
-        .padding(24)
-        .frame(minWidth: 160, maxWidth: 320)
-        .modifier(NativeActivityCardStyle())
+        .frame(maxWidth: 280)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("native-activity")
     }
+
+    private var hud: some View {
+        ProgressView {
+            Text(request.label).font(.headline).foregroundStyle(.primary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+        }
+        .controlSize(.large)
+        .tint(.primary)
+        .padding(.horizontal, 28).padding(.vertical, 24)
+        .frame(minWidth: 148)
+        .modifier(NativeActivityCardStyle())
+    }
 }
 
+/// Glass tinted with the card's own background over a matching scrim, so the label keeps its contrast
+/// over whatever is dimmed beneath, with the shadow on the backing shape only.
 private struct NativeActivityCardStyle: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        let shadow = Color.black.opacity(colorScheme == .dark ? 0.4 : 0.16)
         if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: .rect(cornerRadius: 24))
+            content.glassEffect(.regular.tint(Color(uiColor: .systemBackground).opacity(0.8)), in: .rect(cornerRadius: 28))
+                .background(shape.fill(Color(uiColor: .systemBackground).opacity(0.6))
+                    .shadow(color: shadow, radius: 24, x: 0, y: 10))
         } else {
-            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            content.background(shape.fill(.thickMaterial).shadow(color: shadow, radius: 24, x: 0, y: 10))
         }
     }
 }

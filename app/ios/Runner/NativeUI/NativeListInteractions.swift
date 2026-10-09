@@ -237,8 +237,16 @@ struct NativeBottomBar<Caption: View, Buttons: View>: View {
                 VStack(alignment: .leading, spacing: 8) { label(); buttons() }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .frame(maxWidth: .infinity)
-        .background(.bar)
+        .modifier(NativeBarBackground())
+    }
+}
+
+/// iOS 26+ bars float over the content's scroll edge effect; earlier systems use the bar material.
+@available(iOS 16.0, *)
+private struct NativeBarBackground: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) { content } else { content.background(.bar) }
     }
 }

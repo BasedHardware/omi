@@ -98,11 +98,11 @@ struct NativeRichTextView: View {
 
 /// A stable tint per speaker label: the same label always gets the same hue, across launches and devices.
 /// Each hue reads at least 4.5:1 on the light and dark reading and card backgrounds; Increase Contrast uses
-/// the label colour instead.
+/// the label colour instead. No hue is purple or violet (INV-UI-1).
 enum NativeSpeakerTint {
     private static let hues: [(light: UInt32, dark: UInt32)] = [
-        (0x0A64C8, 0x5AA6FF), (0x1B7A33, 0x5AD27A), (0xB04E00, 0xFFA94D), (0x7A3DBD, 0xC59BFF),
-        (0xBE1A5A, 0xFF7EAB), (0x0D7280, 0x4FD0DB), (0x4A4DC2, 0xA0A2FF), (0x8A5A2C, 0xD6AC80),
+        (0x0A64C8, 0x5AA6FF), (0x1B7A33, 0x5AD27A), (0xB04E00, 0xFFA94D), (0x876400, 0xE8C04A),
+        (0xBE1A5A, 0xFF7EAB), (0x0D7280, 0x4FD0DB), (0x3F6178, 0x9DBBD0), (0x8A5A2C, 0xD6AC80),
     ]
 
     static func color(for speaker: String) -> Color {
@@ -163,7 +163,9 @@ struct NativeZoomImage: View {
             if let image { NativeZoomScroll(image: image, maximumScale: row.maximumValue ?? 4) }
             else if failed { Image(systemName: "photo.badge.exclamationmark").foregroundStyle(.secondary) }
             else { ProgressView() }
-        }.frame(height: 400).accessibilityLabel(row.title)
+        }.frame(height: 400)
+            .clipShape(RoundedRectangle(cornerRadius: NativeMetrics.blockRadius, style: .continuous))
+            .accessibilityLabel(row.title)
             .task(id: row.imageUri) {
                 image = nil
                 failed = false
@@ -252,14 +254,17 @@ struct NativePlaybackSlider: View {
     var body: some View {
         VStack(spacing: 4) {
             if let points = row.points, !points.isEmpty {
+                // Rounded bars like the system's audio scrubbers; played audio is full ink.
                 Chart(points) { point in
                     BarMark(x: .value(row.title, point.x),
-                            yStart: .value(row.title, -max(0.04, point.y)),
-                            yEnd: .value(row.title, max(0.04, point.y)))
-                        .foregroundStyle(Color.primary.opacity(point.label == "missing" ? 0.1 : point.x <= position ? 1 : 0.3))
-                }.frame(height: 28).chartYScale(domain: -1...1)
+                            yStart: .value(row.title, -max(0.06, point.y)),
+                            yEnd: .value(row.title, max(0.06, point.y)))
+                        .cornerRadius(3)
+                        .foregroundStyle(Color.primary.opacity(point.label == "missing" ? 0.08 : point.x <= position ? 0.9 : 0.25))
+                }.frame(height: 32).chartYScale(domain: -1...1)
                     .chartXScale(domain: 0...(row.maximumValue ?? 1))
                     .chartXAxis(.hidden).chartYAxis(.hidden).accessibilityHidden(true)
+                    .padding(.horizontal, 4)
             }
             Slider(value: Binding(get: { position }, set: { value in
                 position = value
@@ -268,7 +273,8 @@ struct NativePlaybackSlider: View {
                 Text(row.title)
             }.accessibilityIdentifier("\(row.id)_slider")
                 .accessibilityValue(row.subtitle)
-            Text(row.subtitle).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            Text(row.subtitle).font(.footnote).monospacedDigit().foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }.onAppear { position = row.value?.number ?? 0 }
             .onChange(of: row.value) { value in if !dragging && !state.pending.contains(row.id) { position = value?.number ?? 0 } }
     }
