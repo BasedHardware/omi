@@ -7,12 +7,9 @@ environments:
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
       env:
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+          category: rollout}
+        PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
       static_address_name: dev-llm-gateway-ilb-ip-address
     gcp_project: based-hardware-dev
     gke:
@@ -21,107 +18,45 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_UNION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-            value: 'false'
-            category: rollout
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'false'
-            category: rollout
-          SONIOX_WIRE_LEDGER:
-            value: 'false'
-            category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
-          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-            value: 'true'
-            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
-            category: rollout
-          TRANSLATION_DEMAND_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONOPEN_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '100'
-            category: rollout
-          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
-            value: '50'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_CHARS:
-            value: '12000'
-            category: rollout
-          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
-            value: '3'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
-            value: '4096'
-            category: rollout
-          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-            value: '10000000'
-            category: rollout
-          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-            value: '1000000000'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
-            value: '4'
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-            value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             category: rollout
             config_map:
               name: dev-omi-backend-config
               key: FREE_TIER_LOCAL_PROCESSING_COHORT
-          FREE_TIER_EMERGENCY_STOP:
-            category: rollout
-            value: 'false'
+          FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -135,9 +70,7 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
-          TTS_PROVIDER:
-            value: gemini
-            category: rollout
+          TTS_PROVIDER: {value: gemini, category: rollout}
           GEMINI_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -157,21 +90,10 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
-          DESKTOP_UPDATE_POINTERS_MODE:
-            value: primary
-            category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'true'
-            category: rollout
-          OMI_LLM_CHAT_AGENT_ROUTE:
-            value: gateway
-            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+          DESKTOP_UPDATE_POINTERS_MODE: {value: primary, category: rollout}
+          OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+          OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
           GOOGLE_CLIENT_ID:
             config_map:
               name: dev-omi-backend-config
@@ -179,90 +101,37 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
-          STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'true'
-            category: rollout
-          STT_RESILIENT_RECONNECT:
-            value: 'false'
-            category: rollout
-          STT_FAILOVER_RECOVERY_ENABLED:
-            value: 'false'
-            category: rollout
-          STT_ROUTING_MODE:
-            value: shadow
-            category: rollout
-          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
-            value: '0.075'
-            category: rollout
-          STT_ROUTING_ON_PERCENT:
-            value: '0'
-            category: rollout
-          STT_ROUTING_TARGETS_JSON:
-            value: ''
-            category: rollout
+          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
+          STT_FAILOVER_RECOVERY_ENABLED: {value: 'false', category: rollout}
+          STT_ROUTING_MODE: {value: shadow, category: rollout}
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
+          STT_ROUTING_ON_PERCENT: {value: '0', category: rollout}
+          STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
             category: reliability
-          STT_NO_TEXT_SECONDS:
-            value: '30'
-            category: rollout
-          SONIOX_MONTHLY_CEILING_USD:
-            value: '0'
-            category: rollout
-          SONIOX_ESTIMATED_USD_PER_HOUR:
-            value: '0.07537'
-            category: rollout
-          STT_MULTI_LANGUAGE_HINTS:
-            value: 'true'
-            category: rollout
-          SONIOX_CONTEXT_TERMS:
-            value: 'false'
-            category: rollout
-          STT_LEARNED_LANGUAGE_PROFILE:
-            value: 'true'
-            category: rollout
-          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '100'
-            category: rollout
-          PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '1'
-            category: rollout
-          PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '1'
-            category: rollout
-          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
-            value: '8'
-            category: rollout
-          PARAKEET_WINDOW_DIARIZATION:
-            value: 'false'
-            category: rollout
-          PARAKEET_WINDOW_PACE_SECONDS:
-            value: '6'
-            category: rollout
-          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
-            value: '24'
-            category: rollout
+          STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
+          SONIOX_MONTHLY_CEILING_USD: {value: '0', category: rollout}
+          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
+          STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
+          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
+          STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT: {value: '1', category: rollout}
+          PARAKEET_WINDOW_MAX_SESSIONS: {value: '1', category: rollout}
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
+          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
             value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
             category: service_discovery
-          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
-            value: '1'
-            category: rollout
-          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
-            value: '1800'
-            category: rollout
-          STT_CIRCUIT_HALF_OPEN_PROBES:
-            value: '1'
-            category: rollout
-          STT_SHED_CONNECT_FAILURES:
-            value: '3'
-            category: rollout
-          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
-            value: '3'
-            category: rollout
-          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
-            value: '30'
-            category: rollout
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {value: '1', category: rollout}
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS: {value: '1800', category: rollout}
+          STT_CIRCUIT_HALF_OPEN_PROBES: {value: '1', category: rollout}
+          STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
           STT_SERVICE_MODELS:
             value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
@@ -270,42 +139,14 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
-          LLM_GATEWAY_ACCOUNTING_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
-            category: rollout
-          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            category: rollout
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
-            category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
-            value: 'true'
-          WAKE_WORD_ADJUDICATION_ENABLED:
-            value: 'true'
-            category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+          CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'true'}
+          WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
@@ -318,15 +159,9 @@ environments:
           LISTEN_RECONNECT_BUDGET_PER_MIN:
             value: '6'
             category: reliability
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: gateway
-            category: rollout
-          ACCOUNT_CUTOVER_ENFORCEMENT:
-            value: 'off'
-            category: rollout
-          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-            value: '0.01'
-            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+          ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
           MODULATE_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -388,12 +223,8 @@ environments:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
-          MEMORY_BELIEF_MODEL_ENABLED:
-            category: rollout
-            value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
-            category: rollout
+          MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+          MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -404,106 +235,45 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
-          TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          TRANSCRIPTION_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-            value: '0'
-            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
+          TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '0', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-            value: '1.0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_ENABLED:
-            value: 'true'
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
+          MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT:
-            value: '100'
-            category: rollout
+          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -511,188 +281,83 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_UNION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-            value: 'false'
-            category: rollout
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'false'
-            category: rollout
-          SONIOX_WIRE_LEDGER:
-            value: 'false'
-            category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
-          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-            value: 'true'
-            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-            value: 'true'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             category: rollout
             config_map:
               name: dev-omi-backend-config
               key: FREE_TIER_LOCAL_PROCESSING_COHORT
-          FREE_TIER_EMERGENCY_STOP:
-            category: rollout
-            value: 'false'
-          LLM_GATEWAY_ACCOUNTING_ENABLED:
-            value: 'true'
-            category: rollout
+          FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+          LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
-            category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            category: rollout
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
-            category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
-            value: 'true'
+          MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+          CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'true'}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
             category: storage_retention
-          TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: omi-release-probe
-            category: rollout
-          TRANSCRIPTION_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-            value: '1'
-            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: omi-release-probe, category: rollout}
+          TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          OMI_LLM_CHAT_AGENT_ROUTE:
-            value: gateway
-            category: rollout
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+          OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_ENABLED:
-            value: 'true'
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
+          MEMORY_BELIEF_MODEL_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
+          MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -853,30 +518,18 @@ environments:
           env_var: OMI_VERTEX_LEGACY_TASK_MODE
           provisional: true
           category: rollout
-        FREE_TIER_LOCAL_PROCESSING:
-          category: rollout
-          value: 'true'
+        FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
         FREE_TIER_LOCAL_PROCESSING_COHORT:
           category: rollout
           env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
           default: ''
-        FREE_TIER_EMERGENCY_STOP:
-          category: rollout
-          value: 'false'
-        MEMORY_BELIEF_MODEL_ENABLED:
-          category: rollout
-          value: 'true'
-        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
-          category: rollout
-          value: 'true'
-        MEMORY_BELIEF_AUTOMATION_PAUSED:
-          value: 'false'
-          category: rollout
+        FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+        MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED: {category: rollout, value: 'true'}
+        MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
         USE_VERTEX_AI:
           value: 'true'
-        TTS_PROVIDER:
-          value: gemini
-          category: rollout
+        TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
         GCP_LOCATION:
@@ -884,15 +537,14 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
-        LLM_GATEWAY_ACCOUNTING_ENABLED:
-          value: 'true'
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
+        LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+          category: rollout}
+        PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -954,151 +606,57 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_DEMAND_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            TRANSLATION_DEMAND_GATE_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONOPEN_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONDEMAND_COHORT_PERCENT:
-              value: '100'
-              category: rollout
-            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
-              value: '50'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_CHARS:
-              value: '12000'
-              category: rollout
-            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
-              value: '3'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
-              value: '4096'
-              category: rollout
-            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-              value: '10000000'
-              category: rollout
-            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-              value: '1000000000'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
-              value: '4'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'true'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
               category: rollout
               env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
               default: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
-            LLM_GATEWAY_ACCOUNTING_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_RECEIPT_RECONCILER_ENABLED:
-              value: 'false'
-              category: rollout
-            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-              category: rollout
-              value: 'true'
-            CONVERSATION_OCR_CONTEXT_ENABLED:
-              category: rollout
-              value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-              value: '25'
-              category: rollout
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'true'
-            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
-              category: rollout
-              value: 'true'
-            WAKE_WORD_ADJUDICATION_ENABLED:
-              value: 'true'
-              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+            CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'true'}
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED: {category: rollout, value: 'true'}
+            WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1116,18 +674,10 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            DESKTOP_UPDATE_POINTERS_MODE:
-              value: primary
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            DESKTOP_UPDATE_POINTERS_MODE: {value: primary, category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -1143,15 +693,9 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
-            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-              value: '0.01'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
@@ -1167,33 +711,21 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
-            MENTOR_GATE_DEBOUNCE_ENABLED:
-              value: 'true'
-              category: rollout
-            SCREEN_FRAME_EGRESS_ENABLED:
-              value: 'true'
-              category: rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
+            REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
@@ -1221,63 +753,20 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_ENABLED:
-              value: 'true'
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_ENABLED:
-              value: 'true'
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
+            MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1306,70 +795,32 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'true'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
               category: rollout
               env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
               default: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1391,15 +842,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -1419,12 +864,8 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -1452,36 +893,13 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
-            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-              category: rollout
-              value: 'true'
-            CONVERSATION_OCR_CONTEXT_ENABLED:
-              category: rollout
-              value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-              value: '25'
-              category: rollout
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'true'
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+            CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'true'}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1489,39 +907,25 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware-dev
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-dev-screen-frames
               category: storage_retention
-            TRANSCRIPTION_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            TRANSCRIPTION_SHADOW_KILL_SWITCH:
-              value: 'false'
-              category: rollout
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            TRANSCRIPTION_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-              value: '0'
-              category: rollout
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1541,63 +945,20 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_ENABLED:
-              value: 'true'
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_ENABLED:
-              value: 'true'
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
+            MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -1626,73 +987,33 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'true'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
               category: rollout
               env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
               default: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'true'
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'true'}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1714,15 +1035,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -1742,12 +1057,8 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -1775,12 +1086,8 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1788,21 +1095,17 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware-dev
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1822,51 +1125,16 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '0'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
           forbidden_env:
           - HOSTED_PUSHER_API_URL
@@ -1899,73 +1167,33 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'true'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
               category: rollout
               env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
               default: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1973,12 +1201,8 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -2002,18 +1226,10 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -2032,15 +1248,11 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -2060,24 +1272,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: '1.0'
-              category: rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -2237,24 +1431,15 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
               category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
             MEMORY_CANONICAL_MAINTENANCE_FLEX:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -2267,12 +1452,8 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -2345,12 +1526,8 @@ environments:
             MEMORY_ENABLED:
               value: 'on'
               category: memory_rollout
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'true'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'true'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               category: memory_rollout
               value: 'true'
@@ -2484,12 +1661,9 @@ environments:
       release_name: prod-omi-llm-gateway
       ingress_name: prod-omi-llm-gateway
       env:
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+          category: rollout}
+        PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         PROACTIVITY_REDIS_HOST:
           config_map:
             name: prod-omi-backend-config
@@ -2501,18 +1675,14 @@ environments:
           secret:
             name: prod-omi-backend-secrets
             key: REDIS_DB_PASSWORD
-        LLM_GATEWAY_ACCOUNTING_ENABLED:
-          value: 'true'
-          category: rollout
+        LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
-        MENTOR_PIPELINE:
-          value: cohort
-          category: rollout
+        MENTOR_PIPELINE: {value: cohort, category: rollout}
       static_address_name: prod-omi-self-hosted-llm-ip-address
     gcp_project: based-hardware
     gke:
@@ -2521,105 +1691,41 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          AUDIO_TIMELINE_SPANS:
-            value: 'true'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'true'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_UNION:
-            value: 'true'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-            value: 'true'
-            category: rollout
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'true'
-            category: rollout
-          SONIOX_WIRE_LEDGER:
-            value: 'true'
-            category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
-          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-            value: 'true'
-            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
-            category: rollout
-          TRANSLATION_DEMAND_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
-          TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONOPEN_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '100'
-            category: rollout
-          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
-            value: '50'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_CHARS:
-            value: '12000'
-            category: rollout
-          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
-            value: '3'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
-            value: '4096'
-            category: rollout
-          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-            value: '10000000'
-            category: rollout
-          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-            value: '1000000000'
-            category: rollout
-          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
-            value: '4'
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-            value: 'false'
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
-            category: rollout
-            value: ''
-          FREE_TIER_EMERGENCY_STOP:
-            category: rollout
-            value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+          FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+          FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -2633,9 +1739,7 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
-          TTS_PROVIDER:
-            value: gemini
-            category: rollout
+          TTS_PROVIDER: {value: gemini, category: rollout}
           GEMINI_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -2655,21 +1759,10 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
-          DESKTOP_UPDATE_POINTERS_MODE:
-            value: primary
-            category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'true'
-            category: rollout
-          OMI_LLM_CHAT_AGENT_ROUTE:
-            value: gateway
-            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+          DESKTOP_UPDATE_POINTERS_MODE: {value: primary, category: rollout}
+          OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+          OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
           GOOGLE_CLIENT_ID:
             config_map:
               name: prod-omi-backend-config
@@ -2677,90 +1770,37 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
-          STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'true'
-            category: rollout
-          STT_RESILIENT_RECONNECT:
-            value: 'false'
-            category: rollout
-          STT_FAILOVER_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
-          STT_ROUTING_MODE:
-            value: 'on'
-            category: rollout
-          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
-            value: '0.075'
-            category: rollout
-          STT_ROUTING_ON_PERCENT:
-            value: '100'
-            category: rollout
-          STT_ROUTING_TARGETS_JSON:
-            value: ''
-            category: rollout
+          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
+          STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          STT_ROUTING_MODE: {value: 'on', category: rollout}
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
+          STT_ROUTING_ON_PERCENT: {value: '100', category: rollout}
+          STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
             category: reliability
-          STT_NO_TEXT_SECONDS:
-            value: '30'
-            category: rollout
-          SONIOX_MONTHLY_CEILING_USD:
-            value: '10000'
-            category: rollout
-          SONIOX_ESTIMATED_USD_PER_HOUR:
-            value: '0.07537'
-            category: rollout
-          STT_MULTI_LANGUAGE_HINTS:
-            value: 'true'
-            category: rollout
-          SONIOX_CONTEXT_TERMS:
-            value: 'false'
-            category: rollout
-          STT_LEARNED_LANGUAGE_PROFILE:
-            value: 'true'
-            category: rollout
-          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '100'
-            category: rollout
-          PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '100'
-            category: rollout
-          PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '16'
-            category: rollout
-          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
-            value: '8'
-            category: rollout
-          PARAKEET_WINDOW_DIARIZATION:
-            value: 'false'
-            category: rollout
-          PARAKEET_WINDOW_PACE_SECONDS:
-            value: '6'
-            category: rollout
-          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
-            value: '24'
-            category: rollout
+          STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
+          SONIOX_MONTHLY_CEILING_USD: {value: '10000', category: rollout}
+          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
+          STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
+          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
+          STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_WINDOW_MAX_SESSIONS: {value: '16', category: rollout}
+          PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
+          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
+          PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
             value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
             category: service_discovery
-          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
-            value: '3'
-            category: rollout
-          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
-            value: '1800'
-            category: rollout
-          STT_CIRCUIT_HALF_OPEN_PROBES:
-            value: '1'
-            category: rollout
-          STT_SHED_CONNECT_FAILURES:
-            value: '3'
-            category: rollout
-          SONIOX_CIRCUIT_FAILURE_THRESHOLD:
-            value: '3'
-            category: rollout
-          SONIOX_CIRCUIT_COOLDOWN_SECONDS:
-            value: '30'
-            category: rollout
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {value: '3', category: rollout}
+          STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS: {value: '1800', category: rollout}
+          STT_CIRCUIT_HALF_OPEN_PROBES: {value: '1', category: rollout}
+          STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
+          SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
+          SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
           STT_SERVICE_MODELS:
             value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
@@ -2768,42 +1808,14 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
-          LLM_GATEWAY_ACCOUNTING_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
-            category: rollout
-          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            category: rollout
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
-            category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
-            value: 'false'
-          WAKE_WORD_ADJUDICATION_ENABLED:
-            value: 'true'
-            category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+          LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+          CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'false'}
+          WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
@@ -2816,15 +1828,9 @@ environments:
           LISTEN_RECONNECT_BUDGET_PER_MIN:
             value: '6'
             category: reliability
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
-            category: rollout
-          ACCOUNT_CUTOVER_ENFORCEMENT:
-            value: 'off'
-            category: rollout
-          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-            value: '0.01'
-            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: 'off', category: rollout}
+          ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
+          DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
           MODULATE_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -2886,12 +1892,8 @@ environments:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'on'
-          MEMORY_BELIEF_MODEL_ENABLED:
-            category: rollout
-            value: 'false'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
-            category: rollout
+          MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+          MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -2902,12 +1904,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
+          DREAM_AGENT_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           PROACTIVITY_REDIS_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -2922,30 +1924,18 @@ environments:
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
-          MENTOR_PIPELINE:
-            value: cohort
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
-            category: rollout
-          OMI_SHAPED_AGENT_MODE:
-            value: cohort
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
+          MENTOR_PIPELINE: {value: cohort, category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
-          SONIOX_IDLE_CLOSE_SECONDS:
-            value: '45'
-            category: rollout
+          SONIOX_IDLE_CLOSE_SECONDS: {value: '45', category: rollout}
+          STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
@@ -2993,9 +1983,7 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
-          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-            value: 'true'
-            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
           MEMORY_V3_CURSOR_SECRET:
             secret:
               name: prod-omi-backend-secrets
@@ -3004,54 +1992,28 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '100'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+          NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT:
-            value: '100'
-            category: rollout
+          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -3059,101 +2021,44 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
-          AUDIO_TIMELINE_SPANS:
-            value: 'true'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'true'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_UNION:
-            value: 'true'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-            value: 'true'
-            category: rollout
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-            value: 'true'
-            category: rollout
-          SONIOX_WIRE_LEDGER:
-            value: 'true'
-            category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
-          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-            value: 'true'
-            category: rollout
+          AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
+          SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-            value: 'false'
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
-            category: rollout
-            value: ''
-          FREE_TIER_EMERGENCY_STOP:
-            category: rollout
-            value: 'false'
-          LLM_GATEWAY_ACCOUNTING_ENABLED:
-            value: 'true'
-            category: rollout
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+          FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+          FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+          LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
-            category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            category: rollout
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-            value: 'true'
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
-            category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
-            value: 'false'
+          MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+          CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'false'}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
+          DREAM_AGENT_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+            category: rollout}
+          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           POSTHOG_PROJECT_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -3172,77 +2077,33 @@ environments:
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
-          MENTOR_PIPELINE:
-            value: cohort
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
-            category: rollout
-          OMI_SHAPED_AGENT_MODE:
-            value: cohort
-            category: rollout
-          SONIOX_ORDERED_FINALIZE:
-            value: 'false'
-            category: rollout
-          MENTOR_GATE_DEBOUNCE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          TRANSCRIPTION_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-            value: '1'
-            category: rollout
+          MENTOR_PIPELINE: {value: cohort, category: rollout}
+          SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
             category: storage_retention
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '20'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_PERCENT:
-            value: '100'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-            value: 'true'
-            category: rollout
-          MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-            value: '1'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+          NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+            category: rollout}
+          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -3311,29 +2172,15 @@ environments:
           env_var: OMI_VERTEX_LEGACY_TASK_MODE
           provisional: true
           category: rollout
-        FREE_TIER_LOCAL_PROCESSING:
-          category: rollout
-          value: 'false'
-        FREE_TIER_LOCAL_PROCESSING_COHORT:
-          category: rollout
-          value: ''
-        FREE_TIER_EMERGENCY_STOP:
-          category: rollout
-          value: 'false'
-        MEMORY_BELIEF_MODEL_ENABLED:
-          category: rollout
-          value: 'false'
-        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
-          category: rollout
-          value: 'false'
-        MEMORY_BELIEF_AUTOMATION_PAUSED:
-          value: 'false'
-          category: rollout
+        FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+        FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+        FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+        MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+        BASIC_PLAN_GATE_PROXY_EMBED_ENABLED: {category: rollout, value: 'false'}
+        MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
         USE_VERTEX_AI:
           value: 'true'
-        TTS_PROVIDER:
-          value: gemini
-          category: rollout
+        TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware
         GCP_LOCATION:
@@ -3341,24 +2188,21 @@ environments:
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
-        LLM_GATEWAY_ACCOUNTING_ENABLED:
-          value: 'true'
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
+        LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+        FIRESTORE_READ_LEDGER:
+          value: '1'
+        FIRESTORE_READ_LEDGER_SERVICE:
+          value: desktop-backend
+        PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+          category: rollout}
+        PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
-        MENTOR_PIPELINE:
-          value: cohort
-          category: rollout
+        MENTOR_PIPELINE: {value: cohort, category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -3428,150 +2272,54 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'true'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_DEMAND_SHADOW_ENABLED:
-              value: 'false'
-              category: rollout
-            TRANSLATION_DEMAND_GATE_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONOPEN_ENABLED:
-              value: 'true'
-              category: rollout
-            TRANSLATION_ONDEMAND_COHORT_PERCENT:
-              value: '100'
-              category: rollout
-            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
-              value: '50'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_CHARS:
-              value: '12000'
-              category: rollout
-            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
-              value: '3'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
-              value: '4096'
-              category: rollout
-            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-              value: '10000000'
-              category: rollout
-            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-              value: '1000000000'
-              category: rollout
-            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
-              value: '4'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'false'
-            FREE_TIER_LOCAL_PROCESSING_COHORT:
-              category: rollout
-              value: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+            TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+            FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
-            LLM_GATEWAY_ACCOUNTING_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_RECEIPT_RECONCILER_ENABLED:
-              value: 'false'
-              category: rollout
-            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-              category: rollout
-              value: 'true'
-            CONVERSATION_OCR_CONTEXT_ENABLED:
-              category: rollout
-              value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-              value: '25'
-              category: rollout
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'false'
-            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
-              category: rollout
-              value: 'false'
-            WAKE_WORD_ADJUDICATION_ENABLED:
-              value: 'true'
-              category: rollout
+            LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+            CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'false'}
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED: {category: rollout, value: 'false'}
+            WAKE_WORD_ADJUDICATION_ENABLED: {value: 'true', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -3589,18 +2337,10 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            DESKTOP_UPDATE_POINTERS_MODE:
-              value: primary
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            DESKTOP_UPDATE_POINTERS_MODE: {value: primary, category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -3616,15 +2356,9 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
-            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
-              value: '0.01'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
+            DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
@@ -3640,52 +2374,33 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            MENTOR_PIPELINE:
-              value: cohort
-              category: rollout
-            SPEAKER_MATCH_SCORES_ENABLED:
-              value: 'true'
-              category: rollout
-            OMI_SHAPED_AGENT_MODE:
-              value: cohort
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
-            MENTOR_GATE_DEBOUNCE_ENABLED:
-              value: 'true'
-              category: rollout
+            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
-            SCREEN_FRAME_EGRESS_ENABLED:
-              value: 'true'
-              category: rollout
+            SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BUCKET_SCREEN_FRAMES:
               value: based-hardware-prod-screen-frames
               category: storage_retention
-            ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
-              value: '1'
-              category: rollout
+            ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE: {value: '1', category: rollout}
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -3735,9 +2450,7 @@ environments:
               value: price_1TuIa81F8wnoWYvw0iX0j5M8
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
               category: oauth_metadata
@@ -3747,45 +2460,21 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_ENABLED:
-              value: 'true'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '100'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-              value: '1'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -3812,69 +2501,29 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'true'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'false'
-            FREE_TIER_LOCAL_PROCESSING_COHORT:
-              category: rollout
-              value: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+            FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -3896,15 +2545,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -3924,12 +2567,8 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -3957,36 +2596,13 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
-            CONVERSATION_NOTES_V2_ENABLED:
-              value: 'true'
-              category: rollout
-            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-              category: rollout
-              value: 'true'
-            CONVERSATION_OCR_CONTEXT_ENABLED:
-              category: rollout
-              value: 'true'
-            MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-              value: '25'
-              category: rollout
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'false'
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
+            CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED: {value: 'true', category: rollout}
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'false'}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -3994,33 +2610,26 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+              category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '4', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            MENTOR_PIPELINE:
-              value: cohort
-              category: rollout
-            SPEAKER_MATCH_SCORES_ENABLED:
-              value: 'true'
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
-            LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
-              value: 'true'
-              category: rollout
-            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
-              value: 'true'
-              category: rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
+            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true',
+              category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BUCKET_SCREEN_FRAMES:
@@ -4067,48 +2676,21 @@ environments:
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_ENABLED:
-              value: 'true'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '100'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-              value: '1'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -4134,72 +2716,30 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-sync-backfill
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'true'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'false'
-            FREE_TIER_LOCAL_PROCESSING_COHORT:
-              category: rollout
-              value: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
-            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-              category: rollout
-              value: 'false'
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+            FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+            BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED: {category: rollout, value: 'false'}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -4221,15 +2761,9 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             SYNC_BACKFILL_USER_DAILY_HOURS:
               provisional: true
               value: '4'
@@ -4249,12 +2783,8 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             SYNC_BACKFILL_MAX_AGE_SECONDS:
               provisional: true
               value: '2592000'
@@ -4282,12 +2812,8 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -4295,27 +2821,22 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+              category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
             SYNC_PHASE_METRICS_PROJECT:
               value: based-hardware
               category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            MENTOR_PIPELINE:
-              value: cohort
-              category: rollout
-            SPEAKER_MATCH_SCORES_ENABLED:
-              value: 'true'
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4359,48 +2880,21 @@ environments:
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
-              category: rollout
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-              value: '20'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_ENABLED:
-              value: 'true'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_PERCENT:
-              value: '100'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_ENABLED:
-              value: 'true'
-              category: rollout
-            MEETING_NOTES_EPISODE_EVIDENCE_PERCENT:
-              value: '1'
-              category: rollout
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-              value: '60000'
-              category: rollout
-            CAPTURE_JEV_SHADOW_ENABLED:
-              value: 'true'
-              category: rollout
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
-            CAPTURE_JEV_SHADOW_PERCENT:
-              value: '0'
-              category: rollout
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
+            NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
+            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
           provisional: true
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
@@ -4430,72 +2924,30 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend-integration
-            AUDIO_TIMELINE_SPANS:
-              value: 'false'
-              category: rollout
-            LIVE_SPEAKER_SPAN_RESOLUTION:
-              value: 'true'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_RETENTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_MERGE_UNION:
-              value: 'false'
-              category: rollout
-            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
-              value: 'false'
-              category: rollout
-            SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
-              value: 'false'
-              category: rollout
-            SONIOX_WIRE_LEDGER:
-              value: 'false'
-              category: rollout
-            CAPTURE_EVIDENCE_V1_DARK_WRITE:
-              value: 'true'
-              category: rollout
-            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
-              value: 'true'
-              category: rollout
+            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-              value: shadow
-              category: rollout
-            CAPTURE_GROUP_CONTAINMENT_MODE:
-              value: shadow
-              category: rollout
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_S1_REQUIRED:
-              value: 'true'
-              category: rollout
-            SYNC_WAL_AUDIO_COVERAGE_ENABLED:
-              value: 'true'
-              category: rollout
-            FREE_TIER_LOCAL_PROCESSING:
-              category: rollout
-              value: 'false'
-            FREE_TIER_LOCAL_PROCESSING_COHORT:
-              category: rollout
-              value: ''
-            FREE_TIER_EMERGENCY_STOP:
-              category: rollout
-              value: 'false'
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
+            FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
+            FREE_TIER_EMERGENCY_STOP: {category: rollout, value: 'false'}
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -4503,12 +2955,8 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -4532,18 +2980,10 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
-            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: gateway
-              category: rollout
-            ACCOUNT_CUTOVER_ENFORCEMENT:
-              value: 'off'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -4562,21 +3002,16 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            PROACTIVITY_V2_POSTHOG_TOKEN:
-              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-              category: rollout
-            PROACTIVITY_V2_POSTHOG_HOST:
-              value: https://us.posthog.com
-              category: rollout
-            MENTOR_PIPELINE:
-              value: cohort
-              category: rollout
-            SPEAKER_MATCH_SCORES_ENABLED:
-              value: 'true'
-              category: rollout
-            SONIOX_ORDERED_FINALIZE:
-              value: 'false'
-              category: rollout
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23',
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y,
+              category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -4602,12 +3037,9 @@ environments:
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23,
+              category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -4760,24 +3192,15 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
               category: service_discovery
-            OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
-              category: rollout
-            OMI_LLM_CHAT_AGENT_ROUTE:
-              value: gateway
-              category: rollout
-            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'false'
-              category: rollout
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
             MEMORY_CANONICAL_MAINTENANCE_FLEX:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-              category: memory_rollout
-              value: 'false'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -4790,12 +3213,8 @@ environments:
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -4807,9 +3226,7 @@ environments:
               category: memory_rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
-            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
-              value: 'true'
-              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
         frame-request-retention-job:
           secrets:
             POSTHOG_PROJECT_API_KEY:
@@ -4871,12 +3288,8 @@ environments:
             MEMORY_ENABLED:
               value: 'on'
               category: memory_rollout
-            MEMORY_BELIEF_MODEL_ENABLED:
-              category: rollout
-              value: 'false'
-            MEMORY_BELIEF_AUTOMATION_PAUSED:
-              value: 'false'
-              category: rollout
+            MEMORY_BELIEF_MODEL_ENABLED: {category: rollout, value: 'false'}
+            MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
               category: memory_rollout
               value: 'false'

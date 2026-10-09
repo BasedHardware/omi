@@ -52,6 +52,8 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/review',
+    '/v1/entities',
     '/v1/proactivity',
     '/memory/search',
     '/v1/account/cutover',
@@ -147,6 +149,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; public docs expose the Developer API key conversation detail route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; not part of the Developer API key contract.',
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/title',
@@ -255,6 +261,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}/analytics',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; included in the app-client contract, not the Developer API key contract.',
     (
         'GET',
         '/v1/conversations/{conversation_id}/finalization',
@@ -959,6 +969,9 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     elif surface == 'integration-public':
         routes = integration_public_contract_routes(app)
         title = INTEGRATION_PUBLIC_OPENAPI_TITLE
+    elif surface == 'dream':
+        routes = [route for route in app.routes if isinstance(route, APIRoute) and route.path == '/v1/dream/runs']
+        title = 'Omi Dream API'
     else:
         raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
@@ -974,7 +987,7 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     )
     if surface == 'public':
         _normalize_bearer_security(schema)
-    elif surface == 'app-client':
+    elif surface in {'app-client', 'dream'}:
         _normalize_app_client_security(schema)
     elif surface == 'integration-public':
         _normalize_integration_public_security(schema)
@@ -1056,6 +1069,9 @@ def validate_contract(app, schema: dict[str, Any], surface: str = 'public') -> N
                     f'Developer-API-only route leaked into app-client OpenAPI: {method} {path} '
                     f'({APP_CLIENT_EXCLUDED_ROUTES[(method, path)]})'
                 )
+    elif surface == 'dream':
+        if set(documented_route_keys(schema)) != {('GET', '/v1/dream/runs'), ('POST', '/v1/dream/runs')}:
+            raise OpenAPIContractError('Dream surface must contain exactly the owner GET and POST routes')
     elif surface == 'integration-public':
         documented = set(documented_route_keys(schema))
         expected = set(
@@ -1118,7 +1134,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Export or verify an Omi OpenAPI contract.')
     parser.add_argument(
         '--surface',
-        choices=('public', 'app-client', 'integration-public'),
+        choices=('public', 'app-client', 'integration-public', 'dream'),
         default='public',
         help='contract surface to export; defaults to public Developer API',
     )
@@ -1143,6 +1159,8 @@ def default_spec_path(surface: str) -> Path:
         return DEFAULT_APP_CLIENT_SPEC_PATH
     if surface == 'integration-public':
         return DEFAULT_INTEGRATION_PUBLIC_SPEC_PATH
+    if surface == 'dream':
+        return BACKEND_DIR / 'docs' / 'api' / 'dream-openapi.json'
     raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
 

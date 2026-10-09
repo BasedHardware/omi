@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
@@ -455,6 +456,13 @@ class ListenSessionRuntime:
                 retry_after=retry_after,
             )
             return False
+        if self.client_conversation_id and await self.persistence.call(
+            conversation_tombstones.is_deleted, self.request.uid, self.client_conversation_id
+        ):
+            # Check before bootstrap/registration so rejection has no session to tear down.
+            # A create already past this point can still race a deletion commit.
+            await self.request.websocket.close(code=1008, reason='Conversation was deleted')
+            return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
@@ -593,11 +601,12 @@ class ListenSessionRuntime:
         include_profile = should_include_speech_profile(
             request.include_speech_profile, self.is_multi_channel, request.onboarding_mode
         )
-        if should_load_speech_profile(
+        profile_eligible = should_load_speech_profile(
             use_custom_stt=self.use_custom_stt,
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
-        ):
+        )
+        if profile_eligible:
             # A Firestore voiceprint is sufficient for matching even if its GCS
             # audio cache has disappeared. Only probe audio for legacy profiles
             # whose embedding still needs to be extracted.
@@ -614,7 +623,7 @@ class ListenSessionRuntime:
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
-            has_speech_profile=self.has_speech_profile,
+            has_speech_profile=self.has_speech_profile or profile_eligible,
         )
         if self.state.speaker_id_enabled:
             self.state.audio_ring_buffer = AudioRingBuffer(self.limits.ring_buffer_duration, request.sample_rate)

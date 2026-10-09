@@ -92,9 +92,6 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
-        OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-          value: 'true'
-          category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
           value: gateway
           category: rollout
@@ -105,9 +102,6 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
-        STT_CONNECT_ORDER_FROM_CONFIG:
-          value: 'false'
-          category: rollout
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
@@ -196,14 +190,8 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: CONVERSATION_SUMMARIZED_APP_IDS
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
-          category: rollout
-        MEETING_RECEIPT_RECONCILER_ENABLED:
-          value: 'false'
           category: rollout
         LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
           value: 'true'
@@ -211,12 +199,6 @@ environment_shared:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -367,18 +349,9 @@ environment_shared:
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
-        CONVERSATION_NOTES_V2_ENABLED:
-          value: 'true'
-          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          category: rollout
-        MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
-          category: rollout
-        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
           value: 'false'
@@ -474,6 +447,10 @@ environment_shared:
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
+      FIRESTORE_READ_LEDGER:
+        value: '1'
+      FIRESTORE_READ_LEDGER_SERVICE:
+        value: desktop-backend
     secrets:
       GEMINI_API_KEY:
         secret: GEMINI_API_KEY
@@ -570,24 +547,12 @@ environment_shared:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
-            category: rollout
-          MEETING_RECEIPT_RECONCILER_ENABLED:
-            value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -819,18 +784,9 @@ environment_shared:
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
             category: rollout
-          CONVERSATION_NOTES_V2_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            category: rollout
-          MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
-            category: rollout
-          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
@@ -1248,9 +1204,6 @@ environment_shared:
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
             category: memory_rollout
             value: 'true'
-          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-            category: memory_rollout
-            value: 'false'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

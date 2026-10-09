@@ -114,8 +114,6 @@ env:
     value: cohort
   - name: POSTHOG_HOST
     value: https://us.posthog.com
-  - name: MENTOR_GATE_DEBOUNCE_ENABLED
-    value: "true"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
@@ -196,25 +194,21 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
-  - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
-    value: "true"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
-    value: "cohort"
-  - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "true"
-  - name: MEETING_RECEIPT_RECONCILER_ENABLED
-    value: "false"
+    value: "on"
+  - name: DREAM_AGENT_MODE
+    value: 'shadow'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: REVIEW_SURFACE_MODE
+    value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"
@@ -229,15 +223,13 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "20"
+    value: "0"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_ENABLED
+  - name: NOTES_TIER_ESCALATION_ENABLED
     value: 'true'
-  - name: MEETING_NOTES_EPISODE_EVIDENCE_PERCENT
-    value: '1'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
@@ -439,8 +431,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
-  - name: STT_CONNECT_ORDER_FROM_CONFIG
-    value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_FAILOVER_RECOVERY_ENABLED
@@ -459,6 +449,8 @@ env:
     value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
+  - name: STT_NO_TEXT_RESCUE_ENABLED
+    value: "true"
   - name: SONIOX_MONTHLY_CEILING_USD
     value: "10000"
   - name: SONIOX_ESTIMATED_USD_PER_HOUR

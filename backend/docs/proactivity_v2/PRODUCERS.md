@@ -1,19 +1,18 @@
 # Mentor and commitment producers
 
-`MENTOR_PIPELINE=legacy` remains the default. `cohort` selects one pipeline per
-user through the same server-side `proactivity_v2` resolver and cached PostHog client
-as v2 admission: true selects v2; false, unknown or flag errors select unchanged
-legacy. Mentor hosts and gateway admission use the same selector. Set cohort on
-both sides for a per-user rollout; host-wide `v2` otherwise suppresses unflagged
-mentor users. Selection is exclusive per evaluation; v2 failure never invokes legacy.
-`v2` exclusively dispatches the
-conversation mentor through the v2 ledger and reserved gateway calls; invalid
-values invoke neither path, and a v2 failure never invokes legacy. Existing
-buffering, rate checks and debounce have a shared admission helper. Legacy code
-remains for the follow-on retirement PR. Merged PR #20434 supplies the shared
-paid-only admission helper and default-on debounce; its former EXP-005 transcript
-shadow was removed before merge. V2 additionally enforces strict spine admission,
-with draft usefulness measured only by its own budgeted shadow judge.
+`MENTOR_PIPELINE=cohort` is the only valid mode: the legacy mentor pipeline was
+deleted once v2 reached 100% of eligible users. `cohort` selects per user
+through the same server-side `proactivity_v2` resolver and cached PostHog client
+as v2 admission: true selects v2; false, unknown or flag errors dispatch
+nothing (fail closed) — there is no legacy lane to fall back to. Mentor hosts
+and gateway admission use the same selector. Any other env value invokes
+neither path and fails the runtime env validator. Selection is exclusive per
+evaluation; a v2 failure never invokes a second lane. Existing buffering, rate
+checks and debounce have a shared admission helper that v2 rides unchanged.
+Merged PR #20434 supplies the shared paid-only admission helper and
+default-on debounce; its former EXP-005 transcript shadow was removed before
+merge. V2 additionally enforces strict spine admission, with draft usefulness
+measured only by its own budgeted shadow judge.
 
 All v2 model steps bound the serialized provider request to the producer registry's
 byte ceiling before sending it. Gate, draft and critic retain the prompt template
@@ -95,6 +94,18 @@ the first reply within the spine's 24h delivery window.
 
 Follow-ups use the existing action-item reminder send/reconcile functions. A named,
 one-shot Cloud Task wakes the backend at the due revision; there is no new cron.
+Both creation-data and update/reconcile reminder transports share canonical
+lifecycle admission in `config/action_item_reminder_policy.py`: completed,
+cancelled, superseded, deleted, explicitly unknown-state and undated tasks never
+arm client reminders or enqueue new follow-ups. Missing status retains the
+released legacy completion/due-date behavior. Producers pass the saved post-write
+row; MCP response cleaning occurs after this decision. Cancellation reuses the
+existing `action_item_delete` envelope, which cancels the local notification by
+ID without deleting a task. This admission policy does not order previously
+queued FCM messages or cancel an offline device's already-scheduled notification.
+An unavailable derived post-commit state read skips only unresolved reminder
+effects, emits bounded degraded telemetry and preserves the task mutation
+receipt/processing continuation; it does not add a durable reconciliation retry.
 Tasks more than 30 days ahead use deterministic 28-day hops with no model work.
 Changed due dates or closed/retired/deleted/manual tasks are ignored on execution.
 A repeated callback is the same ledger identity (task + UTC due revision + `due`).

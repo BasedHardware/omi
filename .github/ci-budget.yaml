@@ -884,7 +884,7 @@
       "runs_on": "ubuntu-latest"
     },
     "firestore_read_reconcile.yml/reconcile": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 10,
       "display_name": "reconcile",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -893,7 +893,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Once-daily read-only Firestore bill reconcile. Five minutes covers one BigQuery query and 24 hourly log reads. Not a pull-request job.",
+      "rationale": "Once-daily read-only Firestore bill reconcile. Ten minutes covers one BigQuery query and 24 hourly log walks (the fallback run of 2026-10-07 took ~1h wall for a 24h walk under gcloud logging read flakiness; the scheduled runner should sit far below that, and 5 was never observed). Raise accompanies the D-2 scoring and cron-environment binding in the same change. Not a pull-request job.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1661,6 +1661,53 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "grafana_dashboard_provisioning.yml/provision": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {
+        "include": [
+          {
+            "environment": "prod",
+            "url": "https://monitor.omi.me"
+          },
+          {
+            "environment": "dev",
+            "url": "https://monitor.omiapi.com"
+          }
+        ]
+      },
+      "matrix_size": 2,
+      "needs": "validate",
+      "owner": "CI maintainers",
+      "rationale": "Provision runs a 2-env matrix only when dashboard JSON changes on main; API POST + read-back per board.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "grafana_dashboard_provisioning.yml/validate": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Register the Grafana provisioning workflow added with auto-provision; validate is a JSON lint.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "jit_qa_cloud_run.yml/admit": {
       "budget_p50_minutes": 5,
       "display_name": "Admit exact proven main source",
@@ -2360,13 +2407,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 66,
+      "expected_runs_per_day": 67,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "rationale": "One label read; 2026-09-28 PR run took 23s. Expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2374,11 +2421,35 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "python-cli-ci.yml/install-smoke": {
+      "budget_p50_minutes": 5,
+      "display_name": "Clean install smoke (Python ${{ matrix.python-version }})",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 2,
+      "if": null,
+      "matrix": {
+        "python-version": [
+          "3.10",
+          "3.11",
+          "3.12"
+        ]
+      },
+      "matrix_size": 3,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Path-filtered clean-install smoke (Python 3.10, 3.11, and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 2 runs/day (30 linux-minutes/day), including one daily run for the PyPI publish gate path. A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 3
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "python-cli-ci.yml/tests": {
       "budget_p50_minutes": 3,
       "display_name": "${{ matrix.label }}",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 50,
+      "expected_runs_per_day": 51,
       "if": null,
       "matrix": {
         "include": [
@@ -2397,7 +2468,7 @@
       "matrix_size": 2,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "dynamic",
       "runner_counts": {
@@ -2409,13 +2480,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Windows ACL / Python 3.12",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. Expected volume adds one daily run for the PyPI publish gate path.",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -3459,7 +3530,7 @@
     "firestore_read_reconcile.yml": {
       "name": "Firestore read ledger reconcile",
       "owner": "CI maintainers",
-      "rationale": "Daily read-only reconcile of billed Firestore read ops against the in-process ledger. Schedule plus manual dispatch. Does not deploy or change audit config.",
+      "rationale": "Daily read-only reconcile of billed Firestore read ops against the in-process ledger. Schedule plus manual dispatch. 2026-10-07: job bound to the new no-approval cron environment (prod WIF condition also accepts assertion.environment == 'cron') and default scored day moved to D-2 for a settled bill; trigger input description updated accordingly. Does not deploy or change audit config.",
       "triggers": {
         "schedule": [
           {
@@ -3469,7 +3540,7 @@
         "workflow_dispatch": {
           "inputs": {
             "day": {
-              "description": "Closed UTC day to reconcile (YYYY-MM-DD; blank uses yesterday UTC)",
+              "description": "Closed UTC day to reconcile (YYYY-MM-DD; blank uses the D-2 settled day)",
               "required": "false",
               "type": "string"
             }
@@ -4602,6 +4673,37 @@
         }
       }
     },
+    "grafana_dashboard_provisioning.yml": {
+      "name": "Provision Grafana dashboards",
+      "owner": "CI maintainers",
+      "rationale": "Register the Grafana provisioning workflow; runs on dashboard JSON merges to main.",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/charts/monitoring/dashboards/**",
+            ".github/workflows/grafana_dashboard_provisioning.yml"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "prod",
+              "description": "Select the Grafana to provision",
+              "options": [
+                "prod",
+                "dev",
+                "both"
+              ],
+              "required": "true",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
     "jit_qa_cloud_run.yml": {
       "name": "JIT isolated QA Cloud Run plane",
       "owner": "CI maintainers",
@@ -5026,7 +5128,7 @@
     "python-cli-ci.yml": {
       "name": "Python CLI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Path-filter widened so changes to the PyPI publish gate also run Python CLI verification.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5035,7 +5137,8 @@
           "paths": [
             "sdks/python-cli/**",
             ".github/actions/ci-tier/**",
-            ".github/workflows/python-cli-ci.yml"
+            ".github/workflows/python-cli-ci.yml",
+            ".github/workflows/publish_omi_cli.yml"
           ]
         },
         "push": {
@@ -5045,7 +5148,8 @@
           "paths": [
             "sdks/python-cli/**",
             ".github/actions/ci-tier/**",
-            ".github/workflows/python-cli-ci.yml"
+            ".github/workflows/python-cli-ci.yml",
+            ".github/workflows/publish_omi_cli.yml"
           ]
         }
       }

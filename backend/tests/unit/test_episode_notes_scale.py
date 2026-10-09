@@ -7,29 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from config.episode_notes import episode_notes_cohort
 from models.episode_extraction import EpisodeStructuredExtraction
 from utils.conversations.episode_compaction import compact_episode_items
 from utils.conversations.episode_evidence import EvidenceItem, render_episode_evidence
 from utils.llm.notes_observability import NotesRun
-
-
-@pytest.mark.parametrize('value', ['', 'bad', 'nan', 'inf', '-1', '101', '0'])
-def test_ramp_fails_closed(monkeypatch, value):
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', value)
-    assert not episode_notes_cohort('invented-owner')
-    assert not episode_notes_cohort(None)
-
-
-def test_sticky_nested_uid_cohorts(monkeypatch):
-    groups = []
-    for share in (1, 10, 50, 100):
-        monkeypatch.setenv('MEETING_NOTES_EPISODE_EVIDENCE_PERCENT', str(share))
-        group = {str(uid) for uid in range(1000) if episode_notes_cohort(str(uid))}
-        assert group == {str(uid) for uid in range(1000) if episode_notes_cohort(str(uid))}
-        groups.append(group)
-    assert all(left <= right for left, right in zip(groups, groups[1:]))
-    assert len(groups[-1]) == 1000
 
 
 def test_compaction_keeps_speech_changes_id_and_time_and_bounds_incidental_screens():
@@ -143,7 +124,7 @@ def test_list_and_search_omit_claims_detail_keeps_them(runtime):
     assert detail['structured']['note_claims'][0]['text'] == 'Approval'
 
 
-def test_production_rich_reads_identical_with_episode_no_n_plus_one(runtime, monkeypatch):
+def test_production_rich_reads_have_no_n_plus_one(runtime, monkeypatch):
     _, wiring, pack, _ = runtime
     from models.calendar_context import CalendarMeetingContext, MeetingParticipant
     from utils.conversations.meeting_context_render import PriorMeetingNote
@@ -190,7 +171,7 @@ def test_production_rich_reads_identical_with_episode_no_n_plus_one(runtime, mon
         finished_at=calendar.start_time,
     )
     results = []
-    for episode in (False, True):
+    for _ in range(2):
         reads.clear()
         documents.clear()
         wiring.rich_notes_inputs(
@@ -200,34 +181,8 @@ def test_production_rich_reads_identical_with_episode_no_n_plus_one(runtime, mon
             'UTC',
             include_background=True,
             include_screen_text=True,
-            **({'evidence_items': []} if episode else {}),
         )
         results.append((dict(reads), dict(documents)))
     assert results[0] == results[1]
     assert all(count == 1 for count in results[1][0].values())
     assert sum(results[1][1].values()) == 91
-
-
-def test_long_fallback_background_reuses_ocr_query(runtime, monkeypatch):
-    _, wiring, sources, _ = runtime
-    from utils.conversations.meeting_context_render import MeetingContextPack
-    from utils.conversations.meeting_participants import MeetingRoster
-
-    calls = []
-    pack = MeetingContextPack(
-        screen_rows=({'appName': 'Browser', 'windowTitle': 'Pricing', 'ocrText': 'Pricing draft'},)
-    )
-    monkeypatch.setattr(sources, 'gather_meeting_context_pack', lambda *a, **k: calls.append(k) or pack)
-    evidence = []
-    background = wiring._rich_meeting_context_block(
-        'invented',
-        SimpleNamespace(),
-        MeetingRoster(entries=(), display_title=None, title_is_window_title=False),
-        [],
-        'UTC',
-        include_screen_text=True,
-        evidence_items=evidence,
-    )
-    assert len(calls) == 1 and calls[0]['preserve_screen_rows']
-    assert 'Pricing draft' in background
-    assert 'Pricing draft' in evidence[0].content

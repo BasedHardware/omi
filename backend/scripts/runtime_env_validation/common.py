@@ -345,9 +345,11 @@ def validate_mentor_pipeline(
         if config.get('name') == 'MENTOR_PIPELINE':
             entry = config
         if entry is not None:
-            value = entry.get('value', entry.get('default', 'legacy')) if isinstance(entry, dict) else entry
-            if not isinstance(value, str) or value not in {'legacy', 'v2', 'cohort'}:
-                errors.append(ValidationError(scope, 'MENTOR_PIPELINE must be legacy, v2 or cohort (default legacy)'))
+            value = entry.get('value', entry.get('default')) if isinstance(entry, dict) else entry
+            if not isinstance(value, str) or value != 'cohort':
+                errors.append(
+                    ValidationError(scope, 'MENTOR_PIPELINE must be cohort (the legacy/v2 modes were removed)')
+                )
         for name, value in config.items():
             errors.extend(validate_mentor_pipeline(scope=f'{scope}/{name}', config=value, _seen=seen))
     elif isinstance(config, list):

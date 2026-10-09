@@ -3,6 +3,25 @@ environments:
   dev:
     project: based-hardware-dev
     jobs:
+      - name: dream-agent-canary-half-hourly
+        region: us-central1
+        schedule: "*/30 * * * *"
+        time_zone: UTC
+        state: PAUSED
+        target:
+          type: http
+          uri: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/dream-agent/canary
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+            audience: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/docs/runbooks/dream-agent.md
       - name: day3-reengagement-email-daily
         region: us-central1
         schedule: "0 15 * * *"
@@ -184,6 +203,44 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: dream-agent-sweep-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/dream-agent/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/docs/runbooks/dream-agent.md
+      - name: dream-agent-canary-half-hourly
+        region: us-central1
+        schedule: "*/30 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/dream-agent/canary
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/docs/runbooks/dream-agent.md
       - name: omi-admin-stats-precompute
         region: us-central1
         schedule: "*/30 * * * *"

@@ -123,6 +123,8 @@ void main() {
 
   test('stall recovery is not shown as a user pause and keeps Pause available', () async {
     await world.elapse(const Duration(seconds: 5));
+    await world.controller.pendingSourceSwitch; // Recovery first makes the WAL boundary durable.
+    await world.settle();
     expect(presentation.snapshot['status'], isIn(['interrupted', 'connecting']));
     expect(presentation.snapshot['paused'], true);
     expect(presentation.snapshot['canPause'], true);
@@ -175,13 +177,13 @@ void main() {
     expect(presentation.snapshot['source'], 'pendant');
   }
 
-  test('silence timeout publishes Paused to the Live Activity', () async {
+  test('silence timeout does not publish a false pause to the Live Activity', () async {
     await recordWithPendant();
     await world.elapse(const Duration(seconds: 120));
     await world.controller.pendingSourceSwitch;
     await world.settle();
-    expect(presentation.snapshot['paused'], true);
-    expect(presentation.snapshot['status'], 'paused');
+    expect(presentation.snapshot['paused'], false);
+    expect(presentation.snapshot['status'], 'listening');
     expect(presentation.snapshot['canPause'], true);
   });
 

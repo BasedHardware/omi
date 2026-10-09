@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversation_scan as conversation_scan_db
@@ -11,6 +11,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
@@ -1291,6 +1292,9 @@ def delete_conversation(
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
 
+    # Commit intent before retraction or cleanup; failures must never undo this guard.
+    conversation_tombstones.record_deletion(uid, conversation_id)
+
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
@@ -1303,7 +1307,7 @@ def delete_conversation(
             except ConversationReplacementConflictError as error:
                 logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
                 # Concurrent same-account memory writes kept winning the
-                # account-global control CAS. Nothing has been deleted yet, so
+                # account-global control CAS. Primary content has not been deleted yet, so
                 # fail closed with a retryable answer instead of an opaque 500;
                 # the retraction is idempotent, a retried delete is safe (#11726).
                 raise HTTPException(
@@ -1435,13 +1439,19 @@ def set_action_item_status(
             new_completed_status = data.values[i]
 
             for ai in description_to_items.get(action_item.description, []):
-                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                if not action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status)):
+                    continue
+                updated_item = action_items_db.get_action_item(uid, ai['id'])
+                if not updated_item:
+                    continue
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=ai['id'],
-                    description=ai.get('description', ''),
-                    completed=bool(new_completed_status),
-                    due_at=ai.get('due_at'),
+                    description=updated_item.get('description', ''),
+                    completed=bool(updated_item.get('completed')),
+                    due_at=updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
@@ -1535,6 +1545,7 @@ def _assign_manual_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    time_range=None,
 ):
     if assign_type not in {'is_user', 'person_id'}:
         raise HTTPException(status_code=400, detail='Invalid assign type')
@@ -1553,6 +1564,7 @@ def _assign_manual_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
             background_tasks=background_tasks,
+            **({"time_range": time_range} if time_range is not None else {}),
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1613,7 +1625,13 @@ def set_assignee_conversation_speaker(
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
+    start: Annotated[
+        Optional[float], Query(description="Range start in conversation-offset seconds (inclusive)")
+    ] = None,
+    end: Annotated[Optional[float], Query(description="Range end in conversation-offset seconds (exclusive)")] = None,
 ):
+    if (start is None) != (end is None):
+        raise HTTPException(status_code=422, detail="Supply both start and end for a speaker assignment range")
     return _assign_manual_speaker(
         conversation_id,
         assign_type,
@@ -1623,6 +1641,7 @@ def set_assignee_conversation_speaker(
         speaker_id=speaker_id,
         segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
+        time_range=(start, end) if start is not None else None,
     )
 
 

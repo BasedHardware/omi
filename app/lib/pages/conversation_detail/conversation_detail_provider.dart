@@ -1197,6 +1197,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         visibility: _cachedConversation!.visibility,
         captureGroup: _cachedConversation!.captureGroup,
         speakerResolution: _cachedConversation!.speakerResolution,
+        captureCoverage: _cachedConversation!.captureCoverage,
       );
       _cachedConversation = updatedConversation;
       conversationProvider?.updateConversation(updatedConversation);

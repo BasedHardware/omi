@@ -77,6 +77,20 @@ void main() {
     await world.settle();
     await world.controller.pendingSourceSwitch;
     await world.settle();
+    // Reconciliation runs outside the dispatcher's pendingSourceSwitch. Wait
+    // for observable completion of its async WAL/transport I/O after scope drop,
+    // rather than mistaking coordinator quiescence for transport quiescence.
+    if (!SyncWakeScope.syncOnly && !world.controller.isPaused) {
+      final deadline = Stopwatch()..start();
+      while (!world.controller.keepAliveScheduledForTesting ||
+          (world.socket?.status == PureSocketStatus.connected && world.deviceConnection!.openAudioSubscriptions != 1)) {
+        if (deadline.elapsed > const Duration(seconds: 5)) {
+          throw StateError('scope-drop transport reconciliation did not settle');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        await world.settle();
+      }
+    }
   }
 
   void expectLive() {
@@ -100,7 +114,10 @@ void main() {
     world = await CaptureReplayWorld.boot(tempDir: directory);
     world.deviceConnection = ScriptedDeviceConnection();
     await world.controller.streamDeviceRecording(device: pendant);
-    await world.elapse(const Duration(seconds: 120));
+    // Seed the persisted #20837 marker; current firmware can no longer trigger
+    // a silence pause. Exercise upgrade recovery against the real sync fence.
+    await world.controller.pauseCapture();
+    await SharedPreferencesUtil().saveBool('uplinkSilencePaused', true);
     await settle();
     expect(world.controller.silencePaused, true);
     SharedPreferencesUtil.capturePolicyBridgeForTesting = (method, args) async {

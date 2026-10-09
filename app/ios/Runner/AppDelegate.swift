@@ -448,6 +448,31 @@ final class QuickActionsIconPatcher: NSObject {
         speechHandler.handle(call, result: result)
     }
 
+    // Snapshot only: no battery observer or background work. Restore monitoring
+    // so this telemetry read cannot leave UIDevice battery monitoring enabled.
+    let phoneBatteryChannel = FlutterMethodChannel(name: "com.omi/phone_battery", binaryMessenger: messenger)
+    phoneBatteryChannel.setMethodCallHandler { call, result in
+        guard call.method == "read" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        device.isBatteryMonitoringEnabled = true
+        defer { device.isBatteryMonitoringEnabled = wasMonitoring }
+        let level = device.batteryLevel
+        let state = device.batteryState
+        guard level >= 0, level <= 1, state != .unknown else {
+            result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
+            return
+        }
+        result([
+            "battery_level": Int((level * 100).rounded()),
+            "battery_charging": state == .charging || state == .full,
+            "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
+        ])
+    }
+
     // TestFlight environment detection
     let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: messenger)
     envChannel.setMethodCallHandler { (call, result) in

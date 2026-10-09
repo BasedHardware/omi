@@ -22,8 +22,18 @@ CaptureEnvironment environment(
   bool call = false,
   String? cardRecordingId,
   int cardRevision = 0,
+  int livenessEpoch = 0,
+  bool appSuspended = false,
+  bool? socketConnected,
+  bool transcriptReady = false,
+  DateTime? appSuspendedAt,
+  DateTime? appResumedAt,
 }) =>
     CaptureEnvironment(
+      livenessEpoch: livenessEpoch,
+      appSuspended: appSuspended,
+      appSuspendedAt: appSuspendedAt,
+      appResumedAt: appResumedAt,
       policyMuted: muted,
       paused: muted,
       batchModeEnabled: batch,
@@ -32,8 +42,8 @@ CaptureEnvironment environment(
       networkConnected: true,
       signedIn: () => true,
       phoneMicSupportsBatch: true,
-      transcriptReady: false,
-      socketConnected: state.phoneOwns || state.pendantOwns,
+      transcriptReady: transcriptReady,
+      socketConnected: socketConnected ?? (state.phoneOwns || state.pendantOwns),
       deviceServiceReady: state.connectedDevice != null || state.phoneOwns,
       callActive: call,
       deviceRecording: state.phase == CapturePhase.pendantLive,
@@ -823,6 +833,11 @@ void main() {
       name: 'deferred shared batch policy remains phone-owned while paused',
       steps: [16, 26, 4],
       phase: CapturePhase.phoneBatchPaused,
+    ),
+    (
+      name: 'closing onboarding over a live pendant with batch mode off does not turn batch on',
+      steps: [0, 20, 21],
+      phase: CapturePhase.pendantLive,
     ),
   ]) {
     test(episode.name, () async {

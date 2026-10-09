@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, NamedTuple, Sequence
 
-EXPECTED_SCHEDULE = "0 */6 * * *"
+EXPECTED_SCHEDULE = "0 3,15 * * *"
 EXPECTED_STATE = "ENABLED"
 EXPECTED_TIME_ZONE = "Etc/UTC"
 EXPECTED_HTTP_METHOD = "POST"

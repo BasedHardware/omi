@@ -427,7 +427,7 @@ def test_processing_resolution_keeps_the_whole_rejected_voice_unnamed(world, mon
         lambda uid, cid: receipt(world),
     )
     monkeypatch.setattr(speaker_resolution, 'speaker_embedding_configured', lambda: True)
-    monkeypatch.setattr(speaker_resolution, 'load_voiceprints_for_resolution', lambda uid: {})
+    monkeypatch.setattr(speaker_resolution, 'load_voiceprints_for_resolution', lambda uid, **kw: {})
     vector = np.array([1.0, 0.0], dtype=np.float32)
     cache = speaker_resolution.encode_cache(
         {'s0': (5.0, vector), 's1': (4.0, np.array([0.99, 0.01], dtype=np.float32))}

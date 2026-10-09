@@ -245,9 +245,7 @@ def migrate_staged_candidates(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     return migrate_staged_tasks(
         uid,
-        control.model_copy(
-            update={'workflow_mode': TaskWorkflowMode.read, 'chat_first_ui': rollout.intelligence_product_enabled}
-        ),
+        control.model_copy(update={'workflow_mode': TaskWorkflowMode.read}),
         after_id=request.after_id,
         limit=request.limit,
     )
@@ -273,24 +271,19 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
             workflow_mode=control.workflow_mode,
             account_generation=control.account_generation,
         )
-        chat_first_ui = rollout.intelligence_product_enabled
     except Exception:
         # Control resolution is intentionally fail-closed: a backend outage or
         # malformed generation fence keeps this user in the existing shell.
         return control.model_copy(
             update={
                 'workflow_mode': TaskWorkflowMode.off,
-                'chat_first_ui': False,
             }
         )
 
-    # Desktop samples both fields as one generation-bound projection. Preserve
-    # the raw generation, but never let a stale workflow record select the
-    # legacy shell for a universally entitled account.
+    # Preserve the generation while projecting the server-owned product decision.
     return control.model_copy(
         update={
-            'workflow_mode': TaskWorkflowMode.read,
-            'chat_first_ui': chat_first_ui,
+            'workflow_mode': TaskWorkflowMode.read if rollout.intelligence_product_enabled else TaskWorkflowMode.off
         }
     )
 
@@ -353,10 +346,11 @@ def accept_candidate(
 ):
     _require_candidate_write_control(uid, account_generation)
     try:
-        summary_arguments = {'summary_item': request.summary_item} if request and request.summary_item else {}
-        return candidate_service.accept_candidate(
-            uid, candidate_id, account_generation=account_generation, **summary_arguments
-        )
+        if request and request.summary_item:
+            return candidate_service.accept_candidate(
+                uid, candidate_id, account_generation=account_generation, summary_item=request.summary_item
+            )
+        return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except candidates_db.CandidateStoreError as exc:
