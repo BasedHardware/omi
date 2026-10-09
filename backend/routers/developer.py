@@ -1962,7 +1962,11 @@ def _create_conversation_from_segments(
         # One point read suppresses retries even when a prior delete failed during cleanup.
         # Residual race: a create already past this read can overlap a delete commit;
         # this guard deliberately does not transact across the two collections.
-        if conversation_tombstones.is_deleted(uid, conversation_id):
+        # A live conversation deleted elsewhere is tombstoned under its raw
+        # client session id (the ws doc id), not this derived uuid5 — check both.
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
             logger.info(
                 "from_segments_tombstoned_reject uid=%s client_session_id=%s conversation_id=%s",
                 uid,
@@ -2133,6 +2137,18 @@ def _create_conversation_from_segments(
     if client_projection is not None and not request.client_session_id:
         conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
+        # A delete committing while processing ran must win: re-check intent
+        # before the final persist, otherwise the loser of the admission race
+        # re-persists the row the user just deleted. The next retry of this
+        # upload gets the deleted ack, but the doc would already be back.
+        if conversation_tombstones.is_deleted(uid, conversation.id):
+            logger.info(
+                "from_segments_tombstoned_suppress uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                sanitize(request.client_session_id),
+                conversation.id,
+            )
+            return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,

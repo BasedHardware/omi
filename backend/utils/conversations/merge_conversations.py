@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
+from database import conversation_tombstones
 from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
@@ -698,6 +699,10 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
     row = conversations_db.get_conversation(uid, conversation_id) or {}
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
+            # The source row is destroyed below; without intent its from-segments
+            # session id would re-derive the same id on the next backlog retry and
+            # resurrect a merge donor the user deleted with the survivor.
+            conversation_tombstones.record_deletion(uid, source_id)
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
     record_survivor_deleted(uid, conversation_id, row)

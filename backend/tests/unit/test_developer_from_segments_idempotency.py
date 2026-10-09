@@ -933,6 +933,58 @@ def test_deleted_ack_through_both_http_entrypoints(monkeypatch, path):
     process.assert_not_called()
 
 
+def test_deleted_ack_also_matches_raw_session_id_tombstone(monkeypatch):
+    """A live conversation deleted elsewhere is tombstoned under its raw ws doc id
+    (== client_conversation_id alias), not the derived uuid5 — the create guard
+    must check both identities."""
+    seen = []
+
+    def lookup(uid, key):
+        seen.append(key)
+        return key == 'raw-ws-doc-id'
+
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lookup)
+    read = MagicMock()
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='raw-ws-doc-id'))
+    assert response.status == 'deleted'
+    assert response.id == developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id')
+    assert 'raw-ws-doc-id' in seen and developer._from_segments_conversation_id('uid1', 'raw-ws-doc-id') in seen
+    read.assert_not_called()
+    process.assert_not_called()
+
+
+def test_pre_persist_tombstone_check_suppresses_delete_race_winner(monkeypatch):
+    """A delete committing while processing runs must win: the final persist is
+    preceded by a re-check, and a hit returns the deleted ack instead of writing."""
+    cid = developer._from_segments_conversation_id('uid1', 'race-session')
+    monkeypatch.setattr(developer.conversation_tombstones, 'is_deleted', lambda uid, key: key == cid)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    persisted = MagicMock()
+    created = {}
+
+    def fake_process(uid, language, obj, **kwargs):
+        created['row'] = obj
+        conv = Conversation(
+            id=cid,
+            created_at=obj.created_at,
+            started_at=obj.started_at,
+            finished_at=obj.finished_at,
+            language=obj.language,
+            source=obj.source,
+            structured=Structured(),
+        )
+        return conv
+
+    monkeypatch.setattr(developer, 'process_conversation', fake_process)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='race-session'))
+    assert response.status == 'deleted'
+    persisted.assert_not_called()
+
+
 def test_tombstone_lookup_failure_never_admits_processing(monkeypatch):
     monkeypatch.setattr(
         developer.conversation_tombstones, 'is_deleted', MagicMock(side_effect=RuntimeError('unavailable'))
