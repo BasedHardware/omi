@@ -7,6 +7,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
+import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -144,7 +145,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildRecordingsHeader(filteredWals.length),
+                      _buildRecordingsHeader(),
                       const SizedBox(height: 10),
                       _buildFilterChips(),
                       const SizedBox(height: 12),
@@ -152,7 +153,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   ]),
                 ),
               ),
-              if (hasAnyRecording) _buildWalListSliver(syncProvider, filteredWals),
+              if (hasAnyRecording) _buildWalListSliver(syncProvider, groupRecordingBlocks(filteredWals)),
               const SliverToBoxAdapter(child: SizedBox(height: 48)),
             ],
           ),
@@ -427,7 +428,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  Widget _buildRecordingsHeader(int total) {
+  Widget _buildRecordingsHeader() {
     return OmiSectionHeader(
       context.l10n.recordings,
       trailing: Text(context.l10n.newestFirst, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
@@ -482,8 +483,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// The visual "rounded card" wrapper is achieved per-row: the first item gets
   /// rounded top corners, the last gets rounded bottom corners. Dividers are
   /// drawn between rows. This preserves the design while staying lazy.
-  Widget _buildWalListSliver(SyncProvider syncProvider, List<Wal> wals) {
-    if (wals.isEmpty) {
+  Widget _buildWalListSliver(SyncProvider syncProvider, List<RecordingBlock> blocks) {
+    if (blocks.isEmpty) {
       final emptyMsg = switch (_filter) {
         WalDisplayFilter.synced => context.l10n.noSyncedRecordingsYet,
         WalDisplayFilter.pending => context.l10n.noPendingRecordings,
@@ -506,17 +507,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList.builder(
-        itemCount: wals.length,
-        itemBuilder: (context, i) => _buildWalListItem(syncProvider, wals, i),
+        itemCount: blocks.length,
+        itemBuilder: (context, i) => _buildBlockListItem(syncProvider, blocks[i], i, blocks.length),
       ),
     );
   }
 
-  Widget _buildWalListItem(SyncProvider syncProvider, List<Wal> wals, int i) {
-    final wal = wals[i];
+  /// A one-file recording keeps the swipe-to-delete row; a longer one is a single row that opens
+  /// its files, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
+  Widget _buildBlockListItem(SyncProvider syncProvider, RecordingBlock block, int i, int count) {
+    final wal = block.wals.first;
     final state = wal.syncDisplayState;
     final isFirst = i == 0;
-    final isLast = i == wals.length - 1;
+    final isLast = i == count - 1;
     return Container(
       decoration: BoxDecoration(
         color: OmiColors.surface1,
@@ -529,34 +532,144 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Dismissible(
-            // Index suffix because `wal.id` (device_timerStart) is not unique
-            // across SD-card + on-phone copies of the same recording.
-            key: ValueKey('${wal.id}#$i'),
-            direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
-            confirmDismiss: (direction) {
-              final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
-              return showOmiConfirm(
-                context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
-                confirmLabel: context.l10n.delete,
-                destructive: true,
-              );
-            },
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20.0),
-              color: Colors.red,
-              child: const Icon(Icons.delete, color: Colors.white),
+          if (block.wals.length > 1)
+            _blockRow(block)
+          else
+            Dismissible(
+              // Index suffix because `wal.id` (device_timerStart) is not unique
+              // across SD-card + on-phone copies of the same recording.
+              key: ValueKey('${wal.id}#$i'),
+              direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+              confirmDismiss: (direction) {
+                final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
+                return showOmiConfirm(
+                  context,
+                  title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                  message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                  confirmLabel: context.l10n.delete,
+                  destructive: true,
+                );
+              },
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20.0),
+                color: Colors.red,
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              onDismissed: (direction) {
+                syncProvider.deleteWal(wal);
+              },
+              child: _walRow(wal),
             ),
-            onDismissed: (direction) {
-              syncProvider.deleteWal(wal);
-            },
-            child: _walRow(wal),
-          ),
-          if (!isLast) const Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16),
+          if (!isLast) _rowDivider,
         ],
+      ),
+    );
+  }
+
+  Widget _blockRow(RecordingBlock block) {
+    final state = block.state;
+    final (color, label) = _rowLabel(block.representative);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showBlockFiles(block),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _blockTitle(block),
+                    style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _rowSubtitleStyle(color),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            _blockTrailing(block, state),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The row's one action, for the whole recording: Try again re-sends the files that can still
+  /// go, Delete removes a recording nothing can move forward. Mixed or healthy blocks open.
+  Widget _blockTrailing(RecordingBlock block, WalSyncDisplayState state) {
+    if (state == WalSyncDisplayState.syncing) return const OmiSpinner(size: OmiSpinnerSize.small);
+    if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+      return OmiButton.secondary(
+        label: context.l10n.tryAgain,
+        size: OmiButtonSize.compact,
+        onPressed: () async {
+          final sync = context.read<SyncProvider>();
+          for (final wal in block.wals) {
+            final s = wal.syncDisplayState;
+            if (s == WalSyncDisplayState.failed || s == WalSyncDisplayState.retrying) await sync.syncWal(wal);
+          }
+        },
+      );
+    }
+    if (block.wals.every((w) => _isUnsyncableState(w.syncDisplayState))) {
+      return OmiButton.destructive(
+        label: context.l10n.delete,
+        size: OmiButtonSize.compact,
+        onPressed: () => _confirmDeleteWals(block.wals),
+      );
+    }
+    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+  }
+
+  // One title, subtitle and divider for file rows and recording rows, so the two never drift.
+  static const _rowDivider = Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16);
+
+  static TextStyle _rowTitleStyle({required bool synced}) => TextStyle(
+        color: synced ? Colors.grey.shade500 : OmiColors.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      );
+
+  static TextStyle _rowSubtitleStyle(Color color) => TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400);
+
+  String _blockTitle(RecordingBlock block) {
+    final date = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000).toLocal();
+    final dates = OmiDateFormat.of(context);
+    return '${dates.dayHeader(date)} \u00b7 ${dates.time(date)} \u00b7 ${OmiDuration.compact(block.seconds, context.l10n)}';
+  }
+
+  /// The files behind one recording, each with its own row, detail page and actions.
+  void _showBlockFiles(RecordingBlock block) {
+    final ids = block.wals.map((w) => '${w.id}#${w.storage.name}').toSet();
+    final sync = context.read<SyncProvider>();
+    showOmiSheet<void>(
+      context: context,
+      title: _blockTitle(block),
+      // The page's provider, not a lookup from the sheet's own route.
+      builder: (sheetContext) => ListenableBuilder(
+        listenable: sync,
+        builder: (_, __) {
+          final wals = sync.displaySortedWals.where((w) => ids.contains('${w.id}#${w.storage.name}')).toList();
+          if (wals.isEmpty) return const SizedBox.shrink();
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: wals.length,
+              separatorBuilder: (_, __) => _rowDivider,
+              itemBuilder: (_, i) => _walRow(wals[i]),
+            ),
+          );
+        },
       ),
     );
   }
@@ -587,17 +700,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final duration = wal.seconds > 0 ? OmiDuration.compact(wal.seconds, context.l10n) : null;
 
     final state = wal.syncDisplayState;
-    var (color, _, label) = _rowVisual(state);
+    final (color, label) = _rowLabel(wal);
     final isSynced = state == WalSyncDisplayState.synced;
-
-    // On-device WALs surface their transfer state instead of "Waiting to sync".
-    final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
-    if (state == WalSyncDisplayState.waiting && onDevice) {
-      final phase = context.read<SyncProvider>().syncState.phase;
-      label = phase == SyncPhase.downloadingFromDevice
-          ? context.l10n.syncStatusDownloadingFromDevice
-          : context.l10n.syncStatusOnDevice;
-    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -619,18 +723,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 children: [
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: TextStyle(
-                      color: isSynced ? Colors.grey.shade500 : OmiColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: _rowTitleStyle(synced: isSynced),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400),
+                    style: _rowSubtitleStyle(color),
                   ),
                   if (_rowDownloadFraction(wal) != null) ...[
                     const SizedBox(height: 8),
@@ -649,6 +749,20 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         ),
       ),
     );
+  }
+
+  (Color, String) _rowLabel(Wal wal) {
+    final state = wal.syncDisplayState;
+    var (color, _, label) = _rowVisual(state);
+    // On-device WALs surface their transfer state instead of "Waiting to sync".
+    final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+    if (state == WalSyncDisplayState.waiting && onDevice) {
+      final phase = context.read<SyncProvider>().syncState.phase;
+      label = phase == SyncPhase.downloadingFromDevice
+          ? context.l10n.syncStatusDownloadingFromDevice
+          : context.l10n.syncStatusOnDevice;
+    }
+    return (color, label);
   }
 
   Widget _rowTrailing(Wal wal, WalSyncDisplayState state) {
@@ -683,6 +797,21 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       state == WalSyncDisplayState.outsideRecoveryWindow ||
       state == WalSyncDisplayState.unsupportedAudio ||
       state == WalSyncDisplayState.uploadRejected;
+
+  Future<void> _confirmDeleteWals(List<Wal> wals) async {
+    final syncProvider = context.read<SyncProvider>();
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.deleteRecording,
+      message: context.l10n.thisCannotBeUndone,
+      confirmLabel: context.l10n.delete,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    for (final wal in wals) {
+      await syncProvider.deleteWal(wal);
+    }
+  }
 
   Future<void> _confirmDeleteWal(Wal wal) async {
     final syncProvider = context.read<SyncProvider>();
