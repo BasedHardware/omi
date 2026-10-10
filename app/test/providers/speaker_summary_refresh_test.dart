@@ -708,6 +708,111 @@ void main() {
       h.provider.dispose();
     });
 
+    testWidgets('an Undo that saves only some of its labels leaves every line as the server has it', (tester) async {
+      final server = <String, (bool, String?)>{'s': (false, 'alex'), 's2': (true, null)};
+      var undoSaves = 0;
+      var undoing = false;
+      final provider = ConversationDetailProvider(
+        assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
+          // The second grouped restore fails after the first one landed.
+          if (undoing && ++undoSaves == 2) return false;
+          for (final segmentId in ids) {
+            server[segmentId] = (isUser ?? false, personId);
+          }
+          return true;
+        },
+        fetchConversation: (id) async => twoVoices(id: id),
+        reprocess: (id, {appId, requireSpeakerReceipt = false}) async => twoVoices(id: id),
+      );
+      select(provider, twoVoices());
+      final segments = provider.conversation.transcriptSegments;
+      segments.first.personId = 'alex';
+      segments.last.isUser = true;
+      provider.beginSpeakerLabelingSession();
+      expect(await provider.assignSpeaker(['s', 's2'], 'maya'), isTrue);
+
+      undoing = true;
+      expect(await provider.undoLastSpeakerLabel(), isFalse);
+      expect(undoSaves, 2);
+      expect(server, {'s': (false, 'alex'), 's2': (false, 'maya')});
+      expect({for (final s in segments) s.id: (s.isUser, s.personId)}, server);
+      provider.dispose();
+    });
+
+    testWidgets('a sync bridge mid-pass keeps the pass open; Done regenerates the survivor once', (tester) async {
+      const donorId = '00000000-0000-5000-8000-000000000001';
+      const survivorId = '3883d17e-0000-4000-8000-000000000000';
+      final fetched = <String>[];
+      final reprocessed = <String>[];
+      final provider = ConversationDetailProvider(
+        assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+        fetchConversation: (id) async {
+          fetched.add(id);
+          return twoVoices(id: survivorId);
+        },
+        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+          expectSync(requireSpeakerReceipt, isTrue);
+          reprocessed.add(id);
+          return twoVoices(id: id);
+        },
+      );
+      select(provider, twoVoices(id: donorId));
+      provider.beginSpeakerLabelingSession();
+      expect(await provider.assignSpeaker(['s'], 'maya'), isTrue);
+      expect(fetched, [donorId]);
+      expect(provider.conversation.id, survivorId);
+      expect(provider.speakerLabelingSessionActive, isTrue);
+      expect(provider.speakerLabelingSessionLineCount, 1);
+      expect(provider.canUndoSpeakerLabel, isTrue);
+      await tester.pump(const Duration(seconds: 10));
+      expect(reprocessed, isEmpty);
+
+      // The page still holds the donor ID: it ends its own pass, a page underneath still cannot.
+      provider.confirmSpeakerLabelingSession(conversationId: 'page-underneath');
+      expect(provider.speakerLabelingSessionActive, isTrue);
+      provider.confirmSpeakerLabelingSession(conversationId: donorId);
+      expect(provider.speakerLabelingSessionActive, isFalse);
+      expect(reprocessed, [survivorId]);
+      await tester.pump();
+      provider.leaveSpeakerLabelingSession(donorId);
+      await tester.pump(const Duration(seconds: 10));
+      expect(reprocessed, [survivorId]);
+      provider.dispose();
+    });
+
+    testWidgets('Done or leaving with the bridging save in flight regenerates the survivor once', (tester) async {
+      const donorId = '00000000-0000-5000-8000-000000000001';
+      const survivorId = '3883d17e-0000-4000-8000-000000000000';
+      for (final leave in [false, true]) {
+        final save = Completer<bool>();
+        final reprocessed = <String>[];
+        final provider = ConversationDetailProvider(
+          assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+          fetchConversation: (id) async => twoVoices(id: survivorId),
+          reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+            reprocessed.add(id);
+            return twoVoices(id: id);
+          },
+        );
+        select(provider, twoVoices(id: donorId));
+        provider.beginSpeakerLabelingSession();
+        final assignment = provider.assignSpeaker(['s'], 'maya');
+        if (leave) {
+          provider.leaveSpeakerLabelingSession(donorId);
+        } else {
+          provider.confirmSpeakerLabelingSession(conversationId: donorId);
+        }
+        expect(provider.speakerLabelingSessionActive, isFalse);
+        save.complete(true);
+        expect(await assignment, isTrue);
+        await tester.pump();
+        expect(reprocessed, [survivorId], reason: leave ? 'leave' : 'Done');
+        await tester.pump(const Duration(seconds: 10));
+        expect(reprocessed, [survivorId], reason: leave ? 'leave' : 'Done');
+        provider.dispose();
+      }
+    });
+
     testWidgets('a label that failed to save is not counted and has nothing to undo', (tester) async {
       final h = harness(save: () async => false);
       h.provider.beginSpeakerLabelingSession();
