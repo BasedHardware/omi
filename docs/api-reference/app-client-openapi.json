@@ -13128,6 +13128,313 @@
         "title": "Display",
         "type": "object"
       },
+      "DreamReportEdit": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "shadow",
+              "applied",
+              "suppressed",
+              "suggest_only",
+              "edit_cap",
+              "invalid_evidence"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_label": {
+            "title": "Target Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_label",
+          "before",
+          "after",
+          "reason",
+          "evidence_count",
+          "outcome"
+        ],
+        "title": "DreamReportEdit",
+        "type": "object"
+      },
+      "DreamReportFeedback": {
+        "properties": {
+          "component": {
+            "title": "Component",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "failure_class": {
+            "title": "Failure Class",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "failure_class",
+          "severity",
+          "count"
+        ],
+        "title": "DreamReportFeedback",
+        "type": "object"
+      },
+      "DreamReportQuestion": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "DreamReportQuestion",
+        "type": "object"
+      },
+      "DreamReportTask": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "DreamReportTask",
+        "type": "object"
+      },
+      "DreamReportTerm": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "spelling": {
+            "title": "Spelling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "spelling",
+          "aliases"
+        ],
+        "title": "DreamReportTerm",
+        "type": "object"
+      },
+      "DreamRun": {
+        "properties": {
+          "cost_usd": {
+            "default": 0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dirty_dropped": {
+            "default": 0,
+            "title": "Dirty Dropped",
+            "type": "integer"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportEdit"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Type"
+          },
+          "feedback": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportFeedback"
+            },
+            "title": "Feedback",
+            "type": "array"
+          },
+          "privacy_rejected": {
+            "default": 0,
+            "title": "Privacy Rejected",
+            "type": "integer"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "records_queued_after": {
+            "default": 0,
+            "title": "Records Queued After",
+            "type": "integer"
+          },
+          "records_read": {
+            "default": 0,
+            "title": "Records Read",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "slow_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportTask"
+            },
+            "title": "Slow Tasks",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "failed",
+              "deadline",
+              "idle"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tokens": {
+            "default": 0,
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "vocabulary": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportTerm"
+            },
+            "title": "Vocabulary",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "created_at",
+          "trigger",
+          "status"
+        ],
+        "title": "DreamRun",
+        "type": "object"
+      },
+      "DreamRunRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "DreamRunRequest",
+        "type": "object"
+      },
+      "DreamRunsResponse": {
+        "properties": {
+          "manual_runs_limit": {
+            "title": "Manual Runs Limit",
+            "type": "integer"
+          },
+          "manual_runs_today": {
+            "title": "Manual Runs Today",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "on"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "passes_limit": {
+            "title": "Passes Limit",
+            "type": "integer"
+          },
+          "passes_today": {
+            "title": "Passes Today",
+            "type": "integer"
+          },
+          "queued_changes": {
+            "title": "Queued Changes",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/DreamRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "passes_today",
+          "passes_limit",
+          "manual_runs_today",
+          "manual_runs_limit",
+          "queued_changes",
+          "runs"
+        ],
+        "title": "DreamRunsResponse",
+        "type": "object"
+      },
       "EntitiesResponse": {
         "properties": {
           "entities": {
@@ -50083,6 +50390,174 @@
         "tags": [
           "Memories"
         ]
+      }
+    },
+    "/v1/dream/runs": {
+      "get": {
+        "operationId": "get_runs_v1_dream_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamRunsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Runs"
+      },
+      "post": {
+        "operationId": "run_now_v1_dream_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DreamRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Run Now"
       }
     },
     "/v1/entities": {
