@@ -1,3 +1,5 @@
+import pytest
+
 """Regression tests for graceful fallback when the chat stream fails mid-turn.
 
 Before the fix, when the LLM/tool pipeline raised mid-stream the backend swallowed
@@ -128,15 +130,15 @@ def _decode_done_frame(text: str) -> dict:
     raise AssertionError(f'no done: frame in stream: {text!r}')
 
 
-def test_v2_messages_emits_fallback_done_frame_on_pipeline_error():
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+def test_v2_messages_emits_fallback_done_frame_on_pipeline_error(chat_environment):
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def failing_stream(*args, **kwargs):
             kwargs['callback_data']['error'] = 'boom: internal detail'
             yield None  # signal completion with no answer set
 
-        router_module.execute_chat_stream = failing_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = failing_stream
 
         response = client.post(
             '/v2/messages',
@@ -163,8 +165,8 @@ def test_v2_messages_emits_fallback_done_frame_on_pipeline_error():
         _cleanup(saved)
 
 
-def test_v2_messages_normal_answer_still_emits_single_done_frame():
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+def test_v2_messages_normal_answer_still_emits_single_done_frame(chat_environment):
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def ok_stream(*args, **kwargs):
@@ -172,7 +174,7 @@ def test_v2_messages_normal_answer_still_emits_single_done_frame():
             kwargs['callback_data']['answer'] = 'here is your answer'
             yield None
 
-        router_module.execute_chat_stream = ok_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = ok_stream
 
         response = client.post(
             '/v2/messages',
@@ -204,8 +206,8 @@ def _collect_voice_frames(chat_utils):
     return asyncio.run(collect())
 
 
-def test_voice_stream_emits_fallback_done_frame_on_pipeline_error():
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+def test_voice_stream_emits_fallback_done_frame_on_pipeline_error(chat_environment):
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
         stub_calls = []
 
@@ -254,11 +256,11 @@ def test_voice_stream_emits_fallback_done_frame_on_pipeline_error():
         _cleanup(saved)
 
 
-def test_voice_stream_emits_fallback_when_pipeline_yields_no_answer():
+def test_voice_stream_emits_fallback_when_pipeline_yields_no_answer(chat_environment):
     """Distinct from the error path: the pipeline completes cleanly but produces
     neither an answer nor an error (empty LLM output). Still a blank-bubble bug
     without the fallback, but error_recorded is False."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def empty_stream(*args, **kwargs):
@@ -288,11 +290,11 @@ def test_voice_stream_emits_fallback_when_pipeline_yields_no_answer():
         _cleanup(saved)
 
 
-def test_emit_stream_error_fallback_reports_exhausted_when_persist_fails():
+def test_emit_stream_error_fallback_reports_exhausted_when_persist_fails(chat_environment):
     """If the Firestore write for the fallback reply itself raises, the emitter
     must still return a done: frame (blank bubble otherwise) but record the
     fallback as 'exhausted' rather than the persisted 'degraded'."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
         chat_db.add_message.side_effect = RuntimeError('firestore down')
 
@@ -311,8 +313,8 @@ def test_emit_stream_error_fallback_reports_exhausted_when_persist_fails():
         _cleanup(saved)
 
 
-def test_build_stream_error_reply_persists_ai_message():
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+def test_build_stream_error_reply_persists_ai_message(chat_environment):
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
         reply = chat_utils.build_stream_error_reply('test-uid')
 
@@ -326,9 +328,9 @@ def test_build_stream_error_reply_persists_ai_message():
         _cleanup(saved)
 
 
-def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
+def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error(chat_environment):
     """A typed ``error:`` frame plus persisted answer must not also emit the canned sorry."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def timeout_stream(*args, **kwargs):
@@ -338,7 +340,7 @@ def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
             yield 'error: The response took too long. Please try again.'
             yield None
 
-        router_module.execute_chat_stream = timeout_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = timeout_stream
 
         response = client.post(
             '/v2/messages',
@@ -359,9 +361,9 @@ def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
         _cleanup(saved)
 
 
-def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
+def test_v2_messages_emits_canned_done_after_error_without_staged_answer(chat_environment):
     """Persona-style ``error:`` without ``answer`` must still emit a ``done:`` frame."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def persona_error_stream(*args, **kwargs):
@@ -370,7 +372,7 @@ def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
             yield 'error: Unable to complete the response. Please try again.'
             # No answer staged and no None sentinel — router must still finalize.
 
-        router_module.execute_chat_stream = persona_error_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = persona_error_stream
 
         response = client.post(
             '/v2/messages',
@@ -388,9 +390,9 @@ def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
         _cleanup(saved)
 
 
-def test_v2_messages_keeps_typed_answer_when_persistence_fails():
+def test_v2_messages_keeps_typed_answer_when_persistence_fails(chat_environment):
     """Typed timeout answer must still emit done: if Firestore persistence fails."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def timeout_stream(*args, **kwargs):
@@ -400,7 +402,7 @@ def test_v2_messages_keeps_typed_answer_when_persistence_fails():
             yield 'error: The response took too long. Please try again.'
             yield None
 
-        router_module.execute_chat_stream = timeout_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = timeout_stream
 
         def add_message(uid, message_data):
             if message_data.get('sender') == 'ai':
@@ -426,13 +428,13 @@ def test_v2_messages_keeps_typed_answer_when_persistence_fails():
         _cleanup(saved)
 
 
-def test_voice_stream_finalizes_staged_failure_before_error_frame():
+def test_voice_stream_finalizes_staged_failure_before_error_frame(chat_environment):
     """Voice clients disconnect on error: and overwrite done: with plain-text error.
 
     Persist the staged failure as done: and suppress the error frame so UI/history
     keep the typed terminal reply.
     """
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def timeout_stream(*args, **kwargs):
@@ -458,9 +460,9 @@ def test_voice_stream_finalizes_staged_failure_before_error_frame():
         _cleanup(saved)
 
 
-def test_v2_messages_keeps_persisted_id_when_app_usage_recording_fails():
+def test_v2_messages_keeps_persisted_id_when_app_usage_recording_fails(chat_environment):
     """Post-persist analytics failure must not mint a second message id for the client."""
-    client, router_module, chat_utils, chat_db, saved = _make_client()
+    client, router_module, chat_utils, chat_db, saved = chat_environment
     try:
 
         async def timeout_stream(*args, **kwargs):
@@ -470,7 +472,7 @@ def test_v2_messages_keeps_persisted_id_when_app_usage_recording_fails():
             yield 'error: The response took too long. Please try again.'
             yield None
 
-        router_module.execute_chat_stream = timeout_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = timeout_stream
         router_module.record_app_usage.side_effect = RuntimeError('analytics down')
         # Keep app resolution empty so Message.app_id stays a real Optional[str]; the
         # query-param app_id still drives process_message's record_app_usage call.
@@ -493,3 +495,13 @@ def test_v2_messages_keeps_persisted_id_when_app_usage_recording_fails():
         router_module.record_app_usage.assert_called()
     finally:
         _cleanup(saved)
+
+
+@pytest.fixture
+def chat_environment():
+    # Import and wire the isolated app in setup; the call-phase budget measures the request.
+    environment = _make_client()
+    try:
+        yield environment
+    finally:
+        _cleanup(environment[-1])
