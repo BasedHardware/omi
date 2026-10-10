@@ -303,6 +303,26 @@ async def finalize_persisted_conversation(
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
+            # Re-finalization of a row whose fanout already completed (e.g.
+            # server_recovery picking up a row finalized elsewhere). The
+            # summary-vector emission below the claim branch is unreachable on
+            # this path, so run the same fail-soft freshness guard here; a
+            # summary-vector failure never fails finalization (#21111 gap).
+            try:
+                latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+                latest = deserialize_conversation(latest_data) if latest_data else None
+                if (
+                    latest
+                    and latest_data is not None
+                    and not latest_data.get('deleted', False)
+                    and not getattr(latest, 'discarded', False)
+                    and getattr(latest, 'structured', None)
+                    and latest.structured == getattr(conversation, 'structured', None)
+                ):
+                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+            except Exception as error:
+                OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+                logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
