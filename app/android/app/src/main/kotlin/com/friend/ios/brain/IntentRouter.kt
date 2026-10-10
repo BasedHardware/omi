@@ -47,6 +47,8 @@ class IntentRouter(private val context: Context) {
         private const val TAG = "IntentRouter"
         private const val MODEL = "minilm.tflite"
         private const val TOKENS = "minilm_tokens.json"
+        /** Precomputed prototype vectors; see app/scripts/export_prototype_vectors.py. */
+        private const val VECTORS = "minilm_prototypes.json"
         private const val SEQ = 128
         private const val DIM = 384
 
@@ -142,14 +144,7 @@ class IntentRouter(private val context: Context) {
                 )
 
             val spec = JSONObject(context.assets.open(TOKENS).bufferedReader().readText())
-            val tools = spec.getJSONObject("tools")
-            for (name in tools.keys()) {
-                prototypes[name] = embedAll(tools.getJSONObject(name))
-            }
-            // The decline class ships alongside the actions, under a reserved name.
-            prototypes[NO_ACTION] =
-                embedArray(spec.getJSONArray("out_of_domain"))
-            prototypes[OPEN_APP] = embedArray(spec.getJSONArray("app_prototypes"))
+            loadPrototypes(spec)
 
             ready = true
             Log.i(TAG, "loaded ${prototypes.size} action groups")
@@ -232,6 +227,56 @@ class IntentRouter(private val context: Context) {
     }
 
     // ---------------------------------------------------------------- internals
+
+    /**
+     * Populates [prototypes] from the precomputed vectors in [VECTORS].
+     *
+     * This used to embed every stored prototype during [load]: 36 inference runs
+     * (4 tools, 14 out-of-domain, 18 app) at the documented ~600 ms each on the
+     * reference device, so the first route() blocked for roughly 20 seconds. The
+     * prototype text is static and ships in assets, so its embeddings are a pure
+     * function of that text and the model, and
+     * `app/scripts/export_prototype_vectors.py` computes them offline.
+     *
+     * The vectors are L2-normalized, which matters rather than being tidiness:
+     * [cosine] is a bare dot product, so it only equals a cosine because both
+     * sides are unit length.
+     *
+     * If the vector file is missing or malformed it falls back to embedding, so a
+     * broken export degrades to slow rather than to a router that refuses to load.
+     * The fallback is logged because a silent 20 s regression is exactly the kind
+     * of thing that gets reintroduced later without anyone noticing.
+     */
+    private fun loadPrototypes(spec: JSONObject) {
+        try {
+            val root = JSONObject(context.assets.open(VECTORS).bufferedReader().readText())
+            val groups = root.getJSONObject("vectors")
+            for (name in groups.keys()) {
+                val arr = groups.getJSONArray(name)
+                prototypes[name] = (0 until arr.length()).map { i -> toFloats(arr.getJSONArray(i)) }
+            }
+            require(prototypes.isNotEmpty()) { "no prototype vectors in $VECTORS" }
+            Log.i(TAG, "loaded ${prototypes.size} precomputed prototype groups from $VECTORS")
+        } catch (t: Throwable) {
+            Log.w(
+                TAG,
+                "could not read $VECTORS (${t.message}); embedding prototypes at load instead. " +
+                    "Cold route() will block for about 20 s. Re-run " +
+                    "app/scripts/export_prototype_vectors.py",
+                t,
+            )
+            val tools = spec.getJSONObject("tools")
+            for (name in tools.keys()) {
+                prototypes[name] = embedAll(tools.getJSONObject(name))
+            }
+            // The decline class ships alongside the actions, under a reserved name.
+            prototypes[NO_ACTION] = embedArray(spec.getJSONArray("out_of_domain"))
+            prototypes[OPEN_APP] = embedArray(spec.getJSONArray("app_prototypes"))
+        }
+    }
+
+    private fun toFloats(arr: JSONArray): FloatArray =
+        FloatArray(arr.length()) { arr.getDouble(it).toFloat() }
 
     private fun embedAll(o: JSONObject): List<FloatArray> {
         // Tool descriptions ship as a single {ids, mask} object.
