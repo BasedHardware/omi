@@ -15,6 +15,11 @@ from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.messaging.memory_privacy import (
+    channel_private_filter_active,
+    is_channel_private_memory,
+    omit_channel_private,
+)
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
@@ -282,7 +287,7 @@ def get_memories_tool(
                     visible.append(memory)
                 if len(batch) < fetch_limit:
                     break
-        memories = visible[max(offset, 0) : target_end]
+        memories = omit_channel_private(visible[max(offset, 0) : target_end], configurable)
     except Exception as e:
         logger.error(e)
 
@@ -463,10 +468,13 @@ def search_memories_tool(
                 matches = service.search(uid, query, limit=limit, candidate_limit=candidate_limit)
             else:
                 matches = service.search(uid, query, limit=limit)
+        hide_private = channel_private_filter_active(configurable)
         matches = [
             match
             for match in matches
-            if not match.memory.is_locked and not (belief_model_enabled() and memory_use_suppressed(match.memory))
+            if not match.memory.is_locked
+            and not (belief_model_enabled() and memory_use_suppressed(match.memory))
+            and not (hide_private and is_channel_private_memory(match.memory))
         ]
         if scope_start_dt or scope_end_dt:
             matches = [

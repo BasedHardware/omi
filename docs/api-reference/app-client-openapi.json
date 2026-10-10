@@ -6711,6 +6711,17 @@
             "title": "Channel",
             "type": "string"
           },
+          "display_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Handle"
+          },
           "external_id": {
             "title": "External Id",
             "type": "string"
@@ -6718,6 +6729,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "insights": {
+            "default": false,
+            "title": "Insights",
+            "type": "boolean"
+          },
+          "keep_private_memories_in_app": {
+            "default": true,
+            "title": "Keep Private Memories In App",
+            "type": "boolean"
           },
           "linked_at": {
             "format": "date-time",
@@ -6731,6 +6752,11 @@
           "visible_in_app": {
             "default": false,
             "title": "Visible In App",
+            "type": "boolean"
+          },
+          "voice_notes": {
+            "default": true,
+            "title": "Voice Notes",
             "type": "boolean"
           }
         },
@@ -6746,6 +6772,28 @@
       },
       "ChannelLinkProof": {
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -6835,15 +6883,53 @@
         "type": "object"
       },
       "ChannelVisibilityRequest": {
+        "description": "Partial per-link settings. Omitted fields stay as stored.",
         "properties": {
+          "insights": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insights"
+          },
+          "keep_private_memories_in_app": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Private Memories In App"
+          },
           "visible_in_app": {
-            "title": "Visible In App",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible In App"
+          },
+          "voice_notes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Notes"
           }
         },
-        "required": [
-          "visible_in_app"
-        ],
         "title": "ChannelVisibilityRequest",
         "type": "object"
       },
@@ -7223,6 +7309,30 @@
             "description": "App/plugin the session belongs to; null for main chat.",
             "title": "App Id"
           },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Messaging channel for a channel session.",
+            "title": "Channel"
+          },
+          "channel_link_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Link that owns a channel session.",
+            "title": "Channel Link Id"
+          },
           "created_at": {
             "description": "Session creation timestamp (UTC).",
             "format": "date-time",
@@ -7267,6 +7377,18 @@
             "description": "Whether the user starred the session.",
             "title": "Starred",
             "type": "boolean"
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Surface id. Absent means the app surface.",
+            "title": "Surface"
           },
           "title": {
             "description": "Display title of the session.",

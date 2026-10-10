@@ -10,6 +10,7 @@ from models.messaging import (
     ChannelVisibilityRequest,
     ChannelLinkReceipt,
 )
+from config.messaging import public_link_fields
 from utils.messaging.access import require_access
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 
@@ -28,7 +29,9 @@ def mint_link_proof(
     body: ChannelLinkRequest, uid: str = Depends(with_rate_limit(get_current_user_uid, 'chat:send_message'))
 ):
     _admit(uid)
-    return MessagingStore().mint(uid, body.channel, body.provider, body.kind)
+    proof = MessagingStore().mint(uid, body.channel, body.provider, body.kind)
+    deep_link, address = public_link_fields(body.channel, proof['proof'])
+    return {**proof, 'deep_link': deep_link, 'address': address}
 
 
 @router.get('/v1/messaging/links', response_model=ChannelLinksResponse, tags=['messaging'])
@@ -53,9 +56,11 @@ def set_visibility(link_id: str, body: ChannelVisibilityRequest, uid: str = Depe
     if len(link_id) != 64 or any(c not in '0123456789abcdef' for c in link_id):
         raise HTTPException(status_code=404, detail='Link not found')
     try:
-        MessagingStore().set_visibility(uid, link_id, body.visible_in_app)
+        MessagingStore().set_settings(uid, link_id, body.model_dump(exclude_none=True))
     except PermissionError:
         raise HTTPException(status_code=404, detail='Link not found') from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Invalid link settings') from None
     return {'status': 'updated'}
 
 

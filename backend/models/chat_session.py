@@ -31,6 +31,9 @@ class ChatSessionResponse(BaseModel):
     plugin_id: Optional[str] = Field(default=None, description='Mirrors app_id for cross-platform query compatibility.')
     message_count: int = Field(description='Number of messages in the session.')
     starred: bool = Field(description='Whether the user starred the session.')
+    channel: Optional[str] = Field(default=None, description='Messaging channel for a channel session.')
+    channel_link_id: Optional[str] = Field(default=None, description='Link that owns a channel session.')
+    surface: Optional[str] = Field(default=None, description='Surface id. Absent means the app surface.')
 
     @model_validator(mode='before')
     @classmethod

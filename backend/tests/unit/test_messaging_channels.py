@@ -302,6 +302,85 @@ def test_access_uses_existing_subscription_authority_and_defaults_off(monkeypatc
         access.require_access('u')
 
 
+def test_public_link_fields_come_from_config_without_a_channel_branch(monkeypatch):
+    from config.messaging import public_link_fields
+
+    monkeypatch.delenv('OMI_MESSAGING_LINK_TARGETS', raising=False)
+    assert public_link_fields('telegram', 'proof') == (None, None)
+    monkeypatch.setenv(
+        'OMI_MESSAGING_LINK_TARGETS',
+        json.dumps(
+            {
+                'telegram': {
+                    'address': 'OmiBot',
+                    'deep_link_template': 'https://t.me/{address}?start={proof}',
+                },
+                'imessage': {'address': '+15555550100'},
+            }
+        ),
+    )
+    assert public_link_fields('telegram', 'a b') == ('https://t.me/OmiBot?start=a%20b', 'OmiBot')
+    assert public_link_fields('imessage', 'CODE') == (None, '+15555550100')
+    assert public_link_fields('unknown', 'CODE') == (None, None)
+    monkeypatch.setenv('OMI_MESSAGING_LINK_TARGETS', '{')
+    assert public_link_fields('telegram', 'proof') == (None, None)
+
+
+def test_channel_retrieval_drops_private_and_restricted_memories():
+    from types import SimpleNamespace
+    from utils.messaging.memory_privacy import is_channel_private_memory, omit_channel_private
+    from utils.messaging.projection import SurfaceRuntime, surface_runtime
+    from utils.messaging.contracts import Principal
+
+    public = SimpleNamespace(visibility='public', sensitivity_labels=[], content='likes tea')
+    marked = SimpleNamespace(visibility='private', sensitivity_labels=[], content='secret note')
+    health = SimpleNamespace(visibility='public', sensitivity_labels=['health'], content='blood pressure')
+    assert not is_channel_private_memory(public)
+    assert is_channel_private_memory(marked)
+    assert is_channel_private_memory(health)
+    rows = [public, marked, health]
+    assert omit_channel_private(rows) == rows
+    token = surface_runtime.set(SurfaceRuntime('channel:opaque', '', Principal('u'), withhold_private_memories=True))
+    try:
+        assert omit_channel_private(rows) == [public]
+        assert omit_channel_private(rows, {'withhold_private_memories': False}) == [public]
+    finally:
+        surface_runtime.reset(token)
+    assert omit_channel_private(rows, {'withhold_private_memories': True}) == [public]
+
+
+def test_invalid_link_proof_completes_without_a_distinct_reply(adapter):
+    store = MemoryStore()
+    body, headers = adapter.signed(link_proof='not-a-real-proof', text='/start not-a-real-proof')
+    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+
+    async def run():
+        path = (await gateway.webhook(body, headers))['jobs'][0]
+        assert await gateway.process(path)
+        assert store.jobs[path]['status'] == 'done'
+
+    asyncio.run(run())
+    assert [item['text'] for item in adapter.sent] == ['Link your account in Omi to chat here.']
+
+
+def test_history_search_uses_the_closed_over_owner(monkeypatch):
+    seen = []
+
+    def scan(uid, batch_size):
+        seen.append(uid)
+        if uid == 'owner':
+            return iter(
+                [{'id': 'mine', 'text': 'needle', 'chat_session_id': 's', 'created_at': datetime.now(timezone.utc)}]
+            )
+        return iter(
+            [{'id': 'theirs', 'text': 'needle', 'chat_session_id': 's', 'created_at': datetime.now(timezone.utc)}]
+        )
+
+    monkeypatch.setattr(history.chat_db, 'iter_all_messages', scan)
+    assert [row['id'] for row in history.search_history('owner', 'needle')] == ['mine']
+    assert seen == ['owner']
+
+
 def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
     from datetime import timedelta
 
