@@ -3,6 +3,7 @@ import { AcpRuntimeAdapter } from "./acp.js";
 export interface OpenClawRuntimeAdapterOptions {
   command?: string;
   log?: (message: string) => void;
+  isRunWaitingOnUser?: (runId: string) => boolean;
 }
 
 export class OpenClawRuntimeAdapter extends AcpRuntimeAdapter {
@@ -14,6 +15,7 @@ export class OpenClawRuntimeAdapter extends AcpRuntimeAdapter {
       sessionMcpServersMode: "empty",
       supportsSessionSetModel: false,
       log: options.log,
+      isRunWaitingOnUser: options.isRunWaitingOnUser,
     });
   }
 }

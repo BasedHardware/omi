@@ -118,7 +118,6 @@ describe("omi tool manifest", () => {
       "request_permission",
       "get_product_kb",
       "web_search",
-      "screenshot",
       "search_contacts",
       "list_message_chats",
       "read_message_history",
@@ -129,8 +128,12 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
 
-  it("keeps the realtime screenshot executor capability-registered", () => {
-    const screenshot = toolsForAdapter("pi-mono").find((tool) => tool.name === "screenshot");
+  it("keeps the realtime screenshot executor on the realtime voice surface and off the chat adapters", () => {
+    // Realtime voice runs authorize it through their surface projection; a
+    // chat adapter advertising it would hand typed chat an ungated capture.
+    expect(toolsForAdapter("pi-mono").some((tool) => tool.name === "screenshot")).toBe(false);
+    expect(toolsForAdapter("omi-tools-stdio", { screenContext: true }).some((tool) => tool.name === "screenshot")).toBe(false);
+    const screenshot = toolsForSurface("realtime_voice").find((tool) => tool.name === "screenshot");
 
     expect(screenshot?.surfaces).toEqual(["realtime_voice"]);
     expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
@@ -169,7 +172,7 @@ describe("omi tool manifest", () => {
     expect(workContext?.promptGuidelines?.join("\n")).toContain("historical unless this turn separately attached a live image");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("capture a live image");
     expect(captureScreen?.promptGuidelines?.join("\n")).not.toContain("get_work_context first");
-    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("asks the person to approve each screenshot in the app");
     expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
   });
 

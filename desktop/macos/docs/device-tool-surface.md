@@ -67,7 +67,131 @@ scoped grant. Nothing about the old bundle's guarantees changed.
 
 A `send_message` grant carries a `resourceRef` of the recipient handle.
 Approving a message to one person does not authorize a message to anyone else;
-the policy re-requires dispatch when the handle differs.
+the policy re-requires dispatch when the handle differs. Tools without a
+natural target get a stable ref so a session grant can still name them:
+`list_message_chats` is `messages:chats` and `list_mail_messages` is
+`mail:inbox`. `capture_screen` gets `screen` so its card names a target, but
+no grant ever covers it (below).
+
+The resource is derived only from the fields the tool acts on (`to`, `script`,
+`chat_id` or `handle`). The model cannot name it: the gated tools are held
+to their manifest schema at the kernel boundary, so an unknown key such as
+`resource_ref`, a missing required field, or a wrong type is refused as
+`invalid_tool_input` before anything is prepared.
+
+### How a dispatch is asked and answered
+
+A `dispatch` decision does not fail the tool call. The kernel writes the
+invocation to the ledger as `prepared`, inserts one `approval` dispatch bound
+to that exact invocation (its id and input hash live in the dispatch payload),
+moves the run to `waiting_approval`, and appends `approval.requested`, all in
+one transaction. The runtime sends Swift an `approval_requested` frame with the
+recipient, the exact text or script, the options, and the expiry. The card
+shows the whole input or nothing: text or a script longer than the 4 KiB card
+bound is refused as `input_too_large_to_approve` so the model can shorten it.
+
+The user answers through signed direct control with `resolve_desktop_dispatch`:
+
+| Answer | Call | Effect |
+|---|---|---|
+| Allow once | `status: resolved`, `resolution: { decision: "allow" }` | this invocation runs once; no grant |
+| Allow for this chat | the same plus a `grant` with `runId: null`, the dispatch's capability/operation/resource, and an `expiresAtMs` at most 24 h out | mints a session-scoped grant, then runs |
+| Deny | `resolution: { decision: "deny" }` or `status: cancelled` | the model gets `approval_denied`; the run continues |
+
+"Allow for this chat" is offered only when there is an exact resource for the
+grant to cover, and each option says what that is (`covers`): messages to this
+recipient, this conversation, your recent Messages conversations, your Mail
+inbox headers. For `run_applescript` the grant covers only the identical
+script, byte for byte; a different script asks again. A thread read with
+neither `chat_id` nor `handle`, and every live screenshot, offers allow once
+and deny only, and the kernel refuses to mint a grant for a card that did not
+offer one.
+
+Expiry (180 s, matching the mobile device-tool transport), run cancellation,
+owner change and a disconnected relay client also end as `approval_denied`,
+and every card ends with exactly one `approval.resolved` event and one
+`approval_resolved` frame, whatever ended it. A daemon restart fails the
+prepared invocation and expires its dispatch; nothing is replayed. A later call
+with the same recipient and text is a new invocation and asks again unless a
+grant covers it. The model-side wait for every gated tool is the `long` class
+(10 min) so the model does not give up before the user answers.
+
+The model cannot answer for the user: `resolve_desktop_dispatch` from an
+adapter relay returns `policy_denied` and leaves the dispatch pending. A
+dispatch the model creates itself through `create_desktop_dispatch` has its
+`invocation` payload key stripped, so it can never pose as a parked tool call.
+
+Interim gate: parking is on only after a connected client declares the
+`desktop_tool_approval_cards` capability through the `client_capabilities`
+message. The Mac shell sends that message right after a successful handshake
+(`AgentRuntimeProcess.clientCapabilitiesWireMessage`), so parking is on
+whenever the app is connected. A daemon with no card-bearing client keeps the
+immediate `approval_required` rather than holding a call nobody can answer.
+Removing the gate so parking is unconditional is a follow-up once the card has
+shipped in a beta.
+
+### The card on the Mac
+
+`DesktopToolApprovalStore` (`Desktop/Sources/Chat/DesktopToolApprovalStore.swift`)
+turns each `approval_requested` frame into a card and closes it on
+`approval_resolved`, whoever ended it. `DesktopToolApprovalCardList` renders
+the cards of one thread, matched by the surface's session id, so a card never
+shows under another conversation: main chat (`QueryAnswerThread`), a
+workstream (`TaskChatPanel`), and the agent pill (`AIResponseView`). Each
+`DesktopToolApprovalCard` shows the tool's title and question, the exact
+target (`resourceRef`), the content preview, the expiry time, and the answers:
+Allow Once, Allow for This Chat (1 h) only when the request offers
+`allow_session` (with its `covers` text), and Deny. A tool whose resource is
+only a stable key (`messages:chats`, `mail:inbox`, `screen`) shows no target
+row, so the screenshot card is just "Take a screenshot", "Let Omi take a
+screenshot of your whole screen?", Allow Once and Deny. An answer goes through
+signed direct control (`DesktopCoordinatorService.resolveDispatchJSON`, which
+calls `resolve_desktop_dispatch`): allow once sends no grant; allow for this
+chat sends a grant with `runId: null`, the dispatch's capability, operation and
+`resourceRef`, and a 1 h expiry. A refused or undelivered answer returns the
+card to pending with the reason, and the kernel's `approval_resolved` always
+wins over a local answer in flight. The card never runs anything itself; the
+only path to the tool is the kernel's resolution.
+
+A card waiting on the person is not a stall. The chat turn's `StallDetector`
+pauses while a card for the session the turn resolved is pending
+(`setWaitingOnUser`), whichever surface sent the turn: the tool
+row reads "Waiting for your approval", the "taking longer than usual" banner
+stays down, and the 90 s no-progress abort that interrupts the bridge cannot
+fire; when the card closes, the clocks restart from that moment. The composer's
+stop button still cancels the run, and the card then reads "Cancelled, not
+run". On the daemon side the hermes and openclaw adapters' 150 s no-progress
+cancel treats a run in `waiting_approval` as progress for the same reason.
+
+Cards belong to one daemon process and one owner: the store is cleared on every
+runtime handshake, when the daemon exits, and when the owner is revoked. A card
+whose deadline passes without a frame closes locally as expired, and an answer
+the kernel refuses because the dispatch is no longer pending closes the card
+the way the kernel did instead of offering buttons that can only fail. The
+shell declares `desktop_tool_approval_cards` only to a runtime whose `init`
+advertises `desktop_tool_approval_requests`; an older daemon still runs the
+chat and keeps its immediate `approval_required`.
+
+### Live screenshots ask too
+
+`capture_screen` is not in the table above, but it takes the same gate: its
+bundle, `desktop.context.screenshot_image`, is sensitive, so a live capture
+parks behind the same card ("Take a screenshot") under the stable resource
+`screen`, and nothing is captured or saved until the user allows it. It is
+allow once only: the capture is the whole display, including windows the
+person keeps out of capture elsewhere, so the card offers no "Allow for this
+chat", no grant row covers a capture (even one naming `screen`), and
+`desktop.context.screenshot_image` grants must name an exact resource.
+
+`get_screenshot` and its `look_at_frame` alias share the bundle but are served
+only by the local agent API, and the realtime voice `screenshot` tool is
+offered only to realtime voice runs through their surface projection; none of
+them is advertised to the chat, pill or workstream relays. `show_rewind_evidence`
+is classed with the screen-history reads: the model gets back only the stored
+frame's title, app and OCR excerpt, and the pixels go to the person's own Chat
+turn. Tests in `run-tool-capability.test.ts` require every relay-callable tool
+to be classified on purpose and hold the approval set to every relay-callable
+tool in a sensitive bundle, naming each deliberate exception.
 
 ### AppleScript injection
 

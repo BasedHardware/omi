@@ -374,7 +374,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       .legacyMainChatSessionsImported,
       .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
       .externalSurfaceRunCompleteResult, .chatFirstHarnessExecutorResult,
-      .ownerRuntimeRevoked,
+      .ownerRuntimeRevoked, .approvalRequested, .approvalResolved,
       .unknown:
       break
     }

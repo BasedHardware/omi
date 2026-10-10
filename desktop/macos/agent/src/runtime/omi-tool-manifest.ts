@@ -805,7 +805,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Capture a live current-screen image after the user asks about what is visible now.",
       [
         "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
-        "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
+        "Use capture_screen only when raw pixels are necessary. Call it directly: Omi asks the person to approve each screenshot in the app before it captures anything, so capture once and reuse the image.",
         "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
       ],
     ),
@@ -1086,7 +1086,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Send Message",
       "Send an iMessage or SMS through Messages.app after an explicit approval.",
       [
-        "Always requires an approval dispatch showing the resolved recipient and exact text.",
+        "Call it directly: Omi asks the person to approve it in the app, showing the resolved recipient and exact text, before it runs.",
         "Resolve named recipients with search_contacts first.",
         "Leave service unset unless the user explicitly asked for SMS or iMessage.",
       ],
@@ -1098,7 +1098,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Run AppleScript",
       "Run an AppleScript snippet against local macOS apps after an explicit approval.",
       [
-        "Always requires an approval dispatch showing the exact script.",
+        "Call it directly: Omi asks the person to approve it in the app, showing the exact script, before it runs.",
         "Prefer a dedicated tool when one exists — send_message rather than scripting Messages.app.",
         "Requires Automation permission for every app the script targets.",
       ],
@@ -1947,11 +1947,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "capture_screen",
     label: "Capture Screen",
     description:
-      "Capture a live current-screen image. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
+      "Capture a live current-screen image. Omi asks the person to approve it in the app before it captures, so call it directly and do not create a dispatch first. Returns the saved full-screen image path plus native-resolution detail tiles on large screens. Use the Read tool to view the images after capturing.",
     promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
     promptGuidelines: [
       "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
-      "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
+      "Use capture_screen only when raw pixels are necessary. Call it directly: Omi asks the person to approve each screenshot in the app before it captures anything, so capture once and reuse the image.",
       "After capture_screen returns, use Read to view the full-screen image.",
       "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
       "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
@@ -1960,7 +1960,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     latency: "fast local",
     inputSchema: schema({}),
     annotations: readOnlyLocal,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Screen Recording permission."],
@@ -2236,13 +2236,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
-    // Realtime voice invokes this through the same pi-mono runtime capability
-    // fence as other kernel-authorized tools. The surface still limits the
-    // Swift executor to realtime voice; without this projection the runtime
-    // rejects every provider screenshot call as tool_not_allowed.
-    adapters: {
-      "pi-mono": { advertised: true },
-    },
+    // Realtime voice runs are authorized through their surface projection
+    // (`toolsForSurface("realtime_voice")` in the run capability), like
+    // report_screen_observation. Advertising it to pi-mono would put an
+    // ungated full-screen capture in every typed chat, pill and workstream run.
+    adapters: {},
   },
   {
     name: "report_screen_observation",
@@ -2359,7 +2357,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       limit: { type: "number", description: "Maximum chats to return (default 20, max 100)." },
     }),
     annotations: readOnlyLocal,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Full Disk Access to read the Messages database."],
@@ -2383,7 +2381,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       limit: { type: "number", description: "Maximum messages to return (default 30, max 200)." },
     }),
     annotations: readOnlyLocal,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Full Disk Access to read the Messages database."],
@@ -2405,7 +2403,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       limit: { type: "number", description: "Maximum messages to return (default 30, max 200)." },
     }),
     annotations: readOnlyLocal,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Full Disk Access to read the Apple Mail index."],
@@ -2415,7 +2413,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "send_message",
     label: "Send Message",
     description:
-      "Send an iMessage or SMS through Messages.app. Sending is a physical external effect and always requires an approval dispatch showing the resolved recipient and the exact text.",
+      "Send an iMessage or SMS through Messages.app. Sending is a physical external effect; Omi asks the person to approve it in the app before it runs, showing the resolved recipient and the exact text, so call it directly and do not create a dispatch first.",
     promptSnippet: "send_message - Send an iMessage/SMS via Messages.app",
     promptGuidelines: [
       "Resolve the recipient with search_contacts first unless the user gave a raw handle.",
@@ -2439,12 +2437,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ["to", "text"],
     ),
     annotations: openWorldWrite,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: [
       "Requires Messages.app to be signed in and macOS Automation permission for Messages.",
-      "Requires an approval dispatch or an unexpired scoped grant for this recipient.",
+      "Omi asks the person in the app before it runs unless an unexpired scoped grant covers this recipient; do not create a dispatch first.",
     ],
     adapters: piAndStdio(),
   },
@@ -2452,7 +2450,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "run_applescript",
     label: "Run AppleScript",
     description:
-      "Run an AppleScript/osascript snippet against local macOS apps and return its output. This actuates the user's machine and always requires an approval dispatch showing the exact script.",
+      "Run an AppleScript/osascript snippet against local macOS apps and return its output. This actuates the user's machine; Omi asks the person to approve it in the app before it runs, showing the exact script, so call it directly and do not create a dispatch first.",
     promptSnippet: "run_applescript - Run an AppleScript against local apps",
     promptGuidelines: [
       "Prefer a dedicated tool when one exists — use send_message for messaging rather than scripting Messages.app.",
@@ -2469,12 +2467,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ["script"],
     ),
     annotations: openWorldWrite,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: [
       "Requires macOS Automation permission for each app the script targets.",
-      "Requires an approval dispatch or an unexpired scoped grant.",
+      "Omi asks the person in the app before it runs unless an unexpired scoped grant covers it; do not create a dispatch first.",
     ],
     adapters: piAndStdio(),
   },
