@@ -72,12 +72,14 @@ import type {
   JournalBackendReconcileResultMessage,
   ChatFirstDeferralDeliveryResultMessage,
   ChatFirstHarnessExecutorBeginMessage,
+  ClientCapabilitiesMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
   ModelHeadersResultMessage,
   AuthMethod,
 } from "./protocol.js";
 import {
+  CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS,
   PROTOCOL_VERSION,
   RUNTIME_CAPABILITIES,
   assertJournalRemoteTurnInput,
@@ -125,6 +127,8 @@ import {
 import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
 import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
+import type { DesktopToolApprovalRequest } from "./runtime/desktop-tool-policy.js";
+import { RelayToolApprovals } from "./runtime/relay-tool-approvals.js";
 import {
   compactRealtimeSpawnToolResult,
   parseAgentSpawnProducerJournalDescriptor,
@@ -323,6 +327,13 @@ const pendingExternalToolCalls = new Map<
     timeout: ReturnType<typeof setTimeout>;
   }
 >();
+
+/**
+ * Relay invocations parked behind a user approval, and the hand-off of every
+ * relay invocation to Swift. Created with the kernel; see
+ * `runtime/relay-tool-approvals.ts`.
+ */
+let relayToolApprovals: RelayToolApprovals<Socket> | undefined;
 
 /**
  * This exists solely for the local/offline desktop E2E fixture. Unlike the
@@ -805,6 +816,7 @@ function rejectPendingToolCallsForOwner(
       "failed",
     );
   }
+  relayToolApprovals?.rejectForOwner(ownerId, errorCode, message);
   for (const [key, pending] of pendingExternalToolCalls) {
     if (pending.invocation.ownerId !== ownerId) continue;
     pendingExternalToolCalls.delete(key);
@@ -891,6 +903,7 @@ function resolveClientToolCalls(client: Socket, result: string): void {
     }
     writeRelayToolResult(client, pending.callId, result, pending.invocation, "failed");
   }
+  relayToolApprovals?.rejectForClient(client);
 }
 
 function relayError(code: string, message: string): string {
@@ -992,8 +1005,9 @@ function startOmiToolsRelay(): Promise<string> {
                 );
                 continue;
               }
-              let authorized;
+              let authorized: AuthorizedRunToolInvocation;
               let routedProposal;
+              let approval: { dispatch: { dispatchId: string; expiresAtMs: number | null }; request: DesktopToolApprovalRequest } | undefined;
               try {
                 routedProposal = runtimeKernel.routeRelayedRunToolProposal({
                   capabilityRef,
@@ -1001,13 +1015,20 @@ function startOmiToolsRelay(): Promise<string> {
                   toolInput: msg.input ?? {},
                   activeOwnerId: currentOwnerId,
                 });
-                authorized = runtimeKernel.authorizeRelayedRunToolInvocation({
+                // Sensitive device tools park here instead of failing: the
+                // kernel commits the dispatch, ledger row, and waiting_approval
+                // transition together, and the relay call waits for the user.
+                const outcome = runtimeKernel.authorizeRelayedRunToolInvocationOrRequestApproval({
                   capabilityRef,
                   invocationId,
                   toolName: routedProposal.toolName,
                   toolInput: routedProposal.toolInput,
                   activeOwnerId: currentOwnerId,
                 });
+                authorized = outcome.invocation;
+                if (outcome.kind === "approval_required") {
+                  approval = { dispatch: outcome.dispatch, request: outcome.request };
+                }
               } catch (error) {
                 const code = error && typeof error === "object" && "code" in error
                   ? String((error as { code: unknown }).code)
@@ -1176,74 +1197,28 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              const callId = msg.callId;
-              const pendingKey = toolCallPendingKey({
-                invocationId,
-              });
-              if (pendingToolCalls.has(pendingKey)) {
+              if (!relayToolApprovals) {
                 writeRelayToolResult(
                   client,
-                  callId,
-                  relayError("invocation_replayed", "Duplicate tool invocation"),
+                  msg.callId,
+                  relayError("runtime_not_ready", "Agent runtime kernel is not ready"),
                   authorized,
                   "failed",
                 );
                 continue;
               }
-
-              const timeout = setTimeout(() => {
-                const pending = pendingToolCalls.get(pendingKey);
-                if (!pending) return;
-                pendingToolCalls.delete(pendingKey);
-                try {
-                  runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
-                } catch (error) {
-                  logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
-                }
-                writeRelayToolResult(
-                  pending.client,
-                  pending.callId,
-                  relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
-                  pending.invocation,
-                  "failed",
-                );
-              }, 120_000);
-              pendingToolCalls.set(pendingKey, {
-                client,
-                callId,
-                invocation: authorized,
-                timeout,
-              });
-              runtimeKernel.markRunToolInvocationDispatched(authorized);
-              send({
-                type: "authorized_tool_execution",
-                invocationId,
-                ownerId: authorized.ownerId,
-                sessionId: authorized.sessionId,
-                runId: authorized.runId,
-                attemptId: authorized.attemptId,
-                profileGeneration: authorized.profileGeneration,
-                manifestVersion: authorized.manifestVersion,
-                manifestDigest: authorized.manifestDigest,
-                daemonBootEpoch: authorized.daemonBootEpoch,
-                executionGeneration: authorized.executionGeneration,
-                capabilityRef: authorized.capabilityRef,
-                toolName: authorized.canonicalToolName,
-                input: routedProposal.toolInput,
-                inputHash: authorized.inputHash,
-                effectClass: authorized.effectClass,
-                retryPolicy: authorized.retryPolicy,
-                surfaceKind: authorized.surfaceKind,
-                externalRefKind: authorized.externalRefKind,
-                externalRefId: authorized.externalRefId,
-                originatingUserText: authorized.originatingUserText,
-                precedingAssistantText: authorized.precedingAssistantText,
-                runMode: authorized.runMode,
-                chatMode: authorized.chatMode,
-                ...(authorized.chatFirstControlGeneration !== null
-                  ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
-                  : {}),
-              });
+              if (approval) {
+                relayToolApprovals.park({
+                  client,
+                  callId: msg.callId,
+                  invocation: authorized,
+                  toolInput: routedProposal.toolInput,
+                  dispatch: approval.dispatch,
+                  request: approval.request,
+                });
+                continue;
+              }
+              relayToolApprovals.dispatchToSwift(client, msg.callId, authorized, routedProposal.toolInput);
             }
           } catch {
             logErr(`Failed to parse omi-tools message: ${line.slice(0, 200)}`);
@@ -1698,6 +1673,15 @@ async function main(): Promise<void> {
     },
   });
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
+  relayToolApprovals = new RelayToolApprovals<Socket>({
+    kernel,
+    send,
+    writeRelayToolResult,
+    pendingSwiftCalls: pendingToolCalls,
+    activeOwnerId: () => currentOwnerId,
+    log: logErr,
+  });
+  kernel.subscribe((event) => relayToolApprovals?.handleKernelEvent(event));
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
@@ -3946,6 +3930,19 @@ async function main(): Promise<void> {
         const invalidate = msg as InvalidateSessionMessage;
         invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
         transport.handleInvalidateSession(invalidate);
+        break;
+      }
+
+      case "client_capabilities": {
+        // Interim gate for the device tool approval flow: only a client that
+        // can render the approval card may turn parking on. Without it the
+        // relay keeps today's immediate approval_required. The Swift card PR
+        // flips the default and removes this message.
+        const declared = msg as ClientCapabilitiesMessage;
+        const enabled = Array.isArray(declared.capabilities)
+          && declared.capabilities.includes(CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS);
+        kernel.setDesktopToolApprovalsEnabled(enabled);
+        logErr(`client_capabilities client=${declared.clientId ?? ""} desktopToolApprovals=${enabled ? "on" : "off"}`);
         break;
       }
 
