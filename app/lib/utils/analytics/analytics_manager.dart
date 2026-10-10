@@ -15,6 +15,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -81,6 +82,7 @@ class AnalyticsManager {
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
   static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
@@ -113,6 +115,12 @@ class AnalyticsManager {
     if (_identityKnown && _boundIdentity == identity) return;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
+    // Preserve a durable epoch across relaunch of the same account so native
+    // session markers survive process death, but retire them on account changes.
+    final savedIdentity = _preferences.getString('device_health_identity');
+    final savedEpoch = _preferences.getInt('device_health_identity_epoch');
+    final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
+    _identityEpoch = sameOnRestart ? savedEpoch - 1 : (_identityEpoch > savedEpoch ? _identityEpoch : savedEpoch);
     _identityKnown = true;
     _identityEpoch++;
     _boundIdentity = identity;
@@ -124,6 +132,9 @@ class AnalyticsManager {
       CrashlyticsManager.instance.setUserAttribute('app_session_id', '');
     } catch (_) {}
     _settledDistinctId = null;
+    unawaited(_preferences.saveString('device_health_identity', identity ?? ''));
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: _trackingEnabled && identity != null, retire: !sameOnRestart));
     _notifyIdentity(null, false);
     unawaited(_settleIdentity());
     if (hadSession && _trackingEnabled) {
@@ -224,6 +235,7 @@ class AnalyticsManager {
         if (consentRevision == _consentRevision) {
           _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
           _trackingConsent.value = _trackingEnabled;
+          if (!_trackingEnabled) await DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true);
         }
         await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
         if (!identical(_adapter, adapter)) return;
@@ -450,7 +462,9 @@ class AnalyticsManager {
   void optInTracking() {
     _consentRevision++;
     if (!_trackingEnabled) _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
     _trackingEnabled = true;
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: !_identityKnown || _boundIdentity != null, retire: false));
     _trackingConsent.value = true;
     unawaited(_persistTrackingPreference(true));
     _notifyIdentity(null, false);
@@ -471,6 +485,8 @@ class AnalyticsManager {
     _trackingConsent.value = false;
     unawaited(_persistTrackingPreference(false));
     _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true));
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
     _settledDistinctId = null;

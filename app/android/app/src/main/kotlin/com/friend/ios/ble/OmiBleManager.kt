@@ -706,26 +706,37 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private fun batteryHistoryKey(address: String) = "battery_history_${address.uppercase()}"
 
+    fun retireDeviceHealth() {
+        batteryHistoryRecorder.retire()
+        chargingState.clear()
+    }
+
     private val batteryHistoryRecorder by lazy {
         val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
         BatteryHistoryRecorder(
             read = { key -> prefs.getString(key, "[]") ?: "[]" },
-            write = { key, value -> prefs.edit().putString(key, value).apply() },
+            write = { key, value -> if (DeviceHealthPersistence.enabled(application)) prefs.edit().putString(key, value).commit() },
         )
     }
 
     @Synchronized
     private fun persistBatteryReading(address: String, level: Int) {
-        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()],
-            application.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.device_health_app_build", null),
-            application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null))
+        synchronized(DeviceHealthPersistence) {
+            if (!DeviceHealthPersistence.enabled(application)) return
+            batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()],
+                DeviceHealthPersistence.build(application),
+                application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null), DeviceHealthPersistence.epoch(application))
+        }
     }
 
     @Synchronized
     fun recordChargingState(address: String, charging: Boolean) {
-        val addr = address.uppercase()
-        chargingState[addr] = charging
-        batteryHistoryRecorder.backfillCharging(batteryHistoryKey(addr), charging)
+        synchronized(DeviceHealthPersistence) {
+            if (!DeviceHealthPersistence.enabled(application)) return
+            val addr = address.uppercase()
+            chargingState[addr] = charging
+            batteryHistoryRecorder.backfillCharging(batteryHistoryKey(addr), charging)
+        }
     }
 
     fun getBatteryHistory(address: String): List<BleBatteryPoint> {

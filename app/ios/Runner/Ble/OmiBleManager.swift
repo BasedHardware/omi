@@ -10,6 +10,31 @@ import UIKit
 /// Replaces flutter_blue_plus on iOS for better battery efficiency and background reliability.
 final class OmiBleManager: NSObject {
     static let shared = OmiBleManager()
+    private let healthStore = OmiDeviceHealthStore()
+    func setDeviceHealthPolicy(enabled: Bool, epoch: Int64, retire: Bool) {
+        let changed = healthStore.epoch != epoch
+        healthStore.setPolicy(enabled: enabled, epoch: epoch, retire: retire)
+        if retire || changed || !enabled {
+            pendingAudioRecovery.removeAll()
+            packetDays.removeAll()
+            lastPacketIndex.removeAll()
+            audioReceived.removeAll()
+            audioExpected.removeAll()
+            for uuid in connectionStartTimes.keys { connectionStartTimes[uuid] = CheckedIntegerConversion.epochMs() }
+            reconnectDiagnostics.removeAll()
+            chargingState.removeAll()
+            // Battery throttling must not reuse the previous account's baseline.
+            batteryBaselineRehydrated.removeAll()
+            lastPersistedBatteryLevel.removeAll()
+            lastPersistedBatteryTimestampMs.removeAll()
+            lastPersistedBatteryCharging.removeAll()
+        }
+        if enabled {
+            for (uuid, peripheral) in peripherals where peripheral.state == .connected {
+                healthStore.start(uuid, at: CheckedIntegerConversion.epochMs())
+            }
+        }
+    }
 
     static let restoreIdentifier = "com.omi.ble.restore"
 
@@ -229,6 +254,7 @@ final class OmiBleManager: NSObject {
         }
 
         if let peripheral {
+            if peripheral.state == .connected { healthStore.start(uuid, at: CheckedIntegerConversion.epochMs()) }
             peripheral.delegate = self
             peripherals[uuid] = peripheral
             failedReadyRequests.remove(uuid)
@@ -414,18 +440,19 @@ final class OmiBleManager: NSObject {
     }
 
     func disconnectPeripheral(uuid: String) {
+        persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
         manuallyDisconnected.insert(uuid)
         setCaptureAuthorized(uuid: uuid, authorized: false)
         captureReconnects.removeValue(forKey: uuid)?.finish(false)
         pairingLostBlocked.remove(uuid)
         finishReadyRequest(uuid: uuid)
-        persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
         guard let peripheral = peripherals[uuid] else { return }
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
     func disconnectAllPeripherals() {
         for (uuid, peripheral) in peripherals {
+            persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
             manuallyDisconnected.insert(uuid)
             reconnectDiagnostics.removeValue(forKey: uuid)
             finishReadyRequest(uuid: uuid)
@@ -760,6 +787,7 @@ final class OmiBleManager: NSObject {
 
     @discardableResult
     private func persistPropertyListRecords(_ records: [[String: Any]], forKey key: String, in defaults: UserDefaults) -> Bool {
+        guard healthStore.enabled else { return false }
         func value(_ object: Any) -> PlistValue? {
             if let string = object as? String { return .string(string) }
             if let date = object as? Date { return .date(date) }
@@ -824,6 +852,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func appendLifecycleEvent(_ name: String) {
+        guard healthStore.enabled else { return }
         let defaults = UserDefaults.standard
         var events = defaults.array(forKey: "ble_diagnostics_lifecycle") as? [[String: Any]] ?? []
         let now = CheckedIntegerConversion.epochMs()
@@ -833,6 +862,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func logBle(uuid: String, event: String, detail: String) {
+        guard healthStore.enabled else { return }
         let defaults = UserDefaults.standard
         let key = "ble_diagnostics_log_\(uuid)"
         var entries = defaults.array(forKey: key) as? [[String: Any]] ?? []
@@ -843,6 +873,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func recordAudioPacket(uuid: String, value: Data) {
+        guard healthStore.enabled else { return }
         guard value.count >= 3 else { return }
         let index = Int(value[0]) | (Int(value[1]) << 8)
         let previous = lastPacketIndex[uuid]
@@ -857,7 +888,8 @@ final class OmiBleManager: NSObject {
         var days = packetDays[uuid] ?? (defaults.array(forKey: "ble_packet_days_\(uuid)") as? [[String: Any]] ?? [])
         if days.last?["ts"] as? Int64 != day {
             var point: [String: Any] = ["ts": day, "received": Int64(0), "expected": Int64(0)]
-            point["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+            point["identity_epoch"] = healthStore.epoch
+        point["app_build"] = OmiDeviceHealthStore.build
             point["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
             days.append(point)
         }
@@ -865,7 +897,7 @@ final class OmiBleManager: NSObject {
         days[i]["received"] = (days[i]["received"] as? Int64 ?? 0) + 1
         days[i]["expected"] = (days[i]["expected"] as? Int64 ?? 0) + Int64(delta > 4096 ? 1 : delta)
         packetDays[uuid] = Array(days.suffix(8))
-        if let marker = pendingAudioRecovery.removeValue(forKey: uuid) ?? (defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64) {
+        if let marker = healthStore.openSince(uuid) {
             let key = Self.historyKey(uuid)
             let defaults = UserDefaults.standard
             var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
@@ -873,7 +905,7 @@ final class OmiBleManager: NSObject {
                 history[i]["lostAudioSeconds"] = Double(max(0, now - marker)) / 1000
                 history[i]["lostAudioResolvedAt"] = now
             } else {
-                history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now]]).suffix(Self.maxDisconnectHistory))
+                history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now, "identity_epoch": healthStore.epoch]]).suffix(Self.maxDisconnectHistory))
             }
             guard persistPropertyListRecords(history, forKey: key, in: defaults) else { return }
             defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
@@ -892,6 +924,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
+        guard healthStore.enabled else { return }
         guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.epochMs()) else { return }
         let defaults = UserDefaults.standard
         chargingState[uuid] = value["charging"] as? Bool
@@ -909,7 +942,8 @@ final class OmiBleManager: NSObject {
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
         var stamped = value
-        stamped["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        stamped["identity_epoch"] = healthStore.epoch
+        stamped["app_build"] = OmiDeviceHealthStore.build
         stamped["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
         reads.append(stamped)
         // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
@@ -921,6 +955,7 @@ final class OmiBleManager: NSObject {
     }
 
     func getExtendedDeviceDiagnostics(uuid: String) -> String {
+        guard healthStore.enabled else { return "{}" }
         let defaults = UserDefaults.standard
         var data: [String: Any] = [
             "observed_at": CheckedIntegerConversion.epochMs(),
@@ -938,7 +973,8 @@ final class OmiBleManager: NSObject {
             "capture_health_history": defaults.array(forKey: "ble_capture_health_\(uuid)") ?? [],
             "counters_since": defaults.object(forKey: "ble_diagnostics_counters_since_\(uuid)") ?? NSNull(),
         ]
-        data["audio_outage_started_at"] = defaults.object(forKey: "ble_audio_outage_\(uuid)")
+        data["identity_epoch"] = healthStore.epoch
+        data["audio_outage_started_at"] = healthStore.openSince(uuid)
         guard let encoded = try? SafeJSON.data(withJSONObject: data),
               let result = String(data: encoded, encoding: .utf8) else { return "{}" }
         return result
@@ -995,6 +1031,8 @@ final class OmiBleManager: NSObject {
         isManual: Bool,
         eventType: String
     ) {
+        guard healthStore.enabled else { return }
+        if eventType == "disconnect" { healthStore.end(uuid, at: CheckedIntegerConversion.epochMs()) }
         let defaults = UserDefaults.standard
         let key = OmiBleManager.historyKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
@@ -1019,7 +1057,8 @@ final class OmiBleManager: NSObject {
             "timeToReconnectMs": 0,
             "rssiTrend": trend,
         ]
-        event["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        event["identity_epoch"] = healthStore.epoch
+        event["app_build"] = OmiDeviceHealthStore.build
         event["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
         history.append(event)
         var recovery = reconnectDiagnostics[uuid, default: OmiBleReconnectDiagnostics()]
@@ -1034,8 +1073,8 @@ final class OmiBleManager: NSObject {
         persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
         logBle(uuid: uuid, event: eventType, detail: event["reason"] as? String ?? "unknown")
 
-        if !isManual {
-            if eventType == "disconnect" {
+        if eventType == "disconnect" {
+            if healthStore.enabled {
                 let start = defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64 ?? now
                 pendingAudioRecovery[uuid] = start
                 try? SafeDefaults.store(.int64(start), forKey: "ble_audio_outage_\(uuid)", in: defaults)
@@ -1132,6 +1171,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func persistBatteryReading(uuid: String, level: Int) {
+        guard healthStore.enabled else { return }
         guard let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) else { return }
         rehydrateBatteryBaselineIfNeeded(uuid: uuid)
         let charging = chargingState[uuid]
@@ -1150,7 +1190,8 @@ final class OmiBleManager: NSObject {
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
         var point = OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: now, level: level, charging: charging)
-        point["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        point["identity_epoch"] = healthStore.epoch
+        point["app_build"] = OmiDeviceHealthStore.build
         point["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
         history.append(point)
 
@@ -1162,6 +1203,7 @@ final class OmiBleManager: NSObject {
             guard let timestamp = entry["ts"] as? Int64,
                   let batteryLevel = entry["level"] as? Int else { return nil }
             var record: [String: PlistValue] = ["ts": .int64(timestamp), "level": .int(batteryLevel)]
+            if let epoch = entry["identity_epoch"] as? Int64 { record["identity_epoch"] = .int64(epoch) }
             if let build = entry["app_build"] as? String { record["app_build"] = .string(build) }
             if let firmware = entry["firmware"] as? String { record["firmware"] = .string(firmware) }
             if let charging = entry["charging"] as? Bool { record["charging"] = .bool(charging) }
@@ -1267,6 +1309,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 // Re-establish connection if not already connected. CoreBluetooth
                 // may restore a complete GATT snapshot, so use it immediately.
                 if peripheral.state == .connected {
+                    healthStore.start(uuid, at: CheckedIntegerConversion.epochMs())
                     if let bleServices = completedBleServices(for: peripheral) {
                         completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "restored_cache")
                     } else {
@@ -1319,6 +1362,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         discoveryStartedAt.removeValue(forKey: uuid)
         pairingRecoveryInFlight.remove(uuid)
         let connectionStartedAt = CheckedIntegerConversion.epochMs()
+        healthStore.start(uuid, at: connectionStartedAt)
         connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
@@ -1398,6 +1442,9 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
             || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
+        if !isManual {
+            persistDisconnectEvent(uuid: uuid, reason: Self.bleReasonString(from: error), reasonCode: (error as? CBError)?.code.rawValue ?? -1, isManual: false, eventType: "disconnect")
+        }
         cleanupPeripheral(uuid)
 
         if pairingLost {
@@ -1410,7 +1457,6 @@ extension OmiBleManager: CBCentralManagerDelegate {
         LimitlessFlashDrainEngine.shared.onDeviceDisconnected(uuid)
 
         if let recovery = captureReconnects[uuid] {
-            persistDisconnectEvent(uuid: uuid, reason: "capture_recovery", reasonCode: 0, isManual: false, eventType: "disconnect")
             connectionStartTimes.removeValue(forKey: uuid)
             recovery.didDisconnect(pairingLost: pairingLost || isManual)
             if recovery.stage == .finished {
@@ -1421,19 +1467,6 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         captureSessions[uuid]?.disconnected(recovering: false)
 
-        if !isManual {
-            let reason = Self.bleReasonString(from: error)
-            let code = (error as? CBError)?.code.rawValue ?? -1
-            // Persist BEFORE clearing connectionStartTimes — the persist step reads
-            // it to compute connection_duration_ms.
-            persistDisconnectEvent(
-                uuid: uuid,
-                reason: reason,
-                reasonCode: Int(code),
-                isManual: false,
-                eventType: "disconnect"
-            )
-        }
         connectionStartTimes.removeValue(forKey: uuid)
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
