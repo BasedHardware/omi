@@ -42,6 +42,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case listMailMessages = "list_mail_messages"
   case sendMessage = "send_message"
   case runApplescript = "run_applescript"
+  case uiSnapshot = "ui_snapshot"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -55,8 +56,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:43fc1fe1051a50925ae6b5cdd9275114419a85e2ffcd8a67dfab2e611ad76d14"
-  static let chatFirstManifestDigest = "sha256:fb2cd280cbe0f3c29a6d83fe195750fc4b4cfa504af4bf4c55472e2491fe5227"
+  static let manifestDigest = "sha256:69738b024f2d875262bdc7e184f039790c95b4a12854c4d441f750692c5a02c1"
+  static let chatFirstManifestDigest = "sha256:246e6f6ca02e67ffa84498b746edb0aa1a1b435a20b019929e4e2434a7432b64"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -105,6 +106,7 @@ enum GeneratedToolExecutors {
     .listMailMessages: .chatToolExecutor,
     .sendMessage: .chatToolExecutor,
     .runApplescript: .chatToolExecutor,
+    .uiSnapshot: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -174,6 +176,7 @@ enum GeneratedToolExecutors {
     case listMailMessages
     case sendMessage
     case runApplescript
+    case uiSnapshot
     case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
@@ -220,6 +223,7 @@ enum GeneratedToolExecutors {
     case .listMailMessages: return .listMailMessages
     case .sendMessage: return .sendMessage
     case .runApplescript: return .runApplescript
+    case .uiSnapshot: return .uiSnapshot
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks

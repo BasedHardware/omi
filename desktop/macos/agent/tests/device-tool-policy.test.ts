@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateDesktopToolPolicy } from "../src/runtime/desktop-tool-policy.js";
+import { evaluateDesktopToolPolicy, type DesktopCoordinatorBundle } from "../src/runtime/desktop-tool-policy.js";
 import { toolManifestEntry } from "../src/runtime/omi-tool-manifest.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -167,6 +167,80 @@ describe("on-device tool surface policy", () => {
   });
 });
 
+describe("ui_snapshot policy", () => {
+  const nowMs = 1_000_000;
+  const observe = ["desktop.automation.observe"] as const;
+  const grant = (overrides: Partial<{ bundle: DesktopCoordinatorBundle; resourceRef: string; expiresAtMs: number }> = {}) => ({
+    bundle: "desktop.automation.observe" as DesktopCoordinatorBundle,
+    resourceRef: "com.apple.textedit",
+    expiresAtMs: nowMs + HOUR_MS,
+    effect: "allow" as const,
+    ...overrides,
+  });
+  const snapshot = (resourceRef: string | undefined, grants: ReturnType<typeof grant>[] = []) =>
+    evaluateDesktopToolPolicy({
+      toolName: "ui_snapshot",
+      operation: "ui_snapshot",
+      selectedBundles: observe,
+      resourceRef,
+      nowMs,
+      grants,
+    });
+
+  it("requires dispatch even though it only reads", () => {
+    const result = snapshot("com.apple.textedit");
+
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.requiredBundles).toEqual(["desktop.automation.observe"]);
+    expect(result.descriptor).toMatchObject({ riskTier: "high", privacyTier: "sensitive", readOnly: true });
+  });
+
+  it("is denied when the observe bundle was never selected", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "ui_snapshot",
+      selectedBundles: ["desktop.automation.act"],
+      resourceRef: "com.apple.textedit",
+    });
+
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("desktop.automation.observe");
+  });
+
+  it("lets a grant for one app cover that app and no other", () => {
+    expect(snapshot("com.apple.textedit", [grant()]).decision).toBe("allow");
+    expect(snapshot("com.apple.notes", [grant()]).decision).toBe("dispatch_required");
+  });
+
+  it("never lets an unscoped or expired observe grant cover anything", () => {
+    const unscoped = { ...grant(), resourceRef: undefined };
+
+    expect(snapshot("com.apple.textedit", [unscoped]).decision).toBe("dispatch_required");
+    expect(snapshot("com.apple.textedit", [grant({ expiresAtMs: nowMs - 1 })]).decision).toBe("dispatch_required");
+  });
+
+  it("does not let an act or messaging grant authorize a read of an app", () => {
+    const act = grant({ bundle: "desktop.automation.act" });
+    const messaging = grant({ bundle: "desktop.messaging.read" });
+
+    expect(snapshot("com.apple.textedit", [act, messaging]).decision).toBe("dispatch_required");
+  });
+
+  it("hard-denies the refused apps and malformed bundle ids before any card", () => {
+    for (const refused of ["com.apple.terminal", "com.googlecode.iterm2", "com.1password.1password", "com.apple.securityagent", "com.omi.desktop-dev", "com.omi.computer-macos"]) {
+      const result = snapshot(refused, [grant({ resourceRef: refused })]);
+      expect(result.decision, refused).toBe("deny");
+      expect(result.reason).toContain("never reads");
+    }
+    for (const malformed of [undefined, "TextEdit", "com..apple", "com.apple.text edit"]) {
+      expect(snapshot(malformed).decision, String(malformed)).toBe("deny");
+    }
+  });
+
+  it("lets System Settings reach the card because only some of its panes are refused", () => {
+    expect(snapshot("com.apple.systempreferences").decision).toBe("dispatch_required");
+  });
+});
+
 describe("on-device tool manifest", () => {
   it("routes every device tool through the Swift chat tool executor", () => {
     for (const name of [
@@ -176,6 +250,7 @@ describe("on-device tool manifest", () => {
       "list_mail_messages",
       "send_message",
       "run_applescript",
+      "ui_snapshot",
     ]) {
       const entry = toolManifestEntry(name);
       expect(entry, `${name} is missing from the manifest`).toBeDefined();
@@ -189,6 +264,7 @@ describe("on-device tool manifest", () => {
     expect(toolManifestEntry("search_contacts")?.annotations.readOnlyHint).toBe(true);
     expect(toolManifestEntry("send_message")?.annotations.openWorldHint).toBe(true);
     expect(toolManifestEntry("run_applescript")?.annotations.openWorldHint).toBe(true);
+    expect(toolManifestEntry("ui_snapshot")?.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
   });
 
   it("states the permission each device tool depends on", () => {
@@ -197,6 +273,7 @@ describe("on-device tool manifest", () => {
       "Full Disk Access",
     );
     expect(toolManifestEntry("send_message")?.runtimePreconditions.join(" ")).toContain("Automation");
+    expect(toolManifestEntry("ui_snapshot")?.runtimePreconditions.join(" ")).toContain("Accessibility");
   });
 
   it("offers the device tool permissions through request_permission", () => {
