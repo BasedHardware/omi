@@ -1338,8 +1338,9 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
-  /// Clears persisted user identity and server-backed display caches while
-  /// preserving device, onboarding, permissions, and offline recording state.
+  /// Clears persisted user identity and server-backed display caches along
+  /// with onboarding and AI consent state, while preserving device,
+  /// permissions, and offline recording state.
   void clearUserDisplayCache() {
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
@@ -1366,6 +1367,8 @@ class SharedPreferencesUtil {
     calendarEnabled = false;
     _preferences?.remove('cachedMemories');
     if (ownerUid.isNotEmpty) _preferences?.remove(_userScopedKey('cachedMemories', ownerUid));
+    aiConsentGiven = false;
+    onboardingCompleted = false;
   }
 
   String _userScopedKey(String baseKey, String ownerUid) => '$baseKey:$ownerUid';
