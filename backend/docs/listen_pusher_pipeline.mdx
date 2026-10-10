@@ -2064,6 +2064,10 @@ JSON. It holds at most 16 PCM-digest entries (4096 dimensions each), usable for
 12 hours, with a 2 MiB serialized cap. Uploads use the existing owner storage
 write fence; conversation audio and account storage purges remove the object.
 It does not overwrite the post-resolution owner-evidence cache.
+Ordinary conversation deletion also purges this derived object immediately after
+the durable deletion intent, independent of the primary-audio cascade policy.
+Fill checks that intent and source existence before and after upload; a late fill
+or unconfirmed post-write check removes the object rather than leaving an orphan.
 
 At most four cards, two per conversation and two owner cards per daily set remain;
 **at most one owner card can ever be issued per conversation**. Issuance claims

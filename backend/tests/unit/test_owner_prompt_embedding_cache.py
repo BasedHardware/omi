@@ -27,6 +27,8 @@ class Blob:
         return self.bucket.objects[self.name]
 
     def delete(self):
+        if self.name not in self.bucket.objects:
+            raise storage.BlobNotFound('synthetic cache miss')
         del self.bucket.objects[self.name]
 
 
@@ -44,6 +46,11 @@ class Bucket:
 @pytest.fixture
 def private_bucket(monkeypatch):
     bucket = Bucket()
+    bucket.deleted_conversations = set()
+    monkeypatch.setattr(
+        cache.conversation_tombstones, 'is_deleted', lambda uid, cid: (uid, cid) in bucket.deleted_conversations
+    )
+    monkeypatch.setattr(cache.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
 
     class Client:
         def bucket(self, name):
@@ -162,3 +169,49 @@ def test_cache_reader_rejects_unbounded_dimensions_and_invalid_serialized_entrie
     }
     storage.upload_owner_prompt_embedding_cache('u', 'c', json.dumps(malformed).encode())
     assert cache.load('u', 'c') == {}
+
+
+@pytest.mark.parametrize('during_upload', [False, True])
+def test_deletion_intent_blocks_or_purges_late_encrypted_fill(private_bucket, monkeypatch, during_upload):
+    if during_upload:
+        real_upload = storage.upload_owner_prompt_embedding_cache
+
+        def upload(uid, cid, data):
+            real_upload(uid, cid, data)
+            private_bucket.deleted_conversations.add((uid, cid))
+            storage.delete_owner_prompt_embedding_cache(uid, cid)
+            real_upload(uid, cid, data)  # the write that raced after the purge
+
+        monkeypatch.setattr(storage, 'upload_owner_prompt_embedding_cache', upload)
+    else:
+        private_bucket.deleted_conversations.add(('u', 'c'))
+    cache.save('u', 'c', entries())
+    assert not private_bucket.objects and cache.load('u', 'c') == {}
+    storage.delete_owner_prompt_embedding_cache('u', 'c')  # retry is idempotent
+
+
+def test_unconfirmed_post_write_deletion_fence_removes_new_object(private_bucket, monkeypatch):
+    calls = []
+
+    def is_deleted(*args):
+        calls.append(True)
+        if len(calls) == 2:
+            raise RuntimeError('synthetic fence read failure')
+        return False
+
+    monkeypatch.setattr(cache.conversation_tombstones, 'is_deleted', is_deleted)
+    with pytest.raises(RuntimeError, match='fence read failure'):
+        cache.save('u', 'c', entries())
+    assert not private_bucket.objects
+
+
+def test_parent_removed_during_cache_upload_cannot_leave_orphan(private_bucket, monkeypatch):
+    reads = []
+
+    def source(*args):
+        reads.append(True)
+        return {'id': 'c'} if len(reads) == 1 else None
+
+    monkeypatch.setattr(cache.conversations_db, 'get_conversation', source)
+    cache.save('u', 'c', entries())
+    assert not private_bucket.objects

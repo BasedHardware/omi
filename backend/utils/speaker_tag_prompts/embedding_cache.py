@@ -11,6 +11,8 @@ import time
 
 import numpy as np
 
+from database import conversation_tombstones
+from database import conversations as conversations_db
 from utils.other import storage
 from utils.speaker_tag_prompts.owner_confirmation import MAX_CONSTITUENTS
 
@@ -54,8 +56,25 @@ def load(uid: str, conversation_id: str) -> dict:
         return {}
 
 
+def _source_live(uid: str, conversation_id: str) -> bool:
+    if conversation_tombstones.is_deleted(uid, conversation_id):
+        return False
+    source = conversations_db.get_conversation(uid, conversation_id)
+    return bool(source and not source.get('deleted') and not source.get('discarded'))
+
+
 def save(uid: str, conversation_id: str, entries: dict) -> None:
     data = json.dumps({'v': 1, 'entries': _bounded(entries, time.time())}, allow_nan=False).encode()
     if len(data) > MAX_BYTES:
         raise ValueError('Owner prompt evidence exceeds cache budget')
+    if not _source_live(uid, conversation_id):
+        return
     storage.upload_owner_prompt_embedding_cache(uid, conversation_id, data)
+    try:
+        live = _source_live(uid, conversation_id)
+    except Exception:
+        # An unconfirmed post-write fence cannot retain derived biometric data.
+        storage.delete_owner_prompt_embedding_cache(uid, conversation_id)
+        raise
+    if not live:
+        storage.delete_owner_prompt_embedding_cache(uid, conversation_id)
