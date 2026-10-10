@@ -46,7 +46,7 @@ final class NotificationSpeechTests: XCTestCase {
   func testEnabledDeliverySpeaksOnceAcrossDualPresentation() {
     var spoken: [String] = []
     let speaker = NotificationSpeechOnDelivery(
-      text: "Call dad tonight", speak: { spoken.append($0) }, othersCanHearNow: { false })
+      text: "Call dad tonight", speak: { text, _ in spoken.append(text) }, othersCanHearNow: { false })
     speaker.notificationWasPresented()
     speaker.notificationWasPresented()
     XCTAssertEqual(spoken, ["Call dad tonight"])
@@ -57,7 +57,7 @@ final class NotificationSpeechTests: XCTestCase {
     var spoken: [String] = []
     let speaker = NotificationSpeechOnDelivery(
       text: NotificationSpeech.utterance(message: "Call dad tonight", isEnabled: false, isProactive: true)
-    ) { spoken.append($0) }
+    ) { text, _ in spoken.append(text) }
     speaker.notificationWasPresented()
     XCTAssertTrue(spoken.isEmpty)
   }

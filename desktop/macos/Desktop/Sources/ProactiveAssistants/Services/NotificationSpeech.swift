@@ -53,13 +53,15 @@ enum NotificationSpeech {
 @MainActor
 final class NotificationSpeechOnDelivery {
   private let text: String?
-  private let speak: (String) -> Void
+  private let speak: (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void
   private let othersCanHearNow: () -> Bool
   private var hasSpoken = false
 
   init(
     text: String?,
-    speak: @escaping (String) -> Void = { FloatingBarVoicePlaybackService.shared.speakOneShot($0) },
+    speak: @escaping (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void = {
+      FloatingBarVoicePlaybackService.shared.speakOneShot($0, audienceAllows: $1)
+    },
     othersCanHearNow: @escaping () -> Bool = {
       NotificationService.shouldWithholdSpeechForPresence(presence: NotificationService.currentPresence())
     }
@@ -93,6 +95,8 @@ final class NotificationSpeechOnDelivery {
     }
     hasSpoken = true
     log("NotificationSpeech: speaking delivered notification (\(text.count) chars)")
-    speak(text)
+    // Speech is generated before it plays; a call can start in between. The player
+    // re-checks this wherever audio would actually start, including fallbacks.
+    speak(text) { [othersCanHearNow] in !othersCanHearNow() }
   }
 }
