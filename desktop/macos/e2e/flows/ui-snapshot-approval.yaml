@@ -14,6 +14,9 @@ covers:
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshot.swift
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker.swift
   - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker+Tree.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotOrdering.swift
+  - desktop/macos/Desktop/Sources/Automation/CaptureScreenExclusion.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+CaptureExclusion.swift
 preconditions:
   - signed_in
   - onboarding_completed
@@ -54,6 +57,10 @@ steps:
   - id: S6b
     name: System Settings in another language
     do: "Add German as the first preferred language (System Settings > General > Language & Region), reopen System Settings, and repeat S6 with Allgemein > Anmeldeobjekte & Erweiterungen (refused_settings_pane) and Ton (reads). Restore the language afterwards."
+
+  - id: S6c
+    name: A screenshot leaves out the apps Omi never reads
+    do: "Put a Terminal window in front, covering part of the screen, and ask Omi what is on the screen. After Allow Once, the saved screenshot (the path in the reply) shows the screen without the Terminal window; the app log has 'capture_screen: leaving out'."
 
   - id: S7
     name: Deny never reads

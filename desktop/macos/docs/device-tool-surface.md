@@ -196,6 +196,16 @@ turn. Tests in `run-tool-capability.test.ts` require every relay-callable tool
 to be classified on purpose and hold the approval set to every relay-callable
 tool in a sensitive bundle, naming each deliberate exception.
 
+A screenshot leaves out the apps Omi never looks at: Omi itself and every
+`com.omi.*` build, the apps on the shared UI automation safety floor (the same
+generated list `ui_snapshot` refuses: terminals, password managers, Keychain,
+sign-in and authorization prompts) and the apps the person excluded from
+capture (`CaptureScreenExclusion`). The image is taken through a
+ScreenCaptureKit filter that removes those apps' windows, so one that is
+frontmost or fills the screen is simply not in the picture. If that filter
+cannot be used, the plain display capture is taken only when none of those
+apps has a window on screen; otherwise nothing is captured.
+
 ### Reading app windows
 
 `ui_snapshot` reads one window of another app as named elements through
