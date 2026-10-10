@@ -63,6 +63,93 @@ final class LocalMcpStoreTests: XCTestCase {
     XCTAssertThrowsError(try LocalMcpStore.addCommandServer(name: "ok", commandLine: "   "))
   }
 
+  // MARK: - Explicit credential replacement
+
+  func testSavingKeyRemovesEveryAuthorizationHeaderAndPreservesServerConfiguration() throws {
+    try LocalMcpStore.upsertServer(
+      "example",
+      entry: [
+        "url": "https://example.test/sse", "transport": "sse",
+        "token": "old-key", "auth": ["access_token": "old-oauth"],
+        "headers": [
+          "Authorization": "Bearer old-header", "authorization": "Bearer lower-header",
+          "aUtHoRiZaTiOn": "Bearer mixed-header", "X-Workspace": "fixture-workspace",
+          "X-Api-Key": "unrelated-header",
+        ],
+        "custom": ["retain": true],
+      ])
+
+    try LocalMcpStore.setAPIKey(name: "example", apiKey: "  replacement-key  ")
+
+    let saved = try XCTUnwrap(LocalMcpStore.readAllServers()["example"] as? [String: Any])
+    XCTAssertEqual(saved["token"] as? String, "replacement-key")
+    XCTAssertNil(saved["auth"], "The previous OAuth credential must not remain an alternative key")
+    XCTAssertEqual(
+      saved["headers"] as? [String: String],
+      [
+        "X-Workspace": "fixture-workspace", "X-Api-Key": "unrelated-header",
+      ])
+    XCTAssertEqual(saved["url"] as? String, "https://example.test/sse")
+    XCTAssertEqual(saved["transport"] as? String, "sse")
+    XCTAssertEqual(saved["custom"] as? [String: Bool], ["retain": true])
+    XCTAssertEqual(
+      McpServerProbe.headers(from: saved),
+      [
+        "Authorization": "Bearer replacement-key", "X-Workspace": "fixture-workspace",
+        "X-Api-Key": "unrelated-header",
+      ])
+  }
+
+  func testClearingKeyRemovesStaleAuthorizationWithoutDiscardingExistingOAuth() throws {
+    try LocalMcpStore.upsertServer(
+      "example",
+      entry: [
+        "url": "https://example.test/mcp", "token": "old-key",
+        "auth": ["access_token": "retained-oauth"],
+        "headers": ["authorization": "Bearer stale-header"],
+      ])
+
+    try LocalMcpStore.setAPIKey(name: "example", apiKey: " \n ")
+
+    let saved = try XCTUnwrap(LocalMcpStore.readAllServers()["example"] as? [String: Any])
+    XCTAssertNil(saved["token"])
+    XCTAssertNil(saved["headers"], "No empty or stale Authorization header should survive")
+    XCTAssertEqual((saved["auth"] as? [String: String])?["access_token"], "retained-oauth")
+    XCTAssertEqual(McpServerProbe.headers(from: saved), ["Authorization": "Bearer retained-oauth"])
+  }
+
+  func testSuccessfulOAuthReplacementRemovesHeaderAndTokenPrecedenceWithoutChangingServer() throws {
+    let original: [String: Any] = [
+      "url": "https://example.test/sse", "transport": "sse", "token": "stale-key",
+      "auth": ["access_token": "stale-oauth"],
+      "headers": ["authorization": "Bearer stale-header", "X-Workspace": "retained-workspace"],
+      "custom": ["enabled": true],
+    ]
+    let authorized = LocalMcpStore.replacingOAuthCredentials(
+      in: original, with: ["access_token": "authorized-oauth", "refresh_token": "authorized-refresh"])
+    try LocalMcpStore.upsertServer("example", entry: authorized)
+
+    let saved = try XCTUnwrap(LocalMcpStore.readAllServers()["example"] as? [String: Any])
+    XCTAssertNil(saved["token"])
+    XCTAssertEqual(saved["headers"] as? [String: String], ["X-Workspace": "retained-workspace"])
+    XCTAssertEqual(
+      saved["auth"] as? [String: String],
+      [
+        "access_token": "authorized-oauth", "refresh_token": "authorized-refresh",
+      ])
+    XCTAssertEqual(saved["custom"] as? [String: Bool], ["enabled": true])
+    XCTAssertEqual(
+      McpServerProbe.Target(entry: saved),
+      .sse(
+        url: try XCTUnwrap(URL(string: "https://example.test/sse")),
+        headers: ["Authorization": "Bearer authorized-oauth", "X-Workspace": "retained-workspace"]))
+    XCTAssertEqual(
+      original["headers"] as? [String: String],
+      [
+        "authorization": "Bearer stale-header", "X-Workspace": "retained-workspace",
+      ], "Preparing replacement must not mutate the original configuration")
+  }
+
   // MARK: - File permissions
 
   private func posixPermissions(of url: URL) throws -> Int {

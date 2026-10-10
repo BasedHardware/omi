@@ -49,7 +49,7 @@ extension LocalMcpStore {
   /// installed from the marketplace, hand-written into mcp.json, or one whose refresh token has
   /// since been revoked — could report "Needs sign-in" with nothing anywhere to act on it.
   static func signIn(name: String) async throws {
-    guard var entry = readAllServers()[name] as? [String: Any] else {
+    guard let entry = readAllServers()[name] as? [String: Any] else {
       throw storeError("That server is no longer configured")
     }
     guard let url = entry["url"] as? String, let serverURL = URL(string: url) else {
@@ -58,11 +58,31 @@ extension LocalMcpStore {
     guard let meta = await discoverOAuthMetadata(serverURL: serverURL) else {
       throw storeError("This server does not advertise OAuth. If it needs an API key, set one here instead.")
     }
-    entry["auth"] = try await runOAuthFlow(meta: meta)
-    // A key and a token are alternative credentials; leaving a stale key behind would keep being
-    // sent as the Authorization header and mask the token we just obtained.
-    entry.removeValue(forKey: "token")
-    try upsertServer(name, entry: entry)
+    let auth = try await runOAuthFlow(meta: meta)
+    try upsertServer(name, entry: replacingOAuthCredentials(in: entry, with: auth))
+  }
+
+  /// Called only after OAuth succeeds. Neither a top-level key nor a registry-declared
+  /// Authorization header may mask the token the user has just authorized.
+  static func replacingOAuthCredentials(in entry: [String: Any], with auth: [String: Any]) -> [String: Any] {
+    var updated = removingAuthorizationHeaders(from: entry)
+    updated["auth"] = auth
+    updated.removeValue(forKey: "token")
+    return updated
+  }
+
+  /// Header names are case-insensitive. Credential replacement owns Authorization only;
+  /// workspace headers, transport, endpoint, and hand-edited metadata remain unchanged.
+  static func removingAuthorizationHeaders(from entry: [String: Any]) -> [String: Any] {
+    guard let headers = entry["headers"] as? [String: Any] else { return entry }
+    var updated = entry
+    let remaining = headers.filter { $0.key.caseInsensitiveCompare("Authorization") != .orderedSame }
+    if remaining.isEmpty {
+      updated.removeValue(forKey: "headers")
+    } else {
+      updated["headers"] = remaining
+    }
+    return updated
   }
 
   /// Replace the API key on a configured server, for a key that was mistyped or has been rotated.
@@ -73,6 +93,7 @@ extension LocalMcpStore {
     guard entry["url"] is String else {
       throw storeError("Only remote servers take an API key")
     }
+    entry = removingAuthorizationHeaders(from: entry)
     let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       entry.removeValue(forKey: "token")
