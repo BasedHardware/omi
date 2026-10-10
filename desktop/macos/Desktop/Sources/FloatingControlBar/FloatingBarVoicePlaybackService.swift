@@ -105,10 +105,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
   private var activePlayerFallbackText = ""
+  private var activePlayerAudienceAllows: (() -> Bool)?
   private var playbackGeneration: UInt64 = 0
   private var voiceSampleGeneration: UInt64 = 0
   var voiceSampleActive = false
   var voiceSampleSynthesizer: ((String) async throws -> Data)?
+  var oneShotSynthesizer: (@Sendable (_ text: String, _ voiceID: String, _ instructions: String) async throws -> Data)?
   var voiceSampleBusyProbe: (() -> Bool)?
   var voiceSampleStarter: ((Data) -> Void)?
   // AVSpeechSynthesizer delegates arrive asynchronously, including after a
@@ -401,12 +403,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     audioPlayer?.stop()
     audioPlayer = nil
     activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
     clearFloatingPillResponseGlowIfIdle()
   }
 
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
-  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
+  /// `audienceAllows` is re-read wherever audio would actually start (after cloud
+  /// synthesis and before any system-voice fallback), so speech accepted in private
+  /// is dropped if the audience changes while it is being generated.
+  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil, audienceAllows: (() -> Bool)? = nil) {
     let trimmed = LegacyReplyTokenSanitizer.spokenText(from: text)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
@@ -427,20 +433,22 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     case .cloud(let voiceID, let instructions):
       let token = currentSynthesisToken()
       isOneShotSynthesizing = true
+      let synthesize = oneShotSynthesizer ?? Self.synthesizeCloudSpeech
       Task { [weak self] in
         do {
-          let audio = try await Self.synthesizeCloudSpeech(
-            text: trimmed, voiceID: voiceID, instructions: instructions)
+          let audio = try await synthesize(trimmed, voiceID, instructions)
           await MainActor.run {
             guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
-            self.startPlayback(audio, fallbackText: trimmed)
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
+            self.startPlayback(audio, fallbackText: trimmed, audienceAllows: audienceAllows)
           }
         } catch {
           await MainActor.run {
             guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
             guard self.canUseCloudTTSFallback(after: error, token: token, operation: "one_shot") else { return }
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
             log(
               "FloatingBarVoicePlaybackService: one-shot synthesis failed; rendering the same response with system voice "
                 + "reason=\(Self.ttsFallbackReason(for: error))")
@@ -642,7 +650,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return true
   }
 
-  private func startPlayback(_ data: Data, fallbackText: String = "") {
+  /// Speech accepted for a private audience that is no longer private: say nothing.
+  /// The empty enqueue releases any output lease and clears the glow without speaking.
+  private func withholdOneShotForAudience() {
+    log("FloatingBarVoicePlaybackService: withholding one-shot speech because others can hear")
+    enqueueSystemSpeech("")
+  }
+
+  private func startPlayback(_ data: Data, fallbackText: String = "", audienceAllows: (() -> Bool)? = nil) {
     do {
       if UserDefaults.standard.bool(forKey: "forceTTSPlaybackFail") {
         throw NSError(domain: "TTSPlayback", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced playback failure"])
@@ -663,6 +678,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      activePlayerAudienceAllows = audienceAllows
       if let lease = activePTTLease {
         _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
       }
@@ -688,6 +704,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       if activeRealtimeSlowToolAcknowledgement != nil {
         activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
       }
+      guard audienceAllows?() ?? true else { return withholdOneShotForAudience() }
       enqueueSystemSpeech(fallbackText)
     }
   }
@@ -815,13 +832,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
       let fallbackText = self.activePlayerFallbackText
+      let audienceAllows = self.activePlayerAudienceAllows
       self.audioPlayer = nil
       self.activePlayerFallbackText = ""
+      self.activePlayerAudienceAllows = nil
       self.voiceSampleActive = false
       if !flag, !fallbackText.isEmpty {
         log("FloatingBarVoicePlaybackService: player ended unsuccessfully; using system voice")
         self.recordSelectedVoiceFallback(
           to: "system_voice_fallback", reason: "enqueue_failed", outcome: .degraded)
+        guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
         self.enqueueSystemSpeech(fallbackText)
         return
       }
@@ -912,6 +932,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     audioPlayer?.stop()
     audioPlayer = nil
     activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
     voiceSampleGeneration &+= 1
     voiceSampleActive = false
     speechSynthesizer.stopSpeaking(at: .immediate)

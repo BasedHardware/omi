@@ -3736,6 +3736,8 @@ class FloatingControlBarManager {
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
+    isProactive: Bool = false,
+    spokenAloud: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil,
@@ -3753,6 +3755,10 @@ class FloatingControlBarManager {
       onDropped?()
       return .rejectedOwnerChange
     }
+    // Resolve persistence once: main's policy promotes `.trial` to persistent even
+    // when the caller did not request it, and a persistent card must never also be
+    // treated as notch-only, so both arguments read the same resolved value.
+    let persists = FloatingBarNoticePolicy.persists(kind: kind, requestedPersistent: isPersistent)
     let notification = FloatingBarNotification(
       ownerID: ownerID,
       title: title,
@@ -3766,7 +3772,14 @@ class FloatingControlBarManager {
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       screenshotData: screenshotData,
-      isPersistent: FloatingBarNoticePolicy.persists(kind: kind, requestedPersistent: isPersistent)
+      isPersistent: persists,
+      isProactive: isProactive,
+      speechEligible: spokenAloud,
+      staysInNotch: FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: spokenAloud,
+        hasAction: action != nil,
+        isPersistent: persists
+      )
     )
     guard let window else {
       log("FloatingControlBarManager: dropping notification because window is not set up")
@@ -4575,8 +4588,10 @@ class FloatingControlBarManager {
   }
 
   @discardableResult
-  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
+  private func presentNotification(_ queuedNotification: FloatingBarNotification, in window: FloatingControlBarWindow)
+    -> Bool
   {
+    var notification = queuedNotification
     guard
       let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
@@ -4588,7 +4603,68 @@ class FloatingControlBarManager {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       return false
     }
+    if notification.isProactive {
+      if NotificationService.shouldSuppressForSnooze(
+        respectFrequency: true,
+        snoozedUntil: NotificationService.currentSnoozeExpiry(),
+        now: Date())
+      {
+        notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+        notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+        log("FloatingControlBarManager: dropping proactive notification because snooze became active")
+        return false
+      }
+      let presence = NotificationService.currentPresence()
+      if NotificationService.shouldSuppressForPresence(respectFrequency: true, presence: presence) {
+        notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+        notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+        log("FloatingControlBarManager: dropping proactive notification because screen sharing became active")
+        return false
+      }
+      notification.staysInNotch = FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: notification.speechEligible
+          && !NotificationService.shouldWithholdSpeechForPresence(presence: presence),
+        hasAction: notification.action != nil,
+        isPersistent: notification.isPersistent)
+    }
     cacheNotificationContextIfNeeded(notification)
+
+    // A live voice session has no eyes. Hand it the card as silent context so a spoken
+    // follow-up has a referent; the typed path gets the same thing via
+    // pendingNotificationContext.
+    NotchCardVoiceDelivery.shared.cardPresented(
+      id: notification.id,
+      text: notificationContextSuffix(
+        message: ChatMessage(text: notification.message, sender: .ai),
+        context: notification.context
+      )
+    )
+
+    // A spoken card is delivered by the notch — the response glow, and Omi saying it —
+    // so there is no panel to raise, nothing to time out, and no reason to displace a card
+    // already on screen. Returning here rather than shrinking the panel later keeps every
+    // surface consistent: `currentNotification` drives the bar's width, its minimum size,
+    // and several reveal guards, so a card that is not shown must never be set as current.
+    //
+    // Reported as delivered all the same. It was.
+    if notification.staysInNotch {
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onPresented()
+      if let suggestionIdentity = notification.suggestionTelemetryIdentity {
+        AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(
+          .delivered, identity: suggestionIdentity)
+      }
+      DesktopUsageDailyReporter.shared.recordProactiveCardShown()
+      AnalyticsManager.shared.notificationSent(
+        notificationId: notification.id.uuidString,
+        title: notification.title,
+        assistantId: notification.assistantId,
+        surface: "floating_bar_notch",
+        suggestionIdentity: notification.suggestionTelemetryIdentity
+      )
+      log("FloatingControlBarManager: card \(notification.id) spoken from the notch, no panel")
+      return true
+    }
 
     if let existing = window.state.currentNotification, existing.id != notification.id {
       cancelNotificationDismissTimer()
@@ -4608,17 +4684,6 @@ class FloatingControlBarManager {
       // down to lobe width and animate back out.
       window.dismissNotification(animated: false, resize: false)
     }
-
-    // A live voice session has no eyes. Hand it the card as silent context so a spoken
-    // follow-up has a referent; the typed path gets the same thing via
-    // pendingNotificationContext.
-    NotchCardVoiceDelivery.shared.cardPresented(
-      id: notification.id,
-      text: notificationContextSuffix(
-        message: ChatMessage(text: notification.message, sender: .ai),
-        context: notification.context
-      )
-    )
 
     // The flag must survive the whole notification chain: when a queued
     // notification is presented the window is already visible from the
