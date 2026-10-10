@@ -798,6 +798,14 @@ _add(
         setup=_queue_conversation_scan_page,
     )
 )
+_add(
+    DriverEntry(
+        'database.conversation_mutations.prune_expired_mutation_receipts',
+        base={'uid': UID, 'conversation_id': 'conv-1'},
+        domains={'now': [None, T0]},
+        neutrals={'batch_size': _PAGE},
+    )
+)
 
 _add(
     CoveredByEntry(
