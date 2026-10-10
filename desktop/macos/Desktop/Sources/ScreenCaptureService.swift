@@ -830,11 +830,6 @@ final class ScreenCaptureService: Sendable {
     return (appName, frontmost.title, frontmost.windowID)
   }
 
-  /// Private API: get CGWindowID directly from an AXUIElement (avoids fragile position/size matching)
-  @_silgen_name("_AXUIElementGetWindow")
-  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>)
-    -> AXError
-
   /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
   private static func getWindowInfoViaAccessibility(
     pid: pid_t, bundleID: String, windowList: [[String: Any]]
@@ -894,9 +889,7 @@ final class ScreenCaptureService: Sendable {
     let axTitle = titleValue as? String
 
     // Try direct CGWindowID lookup first (handles multiple windows of same app correctly)
-    var directWindowID: CGWindowID = 0
-    let directResult = _AXUIElementGetWindow(windowElement, &directWindowID)
-    if directResult == .success && directWindowID != 0 {
+    if let directWindowID = AXWindowIdentity.windowID(of: windowElement) {
       // Verify the window ID exists in the on-screen window list
       let existsOnScreen = windowList.contains { window in
         (window[kCGWindowNumber as String] as? CGWindowID) == directWindowID
