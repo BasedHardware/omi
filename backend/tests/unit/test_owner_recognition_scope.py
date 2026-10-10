@@ -55,7 +55,11 @@ def test_same_integer_id_in_two_scopes_cannot_label_other_short_reply():
         transcript_segments=[TranscriptSegment(**s) for s in segments],
     )
     apply_speaker_resolution(
-        conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
+        conversation,
+        resolution.speaker_ids,
+        resolution.voice_identities,
+        resolution.voice_identity_statuses,
+        owner_voiceprint_available=resolution.owner_voiceprint_available,
     )
     assert [s['is_user'] for s in conversation.model_dump()['transcript_segments']] == [True, False, False]
     assert resolution.speaker_ids['short'] == resolution.speaker_ids['other']
@@ -141,6 +145,7 @@ def test_short_reply_from_acoustically_contradicted_voice_withdraws_auto_owner()
         resolution.speaker_ids,
         resolution.voice_identities,
         resolution.voice_identity_statuses,
+        owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
     )
     assert conversation.model_dump()['transcript_segments'][-1]['is_user'] is False
