@@ -172,6 +172,15 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
 _typesense_client: Any | None = None
 
 
+def _typesense_connection_timeout_seconds() -> int:
+    # Lazy env resolution, like CONVERSATION_INDEX_WRITES_ENV. Bound request wait to 1–30s.
+    try:
+        value = int(os.getenv('TYPESENSE_CONNECTION_TIMEOUT_SECONDS', '5'))
+    except (TypeError, ValueError):
+        return 5
+    return value if 1 <= value <= 30 else 5
+
+
 def _get_typesense_client() -> Any:
     global _typesense_client
     if _typesense_client is None:
@@ -185,7 +194,8 @@ def _get_typesense_client() -> Any:
                     }
                 ],
                 'api_key': os.getenv('TYPESENSE_API_KEY'),
-                'connection_timeout_seconds': 2,
+                # TYPESENSE_CONNECTION_TIMEOUT_SECONDS defaults to 5; invalid/out-of-bounds values use 5.
+                'connection_timeout_seconds': _typesense_connection_timeout_seconds(),
             }
         )
     return _typesense_client
@@ -439,10 +449,12 @@ def keyword_search_conversation_ids(
     limit: int = 5,
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
+    *,
+    raise_on_error: bool = False,
 ) -> List[str]:
     """Typesense keyword search returning only conversation ids, for hybrid (keyword + vector) retrieval.
 
-    Fail-open: any search error returns [] so callers can fall back to vector-only results.
+    Fail-open by default; raise_on_error lets chat disclose keyword degradation.
     """
     if not query.strip():
         return []
@@ -460,6 +472,8 @@ def keyword_search_conversation_ids(
         return [str(item['id']) for item in items if item.get('id')]
     except Exception as e:
         logger.warning("keyword_search_conversation_ids failed for uid=%s, falling back to vector-only: %s", uid, e)
+        if raise_on_error:
+            raise ConversationSearchUnavailableError("Keyword index unavailable") from e
         return []
 
 
