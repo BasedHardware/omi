@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists
 
@@ -98,7 +99,7 @@ class MessagingStore:
             tx.delete(self.user(uid).collection('channel_link_proofs').document(proof_ref.id))
             return link
 
-        return apply(self.db.transaction())
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
     def lookup(self, message):
         return self.identity(message.channel, message.provider, message.external_user_id).get().to_dict()
@@ -133,7 +134,7 @@ class MessagingStore:
             tx.update(identity, {'active': False, 'generation': str(uuid4())})
             return link
 
-        revoke(self.db.transaction())
+        run_with_transaction_contention_retry(self.db.transaction, revoke, operation_name='messaging_revoke')
         # Revocation precedes deletion. Workers re-check immediately before every send.
         for session in self.user(uid).collection('chat_sessions').stream():
             data = session.to_dict()
@@ -185,7 +186,7 @@ class MessagingStore:
             tx.update(ref, {'status': 'running'})
             return json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
 
-        return apply(self.db.transaction())
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
     def complete(self, path):
         # Content-free dedup tombstone survives retries; unlink removes its parent.
@@ -210,7 +211,7 @@ class MessagingStore:
                 raise PermissionError('Lost surface lease')
             tx.delete(ref)
 
-        apply(self.db.transaction())
+        run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
     def session(self, uid, message, link):
         surface = 'channel:' + key(message.channel, message.external_chat_id)
@@ -259,10 +260,10 @@ class MessagingStore:
             session = ref.get(transaction=tx).to_dict()
             if not session:
                 raise PermissionError('Session removed')
-            self._assert_session_link(tx, uid, session)
+            self.assert_session_link(tx, uid, session)
             tx.create(ref.collection('channel_events').document(f'{len(events):012d}'), payload)
 
-        apply(self.db.transaction())
+        run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
 
     def retry(self, path):
         self.db.document(path).update({'status': 'pending'})
@@ -277,7 +278,7 @@ class MessagingStore:
             if d.to_dict().get('status') == 'pending'
         ]
 
-    def _assert_session_link(self, tx, uid, session):
+    def assert_session_link(self, tx, uid, session):
         user = self.user(uid).get(transaction=tx).to_dict()
         deletion = account_deletion_document(uid, firestore_client=self.db).get(transaction=tx)
         if not user or _deletion_blocks(deletion):
@@ -298,11 +299,11 @@ class MessagingStore:
             session = session_ref.get(transaction=tx).to_dict()
             if not session:
                 raise PermissionError('Session removed')
-            self._assert_session_link(tx, uid, session)
+            self.assert_session_link(tx, uid, session)
             tx.set(self.user(uid).collection('messages').document(document['id']), payload)
             tx.update(session_ref, {'updated_at': datetime.now(timezone.utc)})
 
-        apply(self.db.transaction())
+        run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
         return document
 
     def proof_owner(self, proof):

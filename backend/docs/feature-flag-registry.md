@@ -203,9 +203,12 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
 | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
+| `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
+| `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `OMI_MESSAGING_CHANNELS` | Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and Pro entitlement. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation. on serves shaped to everyone; off/unset/unknown disables shaped serving. cohort is an alias of on after legacy removal. Legacy comparison and shadow serving have been removed. Default off. | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | 2026-11-05 | dazheng |
+| `OMI_TELEGRAM_ENABLED` | Default-off registration of the private-chat Telegram adapter. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
@@ -329,8 +332,11 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
+| `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `OMI_IMESSAGE_PROVIDER` | Installed iMessage provider selection; currently linq only. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
+| `OMI_TELEGRAM_STREAMING` | Telegram preview mode draft, edit or none; default draft. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
@@ -407,9 +413,15 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
+- `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
+- `OMI_IMESSAGE_ENABLED` — Default-off registration of the iMessage provider adapter. (fail: closed)
+- `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` — Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. (fail: closed)
+- `OMI_IMESSAGE_PROVIDER` — Installed iMessage provider selection; currently linq only. (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
 - `OMI_MESSAGING_CHANNELS` — Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and Pro entitlement. (fail: closed)
 - `OMI_MESSAGING_CHANNELS_UIDS` — Comma-separated exact uid allowlist for messaging channels; empty admits nobody. (fail: closed)
+- `OMI_TELEGRAM_ENABLED` — Default-off registration of the private-chat Telegram adapter. (fail: closed)
+- `OMI_TELEGRAM_STREAMING` — Telegram preview mode draft, edit or none; default draft. (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
