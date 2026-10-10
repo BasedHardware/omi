@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.463",
+      "date": "2026-10-10",
+      "changes": [
+        "Settings, memory, task, and onboarding descriptions now say plainly what each feature does"
+      ]
+    },
+    {
       "version": "0.12.462",
       "date": "2026-10-10",
       "changes": [
