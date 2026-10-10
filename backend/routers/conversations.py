@@ -1108,11 +1108,15 @@ async def link_calendar_event(
                 try:
                     event = await get_google_calendar_event(new_token, request.event_id)
                 except Exception as retry_error:
-                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+                    logger.error(f"Failed after token refresh: {retry_error}", exc_info=True)
+                    raise HTTPException(
+                        status_code=500, detail="Failed to fetch calendar event after token refresh."
+                    )
             else:
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar event: {error_msg}")
+            logger.error(f"Failed to fetch calendar event: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to fetch calendar event from provider.")
 
     # Convert to CalendarEventLink
     calendar_event = _event_to_calendar_event_link(event)
