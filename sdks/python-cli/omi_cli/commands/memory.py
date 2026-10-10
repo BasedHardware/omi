@@ -71,26 +71,13 @@ def get_memory(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        # The dev API exposes list+search but no single-resource read for memories;
-        # implement get-by-id by listing with a filter and matching client-side.
-        # We page in chunks until we find it or exhaust the user's memories.
-        page_size = 100
-        offset = 0
-        while True:
-            page = client.get("/v1/dev/user/memories", params={"limit": page_size, "offset": offset})
-            if not page:
-                # Exit code 5 — preserves the documented "not found" agent contract
-                # whether the resource is missing server-side (HTTP 404) or absent
-                # from the client-side scan we do here.
-                raise NotFoundError(message=f"Memory not found: {memory_id}")
-            for item in page:
-                if item.get("id") == memory_id:
-                    ctx.renderer.emit(item, title="memory")
-                    return
-            # The API validates records after applying its database offset, so
-            # malformed historical rows can make a non-final page short.
-            # Keep scanning at the next database offset in that case.
-            offset += page_size
+        try:
+            item = client.get(f"/v1/dev/user/memories/{memory_id}")
+        except NotFoundError:
+            # Exit code 5 — preserves the documented "not found" agent contract
+            # for a missing resource.
+            raise NotFoundError(message=f"Memory not found: {memory_id}")
+    ctx.renderer.emit(item, title="memory")
 
 
 @app.command("create", help="Create a new memory.")

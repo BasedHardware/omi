@@ -70,7 +70,7 @@ hand. The refresh token rotates if Firebase decides to.
 | Command                                        | Endpoint                                              |
 | ---------------------------------------------- | ----------------------------------------------------- |
 | `omi memory list [--limit N --offset N --categories CSV]` | `GET /v1/dev/user/memories`                |
-| `omi memory get ID`                            | client-side scan (no direct GET in the dev API)       |
+| `omi memory get ID`                            | `GET /v1/dev/user/memories/{id}`                      |
 | `omi memory create CONTENT [--category C --visibility V --tag T...]` | `POST /v1/dev/user/memories`                |
 | `omi memory update ID [--content ... --category ... --visibility ... --tag ...]` | `PATCH /v1/dev/user/memories/{id}` |
 | `omi memory delete ID [-y]`                    | `DELETE /v1/dev/user/memories/{id}`                   |
