@@ -29,6 +29,9 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool voiceSessionActive = false;
   bool questionSent = false;
   String? aiResponse;
+  // True right after a question was dropped empty or came back with no speech
+  // detected, so the step can show a retry hint instead of processing forever.
+  bool questionFailed = false;
 
   // Step 2: Voice reply preference. Null until the step is visited so a user
   // who skips the tutorial before this point keeps their existing preference.
@@ -59,6 +62,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    questionFailed = false;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
@@ -140,6 +144,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      questionFailed = false;
       notifyListeners();
     } else {
       // Second press — question is being sent
@@ -152,6 +157,17 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void onVoiceResponseReceived(String response) {
     if (currentStep != askQuestionStep) return;
     aiResponse = response;
+    notifyListeners();
+  }
+
+  /// The question was dropped before sending (no audio captured) or the
+  /// server reported no speech detected. Reset back to the pre-press state
+  /// so the step can show a retry hint instead of processing forever.
+  void onVoiceQuestionFailed() {
+    if (currentStep != askQuestionStep || aiResponse != null) return;
+    voiceSessionActive = false;
+    questionSent = false;
+    questionFailed = true;
     notifyListeners();
   }
 

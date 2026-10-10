@@ -126,8 +126,13 @@ void main() {
     expect(onboarding.voiceSessionActive, isTrue);
     expect(provider.hasVoiceCommandSessionForTesting, isTrue);
 
+    // No audio was ever captured for this session (the test never feeds BLE
+    // bytes in), so this is the same "pressed twice without speaking" case as
+    // #20789: the dropped question resets the step instead of sticking on
+    // "processing" forever.
     provider.handleButtonEventForTesting('test-id', 1);
-    expect(onboarding.questionSent, isTrue);
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionFailed, isTrue);
     expect(onboarding.voiceSessionActive, isFalse);
 
     provider.dispose();
