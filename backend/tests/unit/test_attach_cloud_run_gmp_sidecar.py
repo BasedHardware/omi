@@ -833,10 +833,9 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_p
     assert not collector.get('env'), 'do not deploy reserved service environment variables on a job'
     assert 'export K_SERVICE="${CLOUD_RUN_JOB:?' in collector['args'][0]
     assert 'sleep 35; kill -TERM' in collector['args'][0]
-    assert (
-        patched['spec']['template']['metadata']['annotations']['run.googleapis.com/container-dependencies']
-        == '{"collector":["notifications-job"]}'
-    )
+    # depends_on requires a startup probe on the depended-upon container, and
+    # jobs cannot carry a reachable one — the dependency annotation must go.
+    assert 'run.googleapis.com/container-dependencies' not in patched['spec']['template']['metadata']['annotations']
     assert job['spec']['template']['spec']['template']['spec']['containers'][0].get('name') is None
     assert 'metadata' not in task, 'job task templates must not acquire service annotations'
     annotations = patched['spec']['template']['metadata']['annotations']
