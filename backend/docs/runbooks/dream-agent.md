@@ -95,8 +95,21 @@ The dirty set is authoritative. The timestamp `watermark` is a diagnostic
 frontier and never advances past older unread references; it does not filter the
 queue. Existing shadow-only sequence `events` documents are ignored and are not
 backfilled or deleted. No historical customer records are rewritten. The model
-sees bounded excerpts; mutation tools retain complete snapshots and fence the
-current records.
+sees collection-specific text: conversation title/overview/category followed by
+merged speaker transcript lines, memory content/category, task description/status/due,
+people names/aliases, candidate description/status, entity names/summaries/fact text,
+and screen app/window/OCR text. Speaker names reuse identities already read for
+this pass; own speech is labeled `You`. Record refs remain the dictionary keys,
+while segment IDs, timestamps and provider/speaker-scope metadata stay out of the
+projection. Long text keeps head and tail with an explicit omitted-character count.
+
+Queue selection and inference share the same projection and conservative transport
+gate. Triage gets `min(6000, Caps.tokens // 3)`; reasoning gets the pass budget minus
+observed triage tokens. Per-record character allowances use the space left after
+schema, framing, refs and completion reserve, then halve until the encoded request
+fits. The 128-character minimum stops admission before further dilution starves
+individual records. Conversation summary fields retain space before transcript text
+is shortened. Mutation tools retain complete snapshots and fence current records.
 
 Triage uses `omi:auto:dream-triage` (Luna). Empty triage buys no reasoning. Main
 reasoning uses `omi:auto:dream-reasoning`: Luna before #20960, then the gateway's
@@ -285,8 +298,10 @@ One counts-only log line reports `Dream canary status=pass|fail
 stage=enqueue|admit|model|report error_type=<class>` plus the durable consecutive
 failure count. A verified success resets `dream_canary_health/current.canary_failures`.
 Prometheus exports `omi_dream_dirty_enqueue_total{outcome=ok|failed}`,
-`omi_dream_pass_total{status,error_type}`, `omi_dream_tokens_total`, and
-`omi_dream_canary_total{status,stage}`. Exception labels use a closed allowlist,
+`omi_dream_pass_total{status,error_type}`, `omi_dream_tokens_total`,
+`omi_dream_evidence_chars_total{lane=triage|reasoning}`, and
+`omi_dream_canary_total{status,stage}`. Pass logs report only status and projected evidence character counts for each lane.
+Exception labels use a closed allowlist,
 otherwise `other`; no metric labels contain a UID or arbitrary provider error.
 
 `backend/deploy/monitoring/dream-canary-failures.metric.json` and

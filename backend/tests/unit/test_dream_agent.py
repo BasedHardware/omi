@@ -357,7 +357,7 @@ def test_excerpts_keep_transcript_evidence_when_summary_is_large():
         },
         chars=160,
     )['conversations/c1']
-    assert 'Synthetic misspelled name' in excerpt['transcript_segments']
+    assert 'Synthetic misspelled name' in excerpt
 
 
 def test_large_input_stops_before_gateway_access(monkeypatch):
@@ -374,9 +374,12 @@ def test_large_input_stops_before_gateway_access(monkeypatch):
 
 
 def test_evidence_shrinks_to_the_triage_budget():
-    records = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
-    messages = dream_prompt.evidence_message(records, Triage, 6000, chars=240)
-    assert len(__import__('json').loads(messages[0]['content'])['records']) == 50
+    oversized = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
+    with pytest.raises(ValueError, match='dream_evidence_token_budget'):
+        dream_prompt.evidence_message(oversized, Triage, 6000)
+    records = dict(list(oversized.items())[:12])
+    messages = dream_prompt.evidence_message(records, Triage, 6000)
+    assert len(__import__('json').loads(messages[0]['content'])['records']) == 12
     framed = dream_prompt.mount(Triage, 6000).messages(messages)
     assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000
 

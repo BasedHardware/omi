@@ -53,6 +53,11 @@ def store(monkeypatch):
         body = kwargs['json']
         assert body['max_completion_tokens'] <= 256
         model = body['model']
+        evidence = json.loads(body['messages'][-1]['content'])['records']
+        projected = evidence['conversations/' + storage.RECORD_ID]
+        assert 'SPEAKER_00: Robot Qorbi' in projected
+        assert 'Qorby is a misspelling of Qorbi' in projected
+        assert 'transcript_segments' not in projected
         value = (
             {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
             if model == dream_transport.TRIAGE_LANE

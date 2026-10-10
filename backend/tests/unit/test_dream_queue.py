@@ -33,7 +33,9 @@ def queue(monkeypatch):
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref: {'content': 'Synthetic record ' * 100})
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic record ' * 100}}
+    )
     return db
 
 
@@ -79,7 +81,7 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     assert list(records) == [f'conversations/{i}' for i in range(79, 79 - len(consumed), -1)]
     assert fits_triage(records, caps)
     assert not fits_triage(
-        {**records, f'conversations/{79 - len(consumed)}': {'content': 'Synthetic record ' * 100}}, caps
+        {**records, f'conversations/{79 - len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
     )
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     assert dream_store.dirty_count(UID) == 80 - len(consumed)
