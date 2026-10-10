@@ -79,6 +79,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   List<ActionItemWithMetadata> _actionItems = [];
   int _sessionGeneration = 0;
+  int _paginationGeneration = 0;
+  // Server rows consumed, including rows hidden by deletion or rejected by decoding.
+  int _nextPageOffset = 0;
+  static const int _maxPagesPerLoad = 3;
 
   bool _isLoading = false;
   bool _isFetching = false;
@@ -246,7 +250,7 @@ class ActionItemsProvider extends ChangeNotifier {
     if (existingLoad != null) return existingLoad;
 
     final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
-      _initialLoadCompleted = loaded;
+      if (loaded) _initialLoadCompleted = true;
     });
     _initialLoad = load.whenComplete(() {
       _initialLoad = null;
@@ -371,7 +375,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     final generation = _sessionGeneration;
+    _restartPagination(hasMore: _hasMore);
+    final paginationGeneration = _paginationGeneration;
     var decodedPageIsComplete = true;
+    var rejectedPageRows = 0;
     var loaded = false;
     if (showShimmer) {
       setLoading(true);
@@ -387,24 +394,30 @@ class ActionItemsProvider extends ChangeNotifier {
         startDate: _startDate,
         endDate: _endDate,
         onTyped: (result) {
+          if (generation != _sessionGeneration || paginationGeneration != _paginationGeneration) return;
           _projectTypedList(result);
           if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
+            rejectedPageRows = rejectedRows;
             decodedPageIsComplete = rejectedRows == 0 && !truncated;
           }
         },
       );
-      if (response != null && generation == _sessionGeneration) {
+      if (response != null && generation == _sessionGeneration && paginationGeneration == _paginationGeneration) {
+        _nextPageOffset = response.actionItems.length + rejectedPageRows;
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
         await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
-        loaded = true;
+        loaded = generation == _sessionGeneration && paginationGeneration == _paginationGeneration;
+        if (loaded) _initialLoadCompleted = true;
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {
-      if (showShimmer) {
-        setLoading(false);
-      } else {
-        setFetching(false);
+      if (generation == _sessionGeneration && paginationGeneration == _paginationGeneration) {
+        if (showShimmer) {
+          setLoading(false);
+        } else {
+          setFetching(false);
+        }
       }
     }
 
@@ -462,31 +475,43 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> loadMoreActionItems() async {
-    if (_isFetching || !_hasMore) return;
+    if (_isLoading || _isFetching || !_hasMore) return;
     final generation = _sessionGeneration;
+    final paginationGeneration = _paginationGeneration;
 
     setFetching(true);
 
     try {
-      var decodedPageIsComplete = true;
-      final response = await _fetchActionItemsPage(
-        limit: 50,
-        offset: _actionItems.length,
-        completed: _includeCompleted ? null : false,
-        startDate: _startDate,
-        endDate: _endDate,
-        onTyped: (result) {
-          if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
-            decodedPageIsComplete = rejectedRows == 0 && !truncated;
-          }
-        },
-      );
+      for (var page = 0;
+          page < _maxPagesPerLoad && generation == _sessionGeneration && paginationGeneration == _paginationGeneration;
+          page++) {
+        var decodedPageIsComplete = true;
+        var rejectedPageRows = 0;
+        var typedPageIsTruncated = false;
+        final offset = _nextPageOffset;
+        final response = await _fetchActionItemsPage(
+          limit: 50,
+          offset: offset,
+          completed: _includeCompleted ? null : false,
+          startDate: _startDate,
+          endDate: _endDate,
+          onTyped: (result) {
+            if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
+              rejectedPageRows = rejectedRows;
+              typedPageIsTruncated = truncated;
+              decodedPageIsComplete = rejectedRows == 0 && !truncated;
+            }
+          },
+        );
 
-      if (response != null && generation == _sessionGeneration) {
+        if (response == null || generation != _sessionGeneration || paginationGeneration != _paginationGeneration) {
+          break;
+        }
+        final consumedRows = response.actionItems.length + rejectedPageRows;
+        _nextPageOffset = offset + consumedRows;
         _loadedPageSetComplete =
             _loadedPageSetComplete && decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        // An optimistic delete shortens the visible list before the server removes the row.
-        // Its length can therefore request an overlapping page; keep each server ID once.
+        // A server mutation can rewind pagination. Keep each ID once while rereading its prefix.
         final seenIds = _actionItems.map((item) => item.id).toSet();
         final filtered = response.actionItems
             .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
@@ -502,14 +527,33 @@ class ActionItemsProvider extends ChangeNotifier {
         } else {
           SiriIntegration.current.queueUpsertTasks(filtered);
         }
+        // A hidden/duplicate-only page cannot extend the scroll range to trigger another load.
+        // Continue only when the server made progress and has an untruncated next page.
+        // The page budget bounds each scroll request; a later scroll keeps the advanced cursor.
+        if (!_hasMore || filtered.isNotEmpty || consumedRows == 0 || response.truncated || typedPageIsTruncated) break;
       }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {
-      setFetching(false);
+      if (generation == _sessionGeneration && paginationGeneration == _paginationGeneration) {
+        setFetching(false);
+      }
     }
 
     notifyListeners();
+  }
+
+  // Confirmed creates/deletes shift server offsets. Rescan with deduplication rather than
+  // guessing which side of an in-flight page the mutation happened on. Undo/rollback do not
+  // change the server list and must leave the cursor alone.
+  void _restartPagination({bool hasMore = true}) {
+    _paginationGeneration++;
+    _nextPageOffset = 0;
+    _hasMore = hasMore;
+    _loadedPageSetComplete = false;
+    // The superseded request no longer owns these flags; its finally block is fenced above.
+    _isLoading = false;
+    _isFetching = false;
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
@@ -760,6 +804,8 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
+        _restartPagination();
+        notifyListeners();
         SiriIntegration.current.queueDelete('task', item.id);
       }
       // On success, the tombstone is intentionally retained: a refresh that
@@ -831,6 +877,8 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
+      _restartPagination();
+      notifyListeners();
       SiriIntegration.current.queueDelete('task', id);
     }
     return success;
@@ -875,11 +923,12 @@ class ActionItemsProvider extends ChangeNotifier {
       if (generation != _sessionGeneration) return null;
 
       if (newItem != null) {
+        _restartPagination();
         final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
         if (index != -1) {
           _actionItems[index] = newItem;
-          notifyListeners();
         }
+        notifyListeners();
         // Direct sync to Apple Reminders — no FCM roundtrip needed
         _syncToAppleRemindersIfNeeded(newItem);
         SiriIntegration.current.queueUpsertTasks([newItem]);
@@ -1156,6 +1205,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _restartPagination(hasMore: false);
     _actionItems = [];
     _loadedPageSetComplete = false;
     _homeDayItems = [];
@@ -1222,6 +1272,10 @@ class ActionItemsProvider extends ChangeNotifier {
       return false;
     }
     final deletedIDs = deleted.toSet();
+    if (deletedIDs.isNotEmpty) {
+      _restartPagination();
+      notifyListeners();
+    }
     for (final id in deletedIDs) {
       SiriIntegration.current.queueDelete('task', id);
     }
