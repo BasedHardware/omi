@@ -19,8 +19,9 @@ Only completed, non-discarded, non-deleted rows with nonempty summary title or
 overview qualify. Dry-run reads metadata/summary fields only, with no transcripts,
 embedding calls or vector reads/writes. Output contains counts, never content or
 conversation IDs. Obtain cost and production-write sign-off on the selected count
-before `--apply`: each selected row costs one fresh embedding plus vector fetch/upsert
-and conversation reads. No production execution is part of the implementing PR.
+before `--apply`: each selected row costs one fresh embedding plus the existing
+metadata-extraction LLM calls (including retries), filter-catalog writes, vector
+fetch/upsert and conversation reads. No production execution is part of the implementing PR.
 
 JSON counts: `scanned`, `selected`, `created`, `updated`, `error`, and
 `stopped_error_budget`. Created/updated distinguish whether the vector ID existed
