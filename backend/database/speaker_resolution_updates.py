@@ -19,13 +19,23 @@ def persist_speaker_resolution_if_current(
     *,
     expected_updated_at,
     on_committed_identity: Optional[Callable[[dict, dict], None]] = None,
+    on_outcome: Optional[Callable[[str, str], None]] = None,
 ) -> bool:
     """Identity-only commit: refuse every intervening write, including manual edits.
 
     No lifecycle, summary, task, or processing admission is owned by this path.
     Protection is copied from the read snapshot and a migration defeats its CAS.
     """
+
+    def observe(stage, reason):
+        if on_outcome is not None:
+            try:
+                on_outcome(stage, reason)
+            except Exception:
+                logger.warning('owner_identity_retry_cas_record_failed')
+
     if expected_updated_at is None:
+        observe('cas_refused', 'revision_changed')
         return False
     client = get_firestore_client()
     ref = (
@@ -40,16 +50,22 @@ def persist_speaker_resolution_if_current(
         snapshot = ref.get(transaction=transaction)
         deleting = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
         current = snapshot.to_dict() or {}
-        if (
-            not snapshot.exists
-            or deleting.exists
-            or conversations.is_soft_deleted(current)
-            or current.get('discarded')
-            or current.get('is_locked')
-            or current.get('status') != 'completed'
-            or firestore_revision_datetime(getattr(snapshot, 'update_time', None)) != expected_updated_at
-        ):
-            return False
+        # Reasons follow the former OR's exact short-circuit order. Return the
+        # verdict through the outer transaction; aborted/retried callbacks emit nothing.
+        if not snapshot.exists:
+            return False, 'missing', None
+        if deleting.exists:
+            return False, 'account_deleting', None
+        if conversations.is_soft_deleted(current):
+            return False, 'deleted', None
+        if current.get('discarded'):
+            return False, 'discarded', None
+        if current.get('is_locked'):
+            return False, 'locked', None
+        if current.get('status') != 'completed':
+            return False, 'not_completed', None
+        if firestore_revision_datetime(getattr(snapshot, 'update_time', None)) != expected_updated_at:
+            return False, 'revision_changed', None
         fields = ('transcript_segments', 'transcript_segments_compressed', 'speaker_resolution', match_scores.FIELD)
         patch = {key: copy.deepcopy(conversation_data[key]) for key in fields if key in conversation_data}
         receipt = conversations.decode_manual_speaker_assignments(
@@ -75,13 +91,14 @@ def persist_speaker_resolution_if_current(
 
             identities = (readable(current), readable(prepared))
         transaction.update(ref, {key: prepared[key] for key in fields if key in prepared})
-        return (identities,)
+        return True, 'done', identities
 
-    written = persist(client.transaction())
+    written, reason, identities = persist(client.transaction())
+    observe('cas_committed' if written else 'cas_refused', reason)
     if written:
         if on_committed_identity is not None:
             try:
-                on_committed_identity(*written[0])
+                on_committed_identity(*identities)
             except Exception as error:
                 # Observability cannot turn an authoritative commit into failure.
                 logger.warning(
