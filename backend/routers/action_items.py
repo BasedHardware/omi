@@ -878,12 +878,13 @@ def batch_delete_action_items(
     # Chunk the locked-task preflight so large Select All batches (up to 10,000
     # IDs) stay within Firestore's batch-get limits and avoid loading tens of
     # megabytes of document data in one RPC before any deletion begins.
-    for i in range(0, len(request.ids), 500):
-        existing_items = action_items_db.get_action_items_by_ids(uid, request.ids[i : i + 500])
+    item_ids = list(dict.fromkeys(request.ids))
+    for i in range(0, len(item_ids), 500):
+        existing_items = action_items_db.get_action_items_by_ids(uid, item_ids[i : i + 500])
         if any(item.get('is_locked', False) for item in existing_items):
             raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
 
-    deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
+    deleted_ids = action_items_db.delete_action_items_batch(uid, item_ids)
 
     if deleted_ids:
         delete_action_item_vectors_batch(uid, deleted_ids)

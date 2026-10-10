@@ -7,6 +7,8 @@ would crash with "A maximum of 500 operations are allowed on a commit" instead o
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 import database.action_items as action_items_db
 
 UID = "user-chunking"
@@ -96,3 +98,52 @@ def test_batch_set_sync_requested_chunks_past_499(monkeypatch):
 
     assert len(writes) == 1200
     assert commits == [499, 998, 1200]
+
+
+class _StrictBatch:
+    """Reject repeated documents and oversized commits rather than just counting calls."""
+
+    def __init__(self, commits):
+        self.commits = commits
+        self.ids = []
+
+    def delete(self, ref):
+        assert ref.id not in self.ids, 'repeated document in the same batch'
+        self.ids.append(ref.id)
+
+    def update(self, ref, data):
+        assert data['sync_requested'] is True
+        self.delete(ref)
+
+    def commit(self):
+        assert 0 < len(self.ids) <= 499
+        self.commits.append(list(self.ids))
+
+
+@pytest.mark.parametrize('operation', ['delete', 'sync'])
+@pytest.mark.parametrize('size', [0, 1, 499, 500, 998, 1200])
+def test_batch_mutations_deduplicate_before_chunking(monkeypatch, operation, size):
+    _install_fake_db(monkeypatch)
+    commits = []
+    action_items_db.db.batch.side_effect = lambda: _StrictBatch(commits)
+    purge = MagicMock()
+    bump = MagicMock()
+    monkeypatch.setattr(action_items_db, '_purge_proactivity_source', purge)
+    monkeypatch.setattr(action_items_db, 'bump_action_items_list_version', bump)
+    # Repeat adjacent IDs, plus IDs spanning a chunk boundary. Keep their exact
+    # spelling: whitespace is legal in a document ID and must not be trimmed.
+    unique_ids = [f' item-{i} ' for i in range(size)]
+    requested_ids = [item_id for item_id in unique_ids for _ in range(2)] + unique_ids
+
+    if operation == 'delete':
+        assert action_items_db.delete_action_items_batch(UID, requested_ids) == unique_ids
+        assert [call.args[1] for call in purge.call_args_list] == unique_ids
+    else:
+        action_items_db.batch_set_sync_requested(UID, requested_ids)
+        purge.assert_not_called()
+
+    assert [item_id for chunk in commits for item_id in chunk] == unique_ids
+    assert [len(chunk) for chunk in commits] == [len(unique_ids[i : i + 499]) for i in range(0, size, 499)]
+    assert bump.call_count == int(size > 0)
+    if not size:
+        action_items_db.db.batch.assert_not_called()
