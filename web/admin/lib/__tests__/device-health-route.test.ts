@@ -331,6 +331,54 @@ describe("device health stats route", () => {
     });
   });
 
+  it("mixed-schema fixtures retain a v1-only build alongside a v2 build", async () => {
+    configure();
+    phoneFixtureRows([
+      sampleFixture(1, 95000, { app_build: "1347", battery_level: 90 }),
+      sampleFixture(1, 96800, { app_build: "1347", battery_level: 80 }),
+      sampleFixture(2, 98600),
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series).toHaveLength(2);
+    expect(body.phone_health.series).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          build: "1347",
+          n_pairs: 1,
+          n_v1_pairs: 1,
+          n_v2_intervals: 0,
+          p50_drain_per_hour: 20,
+        }),
+        expect.objectContaining({
+          build: "1348",
+          n_pairs: 1,
+          n_v1_pairs: 0,
+          n_v2_intervals: 1,
+          p50_drain_per_hour: 4,
+        }),
+      ])
+    );
+  });
+
+  it("invalid v2 baseline suppresses v1 fallback for that build", async () => {
+    configure();
+    phoneFixtureRows([
+      sampleFixture(1, 95000, { battery_level: 90 }),
+      sampleFixture(1, 96800, { battery_level: 80 }),
+      sampleFixture(2, 98600, {
+        battery_interval_validity: "no_baseline",
+        previous_battery_level: null,
+        battery_interval_seconds: null,
+      }),
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health).toEqual({
+      status: "measured_no_valid_pairs",
+      series: [],
+      n_events: 3,
+    });
+  });
+
   it("zero-drop v2 fixture intervals contribute to the aggregate", async () => {
     configure();
     phoneFixtureRows([sampleFixture(2, 98600, { previous_battery_level: 70 })]);

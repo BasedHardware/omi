@@ -51,7 +51,11 @@ on the first cross-build interval. A restarted process cannot reconstruct its
 foreground coverage and emits null for that interval. The existing five-minute
 throttle and fifteen-minute foreground timer remain the only sampling schedule.
 A backwards clock jump preserves the original throttle until time catches up;
-a process-local Stopwatch runs across foreground and background spans. Every
+Android uses suspend-inclusive `SystemClock.elapsedRealtime()` from the existing
+phone battery snapshot (`elapsed_realtime_ms`, local only). iOS/desktop keep the
+process-local Stopwatch reference. Android reads the snapshot at each lifecycle
+transition, including throttled transitions; it never falls back to the Android
+Stopwatch, which excludes deep sleep. Every
 lifecycle transition and completed sample compares wall-clock and monotonic
 deltas; disagreement beyond 90 seconds or a backwards delta marks intervals
 spanning that transition `clock_invalid`. Foreground spans use monotonic time.

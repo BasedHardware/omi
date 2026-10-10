@@ -49,6 +49,15 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
         _monotonicMs = monotonicMs ?? _elapsedClock(),
         _supported = supported ?? (Platform.isAndroid || Platform.isIOS);
 
+  bool get _usesAndroidElapsed => defaultTargetPlatform == TargetPlatform.android;
+
+  int _snapshotElapsed(Map<String, Object?>? battery) {
+    if (!_usesAndroidElapsed) return _monotonicMs();
+    final elapsed = battery?['elapsed_realtime_ms'];
+    if (elapsed is! int || elapsed < 0) throw StateError('Android elapsed clock unavailable');
+    return elapsed;
+  }
+
   static int Function() _elapsedClock() {
     final clock = Stopwatch()..start();
     return () => clock.elapsedMilliseconds;
@@ -76,6 +85,7 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
   SharedPreferences? _prefs;
   Map<String, dynamic>? _previous;
   Future<void>? _writes;
+  Future<void> _clockTransitions = Future.value();
   Timer? _timer;
   bool _started = false;
   bool _disposed = false;
@@ -180,8 +190,8 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     _foregroundCoverage = false;
     _foregroundMs = 0;
     _intervalClockInvalid = false;
-    _clockWallMs = _now().millisecondsSinceEpoch;
-    _clockElapsedMs = _monotonicMs();
+    _clockWallMs = _usesAndroidElapsed ? null : _now().millisecondsSinceEpoch;
+    _clockElapsedMs = _usesAndroidElapsed ? null : _monotonicMs();
     _foregroundSinceMs = _state == AppLifecycleState.resumed ? _clockElapsedMs : null;
     _chargingObservedAtMs = null;
     unawaited(_clearBaseline().catchError((Object _) {
@@ -235,10 +245,41 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final atMs = _now().millisecondsSinceEpoch;
-    final elapsedMs = _monotonicMs();
-    _observeClocks(atMs, elapsedMs);
-    _foregroundSinceMs = state == AppLifecycleState.resumed ? elapsedMs : null;
+    if (_usesAndroidElapsed && _enabled) {
+      // Android Stopwatch excludes suspend. Read the existing snapshot even for
+      // throttled transitions so a wall-clock rollback cannot hide between samples.
+      final generation = _generation;
+      final observation = () async {
+        try {
+          final battery = await _readBattery();
+          return (wall: _now().millisecondsSinceEpoch, elapsed: _snapshotElapsed(battery));
+        } catch (_) {
+          return null;
+        }
+      }();
+      _clockTransitions = _clockTransitions.then((_) async {
+        try {
+          final clock = await observation;
+          if (_disposed || generation != _generation) return;
+          if (clock == null) throw StateError('Android elapsed clock unavailable');
+          _observeClocks(clock.wall, clock.elapsed);
+          _foregroundSinceMs = state == AppLifecycleState.resumed ? clock.elapsed : null;
+        } catch (_) {
+          // Never substitute the suspend-exclusive Stopwatch for a missing read.
+          if (_disposed || generation != _generation) return;
+          _intervalClockInvalid = true;
+          _clockInvalidGeneration++;
+          _clockWallMs = null;
+          _clockElapsedMs = null;
+          _foregroundSinceMs = null;
+        }
+      });
+    } else if (!_usesAndroidElapsed) {
+      final atMs = _now().millisecondsSinceEpoch;
+      final elapsedMs = _monotonicMs();
+      _observeClocks(atMs, elapsedMs);
+      _foregroundSinceMs = state == AppLifecycleState.resumed ? elapsedMs : null;
+    }
     _state = state;
     _updateTimer();
     if (_prefs == null) return;
@@ -298,6 +339,8 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     final generation = _generation;
     final identity = _identityFence;
     try {
+      await _clockTransitions;
+      if (!_enabled || generation != _generation || identity != _identityFence) return;
       final throttleMs = _prefs!.getInt(lastSampleKey);
       final throttleElapsed = throttleMs == null ? null : _now().millisecondsSinceEpoch - throttleMs;
       // Preserve the original five-minute throttle, including backwards jumps.
@@ -315,7 +358,11 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
       final previous = _previous;
       final previousMs = previous?['at_ms'] as int?;
       final elapsedMs = previousMs == null ? null : atMs - previousMs;
-      _observeClocks(atMs, _monotonicMs());
+      final referenceMs = _snapshotElapsed(battery);
+      _observeClocks(atMs, referenceMs);
+      if (_usesAndroidElapsed) {
+        _foregroundSinceMs = _state == AppLifecycleState.resumed ? referenceMs : null;
+      }
       final clockGenerationAtSample = _clockInvalidGeneration;
       final clockInvalid = elapsedMs != null && (elapsedMs <= 0 || _intervalClockInvalid);
       final validity = _identityChanged

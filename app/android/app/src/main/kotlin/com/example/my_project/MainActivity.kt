@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.os.BatteryManager
 import android.os.PowerManager
+import android.os.SystemClock
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
@@ -71,6 +72,7 @@ class MainActivity: FlutterActivity() {
                         } catch (_: Exception) { null }
                     } else { null }
                     result.success(mapOf(
+                        "elapsed_realtime_ms" to SystemClock.elapsedRealtime(),
                         "thermal_state" to thermal,
                         "battery_level" to ((level.toDouble() / scale) * 100).toInt(),
                         "battery_charging" to (plugged != 0),

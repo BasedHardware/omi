@@ -18,6 +18,7 @@ void main() {
   late ValueNotifier<bool> consent;
   late DateTime now;
   int? elapsedMs;
+  int? androidElapsedMs;
   late List<({String name, Map<String, dynamic> properties})> events;
   late PhoneBatterySampleTelemetry sampler;
   var reads = 0;
@@ -33,6 +34,7 @@ void main() {
     consent = ValueNotifier(true);
     now = DateTime.utc(2026, 10, 8);
     elapsedMs = null;
+    androidElapsedMs = null;
     events = [];
     reads = 0;
     snapshot = {'battery_level': 72, 'battery_charging': false, 'os_battery_saver': true};
@@ -52,9 +54,15 @@ void main() {
       now: () => now,
       monotonicMs: () => elapsedMs ?? now.millisecondsSinceEpoch,
       supported: true,
-      readBattery: () {
+      readBattery: () async {
         reads++;
-        return read?.call() ?? Future.value(snapshot);
+        final battery = await (read?.call() ?? Future.value(snapshot));
+        return battery == null
+            ? null
+            : {
+                ...battery,
+                'elapsed_realtime_ms': androidElapsedMs ?? elapsedMs ?? now.millisecondsSinceEpoch,
+              };
       },
     );
   });
@@ -113,7 +121,7 @@ void main() {
     expect(persisted['level'], 72);
     expect(prefs.getInt(PhoneBatterySampleTelemetry.lastSampleKey), now.millisecondsSinceEpoch);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('rapid lifecycle changes collapse; five-minute boundary and double elapsed survive restart', (
     tester,
@@ -145,7 +153,7 @@ void main() {
     expect(events.last.properties['seconds_since_previous_sample'], 300.25);
     expect(events.last.properties['seconds_since_previous_sample'], isA<double>());
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('hidden and paused map to one background sample and cancel timer', (tester) async {
     await foreground(tester);
@@ -166,7 +174,7 @@ void main() {
     await settleStorage(tester);
     expect(events.last.properties['sampling_trigger'], 'lifecycle_foreground');
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('timer samples only resumed foreground; detach and dispose cancel it', (tester) async {
     await foreground(tester);
@@ -182,7 +190,7 @@ void main() {
     expect(events, hasLength(2));
     sampler.dispose();
     expect(sampler.hasForegroundTimer, false);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('tracking disabled never starts a timer or reads battery', (tester) async {
     consent.value = false;
@@ -196,7 +204,7 @@ void main() {
     expect(events, isEmpty);
     expect(prefs.getKeys().difference({PhoneBatterySampleTelemetry.buildFirstRunKey}), isEmpty);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('persisted opt-out wins over analytics startup default', (tester) async {
     await prefs.setBool('product_analytics_enabled', false);
@@ -207,7 +215,7 @@ void main() {
     expect(reads, 0);
     expect(events, isEmpty);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('opt-out immediately cancels timer; re-opt-in schedules foreground only', (tester) async {
     await foreground(tester);
@@ -223,7 +231,7 @@ void main() {
     consent.value = true;
     expect(sampler.hasForegroundTimer, false);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('failed battery read emits nothing and does not advance persisted sample', (tester) async {
     read = () async => throw PlatformException(code: 'battery_unavailable');
@@ -237,7 +245,7 @@ void main() {
     await settleStorage(tester);
     expect(events.single.properties.containsKey('seconds_since_previous_sample'), false);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('unknown or invalid level/charging never emits fake values', (tester) async {
     await tester.runAsync(sampler.start);
@@ -257,7 +265,7 @@ void main() {
     expect(events, isEmpty);
     expect(prefs.getKeys().difference({PhoneBatterySampleTelemetry.buildFirstRunKey}), isEmpty);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('charging and battery extremes are real values; unsupported saver is omitted', (tester) async {
     snapshot = {'battery_level': 0, 'battery_charging': true};
@@ -272,7 +280,7 @@ void main() {
     expect(events.last.properties['battery_level'], 100);
     expect(events.last.properties['os_battery_saver'], false);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('overlapping triggers and opt-out during a read cannot emit', (tester) async {
     final pending = Completer<Map<String, Object?>?>();
@@ -288,7 +296,7 @@ void main() {
     expect(events, isEmpty);
     expect(prefs.getKeys().difference({PhoneBatterySampleTelemetry.buildFirstRunKey}), isEmpty);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('clock rollback skips reads and does not emit negative elapsed', (tester) async {
     await foreground(tester);
@@ -298,7 +306,7 @@ void main() {
     expect(events, hasLength(1));
     expect(reads, 1);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('manager opt-out synchronously notifies sampler without lifecycle transition', (tester) async {
     AnalyticsManager.resetForTesting();
@@ -321,7 +329,7 @@ void main() {
     expect(events, hasLength(1));
     sampler.dispose();
     AnalyticsManager.resetForTesting();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
   testWidgets('foreground during preference loading still samples after startup', (tester) async {
     sampler.dispose();
     final pending = Completer<SharedPreferences>();
@@ -344,7 +352,7 @@ void main() {
     expect(events.single.name, 'Phone Battery Sample');
     expect(sampler.hasForegroundTimer, true);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   PhoneBatterySampleTelemetry restartedSampler() => PhoneBatterySampleTelemetry(
         preferences: () async => prefs,
@@ -384,7 +392,7 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'same_build');
     expect(events.last.properties['foreground_seconds_in_interval'], 900.0);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('build first-run age is durable and monotone per build; rollback cannot decrease it', (tester) async {
     await foreground(tester);
@@ -410,7 +418,7 @@ void main() {
     await foreground(tester);
     expect(events.last.properties['seconds_since_build_first_run'], 0.0);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('identity switch clears baseline immediately and fences in-flight read', (tester) async {
     await foreground(tester);
@@ -431,7 +439,7 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'identity_changed');
     expect(events.last.properties['previous_battery_level'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('restart under another identity never reuses local snapshot', (tester) async {
     await foreground(tester);
@@ -442,7 +450,7 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'identity_changed');
     expect(events.last.properties['previous_battery_sample_at_ms'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('consent change clears baseline; re-opt-in never joins across opt-out', (tester) async {
     await foreground(tester);
@@ -457,7 +465,7 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'no_baseline');
     expect(events.last.properties['battery_interval_seconds'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('foreground accumulation uses lifecycle spans; callback true applies to next interval only',
       (tester) async {
@@ -479,7 +487,7 @@ void main() {
     expect(events.last.properties['charging_observed_in_interval'], isNull);
     expect(events.last.properties['thermal_state'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('clock rollback inside a lifecycle span marks the next interval invalid', (tester) async {
     await foreground(tester);
@@ -492,7 +500,7 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'clock_invalid');
     expect(events.last.properties['foreground_seconds_in_interval'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('rollback while backgrounded at +4min then +2min emits clock_invalid at +15min', (tester) async {
     elapsedMs = 0;
@@ -521,7 +529,7 @@ void main() {
     await settleStorage(tester);
     expect(events.last.properties['battery_interval_validity'], 'same_build');
     sampler.dispose();
-  });
+  }, variant: const TargetPlatformVariant({TargetPlatform.iOS, TargetPlatform.android}));
 
   testWidgets('forward wall-clock jump across a background transition emits clock_invalid', (tester) async {
     elapsedMs = 0;
@@ -537,7 +545,29 @@ void main() {
     expect(events.last.properties['battery_interval_validity'], 'clock_invalid');
     expect(events.last.properties['foreground_seconds_in_interval'], isNull);
     sampler.dispose();
-  });
+  }, variant: const TargetPlatformVariant({TargetPlatform.iOS, TargetPlatform.android}));
+
+  testWidgets('Android deep sleep after background at +4min remains same_build on resume at +15min', (tester) async {
+    elapsedMs = 0;
+    androidElapsedMs = 0;
+    await foreground(tester);
+    now = now.add(const Duration(minutes: 4));
+    elapsedMs = 240000;
+    androidElapsedMs = 240000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await settleStorage(tester);
+    expect(events, hasLength(1)); // background snapshot is throttled
+    now = now.add(const Duration(minutes: 11));
+    elapsedMs = 300000; // CLOCK_MONOTONIC advanced only one minute: ten asleep
+    androidElapsedMs = 900000; // elapsedRealtime includes the full sleep
+    sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await settleStorage(tester);
+    expect(events, hasLength(2));
+    expect(events.last.properties['battery_interval_validity'], 'same_build');
+    expect(events.last.properties['battery_interval_seconds'], 900.0);
+    expect(events.last.properties['foreground_seconds_in_interval'], 240.0);
+    sampler.dispose();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('normal foreground background cycle remains same_build with monotonic spans', (tester) async {
     elapsedMs = 0;
@@ -554,7 +584,7 @@ void main() {
     expect(events.last.properties['battery_interval_seconds'], 900.0);
     expect(events.last.properties['foreground_seconds_in_interval'], 240.0);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('thermal snapshot passes known platform states; unavailable state stays null', (tester) async {
     snapshot = {'battery_level': 72, 'battery_charging': false, 'thermal_state': 'serious'};
@@ -571,7 +601,7 @@ void main() {
     await settleStorage(tester);
     expect(events.last.properties['thermal_state'], isNull);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('unknown build and identity never fabricate a valid baseline', (tester) async {
     build = 'unknown';
@@ -586,7 +616,7 @@ void main() {
     expect(events.last.properties['previous_battery_level'], isNull);
     expect(prefs.containsKey(PhoneBatterySampleTelemetry.snapshotKey), false);
     sampler.dispose();
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   test('default native channel and AnalyticsManager preserve build context', () async {
     AnalyticsManager.resetForTesting();
@@ -605,7 +635,7 @@ void main() {
     const channel = MethodChannel('com.omi/phone_battery');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'read');
-      return snapshot;
+      return {...?snapshot, 'elapsed_realtime_ms': 0};
     });
     sampler.dispose();
     sampler = PhoneBatterySampleTelemetry(preferences: () async => prefs, supported: true);
