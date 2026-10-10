@@ -1,0 +1,3 @@
+{
+  "change": "Omi can read the buttons, fields and text of another app's window when you allow it. It asks first with a card naming the app, Allow for This Chat covers only that app for an hour, it never brings the window forward or moves your cursor, and it never reads Terminal, password managers, system sign-in prompts, sensitive System Settings panes or apps you excluded from capture"
+}

@@ -1,0 +1,66 @@
+version: 2
+name: ui-snapshot-approval
+tier: manual
+description: Reading another app's window — ui_snapshot parks behind a per-app card, Allow for This Chat covers only that app, refused apps never reach a card, sensitive System Settings panes are refused on every read, and the read never brings the app forward or moves the cursor
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+UISnapshot.swift
+  - desktop/macos/Desktop/Sources/Automation/AXWindowIdentity.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/AccessibilityElementSource.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/LiveAccessibilityElementSource.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/SettingsPaneGuard.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/SettingsPaneCatalog.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/UIAutomationTargetPolicy.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshot.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker.swift
+  - desktop/macos/Desktop/Sources/Automation/WindowSnapshot/WindowSnapshotWalker+Tree.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: No card before any request
+    bridge.action:
+      name: tool_approval_snapshot
+      params:
+        session_id: ""
+    expect:
+      ok: true
+      result.detail.count: "0"
+      result.detail.pending: "0"
+
+  - id: S2
+    name: A TextEdit read parks behind a card naming the app
+    do: "Grant the named bundle Accessibility. Open a new TextEdit document containing 'hello snapshot test', then bring another app to the front. In main chat ask: 'What buttons and text are in my TextEdit window?' A card titled 'Read an app window' asks 'Let Omi read the window of TextEdit?' with an App row 'TextEdit · com.apple.TextEdit' and Allow Once, Allow for This Chat (1 h) and Deny."
+
+  - id: S3
+    name: Allow Once reads without bringing TextEdit forward
+    do: "Press Allow Once. The reply lists TextEdit's toolbar buttons and the text area with 'hello snapshot test'. TextEdit did not come to the front, the cursor did not move, and the app log has a 'ui_snapshot: bundle=com.apple.textedit nodes=' line with no labels or values in it."
+
+  - id: S4
+    name: Allow for This Chat covers that app only
+    do: "Ask again; a new card appears. Press Allow for This Chat. Ask a third time; it runs with no card. Ask about Notes in the same chat; a new card names Notes."
+
+  - id: S5
+    name: Refused apps never reach a card
+    do: "Ask to read Terminal. No card appears, the model says Omi cannot read that app, and the kernel store has no dispatch row for it."
+
+  - id: S6
+    name: System Settings is checked pane by pane, by an allow-list
+    do: "Open System Settings > Sound and ask to read System Settings; after Allow for This Chat it reads. In the same chat ask again after each switch, with no new card each time: Privacy & Security (refused_settings_pane), Privacy & Security > Accessibility (refused_settings_pane), General > About (reads), General > Login Items & Extensions (refused_settings_pane), a sidebar search for 'disk' with a result selected (refused_settings_pane_unknown), back to Sound (reads), and Full Disk Access opened by the x-apple.systempreferences deep link from Sound (refused_settings_pane)."
+
+  - id: S6b
+    name: System Settings in another language
+    do: "Add German as the first preferred language (System Settings > General > Language & Region), reopen System Settings, and repeat S6 with Allgemein > Anmeldeobjekte & Erweiterungen (refused_settings_pane) and Ton (reads). Restore the language afterwards."
+
+  - id: S7
+    name: Deny never reads
+    do: "Ask to read Notes and press Deny. The card reads 'Denied, not run', the model says it was denied, and the ledger row is failed with error_code approval_denied and no dispatched_at_ms."
+
+  - id: S8
+    name: Logs clean
+    log.expect:
+      forbid:
+        - "Fatal error"
