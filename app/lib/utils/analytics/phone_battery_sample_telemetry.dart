@@ -35,6 +35,7 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     ({String source, String mode}) Function()? captureContext,
     void Function(String, Map<String, dynamic>)? emit,
     DateTime Function()? now,
+    int Function()? monotonicMs,
     bool? supported,
   })  : _readBattery = readBattery ?? (() => _channel.invokeMapMethod<String, Object?>('read')),
         _readBuild = readBuild ?? (() async => (await PackageInfo.fromPlatform()).buildNumber),
@@ -45,8 +46,15 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
         _captureContext = captureContext ?? (() => (source: 'unknown', mode: 'unknown')),
         _emit = emit ?? ((name, properties) => PlatformManager.instance.analytics.track(name, properties: properties)),
         _now = now ?? DateTime.now,
+        _monotonicMs = monotonicMs ?? _elapsedClock(),
         _supported = supported ?? (Platform.isAndroid || Platform.isIOS);
 
+  static int Function() _elapsedClock() {
+    final clock = Stopwatch()..start();
+    return () => clock.elapsedMilliseconds;
+  }
+
+  static const clockSkewTolerance = Duration(seconds: 90);
   static const eventName = 'Phone Battery Sample';
   static const _channel = MethodChannel('com.omi/phone_battery');
   static const lastSampleKey = 'phone_battery_last_sample_ms';
@@ -63,6 +71,7 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
   final ({String source, String mode}) Function() _captureContext;
   final void Function(String, Map<String, dynamic>) _emit;
   final DateTime Function() _now;
+  final int Function() _monotonicMs;
   final bool _supported;
   SharedPreferences? _prefs;
   Map<String, dynamic>? _previous;
@@ -79,7 +88,10 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
   int? _foregroundSinceMs;
   int _foregroundMs = 0;
   bool _foregroundCoverage = false;
-  bool _foregroundClockInvalid = false;
+  bool _intervalClockInvalid = false;
+  int _clockInvalidGeneration = 0;
+  int? _clockWallMs;
+  int? _clockElapsedMs;
   int? _chargingObservedAtMs;
   AppLifecycleState _state = AppLifecycleState.detached;
 
@@ -167,8 +179,10 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     _identityChanged = identityChanged;
     _foregroundCoverage = false;
     _foregroundMs = 0;
-    _foregroundClockInvalid = false;
-    _foregroundSinceMs = _state == AppLifecycleState.resumed ? _now().millisecondsSinceEpoch : null;
+    _intervalClockInvalid = false;
+    _clockWallMs = _now().millisecondsSinceEpoch;
+    _clockElapsedMs = _monotonicMs();
+    _foregroundSinceMs = _state == AppLifecycleState.resumed ? _clockElapsedMs : null;
     _chargingObservedAtMs = null;
     unawaited(_clearBaseline().catchError((Object _) {
       debugPrint('Phone battery telemetry: baseline cleanup unavailable');
@@ -198,22 +212,33 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
     });
   }
 
-  void _accumulateForeground(int atMs) {
-    final since = _foregroundSinceMs;
-    if (since == null) return;
-    if (atMs < since) {
-      _foregroundClockInvalid = true;
-    } else {
-      _foregroundMs += atMs - since;
+  // Observe every transition, including background spans. Wall time is only
+  // trustworthy when it agrees with the continuously running elapsed clock.
+  void _observeClocks(int wallMs, int elapsedMs) {
+    final priorWall = _clockWallMs;
+    final priorElapsed = _clockElapsedMs;
+    if (priorWall != null && priorElapsed != null) {
+      final wallDelta = wallMs - priorWall;
+      final elapsedDelta = elapsedMs - priorElapsed;
+      if (wallDelta < 0 || elapsedDelta < 0 || (wallDelta - elapsedDelta).abs() > clockSkewTolerance.inMilliseconds) {
+        _intervalClockInvalid = true;
+        _clockInvalidGeneration++;
+      }
+      if (_foregroundSinceMs != null && elapsedDelta >= 0) {
+        _foregroundMs += elapsedDelta;
+      }
     }
-    _foregroundSinceMs = atMs;
+    _clockWallMs = wallMs;
+    _clockElapsedMs = elapsedMs;
+    if (_foregroundSinceMs != null) _foregroundSinceMs = elapsedMs;
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final atMs = _now().millisecondsSinceEpoch;
-    _accumulateForeground(atMs);
-    _foregroundSinceMs = state == AppLifecycleState.resumed ? atMs : null;
+    final elapsedMs = _monotonicMs();
+    _observeClocks(atMs, elapsedMs);
+    _foregroundSinceMs = state == AppLifecycleState.resumed ? elapsedMs : null;
     _state = state;
     _updateTimer();
     if (_prefs == null) return;
@@ -290,8 +315,9 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
       final previous = _previous;
       final previousMs = previous?['at_ms'] as int?;
       final elapsedMs = previousMs == null ? null : atMs - previousMs;
-      _accumulateForeground(atMs);
-      final clockInvalid = elapsedMs != null && (elapsedMs <= 0 || _foregroundClockInvalid);
+      _observeClocks(atMs, _monotonicMs());
+      final clockGenerationAtSample = _clockInvalidGeneration;
+      final clockInvalid = elapsedMs != null && (elapsedMs <= 0 || _intervalClockInvalid);
       final validity = _identityChanged
           ? 'identity_changed'
           : previous == null
@@ -348,7 +374,7 @@ class PhoneBatterySampleTelemetry with WidgetsBindingObserver {
       _identityChanged = false;
       // Retain lifecycle/callback observations arriving while persistence awaits.
       _foregroundMs -= foregroundMsAtSample;
-      _foregroundClockInvalid = false;
+      _intervalClockInvalid = _clockInvalidGeneration != clockGenerationAtSample;
       _foregroundCoverage = true;
       if (_chargingObservedAtMs != null && _chargingObservedAtMs! <= atMs) _chargingObservedAtMs = null;
     } catch (_) {

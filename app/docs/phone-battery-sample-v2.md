@@ -51,11 +51,17 @@ on the first cross-build interval. A restarted process cannot reconstruct its
 foreground coverage and emits null for that interval. The existing five-minute
 throttle and fifteen-minute foreground timer remain the only sampling schedule.
 A backwards clock jump preserves the original throttle until time catches up;
-a rollback observed within a lifecycle span marks the next interval invalid.
+a process-local Stopwatch runs across foreground and background spans. Every
+lifecycle transition and completed sample compares wall-clock and monotonic
+deltas; disagreement beyond 90 seconds or a backwards delta marks intervals
+spanning that transition `clock_invalid`. Foreground spans use monotonic time.
+The monotonic reference is not persisted across process restarts.
 
 The admin route detects v2 presence per OS and observation build, including
 invalid baseline rows. It uses only same-build v2 intervals of 900–7200 seconds,
 with both charging endpoints explicitly false and no observed charging callback.
+The estimand is equal-weight per-interval quantiles; the pooled estimator
+(sum of drops / sum of hours) is tracked in the watchdog analysis, not the route.
 Zero drops are included; negative drops are excluded. Builds without v2 retain
 the v1 person-join fallback and its existing charging/drop semantics. Responses
 include `n_pairs` (selected intervals), `n_v1_pairs`, and `n_v2_intervals`
@@ -80,8 +86,14 @@ The raw callsite audit found these collisions; their emitters are unchanged:
 - `App Session Started`: event-owned `app_session_id` equals the session context
   just set by its emitter; preserving it changes no value.
 
-Device diagnostics export `schema_version: 2` is a local export payload, not an
-analytics event. No existing analytics event supplies another schema version.
+| Event | Schema on the wire after delivery fix |
+| --- | --- |
+| `Diagnostics Sent` | `2`, from the diagnostics bundle |
+| `Diagnostics Send Failed` | `2` when a bundle was built; `1` fallback for a pre-bundle failure (invalid emitter version `0`) |
+
+`device_diagnostics.dart` passes the bundle schema to both analytics events.
+Preserving schema `2` on delivery and retry is an intended consequence of this fix;
+it is not confined to the local export payload.
 Global properties now fill absent keys only. Explicitly null event-owned globals
 remain absent on the manager's wire payload. Positive integer event schema
 versions survive delivery and retries; invalid versions use the default `1`.

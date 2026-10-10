@@ -17,6 +17,7 @@ void main() {
   late SharedPreferences prefs;
   late ValueNotifier<bool> consent;
   late DateTime now;
+  int? elapsedMs;
   late List<({String name, Map<String, dynamic> properties})> events;
   late PhoneBatterySampleTelemetry sampler;
   var reads = 0;
@@ -31,6 +32,7 @@ void main() {
     prefs = await SharedPreferences.getInstance();
     consent = ValueNotifier(true);
     now = DateTime.utc(2026, 10, 8);
+    elapsedMs = null;
     events = [];
     reads = 0;
     snapshot = {'battery_level': 72, 'battery_charging': false, 'os_battery_saver': true};
@@ -48,6 +50,7 @@ void main() {
       trackingConsent: consent,
       emit: (name, properties) => events.add((name: name, properties: properties)),
       now: () => now,
+      monotonicMs: () => elapsedMs ?? now.millisecondsSinceEpoch,
       supported: true,
       readBattery: () {
         reads++;
@@ -133,6 +136,7 @@ void main() {
       trackingConsent: consent,
       emit: (name, properties) => events.add((name: name, properties: properties)),
       now: () => now,
+      monotonicMs: () => elapsedMs ?? now.millisecondsSinceEpoch,
       supported: true,
       readBattery: () async => snapshot,
     );
@@ -350,6 +354,7 @@ void main() {
         identity: () => identity,
         identityChanges: identityChanges,
         now: () => now,
+        monotonicMs: () => elapsedMs ?? now.millisecondsSinceEpoch,
         emit: (name, properties) => events.add((name: name, properties: properties)),
         supported: true,
       );
@@ -486,6 +491,68 @@ void main() {
     await settleStorage(tester);
     expect(events.last.properties['battery_interval_validity'], 'clock_invalid');
     expect(events.last.properties['foreground_seconds_in_interval'], isNull);
+    sampler.dispose();
+  });
+
+  testWidgets('rollback while backgrounded at +4min then +2min emits clock_invalid at +15min', (tester) async {
+    elapsedMs = 0;
+    await foreground(tester);
+    final baseline = now;
+    now = baseline.add(const Duration(minutes: 4));
+    elapsedMs = 240000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await settleStorage(tester);
+    now = baseline.add(const Duration(minutes: 2));
+    elapsedMs = 300000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await settleStorage(tester);
+    expect(events, hasLength(1)); // both transitions were throttled
+    now = baseline.add(const Duration(minutes: 15));
+    elapsedMs = 1080000;
+    await tester.pump(const Duration(minutes: 15));
+    await settleStorage(tester);
+    expect(events.last.properties['battery_interval_seconds'], 900.0);
+    expect(events.last.properties['battery_interval_validity'], 'clock_invalid');
+    expect(events.last.properties['foreground_seconds_in_interval'], isNull);
+    // A fresh, uncorrupted interval recovers.
+    now = now.add(const Duration(minutes: 15));
+    elapsedMs = 1980000;
+    await tester.pump(const Duration(minutes: 15));
+    await settleStorage(tester);
+    expect(events.last.properties['battery_interval_validity'], 'same_build');
+    sampler.dispose();
+  });
+
+  testWidgets('forward wall-clock jump across a background transition emits clock_invalid', (tester) async {
+    elapsedMs = 0;
+    await foreground(tester);
+    now = now.add(const Duration(minutes: 4));
+    elapsedMs = 240000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await settleStorage(tester);
+    now = now.add(const Duration(hours: 1));
+    elapsedMs = 300000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await settleStorage(tester);
+    expect(events.last.properties['battery_interval_validity'], 'clock_invalid');
+    expect(events.last.properties['foreground_seconds_in_interval'], isNull);
+    sampler.dispose();
+  });
+
+  testWidgets('normal foreground background cycle remains same_build with monotonic spans', (tester) async {
+    elapsedMs = 0;
+    await foreground(tester);
+    now = now.add(const Duration(minutes: 4));
+    elapsedMs = 240000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await settleStorage(tester);
+    now = now.add(const Duration(minutes: 11));
+    elapsedMs = 900000;
+    sampler.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await settleStorage(tester);
+    expect(events.last.properties['battery_interval_validity'], 'same_build');
+    expect(events.last.properties['battery_interval_seconds'], 900.0);
+    expect(events.last.properties['foreground_seconds_in_interval'], 240.0);
     sampler.dispose();
   });
 

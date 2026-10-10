@@ -72,6 +72,8 @@ export function pendantHealthQuery(days: number): string {
 // v2 presence is per OS/build, including invalid v2 baselines: once a build
 // emits v2, stale v1 pairs cannot contaminate its quantiles. Both candidate
 // counts remain visible during migration. Delivery timestamps only serve v1.
+// Equal-weight per-interval quantiles; the pooled sum(drops)/sum(hours)
+// estimator is tracked in the watchdog analysis, not this route.
 export function phoneHealthQuery(days: number): string {
   return `
     WITH samples AS (

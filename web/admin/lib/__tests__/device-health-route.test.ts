@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,6 +35,56 @@ function request(query = "") {
 
 function queries(): string[] {
   return posthogResults.mock.calls.map((call) => call[3] as string);
+}
+
+// Execute production selection SQL over event fixtures inside the existing
+// PostHog mock. The adapter changes dialect only; it does not duplicate guards.
+function phoneFixtureRows(
+  rows: Array<{
+    person_id: string;
+    timestamp: number;
+    properties: Record<string, unknown>;
+  }>
+) {
+  posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
+    if (query.includes("Mobile Device Health Daily")) return [];
+    if (query.includes("SELECT count() AS n")) return [[rows.length]];
+    return JSON.parse(
+      execFileSync(
+        "python3",
+        [path.resolve("lib/__tests__/support/phone-health-sql-fixture.py")],
+        {
+          input: JSON.stringify({ query, rows }),
+          encoding: "utf8",
+        }
+      )
+    );
+  });
+}
+
+function sampleFixture(
+  schema: number,
+  timestamp: number,
+  properties: Record<string, unknown> = {}
+) {
+  return {
+    person_id: "fixture-user",
+    timestamp,
+    properties: {
+      platform: "iOS",
+      app_build: "1348",
+      app_version: "1.0.559",
+      schema_version: schema,
+      battery_observation_build: "1348",
+      battery_level: 70,
+      battery_charging: false,
+      previous_battery_level: 72,
+      previous_battery_charging: false,
+      battery_interval_seconds: 1800,
+      battery_interval_validity: "same_build",
+      ...properties,
+    },
+  };
 }
 
 afterEach(() => {
@@ -260,6 +312,51 @@ describe("device health stats route", () => {
     // Presence is derived from all samples, not only accepted intervals.
     expect(phone).toContain("FROM samples\n      GROUP BY os, build");
     expect(phone).toContain("WHERE schema_version = 1");
+  });
+
+  it("mixed v1/v2 fixture rows select v2 without double-counting the same build", async () => {
+    configure();
+    phoneFixtureRows([
+      sampleFixture(1, 95000, { battery_level: 90 }),
+      sampleFixture(1, 96800, { battery_level: 80 }),
+      sampleFixture(2, 98600),
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series).toHaveLength(1);
+    expect(body.phone_health.series[0]).toMatchObject({
+      n_pairs: 1,
+      n_v1_pairs: 1,
+      n_v2_intervals: 1,
+      p50_drain_per_hour: 4,
+    });
+  });
+
+  it("zero-drop v2 fixture intervals contribute to the aggregate", async () => {
+    configure();
+    phoneFixtureRows([sampleFixture(2, 98600, { previous_battery_level: 70 })]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series[0]).toMatchObject({
+      n_pairs: 1,
+      n_v2_intervals: 1,
+      p50_drain_per_hour: 0,
+      p90_drain_per_hour: 0,
+    });
+  });
+
+  it.each([
+    ["null current charging endpoint", { battery_charging: null }],
+    ["null previous charging endpoint", { previous_battery_charging: null }],
+    ["observed charging", { charging_observed_in_interval: true }],
+    ["clock-invalid interval", { battery_interval_validity: "clock_invalid" }],
+  ])("excludes v2 fixture with %s", async (_name, properties) => {
+    configure();
+    phoneFixtureRows([sampleFixture(2, 98600, properties)]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health).toEqual({
+      status: "measured_no_valid_pairs",
+      series: [],
+      n_events: 1,
+    });
   });
 
   it("labels a phone build without a version as OS (build)", async () => {
