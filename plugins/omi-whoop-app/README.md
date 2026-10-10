@@ -72,6 +72,13 @@ When creating/updating the Omi app, use these URLs:
 
 ### Chat Tools (POST)
 
+All seven routes require the trusted backend to send `Authorization: Bearer <secret>`
+or a `whoop_tools_token` query parameter matching `WHOOP_TOOLS_SECRET`. A nonempty
+Bearer token takes precedence over the query parameter. Requests return 503 when
+the secret is unset or blank, and 401 when the supplied token is missing or wrong.
+Configure the same secret on the plugin and its trusted caller before rollout;
+the body `uid` remains the user selected by that authenticated caller.
+
 | Endpoint | Description |
 |----------|-------------|
 | `/tools/get_recovery` | Get recovery score and HRV |
@@ -106,6 +113,7 @@ When creating/updating the Omi app, use these URLs:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
+| `WHOOP_TOOLS_SECRET` | Shared secret for authenticating chat-tool callers | Yes |
 | `WHOOP_CLIENT_ID` | Whoop OAuth Client ID | Yes |
 | `WHOOP_CLIENT_SECRET` | Whoop OAuth Client Secret | Yes |
 | `WHOOP_REDIRECT_URI` | OAuth callback URL | Yes |
