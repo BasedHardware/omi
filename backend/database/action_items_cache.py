@@ -65,6 +65,41 @@ _VERSION_KEY_PREFIX = 'ail:ver'
 _ENTRY_KEY_PREFIX = 'ail'
 
 
+def _clean_uid(uid: Any) -> Optional[str]:
+    """Validate and sanitize user ID.
+
+    Must be a non-empty string, <= 128 characters, with no control characters,
+    null bytes, or traversal sequences.
+    """
+    if not isinstance(uid, str):
+        return None
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > 128:
+        return None
+    if any(ord(c) < 32 or ord(c) == 127 for c in cleaned):
+        return None
+    if '..' in cleaned or chr(0) in cleaned:
+        return None
+    return cleaned
+
+
+def _clean_key(key: Any) -> Optional[str]:
+    """Validate Redis key.
+
+    Must be a non-empty string, <= 256 characters, without control characters or null bytes.
+    """
+    if not isinstance(key, str):
+        return None
+    cleaned = key.strip()
+    if not cleaned or len(cleaned) > 256:
+        return None
+    if any(ord(c) < 32 or ord(c) == 127 for c in cleaned):
+        return None
+    if chr(0) in cleaned:
+        return None
+    return cleaned
+
+
 def list_cache_ttl_seconds() -> int:
     """Read the TTL at call time so the env var is a live operational knob."""
     raw = os.getenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', str(_TTL_DEFAULT_SECONDS)).strip()
@@ -78,8 +113,11 @@ def list_cache_ttl_seconds() -> int:
     return min(ttl, _TTL_MAX_SECONDS)
 
 
-def _version_key(uid: str) -> str:
-    return f'{_VERSION_KEY_PREFIX}:{uid}'
+def _version_key(uid: str) -> Optional[str]:
+    cleaned = _clean_uid(uid)
+    if not cleaned:
+        return None
+    return f'{_VERSION_KEY_PREFIX}:{cleaned}'
 
 
 def bump_action_items_list_version(uid: str) -> None:
@@ -89,15 +127,18 @@ def bump_action_items_list_version(uid: str) -> None:
     mutation has committed. Fail-open: a Redis outage means the cache simply
     keeps serving until its short TTL expires.
     """
-    if not uid:
+    vkey = _version_key(uid)
+    if not vkey:
+        return
+    r = getattr(redis_db, 'r', None)
+    if r is None:
         return
     try:
-        key = _version_key(uid)
-        pipe = redis_db.r.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _VERSION_TTL_SECONDS)
+        pipe = r.pipeline()
+        pipe.incr(vkey)
+        pipe.expire(vkey, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
 
 
@@ -107,38 +148,59 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     ``None`` means "do not use the cache for this request" — it is not the same
     as version 0, which is a legitimate never-written-yet user.
     """
+    vkey = _version_key(uid)
+    if not vkey:
+        return None
+    r = getattr(redis_db, 'r', None)
+    if r is None:
+        return None
     try:
-        raw = redis_db.r.get(_version_key(uid))
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        raw = r.get(vkey)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
     if raw is None:
         return 0
     try:
-        return int(raw)
+        val = int(raw)
+        return max(0, val)
     except (TypeError, ValueError):
         return 0
 
 
 def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     """Address one list page. Params are hashed so the key length is bounded."""
+    cleaned_uid = _clean_uid(uid)
+    if not cleaned_uid:
+        return ''
+    safe_version = max(0, version) if isinstance(version, int) else 0
+    safe_params = params if isinstance(params, dict) else {}
     fingerprint = hashlib.sha256(
-        json.dumps(params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+        json.dumps(safe_params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
     ).hexdigest()[:16]
-    return f'{_ENTRY_KEY_PREFIX}:{uid}:{version}:{fingerprint}'
+    return f'{_ENTRY_KEY_PREFIX}:{cleaned_uid}:{safe_version}:{fingerprint}'
 
 
 def compute_etag(body: Dict[str, Any]) -> str:
     """Weak ETag over the exact bytes the route would return."""
-    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
+    safe_body = body if isinstance(body, dict) else {}
+    digest = hashlib.sha256(
+        json.dumps(safe_body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+    )
     return f'W/"{digest.hexdigest()[:32]}"'
 
 
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
+    clean_k = _clean_key(key)
+    if not clean_k:
+        return None
+    r = getattr(redis_db, 'r', None)
+    if r is None:
+        return None
     try:
-        raw = redis_db.r.get(key)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        raw = r.get(clean_k)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -147,33 +209,55 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
         payload = json.loads(raw)
     except (TypeError, ValueError):
         return None
-    if not isinstance(payload, dict) or 'body' not in payload or 'etag' not in payload:
+    if not isinstance(payload, dict):
+        return None
+    etag = payload.get('etag')
+    body = payload.get('body')
+    if not isinstance(etag, str) or not isinstance(body, dict):
         return None
     return payload
 
 
 def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
-    if ttl <= 0:
+    if not isinstance(ttl, int) or ttl <= 0:
+        return
+    effective_ttl = min(ttl, _TTL_MAX_SECONDS)
+    clean_k = _clean_key(key)
+    if not clean_k:
+        return
+    if not isinstance(body, dict) or not isinstance(etag, str):
+        return
+    r = getattr(redis_db, 'r', None)
+    if r is None:
         return
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        r.set(clean_k, json.dumps({'etag': etag, 'body': body}, default=str), ex=effective_ttl)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
         logger.warning('action-items list cache: body not serializable: %s', e)
 
 
-def if_none_match_matches(header_value: Optional[str], etag: str) -> bool:
+def _normalize_etag(tag: str) -> str:
+    """Normalize ETag for RFC 9110 weak comparison."""
+    t = tag.strip()
+    if t.startswith(('W/', 'w/')):
+        t = t[2:].strip()
+    return t.strip('"\'')
+
+
+def if_none_match_matches(header_value: Optional[str], etag: Optional[str]) -> bool:
     """RFC 9110 If-None-Match comparison (weak comparison, ``*`` matches)."""
-    if not header_value:
+    if not header_value or not etag:
         return False
-    candidates = [c.strip() for c in header_value.split(',')]
+    candidates = [c.strip() for c in header_value.split(',') if c.strip()]
     if '*' in candidates:
         return True
-    normalized = etag[2:] if etag.startswith('W/') else etag
+    norm_etag = _normalize_etag(etag)
+    if not norm_etag:
+        return False
     for candidate in candidates:
-        stripped = candidate[2:] if candidate.startswith('W/') else candidate
-        if stripped == normalized:
+        if candidate == '*' or _normalize_etag(candidate) == norm_etag:
             return True
     return False
