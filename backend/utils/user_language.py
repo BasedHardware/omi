@@ -66,6 +66,7 @@ PRIMARY_LANGUAGE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ('fr-CA', 'French (Canada)'),
     ('de-CH', 'German (Switzerland)'),
     ('el', 'Greek'),
+    ('gu', 'Gujarati'),
     ('he', 'Hebrew'),
     ('hu', 'Hungarian'),
     ('id', 'Indonesian'),
