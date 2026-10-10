@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/ui.dart';
 import 'widgets/synced_conversation_list_item.dart';
 
 class SyncedConversationsPage extends StatelessWidget {
@@ -13,17 +13,15 @@ class SyncedConversationsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(context.l10n.processedConversations),
-        backgroundColor: OmiColors.surface0,
-      ),
-      backgroundColor: OmiColors.surface0,
+    return OmiGroupedPage(
+      title: context.l10n.processedConversations,
       body: Consumer<SyncProvider>(
         builder: (context, syncProvider, child) {
           return SingleChildScrollView(
+            padding: OmiGroupedPage.padding,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ConversationsListWidget(
                   conversations: syncProvider.syncedConversationsPointers
@@ -66,10 +64,9 @@ class ConversationsListWidget extends StatelessWidget {
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 18),
-        Text(title, style: TextStyle(color: OmiColors.textPrimary, fontSize: 20)),
-        const SizedBox(height: 10),
+        OmiSectionHeader(title),
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -83,10 +80,11 @@ class ConversationsListWidget extends StatelessWidget {
             );
           },
           separatorBuilder: (ctx, i) {
-            return const SizedBox(height: 10);
+            return const SizedBox(height: OmiSpacing.xs);
           },
           itemCount: conversations.length,
         ),
+        const SizedBox(height: OmiSpacing.xl),
       ],
     );
   }

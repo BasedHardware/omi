@@ -35,9 +35,11 @@ Future<T?> showOmiSheet<T>({
   bool useRootNavigator = false,
   EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
   RouteSettings? routeSettings,
+  Color Function()? surface,
 }) {
   return showOmiSurfaceSheet<T>(
     context: context,
+    surface: surface ?? _surface1,
     isScrollControlled: isScrollControlled,
     useSafeArea: useSafeArea,
     isDismissible: isDismissible,
