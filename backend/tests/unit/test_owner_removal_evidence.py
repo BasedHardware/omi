@@ -139,6 +139,42 @@ def _resolve_project(c, vectors, *, mode, prints, seconds=None, abstained=None, 
 
 
 @pytest.mark.parametrize('mode', MODES)
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+@pytest.mark.parametrize('person_voice', [0, 1])
+def test_reduced_roster_preserves_entire_mixed_voice_without_labeling_unknown_members(
+    env, monkeypatch, mode, level, person_voice
+):
+    _span_flags(monkeypatch)
+    monkeypatch.setenv('SPEAKER_GROUPING_MODE', mode)
+    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'off')
+    _install_audio(monkeypatch, [0, 0, 0], offset=180.0)
+    c = _capture_shifted_conversation([0, 0, 0])
+    # Both transcript orders must preserve the same voice, including an
+    # unlabeled member encountered before the accepted owner.
+    _owner(c.transcript_segments[1], 'live_embedding')
+    monkeypatch.setattr(
+        stage.users_db,
+        'get_people',
+        lambda uid: [
+            dict(
+                id='p1',
+                speaker_embedding=VOICES[person_voice].tolist(),
+                speech_samples=['fake'],
+                speech_samples_version=3,
+            )
+        ],
+    )
+    _, _, read = _commit_store(monkeypatch, c, level)
+    before = [_labels(s) for s in read()['transcript_segments']]
+    removed = _counter('owner_removed')
+    assert stage.refresh_completed_speaker_identity('u1', 'c1')
+    rows = read()['transcript_segments']
+    assert len({s['speaker_id'] for s in rows}) == 1
+    assert [_labels(s) for s in rows] == before
+    assert _counter('owner_removed') == removed
+
+
+@pytest.mark.parametrize('mode', MODES)
 @pytest.mark.parametrize('existing_owner', [False, True])
 def test_no_vote_short_live_owner_survives_without_promoting_unlabeled_fragment(mode, existing_owner):
     c = _capture_shifted_conversation([1, 0], seconds=8)

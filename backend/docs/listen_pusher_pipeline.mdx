@@ -3920,7 +3920,9 @@ can still rewrite speaker IDs and scopes. The shared projection also retains an
 existing owner when a person-only roster accepts someone else or returns no match:
 without a validated owner print, neither an owner comparison nor the enrolled
 runner-up margin was established. An absent, invalid, or failed owner read supplies
-no revocation authority; explicit manual decisions remain authoritative.
+no revocation authority. The reduced-roster decision is suppressed for the whole
+resolved voice: existing labels survive and unlabeled members remain unlabeled.
+Explicit manual decisions remain authoritative.
 This does not change scored rejection with an owner-inclusive roster, owner
 contention, multi-vote acoustic contradiction, or the conservative withdrawal of
 multiple independent sync owner claims on the no-resolution path.
