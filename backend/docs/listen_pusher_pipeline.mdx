@@ -3886,7 +3886,9 @@ Acoustically contradicted provider voices cannot assign an unembedded short
 reply by majority; automatic identity on such a reply is withdrawn. Manual
 receipt authority still wins. A short distinct provider voice without its own
 compatible scoped votes stays unknown, even beside a known owner in the same
-scope; temporal proximity never supplies identity evidence. Manual merge reallocates automatic-only sources through the
+scope; temporal proximity never supplies identity evidence. An existing owner
+accept on that short voice survives absent votes: only incompatible acoustic
+votes establish contradiction. Manual merge reallocates automatic-only sources through the
 existing allocator, retaining absolute capture positions. Sources containing
 manual authority retain their numeric ids; full cross-source receipt migration
 remains outside this patch and is a merge residual.
@@ -3912,6 +3914,18 @@ unrelated conversation database reads do not import its deletion-marker graph.
 New v1 cache writes record the already-supported optional evidence duration even
 when score instrumentation is off. Historical entries keep their grouping and
 PCM semantics; a missing duration cannot support a new positive or negative.
+Unknown identity results preserve existing identity fields regardless of whether
+the accept came from capture or an earlier partial conversation pass. Grouping
+can still rewrite speaker IDs and scopes. The shared projection also retains an
+existing owner when a person-only roster accepts someone else or returns no match:
+without a validated owner print, neither an owner comparison nor the enrolled
+runner-up margin was established. An absent, invalid, or failed owner read supplies
+no revocation authority. The reduced-roster decision is suppressed for the whole
+resolved voice: existing labels survive and unlabeled members remain unlabeled.
+Explicit manual decisions remain authoritative.
+This does not change scored rejection with an owner-inclusive roster, owner
+contention, multi-vote acoustic contradiction, or the conservative withdrawal of
+multiple independent sync owner claims on the no-resolution path.
 
 Missing owner-vector publication is isolated in `database/owner_profile_updates.py`.
 Both new identity persistence helpers pin the customer data plane and read its
