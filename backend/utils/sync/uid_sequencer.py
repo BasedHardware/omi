@@ -185,7 +185,16 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
         return {'disabled': 1}
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
-    owners = registry.due_owners(limit=limit, now=now)
+    try:
+        owners = registry.due_owners(limit=limit, now=now)
+    except Exception as error:
+        # A transient query failure (e.g. Firestore unavailable) must not 500 the
+        # scheduler tick: the next tick re-queries the same due owners.
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=due_owners_error exception_type=%s', type(error).__name__
+        )
+        owners = []
+        outcomes['due_owners_error'] = outcomes.get('due_owners_error', 0) + 1
     for owner in owners:
         try:
             outcome = reconcile_uid(owner['uid'], owner, now=now)
@@ -198,7 +207,14 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
                 type(error).__name__,
             )
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
-    pending = registry.due_pending(limit=limit, now=now)
+    try:
+        pending = registry.due_pending(limit=limit, now=now)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=due_pending_error exception_type=%s', type(error).__name__
+        )
+        pending = []
+        outcomes['due_pending_error'] = outcomes.get('due_pending_error', 0) + 1
     seen_uids: set[str] = set()
     for job in pending:
         try:
