@@ -7,9 +7,10 @@ import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Compact waveform pill that lives inside the chat input row, between the
-/// stop button and the send button. Mirrors the visual treatment of the
-/// regular text field so the input bar feels cohesive in voice mode.
+/// The voice row of the composer, in the field's place: the live waveform while recording, a
+/// shimmer while transcribing, and after a failure the reason in words with the kept recording's
+/// waveform dimmed beside it. The actions (discard, try again) live in the composer's button row
+/// underneath, where the mic and Send sit, so a failed recording asks nothing new of the thumb.
 class VoiceRecorderWidget extends StatefulWidget {
   final Function(String transcript, bool autoSend) onTranscriptReady;
   final VoidCallback onClose;
@@ -77,35 +78,27 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
           case VoiceRecorderState.transcribeFailed:
           case VoiceRecorderState.pendingRecovery:
+            // The reason in plain words, in the ink, never red: the recording is kept and Try
+            // Again sits in the button row below.
+            final recovered = provider.state == VoiceRecorderState.pendingRecovery;
             return SizedBox(
               height: 44,
               child: Row(
                 children: [
                   Text(
-                    provider.state == VoiceRecorderState.pendingRecovery
-                        ? context.l10n.voiceRecordingFound
-                        : context.l10n.error,
-                    style: OmiType.footnote.copyWith(
-                      color: provider.state == VoiceRecorderState.pendingRecovery
-                          ? OmiColors.textPrimary
-                          : OmiColors.danger,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    key: const Key('chat_voice_status'),
+                    recovered ? context.l10n.voiceRecordingFound : context.l10n.voiceFailedToTranscribe,
+                    style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: OmiSpacing.sm),
                   Expanded(
                     child: SizedBox(
-                      height: 32,
+                      height: 28,
                       child: CustomPaint(
-                        painter: AudioWavePainter(levels: provider.audioLevels),
+                        painter: AudioWavePainter(levels: provider.audioLevels, color: AudioWavePainter.restingInk),
                         child: const SizedBox.expand(),
                       ),
                     ),
-                  ),
-                  OmiIconButton(
-                    icon: const Icon(Icons.refresh, size: 20),
-                    label: context.l10n.tryAgain,
-                    onPressed: provider.retry,
                   ),
                 ],
               ),
@@ -122,14 +115,25 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 class AudioWavePainter extends CustomPainter {
   final List<double> levels;
 
-  AudioWavePainter({required List<double> levels}) : levels = List<double>.from(levels);
+  /// The bars' colour; the ink while recording, [restingInk] for a kept recording.
+  final Color color;
+
+  AudioWavePainter({required List<double> levels, Color? color})
+      : levels = List<double>.from(levels),
+        color = color ?? liveInk;
+
+  /// The waveform while it is being drawn.
+  static Color get liveInk => OmiColors.textPrimary.withValues(alpha: 0.85);
+
+  /// The waveform of a recording that is waiting (a failed or recovered one).
+  static Color get restingInk => OmiColors.textPrimary.withValues(alpha: 0.32);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (levels.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     final paint = Paint()
-      ..color = OmiColors.textPrimary.withValues(alpha: 0.85)
+      ..color = color
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 
@@ -157,6 +161,7 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
+    if (color != oldDelegate.color) return true;
     if (levels.length != oldDelegate.levels.length) return true;
     for (int i = 0; i < levels.length; i++) {
       if ((levels[i] - oldDelegate.levels[i]).abs() > 0.005) return true;

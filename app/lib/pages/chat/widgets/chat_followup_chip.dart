@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/pages/chat/widgets/chat_bubbles.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -22,7 +23,7 @@ class ChatFollowUpChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Align(
         alignment: AlignmentDirectional.centerStart,
-        // Match the starter questions above the composer: an outlined action, with no fill.
+        // A filled pill, like the starter questions above the composer, with the reply arrow.
         child: OutlinedButton(
           key: const Key('chat_followup_chip'),
           style: OutlinedButton.styleFrom(
@@ -31,7 +32,8 @@ class ChatFollowUpChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
-            side: BorderSide(color: OmiColors.border),
+            backgroundColor: ChatInk.fill,
+            side: BorderSide.none,
             shape: const StadiumBorder(),
           ),
           onPressed: () {
@@ -42,12 +44,21 @@ class ChatFollowUpChip extends StatelessWidget {
           // Only presentation is shortened; tapping still sends the full question.
           child: MediaQuery.withClampedTextScaling(
             maxScaleFactor: 1.5,
-            child: Text(
-              question.replaceAll(RegExp(r'\s+'), ' ').trim(),
-              style: OmiType.callout,
-              textAlign: TextAlign.start,
-              maxLines: maxLines,
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 16, color: OmiColors.textTertiary)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    question.replaceAll(RegExp(r'\s+'), ' ').trim(),
+                    style: OmiType.callout,
+                    textAlign: TextAlign.start,
+                    maxLines: maxLines,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

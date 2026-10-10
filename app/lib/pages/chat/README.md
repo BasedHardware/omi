@@ -48,9 +48,22 @@ When the keyboard leaves less than 400 points of visible height, it uses one lin
 Generated whitespace is collapsed for display; tapping still sends the complete original
 question. Text scaling remains enabled. The greeting can scroll independently above the composer.
 
-Follow-up suggestions match the starter questions: an unfilled, rounded outline and regular
-callout text, distinct from the user's filled message bubble. They retain a
-44-point minimum touch target and the existing send callback and analytics.
+Chat is drawn in two colours, the ink and the canvas. The user's message is a solid pill at
+the right in the accent (black in light, white in dark) with the Messages tail at its bottom
+corner, and quoted context inside it above the words. Omi's answer is text on the page with no
+box. Everything else is the ink at an opacity, the way iOS draws fills, never an outline: a task
+card, a chart or a failed reply inside an answer is a filled inset; the starters, the follow-up
+and the app pill in the composer are filled pills; the close circle and, when a chat app is
+chosen, the app's capsule in the header (which opens Chat Apps, like the composer pill) are
+filled too. An app's answer carries the app's avatar and name above it. The conversations an
+answer came from are a plain list under it: numbered rows, title over date, hairlines between,
+the number matching the answer's `[n]` marker; no emoji, no chevron. The composer is a filled
+field with no edge, the same colour whether the thread is at its live edge or scrolled, so it
+never blinks while a reply streams in. A recording that failed to transcribe (or one found from
+last time) says why in words in the field, with the kept waveform dimmed beside it; discard
+stays at the left of the button row and Try Again takes Send's place. Follow-up suggestions match the starter
+questions: a filled pill with the reply arrow and regular callout text. They retain a 44-point
+minimum touch target and the existing send callback and analytics.
 Only the latest completed AI reply can supply that suggestion, in the fixed area above the
 composer and keyboard. Historical answers never render their own chips. Sending a new turn
 hides the old suggestion immediately; a newer answer without one leaves the area empty.
