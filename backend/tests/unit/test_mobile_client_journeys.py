@@ -55,7 +55,7 @@ async def test_memory_retrieval_records_success_when_context_is_returned(monkeyp
         'search_memories_tool',
         {'query': 'coffee'},
         {'search_memories_tool': _MemoryTool('Found 1 memories matching coffee:\n- Likes coffee')},
-        {'client_kind': 'mobile_android'},
+        {'client_kind': 'mobile_android', 'user_id': 'test-user'},
     )
 
     assert 'Likes coffee' in result
@@ -75,7 +75,7 @@ async def test_memory_retrieval_records_empty_expected_context_as_degraded(monke
         'get_memories_tool',
         {},
         {'get_memories_tool': _MemoryTool('No memories found. The user has no recorded facts yet.')},
-        {'client_kind': 'mobile_android'},
+        {'client_kind': 'mobile_android', 'user_id': 'test-user'},
     )
 
     assert result.startswith('No memories found')
@@ -97,7 +97,7 @@ async def test_memory_retrieval_records_dependency_failure_when_the_tool_raises(
             'search_memories_tool',
             {'query': 'coffee'},
             {'search_memories_tool': _FailingMemoryTool()},
-            {'client_kind': 'mobile_android'},
+            {'client_kind': 'mobile_android', 'user_id': 'test-user'},
         )
 
     attempt = _AttemptSpy.instances[0]
