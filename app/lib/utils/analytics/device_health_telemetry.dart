@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 
@@ -18,6 +19,34 @@ class DeviceHealthTelemetry {
 
   static final Map<String, Future<void>> _writes = {};
   static final Set<String> _packetSeen = {};
+  static Future<void> _storageWrite = Future.value();
+  static final Map<String, List<_PendingOutageWrite>> _pendingWrites = {};
+  static final Set<String> _retryWrites = {};
+
+  // Check before entering SharedPreferences: its loader can complete an internal
+  // future with a binding error before the caller can attach an error handler.
+  static bool get _hasBinding {
+    try {
+      ServicesBinding.instance;
+      return true;
+    } on FlutterError {
+      return false;
+    } on TypeError {
+      // In release mode the uninitialized singleton fails its null assertion.
+      return false;
+    }
+  }
+
+  static Future<SharedPreferences?> _availablePreferences() async {
+    if (!_hasBinding) return null;
+    try {
+      return await SharedPreferences.getInstance();
+    } catch (_) {
+      // An unavailable platform plugin is retryable on the next write too.
+      return null;
+    }
+  }
+
   static String outageKey(String id) => 'device_health_outage_${id.toUpperCase()}';
 
   static const policyChannel = MethodChannel('com.omi/device_health_policy');
@@ -28,16 +57,23 @@ class DeviceHealthTelemetry {
   /// the old epoch and cannot repopulate storage after this fence.
   static Future<void> syncPolicy({required bool enabled, required bool retire}) {
     _packetSeen.clear();
+    if (retire) {
+      _pendingWrites.clear();
+      _retryWrites.clear();
+    }
     final epoch = AnalyticsManager.identityEpoch;
     final pending = List<Future<void>>.from(_writes.values);
     _policyWrites = _policyWrites.catchError((Object _) {}).then((_) async {
       try {
-        await policyChannel.invokeMethod<void>('setPolicy', {'enabled': enabled, 'epoch': epoch, 'retire': retire});
+        if (_hasBinding) {
+          await policyChannel.invokeMethod<void>('setPolicy', {'enabled': enabled, 'epoch': epoch, 'retire': retire});
+        }
       } on MissingPluginException {
         // No native BLE store on unsupported platforms.
       }
       await Future.wait(pending.map((write) => write.catchError((Object _) {})));
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _availablePreferences();
+      if (prefs == null) return;
       if (retire) {
         for (final key in prefs
             .getKeys()
@@ -51,11 +87,14 @@ class DeviceHealthTelemetry {
 
   /// Each recovery is intersected with calendar days; daily emission cursors
   /// prevent re-emitting earlier open-day exposure after it becomes resolved.
-  static Future<void> recordOutage(String id, {DateTime? at}) => _writeOutage(id, (record, now) {
-        if ((record['last_resolved_start'] as num? ?? -1) >= now) return;
-        record['open_since'] ??= now;
-        _packetSeen.remove(id.toUpperCase());
-      }, at);
+  static Future<void> recordOutage(String id, {DateTime? at}) {
+    if (!AnalyticsManager.deviceHealthRecordingEnabled) return Future.value();
+    _packetSeen.remove(id.toUpperCase());
+    return _writeOutage(id, (record, now) {
+      if ((record['last_resolved_start'] as num? ?? -1) >= now) return;
+      record['open_since'] ??= now;
+    }, at);
+  }
 
   static Future<void> recordRecovery(String id, {DateTime? at}) {
     if (!AnalyticsManager.deviceHealthRecordingEnabled) return Future.value();
@@ -95,30 +134,57 @@ class DeviceHealthTelemetry {
     final epoch = AnalyticsManager.identityEpoch;
     final policy = _policyWrites;
     final key = outageKey(id);
-    final next = (_writes[key] ?? Future.value()).catchError((Object _) {}).then((_) async {
+    final now = (at ?? DateTime.now()).millisecondsSinceEpoch;
+    // Serialize all devices so the next available write also flushes other
+    // devices buffered before startup. Preserve observation time, not flush time.
+    final next = _storageWrite.catchError((Object _) {}).then((_) async {
       await policy;
       if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
-      final prefs = await SharedPreferences.getInstance();
+      (_pendingWrites[key] ??= []).add(_PendingOutageWrite(epoch, now, change));
+      final prefs = await _availablePreferences();
       if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
-      var record = jsonDecode(prefs.getString(key) ?? '{}') as Map<String, dynamic>;
-      if (record['identity_epoch'] != epoch) record = {};
-      final before = jsonEncode(record);
-      record['identity_epoch'] = epoch;
-      final now = (at ?? DateTime.now()).millisecondsSinceEpoch;
-      change(record, now);
-      final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
-      days.removeWhere((day, _) => int.parse(day) < now - 8 * 86400000);
-      final retainedDays = days.keys.toList()..sort();
-      for (final day in retainedDays.take((retainedDays.length - 8).clamp(0, retainedDays.length))) {
-        days.remove(day);
+      if (prefs == null) return;
+      for (final pendingKey in _pendingWrites.keys.toList()) {
+        final pending = _pendingWrites[pendingKey];
+        if (pending == null) continue;
+        pending.removeWhere((write) => write.epoch != AnalyticsManager.identityEpoch);
+        if (pending.isEmpty) {
+          _pendingWrites.remove(pendingKey);
+          _retryWrites.remove(pendingKey);
+          continue;
+        }
+        try {
+          var record = jsonDecode(prefs.getString(pendingKey) ?? '{}') as Map<String, dynamic>;
+          if (record['identity_epoch'] != epoch) record = {};
+          final before = jsonEncode(record);
+          record['identity_epoch'] = epoch;
+          for (final write in pending) {
+            write.change(record, write.at);
+            final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+            days.removeWhere((day, _) => int.parse(day) < write.at - 8 * 86400000);
+            final retainedDays = days.keys.toList()..sort();
+            for (final day in retainedDays.take((retainedDays.length - 8).clamp(0, retainedDays.length))) {
+              days.remove(day);
+            }
+            record['resolved_days'] = days;
+          }
+          final encoded = jsonEncode(record);
+          if (encoded != before || _retryWrites.contains(pendingKey)) {
+            // SharedPreferences updates its cache even if the platform write
+            // fails. Force a retry rather than mistaking that cache for disk.
+            _retryWrites.add(pendingKey);
+            if (!await prefs.setString(pendingKey, encoded)) continue;
+          }
+          // Retirement may have cleared the buffer while persistence was awaited.
+          if (!AnalyticsManager.deviceHealthRecordingEnabled || epoch != AnalyticsManager.identityEpoch) return;
+          _pendingWrites.remove(pendingKey);
+          _retryWrites.remove(pendingKey);
+        } catch (_) {
+          // Keep the observations for retry; telemetry must never break BLE flows.
+        }
       }
-      record['resolved_days'] = days;
-      final encoded = jsonEncode(record);
-      if (encoded != before && !await prefs.setString(key, encoded)) {
-        _packetSeen.remove(id.toUpperCase());
-        throw StateError("Outage persistence failed");
-      }
-    });
+    }).catchError((Object _) {});
+    _storageWrite = next;
     _writes[key] = next;
     return next;
   }
@@ -412,4 +478,12 @@ class DeviceHealthTelemetry {
       _inFlightDevices.remove(device.id);
     }
   }
+}
+
+class _PendingOutageWrite {
+  final int epoch;
+  final int at;
+  final void Function(Map<String, dynamic>, int) change;
+
+  _PendingOutageWrite(this.epoch, this.at, this.change);
 }

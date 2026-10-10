@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
@@ -169,7 +170,14 @@ class BleBridge implements BleFlutterApi {
     }
     final revision = (_connectionRevisions[key] ?? 0) + 1;
     _connectionRevisions[key] = revision;
+    // Disconnect notification must not wait for optional telemetry storage.
+    if (!cccdRecovery) _invalidateIngress(key);
+    _disconnectCallbacks[key]?.call(false, error);
+    if (error == 'pairing_lost') pairingLostCallback?.call();
     try {
+      // Without a binding, no native diagnostics channel exists. Fail here
+      // synchronously so disconnect listeners keep their original ordering.
+      ServicesBinding.instance;
       final raw = await BleHostApi().getExtendedDeviceDiagnostics(peripheralUuid);
       if (_connectionRevisions[key] != revision) return;
       final start = (jsonDecode(raw) as Map)['audio_outage_started_at'] as num?;
@@ -180,10 +188,6 @@ class BleBridge implements BleFlutterApi {
     } catch (_) {
       // Native has already durably recorded the start; import it on emission.
     }
-    if (_connectionRevisions[key] != revision) return;
-    if (!cccdRecovery) _invalidateIngress(key);
-    _disconnectCallbacks[key]?.call(false, error);
-    if (error == 'pairing_lost') pairingLostCallback?.call();
   }
 
   @override
