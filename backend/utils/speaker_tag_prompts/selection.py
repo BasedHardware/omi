@@ -29,6 +29,8 @@ from utils.speaker_tag_prompts.owner_confirmation import (
     StaleOwnerConfirmation,
     source_key,
     validate_window,
+    label_identity,
+    baseline_origin,
 )
 
 PROMPT_WINDOW = timedelta(hours=48)
@@ -90,13 +92,7 @@ def speaker_id_of(segment: Mapping[str, Any]) -> int:
 
 
 def _identity(segment: Mapping[str, Any]) -> str:
-    if segment.get('speaker_identity_status') == 'ambiguous':
-        return 'none'
-    if segment.get('is_user'):
-        return 'user'
-    if segment.get('person_id'):
-        return f"person:{segment['person_id']}"
-    return 'none'
+    return label_identity(segment)
 
 
 def _normalized_segments(conversation: Mapping[str, Any]) -> List[Dict[str, Any]]:
@@ -129,7 +125,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set, *, split
             runs.append(
                 _Run(
                     speaker_id=current[0]['speaker_id'],
-                    identity=_identity(current[0]),
+                    identity=(
+                        _identity(current[0]) if len({_identity(segment) for segment in current}) == 1 else 'mixed'
+                    ),
                     segment_ids=tuple(s['id'] for s in current),
                     start=float(current[0].get('start') or 0),
                     end=max(float(s.get('end') or 0) for s in current),
@@ -193,7 +191,9 @@ def complete_owner_runs(conversation: Mapping[str, Any]) -> List[_Run]:
                 current = []
                 continue
             if text:
-                result.append(_Run(run.speaker_id, _identity(current[0]), ids, start, end, text))
+                identities = {_identity(segment) for segment in current}
+                identity = next(iter(identities)) if len(identities) == 1 else 'mixed'
+                result.append(_Run(run.speaker_id, identity, ids, start, end, text))
             current = []
     return result
 
@@ -398,7 +398,9 @@ def select_prompts(
             )
             if owner is not None:
                 run, distance = owner
-                origin = SpeakerTagPromptOrigin.auto_user if run.identity == 'user' else SpeakerTagPromptOrigin.unnamed
+                baseline = baseline_origin([segment for segment in segments if segment['id'] in run.segment_ids])
+                # Mixed is a server quality category, not a released wire enum.
+                origin = SpeakerTagPromptOrigin.unnamed if baseline == 'mixed' else SpeakerTagPromptOrigin(baseline)
                 add(run, SpeakerTagPromptKind.owner_check, origin, 4.0 - abs(distance - 0.50))
 
         for (_, identity), run in best_run.items():

@@ -21,6 +21,7 @@ from utils.speaker_tag_prompts import selection, service
 from utils.speaker_tag_prompts.owner_confirmation import FIELD, StaleOwnerConfirmation, binding_for
 from utils.owner_voice_evidence import authorized_owner_segments
 from utils.stt.speaker_match import arbitrate_owner_matches, select_speaker_match
+from utils.conversations.speaker_resolution import _manual_speakers
 
 NOW = datetime(2026, 10, 9, tzinfo=timezone.utc)
 
@@ -93,6 +94,8 @@ def world(monkeypatch):
     monkeypatch.setattr(service.voice_profiles_db, 'record_tag_prompt_answered', lambda *a: None)
     monkeypatch.setattr(router, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (16000 * 6))
     monkeypatch.setattr(service, 'verified_clip_pcm', lambda *a, **k: b'\x01\x00' * (16000 * 6))
+    monkeypatch.setattr(service.owner_embedding_cache, 'load', lambda *a: {})
+    monkeypatch.setattr(service.owner_embedding_cache, 'save', lambda *a: None)
     binding = binding_for(raw, card(raw))
     binding['selected_pcm_sha256'] = hashlib.sha256(b'\x01\x00' * (16000 * 6)).hexdigest()
     assert owner_confirmation_db.record('u', 'c', 'claim', binding)
@@ -134,6 +137,43 @@ def test_question_shown_does_not_stamp_another_set_and_is_idempotent(world, monk
     assert counter._value.get() == before + 1
 
 
+@pytest.mark.parametrize('answer', ['me', 'not_me', 'skip'])
+def test_late_duplicate_visibility_counts_consumed_card_without_reopening(world, monkeypatch, answer):
+    store, path, binding = world
+    played(world)
+    service.apply_answer('u', request(binding, answer))
+    consumed = deepcopy(store.rows[path][FIELD])
+    monkeypatch.setattr(service.voice_profiles_db, 'record_tag_prompts_shown', lambda *a: pytest.fail('Extra set'))
+    monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [decoded(store, path)])
+    counter = service.OWNER_CONFIRMATION_EVENTS.labels(event='shown')
+    before = counter._value.get()
+    service.mark_shown('u', [binding['prompt_id']], NOW, set_shown=False)
+    service.mark_shown('u', [binding['prompt_id']], NOW, set_shown=False)
+    assert counter._value.get() == before + 1
+    assert store.rows[path][FIELD] == dict(consumed, shown=True)
+    assert not owner_confirmation_db.record('u', 'c', 'shown', binding)
+    assert not owner_confirmation_db.record('u', 'c', 'claim', binding)
+    assert selection.complete_owner_runs(decoded(store, path)) == []
+    with pytest.raises(StaleOwnerConfirmation):
+        service.apply_answer('u', request(binding, answer))
+    with pytest.raises(StaleOwnerConfirmation):
+        owner_confirmation_db.record('u', 'c', 'played', binding, pcm_sha256=binding['selected_pcm_sha256'])
+
+
+def test_visibility_requires_exact_issued_evidence_even_after_answer(world):
+    store, path, binding = world
+    service.apply_answer('u', request(binding, 'skip'))
+    for field, value in [
+        ('prompt_id', 'other'),
+        ('evidence_id', 'other'),
+        ('segment_ids', ['sibling']),
+        ('speaker_id', 9),
+    ]:
+        with pytest.raises(StaleOwnerConfirmation):
+            owner_confirmation_db.record('u', 'c', 'shown', dict(binding, **{field: value}))
+    assert not store.rows[path][FIELD].get('shown')
+
+
 def request(binding, answer='me', **extra):
     return SpeakerTagPromptAnswerRequest(
         prompt_id=binding['prompt_id'],
@@ -144,7 +184,7 @@ def request(binding, answer='me', **extra):
         segment_ids=['played'],
         answer=answer,
         evidence_id=binding['evidence_id'],
-        **extra
+        **extra,
     )
 
 
@@ -179,7 +219,19 @@ def test_answer_changes_only_played_complete_segment_and_never_enrolls(world, an
 
 @pytest.mark.parametrize(
     'change',
-    ['regroup', 'scope', 'capture', 'delete_segment', 'overlap', 'receipt', 'audio', 'locked', 'deleted', 'discarded'],
+    [
+        'regroup',
+        'scope',
+        'capture',
+        'delete_segment',
+        'overlap',
+        'receipt',
+        'audio',
+        'locked',
+        'deleted',
+        'discarded',
+        'baseline_status',
+    ],
 )
 def test_stale_answer_is_atomic(world, change):
     store, path, binding = world
@@ -205,6 +257,8 @@ def test_stale_answer_is_atomic(world, change):
         raw['deleted'] = True
     elif change == 'discarded':
         raw['discarded'] = True
+    elif change == 'baseline_status':
+        raw['transcript_segments'][0]['speaker_identity_status'] = 'ambiguous'
     before = deepcopy(store.rows)
     with pytest.raises(StaleOwnerConfirmation):
         service.apply_answer('u', request(binding))
@@ -305,7 +359,9 @@ def test_pool_selects_ambiguity_then_centroid_not_labels(monkeypatch):
     raw['transcript_segments'][2]['speaker_id'] = 1
     runs = selection.complete_owner_runs(raw)
     vectors = iter([np.array([[1.0, 0.0]]), np.array([[0.5, 0.8660254]]), np.array([[0.6, 0.8]])])
-    monkeypatch.setattr(service, 'verified_clip_pcm', lambda *a, **k: b'\x01\x00' * (16000 * 6))
+    monkeypatch.setattr(service, 'verified_clip_pcm', lambda uid, raw, start, *a, **k: str(start).encode())
+    monkeypatch.setattr(service.owner_embedding_cache, 'load', lambda *a: {})
+    monkeypatch.setattr(service.owner_embedding_cache, 'save', lambda *a: None)
     monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a, **k: next(vectors))
     monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: None)
     monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda *a, **k: None)
@@ -345,8 +401,6 @@ def test_free_service_selects_one_owner_card_and_claims_quota_durably(world, mon
 
 
 def test_scoped_manual_receipt_is_not_a_post_resolution_voice_anchor(world):
-    from utils.conversations.speaker_resolution import _manual_speakers
-
     played(world)
     service.apply_answer('u', request(world[2]))
     receipt = decoded(world[0], world[1])['manual_speaker_assignments']
@@ -403,5 +457,90 @@ def test_owner_excerpt_boundaries_do_not_depend_on_identity_labels():
     ]
     before = selection.complete_owner_runs(raw)
     raw['transcript_segments'][1]['is_user'] = False
-    assert selection.complete_owner_runs(raw) == before
+    after = selection.complete_owner_runs(raw)
+    assert [(run.segment_ids, run.start, run.end) for run in after] == [
+        (run.segment_ids, run.start, run.end) for run in before
+    ]
+    assert before[0].identity == 'mixed' and after[0].identity == 'none'
     assert before[0].segment_ids == ('a', 'b')
+
+
+@pytest.mark.parametrize(
+    'labels', [('user', 'none'), ('user', 'person:a'), ('person:a', 'none'), ('person:a', 'person:b')]
+)
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('answer', ['me', 'not_me', 'skip'])
+def test_mixed_baselines_are_bound_per_segment_and_quality_is_order_independent(world, labels, reverse, answer):
+    store, path, _ = world
+    raw = conversation()
+    if reverse:
+        labels = labels[::-1]
+    selected = []
+    for index, label in enumerate(labels):
+        selected.append(
+            dict(
+                raw['transcript_segments'][0],
+                id=f'part-{index}',
+                start=index * 3.0,
+                end=(index + 1) * 3.0,
+                is_user=label == 'user',
+                person_id=label.split(':')[1] if label.startswith('person:') else None,
+            )
+        )
+    raw['transcript_segments'] = selected + raw['transcript_segments'][1:]
+    store.rows[path] = deepcopy(raw)
+    run = selection.complete_owner_runs(raw)[0]
+    assert run.identity == 'mixed' and run.segment_ids == ('part-0', 'part-1')
+    prompt = card(raw).model_copy(update={'segment_ids': list(run.segment_ids)})
+    binding = binding_for(raw, prompt)
+    binding['selected_pcm_sha256'] = hashlib.sha256(b'played').hexdigest()
+    assert binding['origin'] == 'mixed'
+    assert binding['baseline_labels'] == [
+        {key: segment.get(key) for key in ('id', 'is_user', 'person_id', 'speaker_identity_status')}
+        for segment in selected
+    ]
+    owner_confirmation_db.record('u', 'c', 'claim', binding)
+    owner_confirmation_db.record('u', 'c', 'played', binding, pcm_sha256=binding['selected_pcm_sha256'])
+    payload = request(binding, answer).model_copy(update={'segment_ids': list(run.segment_ids)})
+    label = 'skipped' if answer == 'skip' else 'owner_mixed_yes' if answer == 'me' else 'owner_mixed_no'
+    counter = service.SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=label)
+    before = counter._value.get()
+    uniform = [
+        service.SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=value)
+        for value in (
+            'owner_auto_confirmed',
+            'owner_auto_rejected',
+            'owner_missed',
+            'owner_unmatched_not_owner',
+            'person_auto_confirmed',
+            'person_auto_corrected',
+        )
+    ]
+    uniform_before = [value._value.get() for value in uniform]
+    response = service.apply_answer('u', payload)
+    assert counter._value.get() == before + 1
+    assert [value._value.get() for value in uniform] == uniform_before
+    assert response.quality_outcome == ('skipped' if answer == 'skip' else 'unknown_voice')
+    after = decoded(store, path)
+    assert after[FIELD]['baseline_labels'] == binding['baseline_labels']
+    assert after['transcript_segments'][2:] == raw['transcript_segments'][2:]
+    if answer == 'not_me':
+        assert [segment.get('person_id') for segment in after['transcript_segments'][:2]] == [
+            segment.get('person_id') for segment in selected
+        ]
+    assert store.rows[('users', 'u')]['speaker_embedding'] == [1.0, 0.0]
+
+
+@pytest.mark.parametrize('answer', ['me', 'not_me'])
+def test_uniform_person_baseline_observes_owner_quality_without_judging_person_identity(world, answer):
+    store, path, _ = world
+    store.rows[path].pop(FIELD)
+    store.rows[path]['transcript_segments'][0]['person_id'] = 'known'
+    raw = decoded(store, path)
+    binding = binding_for(raw, card(raw))
+    binding['selected_pcm_sha256'] = hashlib.sha256(b'played').hexdigest()
+    assert binding['origin'] == 'auto_person'
+    owner_confirmation_db.record('u', 'c', 'claim', binding)
+    owner_confirmation_db.record('u', 'c', 'played', binding, pcm_sha256=binding['selected_pcm_sha256'])
+    result = service.apply_answer('u', request(binding, answer))
+    assert result.quality_outcome == ('owner_missed' if answer == 'me' else 'owner_unmatched_not_owner')

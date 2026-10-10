@@ -9,7 +9,7 @@ import json
 import math
 from typing import Any, Mapping, Sequence
 
-from models.speaker_tag_prompts import SpeakerTagPrompt
+from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptOrigin
 from models.transcript_segment import legacy_conversation_segment_id
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.speaker_learning_policy import union_seconds
@@ -22,6 +22,28 @@ MAX_CONSTITUENTS = 16
 
 class StaleOwnerConfirmation(ValueError):
     """The played evidence no longer authorizes an answer."""
+
+
+def label_identity(segment: Mapping[str, Any]) -> str:
+    if segment.get('speaker_identity_status') == 'ambiguous':
+        return 'none'
+    if segment.get('is_user'):
+        return 'user'
+    if segment.get('person_id'):
+        return f"person:{segment['person_id']}"
+    return 'none'
+
+
+def baseline_origin(segments: Sequence[Mapping[str, Any]]) -> str:
+    identities = {label_identity(segment) for segment in segments}
+    if len(identities) != 1:
+        return 'mixed'
+    identity = next(iter(identities))
+    if identity == 'user':
+        return SpeakerTagPromptOrigin.auto_user.value
+    if identity.startswith('person:'):
+        return SpeakerTagPromptOrigin.auto_person.value
+    return SpeakerTagPromptOrigin.unnamed.value
 
 
 def normalized_segments(conversation: Mapping[str, Any]) -> list[dict]:
@@ -59,6 +81,7 @@ def fingerprint(conversation: Mapping[str, Any]) -> str:
                     'end',
                     'is_user',
                     'person_id',
+                    'speaker_identity_status',
                     'audio_alignment',
                     'audio_capture_run',
                     'audio_capture_start',
@@ -161,7 +184,11 @@ def binding_for(conversation: Mapping[str, Any], prompt: SpeakerTagPrompt) -> di
         audio_capture_run=selected[0].get('audio_capture_run'),
         receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
         fingerprint=digest,
-        origin=prompt.origin.value,
+        origin=baseline_origin(selected),
+        baseline_labels=[
+            {key: segment.get(key) for key in ('id', 'is_user', 'person_id', 'speaker_identity_status')}
+            for segment in sorted(selected, key=lambda segment: segment['id'])
+        ],
     )
     binding['evidence_id'] = hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
     return binding

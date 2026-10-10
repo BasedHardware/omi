@@ -29,6 +29,23 @@ def record(
         raw = ref.get(transaction=transaction).to_dict()
         if not raw:
             raise StaleOwnerConfirmation('Conversation not found')
+        if action == 'shown':
+            # Visibility acknowledges an issued card, not current assignment
+            # authority. Answers may already have changed labels/fingerprints.
+            stored = dict(raw.get(OWNER_CONFIRMATION_FIELD) or {})
+            if (
+                not stored
+                or stored.get('prompt_id') != binding.get('prompt_id')
+                or stored.get('evidence_id') != binding.get('evidence_id')
+                or stored.get('segment_ids') != binding.get('segment_ids')
+                or stored.get('speaker_id') != binding.get('speaker_id')
+            ):
+                raise StaleOwnerConfirmation('Owner question was not issued')
+            if stored.get('shown'):
+                return False
+            stored['shown'] = True
+            transaction.update(ref, {OWNER_CONFIRMATION_FIELD: stored})
+            return True
         current: dict[str, Any] = dict(raw, id=conversation_id)
         try:
             current['transcript_segments'] = conversations.decode_transcript_segments_verified(
@@ -50,11 +67,7 @@ def record(
         )
         if binding.get('speaker_id', stored['speaker_id']) != stored['speaker_id']:
             raise StaleOwnerConfirmation('Owner excerpt speaker changed')
-        if action == 'shown':
-            if stored.get('shown'):
-                return False
-            stored['shown'] = True
-        elif action == 'played':
+        if action == 'played':
             if not pcm_sha256:
                 raise StaleOwnerConfirmation('Missing played audio')
             if stored.get('selected_pcm_sha256') != pcm_sha256 or (

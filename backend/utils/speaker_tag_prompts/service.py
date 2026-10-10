@@ -85,6 +85,7 @@ from utils.speaker_tag_prompts.selection import (
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
+from utils.speaker_tag_prompts import embedding_cache as owner_embedding_cache
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,8 @@ def _owner_group_evidence(
     if not np.isfinite(owner_vector).all() or owner_norm <= 0:
         return None
     groups = {}
+    cached_entries = owner_embedding_cache.load(uid, conversation['id'])
+    cache_changed = False
     by_id = {s.get('id'): s for s in conversation.get('transcript_segments') or []}
     for run in runs:
         if time.monotonic() >= deadline:
@@ -294,17 +297,25 @@ def _owner_group_evidence(
         if pcm is None:
             return None
         pcm_digest = hashlib.sha256(pcm).hexdigest()
-        key = 'owner_prompt_embedding_v1:' + hashlib.sha256(f'{uid}:{pcm_digest}'.encode()).hexdigest()
-        cached = redis_db.get_generic_cache(key)
-        vector = np.asarray(cached, dtype=np.float32).reshape(-1) if isinstance(cached, list) else None
+        cached = cached_entries.get(pcm_digest)
+        vector = np.asarray(cached['vector'], dtype=np.float32).reshape(-1) if cached else None
         if vector is None:
             vector = np.asarray(
                 extract_embedding_from_bytes(pcm_to_wav(pcm), timeout=max(0.01, deadline - time.monotonic())),
                 dtype=np.float32,
             ).reshape(-1)
-            if np.isfinite(vector).all() and np.linalg.norm(vector) > 0:
-                redis_db.set_generic_cache(key, vector.tolist(), ttl=VERIFY_CACHE_SECONDS)
-        if vector.shape != owner_vector.shape or not np.isfinite(vector).all() or np.linalg.norm(vector) <= 0:
+            if vector.shape == owner_vector.shape and np.isfinite(vector).all() and np.linalg.norm(vector) > 0:
+                cached_entries[pcm_digest] = {
+                    'vector': vector.tolist(),
+                    'expires_at': time.time() + owner_embedding_cache.TTL_SECONDS,
+                }
+                cache_changed = True
+        if (
+            vector.size > owner_embedding_cache.MAX_DIMENSIONS
+            or vector.shape != owner_vector.shape
+            or not np.isfinite(vector).all()
+            or np.linalg.norm(vector) <= 0
+        ):
             return None
         vector = vector / np.linalg.norm(vector)
         # The group is a scoped diarized speaker; separate captures and source
@@ -313,6 +324,8 @@ def _owner_group_evidence(
         if segment is None:
             return None
         groups.setdefault(voice_key(segment), []).append((run, vector, pcm_digest))
+    if cache_changed:
+        owner_embedding_cache.save(uid, conversation['id'], cached_entries)
     choices = []
     for members in groups.values():
         centroid = mean_embedding([vector.reshape(1, -1) for _, vector, _ in members]).reshape(-1)
@@ -667,11 +680,25 @@ def _apply_owner_answer(
     }[request.answer]
     OWNER_CONFIRMATION_EVENTS.labels(event=event).inc()
     # Quality uses the server's origin, never a client-supplied label.
-    origin = SpeakerTagPromptOrigin((raw.get(OWNER_CONFIRMATION_FIELD) or {})['origin'])
-    outcome = quality_outcome(origin, request.answer, person_id=None, suggested_person_id=None, person_enrolled=False)
+    origin = (raw.get(OWNER_CONFIRMATION_FIELD) or {})['origin']
+    if origin == 'mixed' and request.answer != SpeakerTagPromptAnswer.skip:
+        # One mixed answered excerpt is its own denominator, not a uniform
+        # owner precision/recall observation. Keep the released response enum.
+        outcome = SpeakerTagPromptQualityOutcome.unknown_voice
+        quality_label = 'owner_mixed_yes' if request.answer == SpeakerTagPromptAnswer.me else 'owner_mixed_no'
+    else:
+        outcome = quality_outcome(
+            # A binary owner answer cannot judge a named person's identity.
+            SpeakerTagPromptOrigin.unnamed if origin in {'mixed', 'auto_person'} else SpeakerTagPromptOrigin(origin),
+            request.answer,
+            person_id=None,
+            suggested_person_id=None,
+            person_enrolled=False,
+        )
+        quality_label = outcome.value
     voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
     SPEAKER_TAG_PROMPT_ANSWERS.labels(kind='owner_check', answer=request.answer.value).inc()
-    SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=outcome.value).inc()
+    SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=quality_label).inc()
     return SpeakerTagPromptAnswerResponse(
         quality_outcome=outcome, conversation_id=request.conversation_id, segment_identities=identities
     )

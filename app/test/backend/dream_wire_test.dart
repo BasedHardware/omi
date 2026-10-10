@@ -94,7 +94,8 @@ void main() {
       expect(run.costUsd, 0.0);
       expect(run.edits, isEmpty);
       expect(run.errorType, json['error_type']);
-      expect(DreamRun.fromGenerated(run)!.runId, status);
+      expect(DreamRun.fromGenerated(run), isNull);
+      expect(DreamRun.fromJson({...run.toJson(), 'run_id': status})!.runId, status);
     }
   });
 

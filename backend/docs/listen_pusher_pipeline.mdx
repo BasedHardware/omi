@@ -2058,6 +2058,13 @@ rank a question. No enrollment, incomplete evidence, long segments requiring a
 crop, mixed capture/source windows or overlapping unselected audio mean no owner
 card. No threshold or voice model changes.
 
+Prompt constituent vectors use a separate owner-encrypted private evidence object
+`audio/{uid}/{conversation_id}/owner-prompt-embeddings.v1.enc`, not generic Redis
+JSON. It holds at most 16 PCM-digest entries (4096 dimensions each), usable for
+12 hours, with a 2 MiB serialized cap. Uploads use the existing owner storage
+write fence; conversation audio and account storage purges remove the object.
+It does not overwrite the post-resolution owner-evidence cache.
+
 At most four cards, two per conversation and two owner cards per daily set remain;
 **at most one owner card can ever be issued per conversation**. Issuance claims
 `owner_confirmation_prompt` atomically on that conversation. This durable quota
@@ -2066,7 +2073,8 @@ retention; a lost list response can consume the opportunity. Deleted or merged
 cards are not retargeted. Existing shown/dismissed cooldowns remain.
 
 The server stores the selected segment IDs, exact complete bounds, speaker scope,
-capture run, receipt generation, roster/audio fingerprint and PCM digest. The
+capture run, receipt generation, roster/audio fingerprint, PCM digest and every
+selected segment's baseline owner/person/status label. The
 clip request carries `prompt_id` and `evidence_id`, must use those exact bounds,
 and stamps delivery only when the bytes match selection. Flutter enables Yes/No
 after complete playback; Skip needs no playback. The server can prove delivery,
@@ -2160,9 +2168,19 @@ carry only closed-enum labels. `omi_owner_confirmation_events_total` counts
 (`owner_missed`, `person_missed_known`) observations — biased toward what was
 asked, so compare trends per kind rather than reading absolute accuracy.
 
+Mixed-baseline excerpts are classified independently of segment order and emit
+`owner_mixed_yes|owner_mixed_no`; their denominator is one answered mixed excerpt,
+not segments or speech seconds. They do not increment uniform precision/recall
+outcomes. The released response enum stays `unknown_voice` for these answers;
+Skip stays `skipped`. Binary owner answers to uniformly named non-owner excerpts
+observe owner misses/non-owner abstentions, not that person's naming precision.
+
 The updated client reports the current visible question, once per card; subsequent owner cards
 use `set_shown=false` to retain the original set cooldown and set-count semantics. Unbound
-owner cards from an older backend are withheld by the client.
+owner cards from an older backend are withheld by the client. Visibility stamps
+the exact issued prompt/evidence/segment identity once, even if Yes/No/Skip
+committed first and changed the transcript fingerprint. This bookkeeping never
+clears the consumed marker or restores playback/answer/issuance authority.
 
 ### People-stats aggregate cache
 
