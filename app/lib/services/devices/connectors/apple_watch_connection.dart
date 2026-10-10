@@ -125,6 +125,16 @@ class AppleWatchDeviceConnection extends DeviceConnection {
     connectionState = DeviceConnectionState.disconnected;
   }
 
+  /// Best effort: the host queues the stop for the Watch when it is not reachable.
+  Future<void> stopRecording() async {
+    if (transport is! WatchTransport) return;
+    try {
+      await (transport as WatchTransport).stopRecording();
+    } catch (e) {
+      Logger.debug('Apple Watch: Error stopping recording: $e');
+    }
+  }
+
   @override
   Future<int> performRetrieveBatteryLevel() async {
     try {
