@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12606,4 +12607,230 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Esile tõstetud inimesed jäävad sinu Inimeste loendi ülaossa ega ole Puhastamisega eemaldatavad.';
+
+  @override
+  String get buildAndShareApp => 'Looge ja jagage oma kohandatud rakendust';
+
+  @override
+  String get membersAndCounting => '8000+ liiget ja arv kasvab.';
+
+  @override
+  String get privacyIntro =>
+      'Omi-s oleme pühendunud teie privaatsuse kaitsmisele. See leht võimaldab teil kontrollida, kuidas teie andmeid säilitatakse ja kasutatakse.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Teie andmed on vaikimisi kaitstud tugeva krüpteerimisega. Vaadake allpool oma seadeid ja tulevasi privaatsusvalikuid.';
+
+  @override
+  String get transcriptionConfig => 'Seadistage STT pakkuja';
+
+  @override
+  String get importDataConfig => 'Importige andmed teistest allikatest';
+
+  @override
+  String get understandingSubtitle => 'Teie vestlustest mõistetud sõnad.';
+
+  @override
+  String get rememberingSubtitle => 'Teie jaoks meeles peetud faktid ja üksikasjad.';
+
+  @override
+  String get debugLogsDesc => 'Aitab diagnoosida probleeme';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Tühjenda kõik sõlmed ja ühendused';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Kui meie mudel paraneb, saame pakkuda teie salvestiste jaoks paremaid transkriptsioone.';
+
+  @override
+  String get bestInClassTranscription => 'Parim oma klassis transkriptsioon nullseadistusega';
+
+  @override
+  String get optimizedForConversation => 'Optimeeritud vestluseks';
+
+  @override
+  String get highAccuracy => 'Kõrge täpsus';
+
+  @override
+  String get privacyFirst => 'Privaatsus esmalt';
+
+  @override
+  String get keepGoing => 'Jätkake, teil läheb suurepäraselt';
+
+  @override
+  String get personalGrowthJourney => 'Teie isikliku arengu teekond AI-ga, mis kuulab iga teie sõna.';
+
+  @override
+  String get alwaysInContext => 'Alati kontekstis';
+
+  @override
+  String get configureSttProvider => 'Seadista STT pakkuja';
+
+  @override
+  String get clearAllNodesAndConnections => 'Kustuta kõik sõlmed ja ühendused';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Vestlusi töödeldakse automaatselt';
+
+  @override
+  String get getInsightsInstantly => 'Saate kohe ülevaateid ja kokkuvõtteid';
+
+  @override
+  String get dailyScoreDescription => 'Skoor, mis aitab teil paremini\nkeskenduda täitmisele.';
+
+  @override
+  String get startConversation => 'Alustage vestlust ja laske maagia alata';
+
+  @override
+  String get wearableAiCompanion => 'Kantav AI kaaslane';
+
+  @override
+  String get organizeAndControlMemories => 'Korraldage ja kontrollige oma mälestusi';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Määra kõik mälestused privaatseks';
+
+  @override
+  String get setAllMemoriesToPublic => 'Määra kõik mälestused avalikuks';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Valige oma eelistatud keel parima Omi kogemuse jaoks';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Lubage funktsioonid parima Omi kogemuse jaoks oma seadmes.';
+
+  @override
+  String get deliveryTimeDescription => 'Millal saada päevast kokkuvõtet';
+
+  @override
+  String get configureSTTProvider => 'Konfigureerige STT pakkuja';
+
+  @override
+  String get setConversationEndDescription => 'Määrake, millal vestlused automaatselt lõpevad';
+
+  @override
+  String get clearNodesDescription => 'Kustuta kõik sõlmed ja ühendused';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.';
+
+  @override
+  String get createAndShareYourApp => 'Loo ja jaga oma rakendust';
+
+  @override
+  String get e2eeDescription =>
+      'Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google\'ile, otse andmebaasist.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.';
+
+  @override
+  String get yourOmiUnleashed => 'Teie Omi, vabastatud. Minge piiramatu juurde lõputute võimaluste jaoks.';
+
+  @override
+  String get privacyIntroText =>
+      'Omis võtame teie privaatsust väga tõsiselt. Tahame olla läbipaistvad andmete osas, mida kogume ja kuidas neid kasutame. Siin on see, mida peate teadma:';
+
+  @override
+  String get commitmentText =>
+      'Oleme pühendunud kasutama kogutud andmeid ainult Omi paremaks muutmiseks. Teie privaatsus ja usaldus on meile ülimalt olulised.';
+
+  @override
+  String get thankYouText =>
+      'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.';
+
+  @override
+  String get howPeopleWorks =>
+      'Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Ehita ja jaga oma kohandatud rakendust';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vali oma eelistus';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Anna nõutav juurdepääs';
+
+  @override
+  String get apiEnvironmentDescription => 'Valige, millise serveriga ühenduda';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Teie kõned jäävad privaatseks ja turvaliseks';
+
+  @override
+  String get omisStorageDesc =>
+      'Kui teie Omi pole telefoniga ühendatud, salvestab see heli kohalikult sisseehitatud mällu. Te ei kaota kunagi salvestist.';
+
+  @override
+  String get permissionsSetupDescription => 'Lubage mõned õigused, et Omi saaks oma võlu avaldada.';
+
+  @override
+  String get architectSubtitle => 'Võimas AI — tuhanded vestlused + agentne automatiseerimine';
+
+  @override
+  String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Kiire ülevaade viimase kahe päeva häältest';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Hoia $name alles ja oota teda oma vestlustes';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi küsib enne sarnaste häälte sobitamist.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Jah tõstab inimese $name kindlust.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+
+  @override
+  String get singlePress => 'Ühekordne vajutus';
+
+  @override
+  String get singlePressAction => 'Ühekordse vajutuse toiming';
+
+  @override
+  String get triplePress => 'Kolmekordne vajutus';
+
+  @override
+  String get triplePressAction => 'Kolmekordse vajutuse toiming';
+
+  @override
+  String get longPress => 'Pikk vajutus';
+
+  @override
+  String get longPressFixedNotice => 'Fikseeritud seadme riistvaras';
+
+  @override
+  String get turnOnOff => 'Lülita sisse / välja';
+
+  @override
+  String get buttonActionNone => 'Puudub';
 }

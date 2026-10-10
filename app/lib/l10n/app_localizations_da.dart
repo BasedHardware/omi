@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12599,4 +12600,230 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Fastgjorte personer ligger øverst på din Personer-liste og fjernes ikke af Ryd op.';
+
+  @override
+  String get buildAndShareApp => 'Byg og del din tilpassede app';
+
+  @override
+  String get membersAndCounting => '8000+ medlemmer og tæller.';
+
+  @override
+  String get privacyIntro =>
+      'Hos Omi er vi forpligtede til at beskytte dit privatliv. Denne side giver dig mulighed for at styre, hvordan dine data gemmes og bruges.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Dine data er som standard sikret med stærk kryptering. Gennemgå dine indstillinger og fremtidige privatlivsindstillinger nedenfor.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurer STT-udbyder';
+
+  @override
+  String get importDataConfig => 'Importer data fra andre kilder';
+
+  @override
+  String get understandingSubtitle => 'Ord forstået fra dine samtaler.';
+
+  @override
+  String get rememberingSubtitle => 'Fakta og detaljer husket for dig.';
+
+  @override
+  String get debugLogsDesc => 'Hjælper med at diagnosticere problemer';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Dette vil slette alle afledte videngraf-data (noder og forbindelser). Dine originale minder forbliver sikre. Grafen vil blive genopbygget over tid eller ved næste anmodning.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Ryd alle noder og forbindelser';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Efterhånden som vores model forbedres, kan vi levere bedre transskriptionsresultater for dine optagelser.';
+
+  @override
+  String get bestInClassTranscription => 'Bedste transskription i klassen';
+
+  @override
+  String get optimizedForConversation => 'Optimeret til samtale';
+
+  @override
+  String get highAccuracy => 'Høj nøjagtighed';
+
+  @override
+  String get privacyFirst => 'Privatliv først';
+
+  @override
+  String get keepGoing => 'Fortsæt';
+
+  @override
+  String get personalGrowthJourney => 'Din personlige vækstrejse med AI, der lytter til hvert ord.';
+
+  @override
+  String get alwaysInContext => 'Altid i kontekst';
+
+  @override
+  String get configureSttProvider => 'Konfigurer STT-udbyder';
+
+  @override
+  String get clearAllNodesAndConnections => 'Ryd alle noder og forbindelser';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Velkommen til Omi! Din AI-ledsager er klar til at hjælpe dig med samtaler, opgaver og meget mere.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Samtaler behandles automatisk';
+
+  @override
+  String get getInsightsInstantly => 'Få indsigter og resuméer øjeblikkeligt';
+
+  @override
+  String get dailyScoreDescription => 'En score til at hjælpe dig\nmed at fokusere på udførelse.';
+
+  @override
+  String get startConversation => 'Start en samtale og lad magien begynde';
+
+  @override
+  String get wearableAiCompanion => 'Bærbar AI-ledsager';
+
+  @override
+  String get organizeAndControlMemories => 'Organiser og kontroller dine minder';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Indstil alle minder til privat synlighed';
+
+  @override
+  String get setAllMemoriesToPublic => 'Indstil alle minder til offentlig synlighed';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Vælg dit foretrukne sprog for den bedste Omi-oplevelse';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Aktiver funktioner for den bedste Omi-oplevelse på din enhed.';
+
+  @override
+  String get deliveryTimeDescription => 'Hvornår du modtager din daglige opsummering';
+
+  @override
+  String get configureSTTProvider => 'Konfigurer STT-udbyder';
+
+  @override
+  String get setConversationEndDescription => 'Indstil, hvornår samtaler afsluttes automatisk';
+
+  @override
+  String get clearNodesDescription => 'Ryd alle knudepunkter og forbindelser';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Dette vil slette alle afledte vidensgrafsdata. Dine originale minder forbliver sikre.';
+
+  @override
+  String get createAndShareYourApp => 'Opret og del din app';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-kryptering er guldstandarden for privatliv. Når det er aktiveret, krypteres dine data på din enhed, før de sendes til vores servere. Det betyder, at ingen, ikke engang Omi, kan få adgang til dit indhold.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dine data er krypteret med en nøgle, der er unik for dig, på vores servere, der er hostet på Google Cloud. Det betyder, at dit rå indhold er utilgængeligt for alle, inklusive Omi-personale eller Google, direkte fra databasen.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktiver for maksimal sikkerhed, hvor kun du kan få adgang til dine data. Tryk for at lære mere.';
+
+  @override
+  String get yourOmiUnleashed => 'Din Omi, frigjort. Bliv ubegrænset for uendelige muligheder.';
+
+  @override
+  String get privacyIntroText =>
+      'Hos Omi tager vi dit privatliv meget alvorligt. Vi ønsker at være transparente om de data, vi indsamler, og hvordan vi bruger dem til at forbedre vores produkt. Her er hvad du skal vide:';
+
+  @override
+  String get commitmentText =>
+      'Vi er forpligtet til kun at bruge de data, vi indsamler, til at gøre Omi til et bedre produkt for dig. Dit privatliv og din tillid er altafgørende for os.';
+
+  @override
+  String get thankYouText =>
+      'Tak fordi du er en værdsat bruger af Omi. Hvis du har spørgsmål eller bekymringer, er du velkommen til at kontakte os på team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Dette vil slette alle afledte videngrafdata (noder og forbindelser). Dine originale minder forbliver sikre. Grafen vil blive genopbygget over tid eller ved næste anmodning.';
+
+  @override
+  String get howPeopleWorks =>
+      'Når en person er oprettet, kan du gå til en samtaleudskrift og tildele dem deres tilsvarende segmenter, på den måde vil Omi også kunne genkende deres tale!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Byg og del din tilpassede app';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vælg din præference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Giv den nødvendige adgang';
+
+  @override
+  String get apiEnvironmentDescription => 'Vælg hvilken server der skal forbindes til';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dine opkald forbliver private og sikre';
+
+  @override
+  String get omisStorageDesc =>
+      'Når din Omi ikke er forbundet til din telefon, gemmer den lyd lokalt i sin indbyggede hukommelse. Du mister aldrig en optagelse.';
+
+  @override
+  String get permissionsSetupDescription => 'Aktivér nogle tilladelser, så Omi kan udfolde sin magi.';
+
+  @override
+  String get architectSubtitle => 'Avanceret AI — tusindvis af chats + agentautomatisering';
+
+  @override
+  String get backgroundModeNote => 'Fungerer indtil videre kun med Omi-enheder og forbedres løbende.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Et hurtigt tjek af stemmer fra de sidste to dage';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Behold $name, og forvent dem i dine samtaler';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi spørger, før lignende stemmer matches.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja øger sikkerheden for $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 stjerner hjælper os virkelig meget ❤️';
+
+  @override
+  String get singlePress => 'Enkelt tryk';
+
+  @override
+  String get singlePressAction => 'Handling for enkelt tryk';
+
+  @override
+  String get triplePress => 'Tredobbelt tryk';
+
+  @override
+  String get triplePressAction => 'Handling for tredobbelt tryk';
+
+  @override
+  String get longPress => 'Langt tryk';
+
+  @override
+  String get longPressFixedNotice => 'Fast i enhedens hardware';
+
+  @override
+  String get turnOnOff => 'Tænd / Sluk';
+
+  @override
+  String get buttonActionNone => 'Ingen';
 }

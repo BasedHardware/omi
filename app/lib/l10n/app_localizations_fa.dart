@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12607,4 +12608,230 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get pinPersonDescription => 'افرادِ سنجاق‌شده بالای فهرست افراد شما می‌مانند و با پاک‌سازی حذف نمی‌شوند.';
+
+  @override
+  String get buildAndShareApp => 'اپلیکیشن سفارشی خود را بسازید و اشتراک‌گذاری کنید';
+
+  @override
+  String get membersAndCounting => '8000+ اعضا و افزایش.';
+
+  @override
+  String get privacyIntro =>
+      'در Omi، ما متعهد به حفاظت از حریم خصوصی شما هستیم. این صفحه به شما اجازه می‌دهد که کنترل کنید داده‌های شما چگونه ذخیره و استفاده می‌شوند.';
+
+  @override
+  String get dataProtectionDesc =>
+      'داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی ایمن هستند. تنظیمات و گزینه‌های حریم خصوصی آینده خود را مرور کنید.';
+
+  @override
+  String get transcriptionConfig => 'پیکربندی ارائه‌دهنده STT';
+
+  @override
+  String get importDataConfig => 'وارد کردن داده‌ها از منابع دیگر';
+
+  @override
+  String get understandingSubtitle => 'کلمات درک‌شده از گفتگوهای شما.';
+
+  @override
+  String get rememberingSubtitle => 'واقعیات و جزئیات یادآوری‌شده برای شما.';
+
+  @override
+  String get debugLogsDesc => 'کمک به تشخیص مشکلات';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'این کار تمام داده‌های گراف دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادداشت‌های اصلی شما امن باقی خواهند ماند. گراف در طول زمان یا در درخواست بعدی بازسازی خواهد شد.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'تمام گره‌ها و اتصالات را پاک کنید';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'هنگامی که مدل ما بهبود می‌یابد، می‌توانیم نتایج رونویسی بهتری برای ضبط‌های شما ارائه دهیم.';
+
+  @override
+  String get bestInClassTranscription => 'بهترین کلاس رونویسی بدون راه‌اندازی';
+
+  @override
+  String get optimizedForConversation => 'برای گفتگو بهینه‌سازی شده';
+
+  @override
+  String get highAccuracy => 'دقت بالا';
+
+  @override
+  String get privacyFirst => 'حریم خصوصی اول';
+
+  @override
+  String get keepGoing => 'ادامه دهید، خیلی خوب انجام می‌دهید';
+
+  @override
+  String get personalGrowthJourney => 'سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.';
+
+  @override
+  String get alwaysInContext => 'همیشه در زمینه';
+
+  @override
+  String get configureSttProvider => 'ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید';
+
+  @override
+  String get clearAllNodesAndConnections => 'پاک کردن تمام گره‌ها و اتصالات';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'خوش‌آمدید به Omi! دستیار هوش مصنوعی شما آماده‌است تا در گفتگوها، وظایف و بسیاری مورد دیگر به شما کمک کند.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'گفتگوها به‌طور خودکار پردازش می‌شوند';
+
+  @override
+  String get getInsightsInstantly => 'بلافاصله بینش‌ها و خلاصه‌ها را دریافت کنید';
+
+  @override
+  String get dailyScoreDescription => 'امتیازی برای کمک به شما\nدر تمرکز بر اجرا.';
+
+  @override
+  String get startConversation => 'یک گفتگو شروع کنید و بگذارید جادو شروع شود';
+
+  @override
+  String get wearableAiCompanion => 'دستیار هوش مصنوعی قابل پوشیدن';
+
+  @override
+  String get organizeAndControlMemories => 'تنظیم و کنترل یادآوری‌های خود';
+
+  @override
+  String get setAllMemoriesToPrivate => 'تنظیم تمام یادآوری‌ها به حالت خصوصی';
+
+  @override
+  String get setAllMemoriesToPublic => 'تنظیم تمام یادآوری‌ها به حالت عمومی';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید';
+
+  @override
+  String get enableFeaturesForBestExperience => 'ویژگی‌ها را برای بهترین تجربه Omi بر روی دستگاه خود فعال کنید.';
+
+  @override
+  String get deliveryTimeDescription => 'زمان دریافت خلاصه روزانه خود';
+
+  @override
+  String get configureSTTProvider => 'پیکربندی ارائه‌دهنده STT';
+
+  @override
+  String get setConversationEndDescription => 'تنظیم زمان خودکار پایان گفتگوها';
+
+  @override
+  String get clearNodesDescription => 'تمام گره‌ها و اتصالات را پاک کنید';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'این تمام داده‌های نمودار دانش مشتق‌شده را حذف می‌کند. خاطرات اصلی شما ایمن می‌مانند.';
+
+  @override
+  String get createAndShareYourApp => 'برنامه خود را ایجاد و اشتراک کنید';
+
+  @override
+  String get e2eeDescription =>
+      'رمزگذاری از سر به سر استاندارد طلایی برای حریم‌خصوصی است. هنگامی که فعال باشد، داده‌های شما قبل از ارسال به سرورهای ما در دستگاه شما رمزگذاری می‌شوند. این بدان معناست که هیچ کس، حتی Omi، نمی‌تواند محتوای شما را دسترسی کند.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'داده‌های شما با کلیدی منحصر به فرد برای شما در سرورهای ما، میزبان‌شده در Google Cloud، رمزگذاری می‌شوند. این بدان معناست که محتوای خام شما برای هیچ کس، از جمله کارکنان Omi یا Google، مستقیماً از پایگاه داده قابل دسترسی نیست.';
+
+  @override
+  String get e2eeCardDescription =>
+      'برای حداکثر امنیت فعال کنید جایی که فقط شما می‌توانید داده‌های خود را دسترسی کنید. برای اطلاعات بیشتر لمس کنید.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi شما، آزاد شده. بی‌محدود بروید برای امکانات بی‌پایان.';
+
+  @override
+  String get privacyIntroText =>
+      'در Omi، ما حریم خصوصی شما را بسیار جدی می‌گیریم. ما می‌خواهیم در مورد داده‌هایی که جمع‌آوری می‌کنیم و نحوه استفاده از آن برای بهبود محصول خود برای شما شفاف باشیم. در اینجا آنچه باید بدانید:';
+
+  @override
+  String get commitmentText =>
+      'ما متعهد هستیم داده‌هایی که جمع‌آوری می‌کنیم را تنها برای بهتر کردن Omi برای شما استفاده کنیم. حریم خصوصی و اعتماد شما برای ما بسیار اهمیت دارند.';
+
+  @override
+  String get thankYouText =>
+      'از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'این تمام داده‌های نمودار دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادآوری‌های اصلی شما ایمن خواهند ماند. نمودار در طول زمان یا بعد از درخواست بعدی بازسازی خواهد شد.';
+
+  @override
+  String get howPeopleWorks =>
+      'بعد از اینکه یک فرد ایجاد شود، می‌توانید به رونویس مکالمه بروید و بخش‌های مرتبط با آن‌ها را تعیین کنید، به این ترتیب Omi می‌تواند صوت آن‌ها را نیز تشخیص دهد!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'برنامه سفارشی خود را بسازید و به اشتراک بگذارید';
+
+  @override
+  String get onboardingChooseYourPreference => 'ترجیح خود را انتخاب کنید';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'دسترسی مورد نیاز را اعطا کنید';
+
+  @override
+  String get apiEnvironmentDescription => 'انتخاب کنید کدام سرویس‌گیر را مورد اتصال قرار دهید';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'تماس‌های شما خصوصی و ایمن هستند';
+
+  @override
+  String get omisStorageDesc =>
+      'هنگامی که Omi به تلفن شما متصل نیست، صوت را به‌طور محلی روی حافظه داخلی‌اش ذخیره می‌کند. شما هرگز ضبط را از دست نمی‌دهید.';
+
+  @override
+  String get permissionsSetupDescription => 'چند مجوز را فعال کنید تا Omi بتواند جادو کند.';
+
+  @override
+  String get architectSubtitle => 'هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی';
+
+  @override
+  String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'بررسی سریع صداهای دو روز گذشته';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'پاسخ «بله» اطمینان درباره $name را بالا می‌برد.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️';
+
+  @override
+  String get singlePress => 'یک بار فشار دادن';
+
+  @override
+  String get singlePressAction => 'اقدام یک بار فشار دادن';
+
+  @override
+  String get triplePress => 'سه بار فشار دادن';
+
+  @override
+  String get triplePressAction => 'اقدام سه بار فشار دادن';
+
+  @override
+  String get longPress => 'فشار طولانی';
+
+  @override
+  String get longPressFixedNotice => 'ثابت در سخت‌افزار دستگاه';
+
+  @override
+  String get turnOnOff => 'روشن / خاموش کردن';
+
+  @override
+  String get buttonActionNone => 'هیچ‌کدام';
 }

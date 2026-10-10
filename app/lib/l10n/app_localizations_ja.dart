@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12429,4 +12430,219 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pinPersonDescription => 'ピン留めした人はピープル一覧の上部に残り、整理では削除されません。';
+
+  @override
+  String get buildAndShareApp => 'カスタムアプリを作成して共有';
+
+  @override
+  String get membersAndCounting => '8000+人のメンバーがいて増え続けています。';
+
+  @override
+  String get privacyIntro => 'Omiでは、あなたのプライバシーを守ることに尽力しています。このページでは、データの保存と使用方法を管理できます。';
+
+  @override
+  String get dataProtectionDesc => 'データは強力な暗号化で既定で保護されています。以下の設定と今後のプライバシーオプションを確認してください。';
+
+  @override
+  String get transcriptionConfig => 'STTプロバイダーを設定';
+
+  @override
+  String get importDataConfig => '他のソースからデータをインポート';
+
+  @override
+  String get understandingSubtitle => '会話から理解された単語数。';
+
+  @override
+  String get rememberingSubtitle => 'あなたのために記憶された事実と詳細。';
+
+  @override
+  String get debugLogsDesc => '問題の診断に役立ちます';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'これにより、派生したすべてのナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全なままです。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'すべてのノードと接続を消去';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc => 'モデルが改善されるにつれて、録音の文字起こし結果がより良くなります。';
+
+  @override
+  String get bestInClassTranscription => '設定不要で最高クラスの文字起こし';
+
+  @override
+  String get optimizedForConversation => '会話に最適化';
+
+  @override
+  String get highAccuracy => '高精度';
+
+  @override
+  String get privacyFirst => 'プライバシー優先';
+
+  @override
+  String get keepGoing => 'その調子です、頑張ってください';
+
+  @override
+  String get personalGrowthJourney => 'あなたのすべての言葉に耳を傾けるAIとの個人的成長の旅。';
+
+  @override
+  String get alwaysInContext => '常にコンテキストに含む';
+
+  @override
+  String get configureSttProvider => 'STTプロバイダーを設定';
+
+  @override
+  String get clearAllNodesAndConnections => 'すべてのノードと接続をクリア';
+
+  @override
+  String get welcomeToOmiDescription => 'Omiへようこそ！あなたのAIコンパニオンは、会話、タスクなどでお手伝いする準備ができています。';
+
+  @override
+  String get conversationsProcessedAutomatically => '会話は自動的に処理されます';
+
+  @override
+  String get getInsightsInstantly => 'すぐにインサイトと要約を取得できます';
+
+  @override
+  String get dailyScoreDescription => '実行に集中するための\nスコアです。';
+
+  @override
+  String get startConversation => '会話を始めて魔法を起こしましょう';
+
+  @override
+  String get wearableAiCompanion => 'ウェアラブルAIコンパニオン';
+
+  @override
+  String get organizeAndControlMemories => '記憶を整理・管理する';
+
+  @override
+  String get setAllMemoriesToPrivate => 'すべての記憶を非公開に設定';
+
+  @override
+  String get setAllMemoriesToPublic => 'すべての記憶を公開に設定';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => '最高のOmi体験のために優先言語を選択してください';
+
+  @override
+  String get enableFeaturesForBestExperience => 'デバイスで最高のOmi体験を得るために機能を有効にしてください。';
+
+  @override
+  String get deliveryTimeDescription => '日次の要約を受け取る時刻';
+
+  @override
+  String get configureSTTProvider => 'STTプロバイダーを設定';
+
+  @override
+  String get setConversationEndDescription => '会話が自動的に終了するタイミングを設定';
+
+  @override
+  String get clearNodesDescription => 'すべてのノードと接続をクリア';
+
+  @override
+  String get deleteKnowledgeGraphWarning => 'これにより、派生したすべてのナレッジグラフデータが削除されます。元の記憶は安全に保たれます。';
+
+  @override
+  String get createAndShareYourApp => 'アプリを作成して共有';
+
+  @override
+  String get e2eeDescription =>
+      'エンドツーエンド暗号化はプライバシーの最高基準です。有効にすると、データはサーバーに送信される前にデバイス上で暗号化されます。これは、Omiを含め、誰もあなたのコンテンツにアクセスできないことを意味します。';
+
+  @override
+  String get secureEncryptionDescription =>
+      'あなたのデータは、Google Cloudでホストされている当社のサーバー上で、あなた固有の鍵で暗号化されています。これは、生のコンテンツがOmiスタッフやGoogleを含む誰にも、データベースから直接アクセスできないことを意味します。';
+
+  @override
+  String get e2eeCardDescription => '最大のセキュリティを有効にすると、あなただけがデータにアクセスできます。詳しくはタップしてください。';
+
+  @override
+  String get yourOmiUnleashed => 'あなたのOmiを解き放とう。無限の可能性のためにUnlimitedへ。';
+
+  @override
+  String get privacyIntroText => 'Omiでは、お客様のプライバシーを非常に重要視しています。収集するデータとその使用方法について透明性を保ちたいと考えています。以下が知っておくべきことです：';
+
+  @override
+  String get commitmentText => '私たちは収集したデータをOmiをより良い製品にするためだけに使用することを約束します。あなたのプライバシーと信頼は私たちにとって最も重要です。';
+
+  @override
+  String get thankYouText => 'Omiの大切なユーザーであることに感謝します。ご質問やご不明な点がございましたら、team@basedhardware.comまでお気軽にお問い合わせください。';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'これにより、すべての派生ナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全に保たれます。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
+
+  @override
+  String get howPeopleWorks => '人物を作成したら、会話の文字起こしに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！';
+
+  @override
+  String get buildAndShareYourCustomApp => 'カスタムアプリを作成して共有';
+
+  @override
+  String get onboardingChooseYourPreference => 'お好みを選択してください';
+
+  @override
+  String get onboardingGrantRequiredAccess => '必要なアクセスを許可';
+
+  @override
+  String get apiEnvironmentDescription => '接続するサーバーを選択';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get omisStorageDesc => 'Omi がスマートフォンに接続されていない時、内蔵メモリに音声をローカル保存します。録音を失うことはありません。';
+
+  @override
+  String get permissionsSetupDescription => 'いくつかの権限を有効にして、Omiの魔法を体験しましょう。';
+
+  @override
+  String get architectSubtitle => 'パワーユーザーAI — 数千のチャット + エージェント自動化';
+
+  @override
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get speakerTagPromptSubtitle => '過去2日間の声をさっと確認';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$nameを残し、会話に登場する人として扱います';
+  }
+
+  @override
+  String get pinPersonHonestLine => '似た声を照合する前にOmiが確認します。';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '「はい」で$nameさんの信頼度が上がります。';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '星5つの評価は私たちの大きな励みになります ❤️';
+
+  @override
+  String get singlePress => 'シングルプレス';
+
+  @override
+  String get singlePressAction => 'シングルプレスアクション';
+
+  @override
+  String get triplePress => 'トリプルプレス';
+
+  @override
+  String get triplePressAction => 'トリプルプレスアクション';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get longPressFixedNotice => 'デバイスハードウェアで固定';
+
+  @override
+  String get turnOnOff => 'オン / オフの切り替え';
+
+  @override
+  String get buttonActionNone => 'なし';
 }

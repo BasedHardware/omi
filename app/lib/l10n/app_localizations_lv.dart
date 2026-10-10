@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12639,4 +12640,230 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Piespraustās personas paliek jūsu Cilvēku saraksta augšā, un Sakopšana tās nenoņem.';
+
+  @override
+  String get buildAndShareApp => 'Izveidojiet un kopīgojiet savu pielāgoto lietotni';
+
+  @override
+  String get membersAndCounting => '8000+ dalībnieki un turpina pieaugt.';
+
+  @override
+  String get privacyIntro =>
+      'Omi mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu. Pārskatiet savus iestatījumus un turpmākās privātuma opcijas zemāk.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurēt STT pakalpojumu sniedzēju';
+
+  @override
+  String get importDataConfig => 'Importēt datus no citiem avotiem';
+
+  @override
+  String get understandingSubtitle => 'Vārdi, kas saprasti no jūsu sarunām.';
+
+  @override
+  String get rememberingSubtitle => 'Fakti un detaļas, kas atcerētas jums.';
+
+  @override
+  String get debugLogsDesc => 'Palīdz diagnosticēt problēmas';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Tas izdzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu oriģinālās atmiņas paliks drošībā. Grafs tiks atjaunots ar laiku vai pēc nākamā pieprasījuma.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Notīrīt visus mezglus un savienojumus';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Uzlabojoties mūsu modelim, mēs varam sniegt labākus transkripcijas rezultātus jūsu ierakstiem.';
+
+  @override
+  String get bestInClassTranscription => 'Labākā klases transkripcija ar nulli iestatījumiem';
+
+  @override
+  String get optimizedForConversation => 'Optimizēts sarunām';
+
+  @override
+  String get highAccuracy => 'Augsta precizitāte';
+
+  @override
+  String get privacyFirst => 'Privātums pirmajā vietā';
+
+  @override
+  String get keepGoing => 'Turpiniet, jūs darāt lieliski';
+
+  @override
+  String get personalGrowthJourney => 'Jūsu personīgās izaugsmes ceļojums ar AI, kas klausās katru jūsu vārdu.';
+
+  @override
+  String get alwaysInContext => 'Vienmēr kontekstā';
+
+  @override
+  String get configureSttProvider => 'Konfigurēt STT pakalpojumu sniedzēju';
+
+  @override
+  String get clearAllNodesAndConnections => 'Notīrīt visus mezglus un savienojumus';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Laipni lūdzam Omi! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Sarunas tiek apstrādātas automātiski';
+
+  @override
+  String get getInsightsInstantly => 'Iegūstiet ieskatus un kopsavilkumus nekavējoties';
+
+  @override
+  String get dailyScoreDescription => 'Rezultāts, kas palīdz labāk\nkoncentrēties uz izpildi.';
+
+  @override
+  String get startConversation => 'Sāciet sarunu un ļaujiet būt brīnumiem';
+
+  @override
+  String get wearableAiCompanion => 'Valkājams AI palīgs';
+
+  @override
+  String get organizeAndControlMemories => 'Organizējiet un kontrolējiet savas atmiņas';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Iestatīt visas atmiņas kā privātas';
+
+  @override
+  String get setAllMemoriesToPublic => 'Iestatīt visas atmiņas kā publiskas';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Izvēlieties vēlamo valodu labākajai Omi pieredzei';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Iespējojiet funkcijas labākajai Omi pieredzei jūsu ierīcē.';
+
+  @override
+  String get deliveryTimeDescription => 'Kad saņemt dienas kopsavilkumu';
+
+  @override
+  String get configureSTTProvider => 'Konfigurēt STT nodrošinātāju';
+
+  @override
+  String get setConversationEndDescription => 'Iestatiet, kad sarunas automātiski beidzas';
+
+  @override
+  String get clearNodesDescription => 'Notīrīt visus mezglus un savienojumus';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Tas izdzēsīs visus atvasinātos zināšanu grafa datus. Jūsu sākotnējās atmiņas paliks drošībā.';
+
+  @override
+  String get createAndShareYourApp => 'Izveidojiet un dalieties ar savu lietotni';
+
+  @override
+  String get e2eeDescription =>
+      'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.';
+
+  @override
+  String get yourOmiUnleashed => 'Jūsu Omi, atbrīvots. Kļūstiet neierobežots bezgalīgām iespējām.';
+
+  @override
+  String get privacyIntroText =>
+      'Omi mēs ļoti nopietni uztveram jūsu privātumu. Mēs vēlamies būt caurspīdīgi par datiem, ko apkopojam un kā tos izmantojam. Lūk, kas jums jāzina:';
+
+  @override
+  String get commitmentText =>
+      'Mēs esam apņēmušies izmantot apkopotos datus tikai, lai padarītu Omi par labāku produktu jums. Jūsu privātums un uzticība mums ir vissvarīgākā.';
+
+  @override
+  String get thankYouText =>
+      'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Tas dzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu sākotnējās atmiņas paliks drošībā. Grafs tiks atjaunots laika gaitā vai nākamajā pieprasījumā.';
+
+  @override
+  String get howPeopleWorks =>
+      'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Izveidojiet un kopīgojiet savu pielāgoto lietotni';
+
+  @override
+  String get onboardingChooseYourPreference => 'Izvēlieties savu preferenci';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Piešķirt nepieciešamo piekļuvi';
+
+  @override
+  String get apiEnvironmentDescription => 'Izvēlieties, kuram serverim pieslēgties';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsu zvani paliek privāti un droši';
+
+  @override
+  String get omisStorageDesc =>
+      'Kad jūsu Omi nav savienots ar tālruni, tas saglabā audio lokāli iebūvētajā atmiņā. Jūs nekad nezaudēsiet ierakstu.';
+
+  @override
+  String get permissionsSetupDescription => 'Iespējojiet dažas atļaujas, lai Omi varētu darīt savu burvību.';
+
+  @override
+  String get architectSubtitle => 'Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija';
+
+  @override
+  String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Ātra pēdējo divu dienu balsu pārbaude';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Paturēt $name un sagaidīt šo personu jūsu sarunās';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi pajautā, pirms saskaņo līdzīgas balsis.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Jā palielina pārliecību par $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 zvaigžņu vērtējums mums ļoti palīdz ❤️';
+
+  @override
+  String get singlePress => 'Viens nospiešana';
+
+  @override
+  String get singlePressAction => 'Viena nospieduma darbība';
+
+  @override
+  String get triplePress => 'Trīskāršs nospiešana';
+
+  @override
+  String get triplePressAction => 'Trīskārša nospieduma darbība';
+
+  @override
+  String get longPress => 'Ilgs nospiedums';
+
+  @override
+  String get longPressFixedNotice => 'Fiksēts ierīces aparatūrā';
+
+  @override
+  String get turnOnOff => 'Ieslēgt / Izslēgt';
+
+  @override
+  String get buttonActionNone => 'Nav';
 }

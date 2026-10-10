@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12639,4 +12640,230 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get pinPersonDescription => 'Pripete osebe ostanejo na vrhu vašega seznama Ljudje in jih ne odstrani Počisti.';
+
+  @override
+  String get buildAndShareApp => 'Ustvari in deli svojo prilagojeno aplikacijo';
+
+  @override
+  String get membersAndCounting => '8000+ članov in več.';
+
+  @override
+  String get privacyIntro =>
+      'Pri Omi smo zavezani zaščiti vaše zasebnosti. Ta stran vam omogoči nadzor nad tem, kako se vaši podatki shranjevajo in uporabljajo.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Vaši podatki so privzeto zaščiteni s krepko enkripcijo. Preglejte svoje nastavitve in prihodnje možnosti zasebnosti spodaj.';
+
+  @override
+  String get transcriptionConfig => 'Nastavite ponudnika STT';
+
+  @override
+  String get importDataConfig => 'Uvozite podatke iz drugih virov';
+
+  @override
+  String get understandingSubtitle => 'Besede razumene iz vaših pogovorov.';
+
+  @override
+  String get rememberingSubtitle => 'Dejstva in podrobnosti, ki se jih za vas spomnijo.';
+
+  @override
+  String get debugLogsDesc => 'Pomaga pri diagnostiki težav';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaši izvirni spomin ostanejo varni. Graf se bo sčasoma ponovno zgrajen ali ob naslednji zahtevi.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Očisti vsa vozlišča in povezave';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Ko se naš model izboljša, lahko zagotovimo boljše rezultate transkripcije za vaše posnetke.';
+
+  @override
+  String get bestInClassTranscription => 'Najboljša transkripcija brez nastavitve';
+
+  @override
+  String get optimizedForConversation => 'Optimizirana za pogovor';
+
+  @override
+  String get highAccuracy => 'Visoka natančnost';
+
+  @override
+  String get privacyFirst => 'Zasebnost na prvem mestu';
+
+  @override
+  String get keepGoing => 'Nadaljujte, odličko se vam dogaja';
+
+  @override
+  String get personalGrowthJourney => 'Vaša osebna pot rasti z AI, ki je pozorna na vsako vaše besedo.';
+
+  @override
+  String get alwaysInContext => 'Vedno v kontekstu';
+
+  @override
+  String get configureSttProvider => 'Nastavite ponudnika STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Počisti vse vozlišča in povezave';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Dobrodošli v Omi! Vaš AI spremljevalec je pripravljen, da vam pomaga s pogovori, nalogami in še več.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Pogovori se obdelajo samodejno';
+
+  @override
+  String get getInsightsInstantly => 'Takoj prejmi vpoglede in povzetke';
+
+  @override
+  String get dailyScoreDescription => 'Ocena, ki ti pomaga bolje\nosredotočiti se na izvajanje.';
+
+  @override
+  String get startConversation => 'Začni pogovor in pusti čaradi, da se dogaja';
+
+  @override
+  String get wearableAiCompanion => 'Nošljiv AI spremljevalec';
+
+  @override
+  String get organizeAndControlMemories => 'Organizirajte in nadzorujte svoje spomine';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Nastavi vse spomine na zasebno vidljivost';
+
+  @override
+  String get setAllMemoriesToPublic => 'Nastavi vse spomine na javno vidljivost';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Izberite svoj izbrani jezik za najboljšo izkušnjo z Omi';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Omogočite funkcije za najboljšo izkušnjo z Omi na vaši napravi.';
+
+  @override
+  String get deliveryTimeDescription => 'Kdaj prejeti dnevni povzetek';
+
+  @override
+  String get configureSTTProvider => 'Konfigurirajte ponudnika STT';
+
+  @override
+  String get setConversationEndDescription => 'Nastavite, kdaj se pogovori samodejno končajo';
+
+  @override
+  String get clearNodesDescription => 'Izbrišite vse vozlišče in povezave';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'To bo izbrisalo vse izpeljane podatke grafa znanja. Vaši prvotni spomini ostajajo varni.';
+
+  @override
+  String get createAndShareYourApp => 'Ustvarite in delite svojo aplikacijo';
+
+  @override
+  String get e2eeDescription =>
+      'Šifriranje od konca do konca je zlati standard za zasebnost. Ko je omogočeno, se vaši podatki šifrirajo na vaši napravi, preden se pošljejo na naše strežnike. To pomeni, da nihče, niti Omi, ne more dostopati do vaše vsebine.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vaši podatki so šifrirani s ključem, ki je edinstven za vas na naših strežnikih, gostovanih na Google Cloud. To pomeni, da je vaša surova vsebina nedostopna komurkoli, vključno z osebjem Omi ali Google, neposredno iz baze podatkov.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Omogočite za največjo varnost, kjer samo vi lahko dostopate do vaših podatkov. Tapnite, da se več naučite.';
+
+  @override
+  String get yourOmiUnleashed => 'Vaš Omi, osvobođen. Pojdite na unlimited za neskončne možnosti.';
+
+  @override
+  String get privacyIntroText =>
+      'V Omi zelo resno jemljemo vašo zasebnost. Želimo biti transparentni o podatkih, ki jih zbiramo, in kako jih uporabljamo za izboljšanje našega izdelka za vas. Tukaj je, kaj morate vedeti:';
+
+  @override
+  String get commitmentText =>
+      'Zavezani smo, da podatke, ki jih zbiramo, uporabljamo samo za izboljšanje Omija za vas. Vaša zasebnost in zaupanje sta nam največje.';
+
+  @override
+  String get thankYouText =>
+      'Hvala, ker ste dragoceni uporabnik Omija. Če imate vprašanja ali pomisleke, se lahko obrnete na nas na team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaša originalna spomina bodo ostala varna. Graf bo ponovno zgrajen s časom ali ob naslednji zahtevi.';
+
+  @override
+  String get howPeopleWorks =>
+      'Ko je oseba ustvarjena, lahko greste na prepis pogovora in jim dodelite njihove pripadajoče segmente, na ta način bo Omi sposoben prepoznati tudi njihov govor!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Sestavi in deli svojo prilagojeno aplikacijo';
+
+  @override
+  String get onboardingChooseYourPreference => 'Izberite svojo preference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Dodelite potreben dostop';
+
+  @override
+  String get apiEnvironmentDescription => 'Izberi, s katerim zaledjem se želiš povezati';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Tvoji klici so zasebni in varni';
+
+  @override
+  String get omisStorageDesc =>
+      'Ko se tvoj Omi ne poveži s tvojim telefonom, shranja avdio lokalno v svoji vgrajeni pomnilnik. Nikoli ne izgubiš posnetka.';
+
+  @override
+  String get permissionsSetupDescription => 'Omogoči nekaj dovoljenj, da Omi deluje s polno zmogljivostjo.';
+
+  @override
+  String get architectSubtitle => 'Napreden AI — tisoče pogovorov + agentna avtomatizacija';
+
+  @override
+  String get backgroundModeNote => 'Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Hiter pregled glasov iz zadnjih dveh dni';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Obdrži osebo $name in jo pričakuj v svojih pogovorih';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vpraša, preden poveže podobne glasove.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Da poveča zanesljivost osebe $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Ocena s 5 zvezdicami nam res zelo pomaga ❤️';
+
+  @override
+  String get singlePress => 'Enojni pritisk';
+
+  @override
+  String get singlePressAction => 'Dejanje enojnega pritiska';
+
+  @override
+  String get triplePress => 'Trojni pritisk';
+
+  @override
+  String get triplePressAction => 'Dejanje trojnega pritiska';
+
+  @override
+  String get longPress => 'Dolg pritisk';
+
+  @override
+  String get longPressFixedNotice => 'Fiksno v strojni opremi naprave';
+
+  @override
+  String get turnOnOff => 'Vklop / Izklop';
+
+  @override
+  String get buttonActionNone => 'Brez';
 }

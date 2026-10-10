@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12597,4 +12598,230 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Pinned people stay at the top of your People list and aren\'t removed by Clean Up.';
+
+  @override
+  String get buildAndShareApp => 'Build and share your custom app';
+
+  @override
+  String get membersAndCounting => '8000+ members and counting.';
+
+  @override
+  String get privacyIntro =>
+      'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Your data is secured by default with strong encryption. Review your settings and future privacy options below.';
+
+  @override
+  String get transcriptionConfig => 'Configure STT provider';
+
+  @override
+  String get importDataConfig => 'Import data from other sources';
+
+  @override
+  String get understandingSubtitle => 'Words understood from your conversations.';
+
+  @override
+  String get rememberingSubtitle => 'Facts and details remembered for you.';
+
+  @override
+  String get debugLogsDesc => 'Helps diagnose issues';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Clear all nodes and connections';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'As our model improves, we can provide better transcription results for your recordings.';
+
+  @override
+  String get bestInClassTranscription => 'Best in class transcription with zero setup';
+
+  @override
+  String get optimizedForConversation => 'Optimized for conversation';
+
+  @override
+  String get highAccuracy => 'High accuracy';
+
+  @override
+  String get privacyFirst => 'Privacy first';
+
+  @override
+  String get keepGoing => 'Keep going, you are doing great';
+
+  @override
+  String get personalGrowthJourney => 'Your personal growth journey with AI that listens to your every word.';
+
+  @override
+  String get alwaysInContext => 'Always in context';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Conversations are processed automatically';
+
+  @override
+  String get getInsightsInstantly => 'Get insights and summaries instantly';
+
+  @override
+  String get dailyScoreDescription => 'A score to help you better\nfocus on execution.';
+
+  @override
+  String get startConversation => 'Start a conversation and let the magic begin';
+
+  @override
+  String get wearableAiCompanion => 'Wearable AI companion';
+
+  @override
+  String get organizeAndControlMemories => 'Organize and control your memories';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Set all memories to private visibility';
+
+  @override
+  String get setAllMemoriesToPublic => 'Set all memories to public visibility';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Select your preferred language for the best Omi experience';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Enable features for the best Omi experience on your device.';
+
+  @override
+  String get deliveryTimeDescription => 'When to receive your daily summary';
+
+  @override
+  String get configureSTTProvider => 'Configure STT provider';
+
+  @override
+  String get setConversationEndDescription => 'Set when conversations auto-end';
+
+  @override
+  String get clearNodesDescription => 'Clear all nodes and connections';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'This will delete all derived knowledge graph data. Your original memories remain safe.';
+
+  @override
+  String get createAndShareYourApp => 'Create and share your app';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Enable for maximum security where only you can access your data. Tap to learn more.';
+
+  @override
+  String get yourOmiUnleashed => 'Your Omi, unleashed. Go unlimited for endless possibilities.';
+
+  @override
+  String get privacyIntroText =>
+      'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:';
+
+  @override
+  String get commitmentText =>
+      'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.';
+
+  @override
+  String get thankYouText =>
+      'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.';
+
+  @override
+  String get howPeopleWorks =>
+      'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Build and share your custom app';
+
+  @override
+  String get onboardingChooseYourPreference => 'Choose your preference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Grant required access';
+
+  @override
+  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Your calls stay private and secure';
+
+  @override
+  String get omisStorageDesc =>
+      'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.';
+
+  @override
+  String get permissionsSetupDescription => 'Enable a few permissions so Omi can work its magic.';
+
+  @override
+  String get architectSubtitle => 'Power-user AI — thousands of chats + agentic automations';
+
+  @override
+  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'A quick check on voices from the last two days';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Keep $name, and expect them in your conversations';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi asks before matching close voices.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Yes raises $name\'s confidence.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Rating us 5 stars really helps us out ❤️';
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get longPressFixedNotice => 'Fixed in device hardware';
+
+  @override
+  String get turnOnOff => 'Turn On / Off';
+
+  @override
+  String get buttonActionNone => 'None';
 }
