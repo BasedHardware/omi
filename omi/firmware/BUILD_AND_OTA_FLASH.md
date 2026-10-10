@@ -1,5 +1,7 @@
 # OMI Firmware Build and OTA Flash Guide
 
+This guide applies to **Consumer V1 (CV1)**, not the XIAO nRF52840 DevKit. For DevKit builds, use `devkit/CMakePresets.json` with NCS 2.7.0.
+
 This guide provides step-by-step instructions for building the OMI firmware using nRF Connect SDK 2.9.0 and flashing it over-the-air (OTA) using the nRF Connect mobile app.
 
 ## Table of Contents
@@ -38,7 +40,7 @@ The OMI firmware is a dual-core nRF5340 application with the following features:
 - **Microphone**: PDM microphone capture with processing
 - **User Interface**: LED indicators, haptic feedback, button controls
 - **Power Management**: Battery monitoring and charging support
-- **Storage**: SD card support for offline audio storage
+- **Storage**: 4 Gbit / 512 MB soldered SD NAND, used as a raw-sector audio ring with no filesystem
 
 ### Architecture
 - **Application Core (Cortex-M33)**: Main application logic
@@ -277,23 +279,31 @@ west update
 
 ### Memory Layout
 ```
-Application Core (nRF5340 CPUAPP):
-├── MCUboot Bootloader (64 KB)
-├── Application Primary (982 KB)
-├── Application Secondary (982 KB) - OTA staging
-└── Settings/NVS
+App-core internal flash (1 MiB):
+├── MCUboot (64 KiB)
+└── Primary slot (960 KiB, including 512-byte MCUboot pad)
 
-Network Core (nRF5340 CPUNET):
-├── Network Bootloader (34 KB)
-├── Network Primary (222 KB)
-└── Network Secondary (222 KB) - OTA staging
+Network-core update region:
+└── 256 KiB (ram_flash / nordic_ram_flash_controller)
+
+External NOR (2 MiB):
+├── Application secondary (960 KiB) - OTA staging
+├── Network secondary (256 KiB) - OTA staging
+└── Remaining region (832 KiB)
+
+SD NAND (4 Gbit / 512 MB):
+└── Raw audio ring, separate from OTA flash
 ```
 
+The checked-in layout is in `boards/omi/pm_static.yml`. Its `app.address`
+does not agree with `app.size` and `app.end_address`; see the comment there.
+Confirm the generated `build/partitions.yml` when building.
+
 ### Security Features
-- **RSA-2048 Signing**: All firmware images are cryptographically signed
+- **Image Signing**: MCUboot uses `bootloader/mcuboot/root-rsa-2048.pem`, a public sample key in the repository; this is not a private production signing key.
 - **Secure Boot**: MCUboot verifies signatures before execution
 - **Rollback Protection**: Prevents downgrade to vulnerable versions
-- **Encrypted Communication**: MCUmgr uses encrypted BLE transport
+- **OTA Transport**: MCUmgr SMP over Bluetooth LE; verify the effective SDK configuration before assuming encryption is required.
 
 ### Build Configuration Highlights
 ```
@@ -308,8 +318,8 @@ CONFIG_BOOTLOADER_MCUBOOT=y               # Use MCUboot
 - **Audio Codec**: OPUS 1.2.1 for efficient audio compression
 - **Bluetooth**: BLE 5.0 with extended advertising and 2M PHY
 - **Power Management**: Advanced power states and battery monitoring
-- **File System**: EXT2 support for SD card storage
-- **Sensors**: LSM6DSL accelerometer/gyroscope support
+- **Offline Storage**: Raw-sector SD NAND ring (`omi/src/sd_card.c`); no EXT2 or LittleFS filesystem
+- **Sensors**: LSM6DS3TR-C timestamp counter for clock recovery; motion features are disabled
 
 ## Success Indicators
 

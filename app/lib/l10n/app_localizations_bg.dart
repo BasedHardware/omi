@@ -12708,6 +12708,155 @@ class AppLocalizationsBg extends AppLocalizations {
   String get tasksGroupByDate => 'Групиране по дата';
 
   @override
+  String get dreamReportTitle => 'Отчет на Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Режим на визуализация: Dream показва какво би променил, но в профила ви засега нищо не се променя.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream прилага тези промени сам. Можете да отмените всяка от тях в Скорошни промени.';
+
+  @override
+  String get dreamReportRunNow => 'Стартирай сега';
+
+  @override
+  String get dreamReportRunLimit => 'Днес няма повече ръчни стартирания';
+
+  @override
+  String get dreamReportRunInProgress => 'Вече тече изпълнение. Опитайте отново след минута.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream не можа да се стартира. Опитайте отново.';
+
+  @override
+  String get dreamReportIdle => 'Още няма нищо ново за преглед.';
+
+  @override
+  String get dreamReportLoadFailed => 'Отчетът на Dream не можа да се зареди.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Още няма изпълнения';
+
+  @override
+  String get dreamReportEmptyBody =>
+      'Dream преглежда какво се е променило във вашия профил приблизително веднъж на час.';
+
+  @override
+  String get dreamReportScheduled => 'По график';
+
+  @override
+  String get dreamReportManual => 'Ръчно';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Неуспешно ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Спряно при достигане на лимита за време';
+
+  @override
+  String get dreamReportNothingFound => 'Няма какво да се поправи';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прочетени елементи: $records · токени: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Би поправил';
+
+  @override
+  String get dreamReportFixed => 'Поправено';
+
+  @override
+  String get dreamReportWouldAsk => 'Би ви попитал';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Би предложил задачи';
+
+  @override
+  String get dreamReportLearnedWords => 'Научени думи';
+
+  @override
+  String get dreamReportFeedback => 'Докладвано на екипа на Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Изтрит елемент';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count от $limit изпълнения днес';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count промени чакат',
+      one: '1 промяна чака',
+      zero: 'Няма чакащи промени',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Днес остават $count ръчни стартирания',
+      one: 'Днес остава 1 ръчно стартиране',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes поправки',
+      one: '1 поправка',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks предложения',
+      one: '1 предложение',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count по-стари промени са пропуснати',
+      one: '1 по-стара промяна е пропусната',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count доклада са задържани заради поверителност',
+      one: '1 доклад е задържан заради поверителност',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Оценка от 5 звезди наистина ни помага ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Максимум 25 байта ($count байта, символите извън ASCII използват няколко байта)';
   }

@@ -12645,6 +12645,154 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tasksGroupByDate => 'तारीख़ के अनुसार समूहित करें';
 
   @override
+  String get dreamReportTitle => 'Dream रिपोर्ट';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'प्रीव्यू मोड: Dream दिखाता है कि वह क्या बदलता, लेकिन अभी आपके खाते में कुछ नहीं बदलता।';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream ये बदलाव खुद लागू करता है। किसी भी बदलाव को हाल के बदलाव में पूर्ववत करें।';
+
+  @override
+  String get dreamReportRunNow => 'अभी चलाएँ';
+
+  @override
+  String get dreamReportRunLimit => 'आज कोई मैन्युअल रन नहीं बचा';
+
+  @override
+  String get dreamReportRunInProgress => 'एक पास पहले से चल रहा है। एक मिनट बाद फिर कोशिश करें।';
+
+  @override
+  String get dreamReportRunFailed => 'Dream नहीं चल सका। फिर कोशिश करें।';
+
+  @override
+  String get dreamReportIdle => 'देखने के लिए अभी कुछ नया नहीं है।';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream रिपोर्ट लोड नहीं हो सकी।';
+
+  @override
+  String get dreamReportEmptyTitle => 'अभी कोई पास नहीं';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream लगभग हर घंटे देखता है कि आपके खाते में क्या बदला।';
+
+  @override
+  String get dreamReportScheduled => 'शेड्यूल किया गया';
+
+  @override
+  String get dreamReportManual => 'मैन्युअल';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'विफल ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'समय सीमा पर रुका';
+
+  @override
+  String get dreamReportNothingFound => 'ठीक करने के लिए कुछ नहीं';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records आइटम पढ़े · $tokens टोकन';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'ठीक करता';
+
+  @override
+  String get dreamReportFixed => 'ठीक किया गया';
+
+  @override
+  String get dreamReportWouldAsk => 'आपसे पूछता';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'कार्य सुझाता';
+
+  @override
+  String get dreamReportLearnedWords => 'सीखे गए शब्द';
+
+  @override
+  String get dreamReportFeedback => 'Omi टीम को बताया गया';
+
+  @override
+  String get dreamReportDeletedItem => 'हटाया गया आइटम';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'आज $count/$limit पास';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बदलाव प्रतीक्षा में',
+      one: '1 बदलाव प्रतीक्षा में',
+      zero: 'कोई बदलाव प्रतीक्षा में नहीं',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'आज $count मैन्युअल रन बचे हैं',
+      one: 'आज 1 मैन्युअल रन बचा है',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes सुधार',
+      one: '1 सुधार',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks सुझाव',
+      one: '1 सुझाव',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count पुराने बदलाव छोड़े गए',
+      one: '1 पुराना बदलाव छोड़ा गया',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'गोपनीयता के लिए $count रिपोर्ट रोकी गईं',
+      one: 'गोपनीयता के लिए 1 रिपोर्ट रोकी गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 स्टार रेटिंग देने से हमें सच में बहुत मदद मिलती है ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'अधिकतम 25 बाइट्स ($count बाइट्स, गैर-ASCII एकाधिक बाइट्स का उपयोग करते हैं)';
   }

@@ -180,6 +180,8 @@ def _sync_task_reminder(uid: str, task_id: str) -> None:
         description=task.get('description', ''),
         completed=bool(task.get('completed')),
         due_at=task.get('due_at'),
+        status=task.get('status'),
+        deleted=bool(task.get('deleted')),
     )
 
 

@@ -490,6 +490,9 @@ def create_action_item_tool(
                     action_item_id=action_item_id,
                     description=task_desc,
                     due_at=due.isoformat(),
+                    completed=bool(created_item.get('completed')),
+                    status=created_item.get('status'),
+                    deleted=bool(created_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to send notification: {notif_error}")
@@ -659,6 +662,8 @@ def update_action_item_tool(
                     updated_item.get('description', ''),
                     bool(updated_item.get('completed')),
                     updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to sync action item reminder: {notif_error}")

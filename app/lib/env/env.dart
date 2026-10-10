@@ -19,6 +19,20 @@ abstract class Env {
   static String? _apiBaseUrlOverride;
   static bool isTestFlight = false;
 
+  /// Loopback hosts a debug hermetic journey may mark trusted. A user-configured
+  /// override is never added here; only [armDebugJourneyCredentialTrust] plus
+  /// [addDebugTrustedAuthority] from the journey boot can populate it.
+  static final Set<String> _debugTrustedAuthorities = <String>{};
+  static bool _debugJourneyCredentialTrustArmed = false;
+  static const Set<String> _debugJourneyLoopbackHosts = {'localhost', '127.0.0.1', '::1'};
+
+  /// Test seam for release and profile. ANDed with [kDebugMode], so setting it
+  /// true cannot admit fixture trust once asserts are stripped.
+  @visibleForTesting
+  static bool debugJourneyTrustPermitted = kDebugMode;
+
+  static bool get _debugJourneyTrustPermitted => kDebugMode && debugJourneyTrustPermitted;
+
   static AppEnvironmentProfile get profile =>
       AppEnvironmentProfile.forFlavor(productionFlavor: F.env == Environment.prod);
 
@@ -28,10 +42,85 @@ abstract class Env {
 
   static void overrideApiBaseUrl(String url) {
     _apiBaseUrlOverride = url;
+    // A replacement override is a new trust boundary. The hermetic journey
+    // boot re-arms only after it has installed the fixture URL.
+    _disarmDebugJourneyCredentialTrust();
+  }
+
+  static bool get hasApiBaseUrlOverride => _apiBaseUrlOverride != null;
+
+  static void clearApiBaseUrlOverride() {
+    _apiBaseUrlOverride = null;
+    _disarmDebugJourneyCredentialTrust();
   }
 
   static void clearApiBaseUrlOverrideForTesting() {
-    _apiBaseUrlOverride = null;
+    clearApiBaseUrlOverride();
+  }
+
+  /// Arms the debug-only fixture trust registry. The hermetic journey boot is
+  /// the only caller. Release and profile builds assert and leave the registry
+  /// disarmed, so a user-configured backend override never receives Omi
+  /// credentials through this path. [clearApiBaseUrlOverride] disarms it.
+  static void armDebugJourneyCredentialTrust() {
+    if (!_debugJourneyTrustPermitted) {
+      assert(false, 'debug journey credential trust is unreachable outside debug journeys');
+      return;
+    }
+    _debugJourneyCredentialTrustArmed = true;
+  }
+
+  /// Registers a loopback fixture host while [armDebugJourneyCredentialTrust]
+  /// is armed. Non-loopback hosts are refused, including custom backends.
+  static void addDebugTrustedAuthority(String host) {
+    if (!_debugJourneyTrustPermitted) {
+      assert(false, 'debug journey credential trust is unreachable outside debug journeys');
+      return;
+    }
+    if (!_debugJourneyCredentialTrustArmed) {
+      assert(false, 'debug trusted authorities require the journey boot flag');
+      return;
+    }
+    final normalized = host.trim().toLowerCase();
+    if (!_debugJourneyLoopbackHosts.contains(normalized)) {
+      assert(false, 'debug journey trust only accepts a loopback fixture host');
+      return;
+    }
+    _debugTrustedAuthorities.add(normalized);
+  }
+
+  static void _disarmDebugJourneyCredentialTrust() {
+    _debugJourneyCredentialTrustArmed = false;
+    _debugTrustedAuthorities.clear();
+  }
+
+  /// True when [uri] is the loopback fixture currently installed as the API
+  /// override. A different host, port, or scheme is not the fixture, and a
+  /// later [overrideApiBaseUrl] disarms the registry entirely.
+  static bool debugTrustedFixtureAuthority(Uri uri) {
+    if (!_debugJourneyTrustPermitted || !_debugJourneyCredentialTrustArmed) return false;
+    if (!_debugJourneyWebScheme(uri.scheme)) return false;
+    final override = _apiBaseUrlOverride;
+    if (override == null || override.isEmpty) return false;
+    final overrideUri = Uri.tryParse(override);
+    if (overrideUri == null || overrideUri.host.isEmpty) return false;
+    if (!_debugJourneyWebScheme(overrideUri.scheme)) return false;
+    if (uri.scheme.toLowerCase() != overrideUri.scheme.toLowerCase()) return false;
+    if (uri.host.toLowerCase() != overrideUri.host.toLowerCase()) return false;
+    if (uri.port != overrideUri.port) return false;
+    return _debugTrustedAuthorities.contains(overrideUri.host.toLowerCase());
+  }
+
+  static bool _debugJourneyWebScheme(String scheme) {
+    switch (scheme.toLowerCase()) {
+      case 'http':
+      case 'https':
+      case 'ws':
+      case 'wss':
+        return true;
+      default:
+        return false;
+    }
   }
 
   static String? get posthogApiKey => _instance.posthogApiKey;

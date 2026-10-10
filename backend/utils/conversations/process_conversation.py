@@ -112,6 +112,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
+from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -2070,15 +2071,32 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
         },
     )
 
-    for idx, action_item in enumerate(conversation.structured.action_items[: len(action_item_ids)]):
-        if identity.reconcile_kept_reminder(uid, action_item_ids[idx], action_item, sync_action_item_reminder):
+    try:
+        saved_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
+    except Exception:
+        # Tasks are already committed. Defer reminders rather than guessing from
+        # extraction state or turning this derived read into a processing failure.
+        logger.warning('action_item_reminder_state_read_unavailable conversation_id=%s', conversation.id)
+        record_fallback(
+            component='other',
+            from_mode='task_reminder_state_read',
+            to_mode='task_write_only',
+            reason='other',
+            outcome='degraded',
+        )
+        saved_items = []
+    for action_item in saved_items:
+        if identity.reconcile_kept_reminder(uid, action_item['id'], action_item, sync_action_item_reminder):
             continue
-        if action_item.due_at:
+        if action_item.get('due_at'):
             send_action_item_data_message(
                 user_id=uid,
-                action_item_id=action_item_ids[idx],
-                description=action_item.description,
-                due_at=action_item.due_at.isoformat(),
+                action_item_id=action_item['id'],
+                description=action_item.get('description', ''),
+                due_at=action_item['due_at'].isoformat(),
+                completed=bool(action_item.get('completed')),
+                status=action_item.get('status'),
+                deleted=bool(action_item.get('deleted')),
             )
 
     created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, identity.items)]
@@ -2925,7 +2943,8 @@ def process_conversation(
 
     _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
-    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    with identity_pass(None if already_observed else 'first'):
+        speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 

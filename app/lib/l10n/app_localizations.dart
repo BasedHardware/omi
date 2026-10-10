@@ -22689,6 +22689,192 @@ abstract class AppLocalizations {
   /// **'Group by Date'**
   String get tasksGroupByDate;
 
+  /// Title of the dogfood screen showing what the background 'Dream' agent looked at and proposed. 'Dream' is a product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Dream Report'**
+  String get dreamReportTitle;
+
+  /// Banner when the agent runs in shadow mode. Keep 'Dream' untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview mode: Dream shows what it would change, but nothing in your account changes yet.'**
+  String get dreamReportShadowBanner;
+
+  /// Banner when the agent applies edits. 'Recent Changes' is the name of another screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Dream applies these changes on its own. Undo any of them in Recent Changes.'**
+  String get dreamReportLiveBanner;
+
+  /// Button that starts an agent pass immediately. Title Case.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Now'**
+  String get dreamReportRunNow;
+
+  /// Shown when the daily manual-run allowance is used up.
+  ///
+  /// In en, this message translates to:
+  /// **'No manual runs left today'**
+  String get dreamReportRunLimit;
+
+  /// Error when a run is already in progress.
+  ///
+  /// In en, this message translates to:
+  /// **'A pass is already running. Try again in a minute.'**
+  String get dreamReportRunInProgress;
+
+  /// Generic error when starting a run fails. Keep 'Dream' untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t run Dream. Try again.'**
+  String get dreamReportRunFailed;
+
+  /// Toast when a manual run finds no changed items.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing new to look at yet.'**
+  String get dreamReportIdle;
+
+  /// Error state when the report cannot be loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the Dream report.'**
+  String get dreamReportLoadFailed;
+
+  /// Empty state title when the agent has not run yet.
+  ///
+  /// In en, this message translates to:
+  /// **'No passes yet'**
+  String get dreamReportEmptyTitle;
+
+  /// Empty state body.
+  ///
+  /// In en, this message translates to:
+  /// **'Dream looks at what changed in your account about once an hour.'**
+  String get dreamReportEmptyBody;
+
+  /// Label for a run started by the hourly schedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get dreamReportScheduled;
+
+  /// Label for a run the user started with Run Now.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual'**
+  String get dreamReportManual;
+
+  /// Run summary when the pass failed; error is a technical error type name.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed ({error})'**
+  String dreamReportFailed(String error);
+
+  /// Run summary when the pass hit its time limit.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped at its time limit'**
+  String get dreamReportTimedOut;
+
+  /// Run summary when the pass found nothing to change.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to fix'**
+  String get dreamReportNothingFound;
+
+  /// Technical stats for a run: items read and model tokens used.
+  ///
+  /// In en, this message translates to:
+  /// **'Read {records} items · {tokens} tokens'**
+  String dreamReportStats(int records, int tokens);
+
+  /// Section label for edits proposed in preview mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Would fix'**
+  String get dreamReportWouldFix;
+
+  /// Section label for edits that were applied.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed'**
+  String get dreamReportFixed;
+
+  /// Section label for questions the agent would ask the user.
+  ///
+  /// In en, this message translates to:
+  /// **'Would ask you'**
+  String get dreamReportWouldAsk;
+
+  /// Section label for tasks the agent would suggest.
+  ///
+  /// In en, this message translates to:
+  /// **'Would suggest tasks'**
+  String get dreamReportWouldSuggestTasks;
+
+  /// Section label for names and terms the agent added to the user's vocabulary.
+  ///
+  /// In en, this message translates to:
+  /// **'Words it learned'**
+  String get dreamReportLearnedWords;
+
+  /// Section label for anonymous diagnostics sent to developers. 'Omi' is a product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported to the Omi team'**
+  String get dreamReportFeedback;
+
+  /// Label for an edit whose target no longer exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted item'**
+  String get dreamReportDeletedItem;
+
+  /// How many scheduled agent passes ran today out of the daily limit.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} of {limit} passes today'**
+  String dreamReportPasses(int count, int limit);
+
+  /// How many changed items are queued for the agent to look at.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}'**
+  String dreamReportQueued(int count);
+
+  /// Remaining manual runs today.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 manual run left today} other{{count} manual runs left today}}'**
+  String dreamReportRunsLeft(int count);
+
+  /// Run summary: number of proposed fixes and of questions/tasks it would suggest.
+  ///
+  /// In en, this message translates to:
+  /// **'{fixes, plural, =1{1 fix} other{{fixes} fixes}} · {asks, plural, =1{1 suggestion} other{{asks} suggestions}}'**
+  String dreamReportFound(int fixes, int asks);
+
+  /// How many old queued changes were dropped because the queue was full.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}'**
+  String dreamReportDropped(int count);
+
+  /// Diagnostics the privacy filter refused to send.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
+  String dreamReportPrivacyHeld(int count);
+
+  /// Store rating pre-prompt body
+  ///
+  /// In en, this message translates to:
+  /// **'Rating us 5 stars really helps us out ❤️'**
+  String get onboardingRatingPromptBody;
+
   /// Error message shown when device name exceeds 25 UTF-8 bytes limit in rename dialog
   ///
   /// In en, this message translates to:

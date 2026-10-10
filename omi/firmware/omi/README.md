@@ -28,11 +28,11 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] BLE
     - [x] Buttons
     - [x] LEDs
-    - [ ] Wi-Fi, partially
+    - [ ] Wi-Fi (nRF7002 populated; not enabled in current firmware)
     - [x] Motors
-    - [x] Qspi flash
+    - [x] SPI NOR flash (OTA staging)
     - [ ] IMU
-    - [x] Sd Card
+    - [x] Soldered SD NAND (raw-sector audio ring, no filesystem)
   - [x] Add support for MCUBoot
     - [x] Add basic MCUBoot
     - [x] Test with the OMI app (iOS/Android)
@@ -54,15 +54,15 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Fix the issue: The led during charging + device off ~ green only, does not provide correct feedback. charging still works.
   - [x] Buttons
     - [x] Turn the device on/off(entering the deepsleep mode)
-    - [x] Long press to chat with omi
+    - [x] Long press (3 s) to power off
     - [x] Test the deepsleep mode's battery draining.
-  - [x] SD Card (2/3)
-    - [x] Store files
+  - [x] SD NAND (2/3)
+    - [x] Store audio in a raw-sector ring
     - [x] Transfer via BLE
     - [ ] Transfer via Wi-Fi
   - [x] Haptic
     - [x] Haptic on turning on/off
-    - [x] Long press to chat with omi
+    - [x] Long press (3 s) to power off
     - [x] Recheck the mass production version, since the current motor is not good https://github.com/BasedHardware/omi/pull/2281#issuecomment-2841105447
   - [x] Battery (1/2)
     - [x] Percentage feedbacks via BLE

@@ -12694,6 +12694,154 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tasksGroupByDate => 'Kumpulkan mengikut Tarikh';
 
   @override
+  String get dreamReportTitle => 'Laporan Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Mod pratonton: Dream menunjukkan apa yang akan diubah, tetapi belum ada yang berubah dalam akaun anda.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream menggunakan perubahan ini sendiri. Buat asal mana-mana dalam Perubahan Terkini.';
+
+  @override
+  String get dreamReportRunNow => 'Jalankan Sekarang';
+
+  @override
+  String get dreamReportRunLimit => 'Tiada larian manual lagi hari ini';
+
+  @override
+  String get dreamReportRunInProgress => 'Satu pusingan sedang berjalan. Cuba lagi dalam seminit.';
+
+  @override
+  String get dreamReportRunFailed => 'Tidak dapat menjalankan Dream. Cuba lagi.';
+
+  @override
+  String get dreamReportIdle => 'Belum ada yang baharu untuk disemak.';
+
+  @override
+  String get dreamReportLoadFailed => 'Tidak dapat memuatkan laporan Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Belum ada pusingan';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream menyemak perubahan dalam akaun anda kira-kira setiap jam.';
+
+  @override
+  String get dreamReportScheduled => 'Berjadual';
+
+  @override
+  String get dreamReportManual => 'Manual';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Gagal ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Berhenti pada had masa';
+
+  @override
+  String get dreamReportNothingFound => 'Tiada yang perlu dibetulkan';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Membaca $records item · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Akan membetulkan';
+
+  @override
+  String get dreamReportFixed => 'Dibetulkan';
+
+  @override
+  String get dreamReportWouldAsk => 'Akan bertanya kepada anda';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Akan mencadangkan tugasan';
+
+  @override
+  String get dreamReportLearnedWords => 'Perkataan yang dipelajari';
+
+  @override
+  String get dreamReportFeedback => 'Dilaporkan kepada pasukan Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Item dipadam';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count daripada $limit pusingan hari ini';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perubahan menunggu',
+      one: '1 perubahan menunggu',
+      zero: 'Tiada perubahan menunggu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count larian manual lagi hari ini',
+      one: '1 larian manual lagi hari ini',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes pembetulan',
+      one: '1 pembetulan',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks cadangan',
+      one: '1 cadangan',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perubahan lama dilangkau',
+      one: '1 perubahan lama dilangkau',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count laporan ditahan atas sebab privasi',
+      one: '1 laporan ditahan atas sebab privasi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Memberi kami 5 bintang sangat membantu kami ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Maksimum 25 bait ($count bait, bukan ASCII menggunakan berbilang bait)';
   }

@@ -12712,6 +12712,154 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tasksGroupByDate => 'Csoportosítás dátum szerint';
 
   @override
+  String get dreamReportTitle => 'Dream-jelentés';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Előnézeti mód: a Dream megmutatja, mit módosítana, de a fiókodban még semmi sem változik.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'A Dream ezeket a módosításokat magától alkalmazza. Bármelyiket visszavonhatod a Legutóbbi módosítások oldalon.';
+
+  @override
+  String get dreamReportRunNow => 'Futtatás most';
+
+  @override
+  String get dreamReportRunLimit => 'Mára nem maradt kézi futtatás';
+
+  @override
+  String get dreamReportRunInProgress => 'Már fut egy menet. Próbáld újra egy perc múlva.';
+
+  @override
+  String get dreamReportRunFailed => 'A Dream futtatása nem sikerült. Próbáld újra.';
+
+  @override
+  String get dreamReportIdle => 'Még nincs mit átnézni.';
+
+  @override
+  String get dreamReportLoadFailed => 'A Dream-jelentés betöltése nem sikerült.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Még nem volt futás';
+
+  @override
+  String get dreamReportEmptyBody => 'A Dream nagyjából óránként átnézi, mi változott a fiókodban.';
+
+  @override
+  String get dreamReportScheduled => 'Ütemezett';
+
+  @override
+  String get dreamReportManual => 'Kézi';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Sikertelen ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Elérte az időkorlátot, és leállt';
+
+  @override
+  String get dreamReportNothingFound => 'Nincs javítanivaló';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records elem beolvasva · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Javítana';
+
+  @override
+  String get dreamReportFixed => 'Javítva';
+
+  @override
+  String get dreamReportWouldAsk => 'Megkérdezne';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Feladatokat javasolna';
+
+  @override
+  String get dreamReportLearnedWords => 'Megtanult szavak';
+
+  @override
+  String get dreamReportFeedback => 'Jelentve az Omi csapatnak';
+
+  @override
+  String get dreamReportDeletedItem => 'Törölt elem';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit futás ma';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count módosítás vár',
+      one: '1 módosítás vár',
+      zero: 'Nincs várakozó módosítás',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ma még $count kézi futtatás maradt',
+      one: 'Ma még 1 kézi futtatás maradt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes javítás',
+      one: '1 javítás',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks javaslat',
+      one: '1 javaslat',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count régebbi módosítás kihagyva',
+      one: '1 régebbi módosítás kihagyva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count jelentés visszatartva adatvédelmi okból',
+      one: '1 jelentés visszatartva adatvédelmi okból',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Legfeljebb 25 bájt ($count bájt, a nem ASCII karakterek több bájtot használnak)';
   }

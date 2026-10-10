@@ -12667,6 +12667,153 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tasksGroupByDate => 'Gruppera efter datum';
 
   @override
+  String get dreamReportTitle => 'Dream-rapport';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Förhandsläge: Dream visar vad som skulle ändras, men inget i ditt konto ändras ännu.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream tillämpar ändringarna själv. Ångra dem i Senaste ändringar.';
+
+  @override
+  String get dreamReportRunNow => 'Kör nu';
+
+  @override
+  String get dreamReportRunLimit => 'Inga manuella körningar kvar idag';
+
+  @override
+  String get dreamReportRunInProgress => 'En körning pågår redan. Försök igen om en minut.';
+
+  @override
+  String get dreamReportRunFailed => 'Det gick inte att köra Dream. Försök igen.';
+
+  @override
+  String get dreamReportIdle => 'Inget nytt att titta på än.';
+
+  @override
+  String get dreamReportLoadFailed => 'Det gick inte att läsa in Dream-rapporten.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Inga körningar än';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream tittar på vad som har ändrats i ditt konto ungefär varje timme.';
+
+  @override
+  String get dreamReportScheduled => 'Schemalagd';
+
+  @override
+  String get dreamReportManual => 'Manuell';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Misslyckades ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Stoppades vid tidsgränsen';
+
+  @override
+  String get dreamReportNothingFound => 'Inget att åtgärda';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Läste $records objekt · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Skulle åtgärda';
+
+  @override
+  String get dreamReportFixed => 'Åtgärdat';
+
+  @override
+  String get dreamReportWouldAsk => 'Skulle fråga dig';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Skulle föreslå uppgifter';
+
+  @override
+  String get dreamReportLearnedWords => 'Ord den lärde sig';
+
+  @override
+  String get dreamReportFeedback => 'Rapporterat till Omi-teamet';
+
+  @override
+  String get dreamReportDeletedItem => 'Borttaget objekt';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count av $limit körningar idag';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ändringar väntar',
+      one: '1 ändring väntar',
+      zero: 'Inga ändringar väntar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count manuella körningar kvar idag',
+      one: '1 manuell körning kvar idag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes korrigeringar',
+      one: '1 korrigering',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks förslag',
+      one: '1 förslag',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count äldre ändringar hoppades över',
+      one: '1 äldre ändring hoppades över',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rapporter hölls tillbaka av sekretesskäl',
+      one: '1 rapport hölls tillbaka av sekretesskäl',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 stjärnor hjälper oss verkligen mycket ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Max 25 byte ($count byte, icke-ASCII använder flera byte)';
   }

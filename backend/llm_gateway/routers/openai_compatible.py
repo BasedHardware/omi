@@ -62,7 +62,9 @@ from llm_gateway.gateway.metrics import (
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
-from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
+from llm_gateway.gateway.resolver import ResolvedRoute, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
@@ -513,7 +515,8 @@ async def _prepared_streaming_iterator(
         )
         try:
             while True:
-                first_chunk = await anext(stream)
+                with vertex_attempt_scope(route, provider_ref):
+                    first_chunk = await anext(stream)
                 if first_chunk:
                     break
         except StopAsyncIteration:
@@ -539,7 +542,9 @@ async def _prepared_streaming_iterator(
                 usage_status=UsageStatus.INDETERMINATE,
             )
             first_failure = first_failure or exc.failure_class.value
-            if not is_lkg_eligible(route, exc.failure_class):
+            if not can_try_next_provider(route, provider_ref, exc.failure_class):
+                if provider_ref != route.primary:
+                    record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
                 raise last_error
             continue
         return _PreparedStream(
@@ -552,6 +557,7 @@ async def _prepared_streaming_iterator(
             cache_requested=cache_requested_for_openai_request(provider_request),
         )
     if last_error is not None:
+        record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
         raise last_error
     raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
@@ -594,6 +600,10 @@ async def _stream_with_terminal_metrics(
         # failover did not complete, so dashboards and ad-hoc queries must not
         # count it as a completed failover.
         completed_fallback = prepared.fallback_used and outcome == 'success'
+        if prepared.fallback_used:
+            record_reserved_rejection_fallback(
+                route, prepared.fallback_reason, outcome='recovered' if outcome == 'success' else 'exhausted'
+            )
         trace.record(
             provider=prepared.provider,
             configured_model=prepared.model,

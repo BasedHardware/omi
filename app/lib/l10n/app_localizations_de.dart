@@ -12759,6 +12759,154 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tasksGroupByDate => 'Nach Datum gruppieren';
 
   @override
+  String get dreamReportTitle => 'Dream-Bericht';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Vorschaumodus: Dream zeigt, was es ändern würde, aber in deinem Konto ändert sich noch nichts.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream wendet diese Änderungen selbstständig an. Mache sie unter Letzte Änderungen rückgängig.';
+
+  @override
+  String get dreamReportRunNow => 'Jetzt ausführen';
+
+  @override
+  String get dreamReportRunLimit => 'Heute keine manuellen Durchläufe mehr';
+
+  @override
+  String get dreamReportRunInProgress => 'Ein Durchlauf läuft bereits. Versuche es in einer Minute erneut.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream konnte nicht gestartet werden. Versuche es erneut.';
+
+  @override
+  String get dreamReportIdle => 'Noch nichts Neues zu prüfen.';
+
+  @override
+  String get dreamReportLoadFailed => 'Der Dream-Bericht konnte nicht geladen werden.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Noch keine Durchläufe';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream prüft etwa einmal pro Stunde, was sich in deinem Konto geändert hat.';
+
+  @override
+  String get dreamReportScheduled => 'Geplant';
+
+  @override
+  String get dreamReportManual => 'Manuell';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Fehlgeschlagen ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Beim Zeitlimit gestoppt';
+
+  @override
+  String get dreamReportNothingFound => 'Nichts zu beheben';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records Elemente gelesen · $tokens Tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Würde korrigieren';
+
+  @override
+  String get dreamReportFixed => 'Korrigiert';
+
+  @override
+  String get dreamReportWouldAsk => 'Würde dich fragen';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Würde Aufgaben vorschlagen';
+
+  @override
+  String get dreamReportLearnedWords => 'Gelernte Wörter';
+
+  @override
+  String get dreamReportFeedback => 'An das Omi-Team gemeldet';
+
+  @override
+  String get dreamReportDeletedItem => 'Gelöschtes Element';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count von $limit Durchläufen heute';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Änderungen warten',
+      one: '1 Änderung wartet',
+      zero: 'Keine Änderungen warten',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Heute noch $count manuelle Durchläufe',
+      one: 'Heute noch 1 manueller Durchlauf',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes Korrekturen',
+      one: '1 Korrektur',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks Vorschläge',
+      one: '1 Vorschlag',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ältere Änderungen übersprungen',
+      one: '1 ältere Änderung übersprungen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Meldungen aus Datenschutzgründen zurückgehalten',
+      one: '1 Meldung aus Datenschutzgründen zurückgehalten',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 Sterne helfen uns wirklich sehr ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Max. 25 Bytes ($count Bytes, Nicht-ASCII verwendet mehrere Bytes)';
   }

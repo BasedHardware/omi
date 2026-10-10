@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
@@ -52,6 +53,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
+    ListenNoAudioObservation,
     LiveSessionTranscriptOutcome,
     record_live_session_transcript_outcome,
     record_live_stt_audio_seconds,
@@ -455,6 +457,13 @@ class ListenSessionRuntime:
                 retry_after=retry_after,
             )
             return False
+        if self.client_conversation_id and await self.persistence.call(
+            conversation_tombstones.is_deleted, self.request.uid, self.client_conversation_id
+        ):
+            # Check before bootstrap/registration so rejection has no session to tear down.
+            # A create already past this point can still race a deletion commit.
+            await self.request.websocket.close(code=1008, reason='Conversation was deleted')
+            return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
@@ -679,6 +688,12 @@ class ListenSessionRuntime:
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
+            observation = getattr(self, '_no_audio_observation', None)
+            if observation is not None:
+                observation.observe(
+                    has_audio=self.state.first_audio_byte_timestamp is not None,
+                    audio_received_at=self.state.last_audio_received_time,
+                )
             if not await self._send_ping():
                 break
             if self.state.last_activity_time and time.time() - self.state.last_activity_time > 90:
@@ -984,6 +999,8 @@ class ListenSessionRuntime:
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            if not self.use_custom_stt:
+                self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(
@@ -1096,6 +1113,9 @@ class ListenSessionRuntime:
                 raise error
 
     async def _teardown(self) -> None:
+        observation = getattr(self, '_no_audio_observation', None)
+        if observation is not None:
+            observation.close()
         try:
             await self._teardown_components()
         finally:

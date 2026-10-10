@@ -12666,6 +12666,154 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tasksGroupByDate => 'Seskupit podle data';
 
   @override
+  String get dreamReportTitle => 'Zpráva Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Režim náhledu: Dream ukazuje, co by změnil, ale ve vašem účtu se zatím nic nemění.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream tyto změny provádí sám. Libovolnou z nich můžete vrátit v Nedávných změnách.';
+
+  @override
+  String get dreamReportRunNow => 'Spustit hned';
+
+  @override
+  String get dreamReportRunLimit => 'Dnes už nezbývají žádná ruční spuštění';
+
+  @override
+  String get dreamReportRunInProgress => 'Průchod už běží. Zkuste to znovu za minutu.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream se nepodařilo spustit. Zkuste to znovu.';
+
+  @override
+  String get dreamReportIdle => 'Zatím není co nového zkontrolovat.';
+
+  @override
+  String get dreamReportLoadFailed => 'Zprávu Dream se nepodařilo načíst.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Zatím žádné průchody';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream zhruba jednou za hodinu zkontroluje, co se ve vašem účtu změnilo.';
+
+  @override
+  String get dreamReportScheduled => 'Naplánováno';
+
+  @override
+  String get dreamReportManual => 'Ručně';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Selhalo ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Zastaveno na časovém limitu';
+
+  @override
+  String get dreamReportNothingFound => 'Není co opravovat';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Přečteno položek: $records · tokenů: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Opravil by';
+
+  @override
+  String get dreamReportFixed => 'Opraveno';
+
+  @override
+  String get dreamReportWouldAsk => 'Zeptal by se vás';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Navrhl by úkoly';
+
+  @override
+  String get dreamReportLearnedWords => 'Naučená slova';
+
+  @override
+  String get dreamReportFeedback => 'Nahlášeno týmu Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Smazaná položka';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Dnes $count z $limit průchodů';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count změn čeká',
+      one: '1 změna čeká',
+      zero: 'Žádné čekající změny',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dnes zbývá $count ručních spuštění',
+      one: 'Dnes zbývá 1 ruční spuštění',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes oprav',
+      one: '1 oprava',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks návrhů',
+      one: '1 návrh',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starších změn přeskočeno',
+      one: '1 starší změna přeskočena',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hlášení zadrženo z důvodu soukromí',
+      one: '1 hlášení zadrženo z důvodu soukromí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Hodnocení 5 hvězdiček nám opravdu hodně pomůže ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Maximálně 25 bajtů ($count bajtů, znaky mimo ASCII používají více bajtů)';
   }

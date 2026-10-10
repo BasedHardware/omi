@@ -155,7 +155,9 @@ class ReplacementPlan:
         """Created rows minus those the user's task app already holds."""
         return [item for item, outcome in zip(created_items, self.outcomes) if outcome != SKIPPED_EXPORTED]
 
-    def reconcile_kept_reminder(self, uid: str, task_id: str, action_item: Any, reconcile: Callable[..., Any]) -> bool:
+    def reconcile_kept_reminder(
+        self, uid: str, task_id: str, action_item: Mapping[str, Any], reconcile: Callable[..., Any]
+    ) -> bool:
         """Reschedule a kept id's reminder with one update message; True when ``task_id`` was kept.
 
         A kept id must not get the replaced-row cancel followed by a fresh schedule: FCM
@@ -164,14 +166,16 @@ class ReplacementPlan:
         """
         if task_id not in self.kept_reminders:
             return False
-        if action_item.due_at or self.kept_reminders[task_id]:
+        if action_item.get('due_at') or self.kept_reminders[task_id]:
             try:
                 reconcile(
                     user_id=uid,
                     action_item_id=task_id,
-                    description=action_item.description,
-                    completed=bool(action_item.completed),
-                    due_at=action_item.due_at,
+                    description=action_item.get('description', ''),
+                    completed=bool(action_item.get('completed')),
+                    due_at=action_item.get('due_at'),
+                    status=action_item.get('status'),
+                    deleted=bool(action_item.get('deleted')),
                 )
             except Exception as error:
                 # The rows are already written; a reminder send must never cost the extraction.

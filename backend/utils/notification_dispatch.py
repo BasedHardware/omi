@@ -276,12 +276,27 @@ def _action_item_reminder_delivery(
     from utils.notifications import send_action_item_data_message
 
     assert data is not None
-    send_action_item_data_message(user_id, data['action_item_id'], data['description'], data['due_at'])
+    send_action_item_data_message(
+        user_id,
+        data['action_item_id'],
+        data['description'],
+        data['due_at'],
+        completed=bool(data.get('completed')),
+        status=data.get('status'),
+        deleted=bool(data.get('deleted')),
+    )
     return None
 
 
 def dispatch_action_item_reminder(
-    *, user_id: str, action_item_id: str, description: str, due_at: str
+    *,
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
 ) -> NotificationDispatchOutcome:
     intent = NotificationIntent(
         user_id=user_id,
@@ -289,6 +304,13 @@ def dispatch_action_item_reminder(
         body='',
         source='action_item_refresh',
         kind=NotificationKind.ACTION_ITEM_REMINDER,
-        data={'action_item_id': action_item_id, 'description': description, 'due_at': due_at},
+        data={
+            'action_item_id': action_item_id,
+            'description': description,
+            'due_at': due_at,
+            'completed': completed,
+            'status': status,
+            'deleted': deleted,
+        },
     )
     return NotificationDispatcher(sync_delivery=_action_item_reminder_delivery).dispatch(intent)

@@ -114,7 +114,14 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           _notify();
           return;
         }
-        if (!result.ok) {
+        // A truncated page with zero rows is not an empty account. Treat it
+        // like a failed fetch so the UI retries instead of showing
+        // "No Memories Yet", and keep any list already on screen.
+        final truncatedEmpty = result.truncated && result.memories.isEmpty && all.isEmpty;
+        if (!result.ok || truncatedEmpty) {
+          if (truncatedEmpty) {
+            Logger.warning('MemoriesProvider: truncated empty memory page; treating as load failure');
+          }
           if (all.isNotEmpty) {
             // The retained partial projection is the same non-authoritative
             // shape as the final non-complete path: index what is shown so
@@ -129,7 +136,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
           if (cached.isNotEmpty) {
             _memories = effectiveTombstoneId != null
                 ? cached.where((memory) => memory.id != effectiveTombstoneId).toList()
-                : cached;
+                : List<Memory>.of(cached);
             _setCategories();
           }
           _loading = false;
@@ -162,13 +169,11 @@ extension _MemoriesProviderLoading on MemoriesProvider {
         currentFetchCoversAll = result.beliefEnabled != true || requestedView == MemoryReadView.all;
         all.addAll(result.memories.where((memory) => seenCurrent.add(memory.id)));
         publishProvisional();
-        // A truncated page is an honest partial response with no resumable cursor;
-        // stop loading instead of continuing with an unstable offset.
+        // A truncated page that already has rows is an honest partial response
+        // with no resumable cursor; stop loading instead of continuing with an
+        // unstable offset. A truncated page with zero rows was handled above.
         if (result.truncated) {
-          if (result.truncated) {
-            Logger.warning(
-                'MemoriesProvider: server returned a truncated list; stopping at ${seenCurrent.length} rows');
-          }
+          Logger.warning('MemoriesProvider: server returned a truncated list; stopping at ${seenCurrent.length} rows');
           break;
         }
         if (result.nextCursor != null) {

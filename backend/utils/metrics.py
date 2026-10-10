@@ -317,6 +317,7 @@ for _reason in (
     'no_pcm',
     'stale_generation',
     'already_mapped',
+    'authority_unavailable',
 ):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
@@ -1097,6 +1098,11 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
 # Wall seconds of live /v4/listen sessions by who could have watched them in real
 # time (routers/listen/realtime_demand.py). The input for routing background
 # capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS = Gauge(
+    'omi_listen_live_no_audio_sessions',
+    'Open backend-STT sockets awaiting first decoded frame for 300s, or receiving no raw byte frames for 300s afterward',
+)
+
 OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
     'omi_listen_realtime_demand_seconds_total',
     'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',

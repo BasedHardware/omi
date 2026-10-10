@@ -12662,6 +12662,154 @@ class AppLocalizationsBn extends AppLocalizations {
   String get tasksGroupByDate => 'তারিখ অনুযায়ী গ্রুপ';
 
   @override
+  String get dreamReportTitle => 'Dream রিপোর্ট';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'প্রিভিউ মোড: Dream কী পরিবর্তন করত তা দেখায়, কিন্তু আপনার অ্যাকাউন্টে এখনও কিছুই বদলায় না।';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream নিজেই এই পরিবর্তনগুলো প্রয়োগ করে। সাম্প্রতিক পরিবর্তন থেকে যেকোনোটি পূর্বাবস্থায় ফেরান।';
+
+  @override
+  String get dreamReportRunNow => 'এখনই চালান';
+
+  @override
+  String get dreamReportRunLimit => 'আজ আর কোনো ম্যানুয়াল রান বাকি নেই';
+
+  @override
+  String get dreamReportRunInProgress => 'একটি পাস ইতিমধ্যে চলছে। এক মিনিট পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get dreamReportRunFailed => 'Dream চালানো যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get dreamReportIdle => 'দেখার মতো নতুন কিছু এখনও নেই।';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream রিপোর্ট লোড করা যায়নি।';
+
+  @override
+  String get dreamReportEmptyTitle => 'এখনও কোনো পাস নেই';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream প্রায় প্রতি ঘণ্টায় দেখে আপনার অ্যাকাউন্টে কী বদলেছে।';
+
+  @override
+  String get dreamReportScheduled => 'নির্ধারিত';
+
+  @override
+  String get dreamReportManual => 'ম্যানুয়াল';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'ব্যর্থ ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'সময়সীমায় থেমে গেছে';
+
+  @override
+  String get dreamReportNothingFound => 'ঠিক করার মতো কিছু নেই';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$recordsটি আইটেম পড়া হয়েছে · $tokensটি টোকেন';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'ঠিক করত';
+
+  @override
+  String get dreamReportFixed => 'ঠিক করা হয়েছে';
+
+  @override
+  String get dreamReportWouldAsk => 'আপনাকে জিজ্ঞাসা করত';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'কাজের পরামর্শ দিত';
+
+  @override
+  String get dreamReportLearnedWords => 'শেখা শব্দ';
+
+  @override
+  String get dreamReportFeedback => 'Omi টিমকে জানানো হয়েছে';
+
+  @override
+  String get dreamReportDeletedItem => 'মুছে ফেলা আইটেম';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'আজ $count/$limitটি পাস';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পরিবর্তন অপেক্ষায়',
+      one: '১টি পরিবর্তন অপেক্ষায়',
+      zero: 'কোনো পরিবর্তন অপেক্ষায় নেই',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আজ আর $countটি ম্যানুয়াল রান বাকি',
+      one: 'আজ আর ১টি ম্যানুয়াল রান বাকি',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixesটি সংশোধন',
+      one: '১টি সংশোধন',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asksটি পরামর্শ',
+      one: '১টি পরামর্শ',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে',
+      one: '১টি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'গোপনীয়তার জন্য $countটি রিপোর্ট আটকে রাখা হয়েছে',
+      one: 'গোপনীয়তার জন্য ১টি রিপোর্ট আটকে রাখা হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '৫ স্টার রেটিং দিলে আমরা সত্যিই অনেক সাহায্য পাই ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'সর্বোচ্চ ২৫ বাইট ($count বাইট, নন-ASCII একাধিক বাইট ব্যবহার করে)';
   }

@@ -12764,6 +12764,154 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tasksGroupByDate => 'I-group ayon sa Petsa';
 
   @override
+  String get dreamReportTitle => 'Ulat ng Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Preview mode: ipinapakita ng Dream ang babaguhin nito, pero wala pang nagbabago sa account mo.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Kusang ina-apply ng Dream ang mga pagbabagong ito. I-undo ang alinman sa Mga Kamakailang Pagbabago.';
+
+  @override
+  String get dreamReportRunNow => 'Patakbuhin Ngayon';
+
+  @override
+  String get dreamReportRunLimit => 'Wala nang manual na takbo ngayon';
+
+  @override
+  String get dreamReportRunInProgress => 'May tumatakbo nang pass. Subukan ulit sa isang minuto.';
+
+  @override
+  String get dreamReportRunFailed => 'Hindi napatakbo ang Dream. Subukan ulit.';
+
+  @override
+  String get dreamReportIdle => 'Wala pang bagong titingnan.';
+
+  @override
+  String get dreamReportLoadFailed => 'Hindi ma-load ang ulat ng Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Wala pang pass';
+
+  @override
+  String get dreamReportEmptyBody => 'Tinitingnan ng Dream ang mga nagbago sa account mo mga isang beses kada oras.';
+
+  @override
+  String get dreamReportScheduled => 'Naka-iskedyul';
+
+  @override
+  String get dreamReportManual => 'Manual';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Nabigo ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Huminto sa limitasyon ng oras';
+
+  @override
+  String get dreamReportNothingFound => 'Walang aayusin';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Nabasa ang $records item · $tokens token';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Aayusin sana';
+
+  @override
+  String get dreamReportFixed => 'Naayos';
+
+  @override
+  String get dreamReportWouldAsk => 'Itatanong sana sa iyo';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Magmumungkahi sana ng mga gawain';
+
+  @override
+  String get dreamReportLearnedWords => 'Mga salitang natutunan';
+
+  @override
+  String get dreamReportFeedback => 'Iniulat sa team ng Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Naburang item';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count sa $limit na pass ngayon';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagbabagong naghihintay',
+      one: '1 pagbabagong naghihintay',
+      zero: 'Walang pagbabagong naghihintay',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count manual na takbo na lang ngayon',
+      one: '1 manual na takbo na lang ngayon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes ayos',
+      one: '1 ayos',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks mungkahi',
+      one: '1 mungkahi',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lumang pagbabago ang nilaktawan',
+      one: '1 lumang pagbabago ang nilaktawan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ulat ang pinigil para sa privacy',
+      one: '1 ulat ang pinigil para sa privacy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Malaking tulong sa amin ang 5 stars ❤️';
+
+  @override
   String maxDeviceNameBytesExceeded(int count) {
     return 'Maximum na 25 byte ($count byte, gumagamit ang non-ASCII ng maraming byte)';
   }

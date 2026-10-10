@@ -194,6 +194,15 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  # Cached-evidence shadow only; authoritative grouping stays incumbent.
+  - name: SPEAKER_GROUPING_SHADOW
+    value: "cohort"
+  - name: SPEAKER_GROUPING_SHADOW_PERCENT
+    value: "10"
+  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: SPEAKER_GROUPING_MODE
+    value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
@@ -228,6 +237,8 @@ env:
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
+  - name: NOTES_TIER_ESCALATION_ENABLED
+    value: 'true'
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP

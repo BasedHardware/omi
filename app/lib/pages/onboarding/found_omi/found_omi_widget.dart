@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
@@ -18,8 +18,10 @@ class _SourceOption {
 
 class FoundOmiWidget extends StatefulWidget {
   final Function goNext;
+  @visibleForTesting
+  final Future<bool> Function(String source)? saveSource;
 
-  const FoundOmiWidget({super.key, required this.goNext});
+  const FoundOmiWidget({super.key, required this.goNext, this.saveSource});
 
   @override
   State<FoundOmiWidget> createState() => _FoundOmiWidgetState();
@@ -27,6 +29,7 @@ class FoundOmiWidget extends StatefulWidget {
 
 class _FoundOmiWidgetState extends State<FoundOmiWidget> {
   String? _selectedSource;
+  bool _saving = false;
   final TextEditingController _otherController = TextEditingController();
 
   List<_SourceOption> _getSources(BuildContext context) {
@@ -60,11 +63,19 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_saving) return;
+    setState(() => _saving = true);
     FocusManager.instance.primaryFocus?.unfocus();
     final source = _selectedSource == context.l10n.otherSource ? _otherController.text.trim() : _selectedSource!;
+    final saved = await (widget.saveSource?.call(source) ?? OnboardingSyncRuntime.enqueue(acquisitionSource: source));
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (!saved) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
     SharedPreferencesUtil().foundOmiSource = source;
-    updateUserOnboardingState(acquisitionSource: source);
     PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
     OmiHaptics.selection();
     widget.goNext();
@@ -72,6 +83,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
 
   /// The survey is optional: Skip moves on without recording a source.
   void _skip() {
+    if (_saving) return;
     FocusManager.instance.primaryFocus?.unfocus();
     OmiHaptics.selection();
     widget.goNext();
@@ -134,13 +146,14 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
             key: const Key('found_omi_continue'),
             label: context.l10n.continueButton,
             expand: true,
-            onPressed: _canContinue ? _submit : null,
+            onPressed: _canContinue && !_saving ? _submit : null,
+            isLoading: _saving,
           ),
           OmiButton.tertiary(
             key: const Key('found_omi_skip'),
             label: context.l10n.skip,
             expand: true,
-            onPressed: _skip,
+            onPressed: _saving ? null : _skip,
           ),
         ],
       ),

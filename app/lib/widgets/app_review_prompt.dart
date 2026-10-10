@@ -28,13 +28,13 @@ class AppReviewPrompt extends StatefulWidget {
     required this.enabled,
     required this.child,
     this.service,
-    this.firstSummaryAskDelay = defaultFirstSummaryAskDelay,
+    this.ratingAskDelay = defaultRatingAskDelay,
     this.isRatingAskEnabled,
     this.requestStoreReview,
   });
 
-  /// How long the first summary after onboarding stays open before it asks "Are you enjoying Omi?".
-  static const defaultFirstSummaryAskDelay = Duration(seconds: 7);
+  /// Asks "Are you enjoying Omi?" right after a conversation opens, once its page has settled.
+  static const defaultRatingAskDelay = Duration(seconds: 1);
 
   @visibleForTesting
   static void resetSessionForTesting() => _AppReviewPromptState._ratingAskedThisSession = false;
@@ -44,7 +44,7 @@ class AppReviewPrompt extends StatefulWidget {
   final bool enabled;
   final Widget child;
   final AppReviewService? service;
-  final Duration firstSummaryAskDelay;
+  final Duration ratingAskDelay;
 
   /// Kill switch for the "Are you enjoying Omi?" ask; defaults to the onboarding rating flag.
   final Future<bool> Function()? isRatingAskEnabled;
@@ -57,9 +57,13 @@ class AppReviewPrompt extends StatefulWidget {
 }
 
 class _AppReviewPromptState extends State<AppReviewPrompt> {
-  /// The "Are you enjoying Omi?" ask fires at most once per app session; the native reading
-  /// prompt stays quiet for that session so the user is never asked twice in a row.
+  /// "Are you enjoying Omi?" is asked once per user (until answered), on any conversation summary.
+  /// The native reading prompt only runs for users who answered Yes, and stays quiet for the rest of
+  /// the session in which the ask was shown, so nobody is asked twice in a row.
   static bool _ratingAskedThisSession = false;
+
+  /// The kill switch, read once per widget; null until resolved. Off keeps the pre-ask behavior.
+  bool? _askGateOn;
 
   Duration _readingDuration = const Duration(seconds: AppReviewTuning.defaultReadingSeconds);
   bool _tuningReady = false;
@@ -68,6 +72,15 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
   @override
   void initState() {
     super.initState();
+    () async {
+      bool on;
+      try {
+        on = await (widget.isRatingAskEnabled ?? OnboardingSetupRatingPromptGate.isEnabled)();
+      } catch (_) {
+        on = false;
+      }
+      if (mounted) setState(() => _askGateOn = on);
+    }();
     AppReviewTuning.readingDuration().then((duration) {
       if (mounted) {
         setState(() {
@@ -111,8 +124,13 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
 
   bool get _firstSummaryAskPending =>
       widget.moment == AppReviewMoment.conversationRead &&
+      _askGateOn == true &&
       !_ratingAskedThisSession &&
-      SharedPreferencesUtil().firstSummaryRatingPending;
+      SharedPreferencesUtil().ratingAskAnswer.isEmpty;
+
+  /// Native requests go only to users who said they enjoy Omi; with the ask switched off, everyone.
+  bool get _nativeAllowed =>
+      _askGateOn == false || (_askGateOn == true && SharedPreferencesUtil().ratingAskAnswer == 'yes');
 
   bool _canAskNow(BuildContext context) =>
       mounted &&
@@ -126,7 +144,7 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
   void _syncFirstSummaryAsk() {
     if (!mounted) return;
     if (_firstSummaryAskPending && _canAskNow(context)) {
-      _firstSummaryTimer ??= Timer(widget.firstSummaryAskDelay, _askFirstSummaryRating);
+      _firstSummaryTimer ??= Timer(widget.ratingAskDelay, _askFirstSummaryRating);
     } else {
       _firstSummaryTimer?.cancel();
       _firstSummaryTimer = null;
@@ -136,16 +154,7 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
   Future<void> _askFirstSummaryRating() async {
     _firstSummaryTimer = null;
     if (!_firstSummaryAskPending || !_canAskNow(context)) return;
-    bool enabled;
-    try {
-      enabled = await (widget.isRatingAskEnabled ?? OnboardingSetupRatingPromptGate.isEnabled)();
-    } catch (_) {
-      enabled = false;
-    }
-    // Flag off: keep it pending so a later summary can ask once the flag is on.
-    if (!mounted || !enabled || !_firstSummaryAskPending || !_canAskNow(context)) return;
     _ratingAskedThisSession = true;
-    SharedPreferencesUtil().firstSummaryRatingPending = false;
     const TypedEvents().emit(const FirstSummaryRatingPromptShown());
     final l10n = context.l10n;
     final enjoying = await showOmiConfirm(
@@ -155,6 +164,9 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
       cancelLabel: l10n.onboardingRatingPromptNo,
       barrierDismissible: false,
     );
+    // Leaving the app while the alert is up returns no answer; ask again on a later summary.
+    if (!mounted) return;
+    SharedPreferencesUtil().ratingAskAnswer = enjoying ? 'yes' : 'no';
     const TypedEvents().emit(FirstSummaryRatingPromptAnswered(
       answer: enjoying ? FirstSummaryRatingPromptAnsweredAnswer.yes : FirstSummaryRatingPromptAnsweredAnswer.no,
     ));
@@ -181,7 +193,7 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
         contentId: '$owner:${widget.contentId}',
         enabled: _tuningReady &&
             !_ratingAskedThisSession &&
-            !_firstSummaryAskPending &&
+            _nativeAllowed &&
             widget.enabled &&
             widget.contentId.isNotEmpty &&
             _available(context),

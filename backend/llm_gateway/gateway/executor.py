@@ -40,7 +40,6 @@ from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
     ResolvedSystemOneRoute,
-    is_lkg_eligible,
     select_lkg_route_for_failure,
 )
 from llm_gateway.gateway.schemas import (
@@ -51,6 +50,8 @@ from llm_gateway.gateway.schemas import (
     RouteArtifact,
     RouteServingClass,
 )
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
@@ -528,17 +529,18 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            response, error = await _attempt_provider(
-                resolved_route,
-                route,
-                provider,
-                provider_ref,
-                credential_context,
-                attempt_trace=attempt_trace,
-                max_provider_attempts=max_provider_attempts,
-                fallback_reason=current_fallback_reason,
-                deadline_monotonic=deadline_monotonic,
-            )
+            with vertex_attempt_scope(route, provider_ref):
+                response, error = await _attempt_provider(
+                    resolved_route,
+                    route,
+                    provider,
+                    provider_ref,
+                    credential_context,
+                    attempt_trace=attempt_trace,
+                    max_provider_attempts=max_provider_attempts,
+                    fallback_reason=current_fallback_reason,
+                    deadline_monotonic=deadline_monotonic,
+                )
             if error is None:
                 if response is None:
                     raise GatewayProviderFailureError(
@@ -559,6 +561,8 @@ async def _execute_route(
                 actual_fallback = current_fallback_reason is not None and (
                     fallback_reason is not None or distinct_within_route
                 )
+                if actual_fallback:
+                    record_reserved_rejection_fallback(route, current_fallback_reason, outcome='recovered')
                 return _executor_result(
                     response,
                     resolved_route=resolved_route,
@@ -579,8 +583,10 @@ async def _execute_route(
         if (
             index == len(refs) - 1
             or max_provider_attempts is not None
-            or not _can_try_next_provider(route, error.failure_class)
+            or not can_try_next_provider(route, provider_ref, error.failure_class)
         ):
+            if index > 0:
+                record_reserved_rejection_fallback(route, current_fallback_reason, outcome='exhausted')
             raise error
         current_fallback_reason = error.failure_class
 
@@ -1026,9 +1032,3 @@ def _safe_failure_message(failure_class: FailureClass, provider_message: str | N
 
 def _expose_provider_error_details() -> bool:
     return os.getenv(EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR, '').strip().lower() == 'true'
-
-
-def _can_try_next_provider(route: RouteArtifact, failure_class: FailureClass | None) -> bool:
-    if failure_class is None:
-        return False
-    return is_lkg_eligible(route, failure_class)
