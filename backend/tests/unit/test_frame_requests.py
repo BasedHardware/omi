@@ -230,3 +230,25 @@ def test_state_route_maps_owner_mismatch_to_forbidden(monkeypatch):
     )
     assert response.status_code == 403
     assert response.json() == {"detail": "frame_request_owner_mismatch"}
+
+
+def test_conversation_photo_image_serves_active_conversation(monkeypatch):
+    monkeypatch.setattr(
+        frame_requests,
+        "read_conversation_frame",
+        lambda uid, cid, pid: (b"image_bytes", "image/jpeg"),
+    )
+    response = _client().get("/v1/conversations/conv-1/photos/photo-1/image")
+    assert response.status_code == 200
+    assert response.content == b"image_bytes"
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_conversation_photo_image_rejects_soft_deleted_conversation(monkeypatch):
+    def reject(uid, cid, pid):
+        raise KeyError("conversation frame not found")
+
+    monkeypatch.setattr(frame_requests, "read_conversation_frame", reject)
+    response = _client().get("/v1/conversations/conv-1/photos/photo-1/image")
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Photo not found"}
