@@ -114,6 +114,7 @@ const LOCAL_READ_TOOLS = new Set([
   "get_action_items",
   "get_email_insights",
   "get_local_status",
+  "get_product_kb",
   "search_knowledge",
   "read_playbook",
   "search_historical_facts",
