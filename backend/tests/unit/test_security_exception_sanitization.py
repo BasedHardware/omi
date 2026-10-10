@@ -14,7 +14,7 @@ in tests/conftest.py blocks any real outbound call.
 """
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -98,6 +98,41 @@ class TestImportUploadSanitization:
             "Disk quota exceeded",
             "errno 122",
         )
+
+    @pytest.mark.asyncio
+    async def test_upload_failure_stores_generic_job_error(self, tmp_path):
+        """The persisted job record (surfaced via GET /v1/import/jobs*) must not
+        carry the raw exception text either — same principle, owner-scoped or not."""
+        job = SimpleNamespace(id="job-1")
+
+        async def fake_run_blocking(executor, fn, *args, **kwargs):
+            if fn is imports_mod.create_import_job:
+                return job
+            if fn is open:
+                return open(*args, **kwargs)
+            # import_jobs_db.update_import_job (now a MagicMock) and any other
+            # sync helper: call directly
+            return fn(*args, **kwargs)
+
+        async def boom_read(n):
+            raise OSError("Disk quota exceeded on /var/lib/omi/uploads (errno 122)")
+
+        fake_file = SimpleNamespace(filename="export.zip", read=boom_read)
+        update_mock = MagicMock(return_value=True)
+
+        with (
+            patch.object(imports_mod, "run_blocking", fake_run_blocking),
+            patch.object(imports_mod, "TEMP_DIR", str(tmp_path)),
+            patch.object(imports_mod.import_jobs_db, "update_import_job", update_mock),
+        ):
+            with pytest.raises(HTTPException):
+                await imports_mod.import_limitless_data(file=fake_file, language="en", uid=UID)
+
+        update_mock.assert_called_once()
+        stored_error = update_mock.call_args[0][1]["error"]
+        assert stored_error == "Failed to save uploaded file. Please try again later."
+        for secret in ("/var/lib/omi/uploads", "Disk quota exceeded", "errno 122"):
+            assert secret not in stored_error, f"leaked into job record: {secret!r}"
 
 
 class TestPhoneVerificationSanitization:

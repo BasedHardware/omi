@@ -1,7 +1,6 @@
 import os
 import re
 import logging
-import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -147,11 +146,9 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
         logger.error(f"Failed to start phone verification for uid {uid}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
     except Exception as e:
-        traceback.print_exc()
         logger.error(f"Failed to start phone verification for uid {uid}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
 
