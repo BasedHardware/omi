@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-internal-sentinel-escapes-as-action",
+  "violated_contract": "A value that exists only as an internal signal must never cross into the namespace of executable actions, because the consumer cannot tell the two apart. Two forms of this occurred in the on-device intent router. A route decision returned the string 'no_action' -- a sentinel meaning the assistant declines -- with declined=false whenever it won by a wide margin, so Dart's actionFor() handed a caller a literal 'no_action' indistinguishable from a chosen action; the margin gate that should have caught it only ever fired on ambiguity, so a confident out-of-domain win bypassed it entirely. Separately, the WordPiece tokenizer returned an empty list for an unrepresentable word and encode() filtered it, so an out-of-vocabulary token silently deleted that word from the utterance and the router scored the request as if the user had never said it. The second is lossier than it looks: a lossy input path is indistinguishable from a correct one at every layer downstream, and the defect is invisible in the happy path.",
+  "canonical_prevention": "Two guards, because the two sites share a shape but not a fix. For a sentinel that selects a decision, the decline must be decided by the identity of the winner rather than by the margin: if the top-scoring class is the sentinel, decline regardless of how far ahead it is. The margin gate governs ambiguity between real candidates only and must not double as a decline rule. For a tokenizer that cannot represent a token, degrade to the vocabulary's unknown token rather than returning nothing, so the model is always shown the input the user actually gave; and make the class doc and the code agree, since a documented [UNK] fallback that the code silently skips is the defect. Both guards are pinned by tests that were run against the pre-fix code and fail there, since a test that passes against the bug records current behaviour rather than preventing a regression.",
+  "canonical_prevention_artifact": [
+    "app/android/app/src/test/java/com/friend/ios/brain/IntentRouterDecisionTest.kt",
+    "app/android/app/src/test/java/com/friend/ios/brain/BertWordPieceTest.kt"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/app/src/main/kotlin/com/friend/ios/brain/**",
+    "app/lib/services/brain/**",
+    "app/react-native/src/services/localBrainRouter.ts",
+    "app/react-native/src/services/localConversations.ts"
+  ],
+  "status": "open"
+}
