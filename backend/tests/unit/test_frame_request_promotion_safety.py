@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 from io import BytesIO
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
+from database.frame_requests import attach_frame_request_to_conversation
 from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
 from routers import frame_requests
 from utils.jit_rollout import JITDecisionStage, TriState
@@ -243,3 +245,112 @@ async def test_frame_authority_fails_closed_before_generation_read(monkeypatch):
     )
 
     assert killed.enabled is False and killed.kill_switch is True
+
+
+class _FakeSnapshot:
+    def __init__(self, data, exists=True, doc_id="id-1", path="users/u/doc/id"):
+        self._data = data
+        self.exists = exists
+        self.id = doc_id
+        self.reference = MagicMock()
+        self.reference.path = path
+
+    def to_dict(self):
+        return self._data
+
+
+def test_attach_frame_request_rejects_soft_deleted_conversation_tombstone():
+    uid = "user-1"
+    request_id = "frame-1"
+    device_id = "desktop-1"
+    account_generation = 3
+    conversation_id = "conversation-1"
+    permanent_storage_id = "permanent-1"
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+    client = MagicMock()
+    tx = MagicMock()
+    client.transaction.return_value = tx
+
+    req_snap = _FakeSnapshot(
+        {
+            "uid": uid,
+            "request_id": request_id,
+            "device_id": device_id,
+            "account_generation": account_generation,
+            "dedupe_key": "opaque",
+            "conversation_id": conversation_id,
+            "screenshot_id": "42",
+            "state": FrameRequestState.uploaded.value,
+            "created_at": now,
+            "expires_at": now,
+            "storage_id": "storage-1",
+            "byte_count": 1024,
+            "content_type": "image/jpeg",
+            "cleanup_state": "pending",
+        },
+        exists=True,
+        doc_id=request_id,
+        path=f"users/{uid}/frame_requests/{request_id}",
+    )
+    conv_snap = _FakeSnapshot(
+        {"id": conversation_id, "deleted": True, "data_protection_level": "standard"},
+        exists=True,
+        doc_id=conversation_id,
+        path=f"users/{uid}/conversations/{conversation_id}",
+    )
+
+    req_doc = MagicMock()
+    req_doc.get.return_value = req_snap
+    conv_doc = MagicMock()
+    conv_doc.get.return_value = conv_snap
+
+    user_doc = MagicMock()
+
+    def user_doc_collection(name):
+        if name == "frame_requests":
+            return MagicMock(document=lambda _id: req_doc)
+        if name == "conversations":
+            return MagicMock(document=lambda _id: conv_doc)
+        return MagicMock()
+
+    user_doc.collection.side_effect = user_doc_collection
+    client.collection.side_effect = lambda name: (
+        MagicMock(document=lambda _id: user_doc) if name == "users" else MagicMock()
+    )
+
+    with pytest.raises(KeyError, match="conversation not found"):
+        attach_frame_request_to_conversation(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            conversation_id=conversation_id,
+            permanent_storage_id=permanent_storage_id,
+            now=now,
+            firestore_client=client,
+        )
+
+
+@pytest.mark.asyncio
+async def test_promote_frame_request_maps_tombstone_rejection_to_404(monkeypatch):
+    request = _request(FrameRequestState.uploaded)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
+    monkeypatch.setattr(frame_requests, "reserve_frame_promotion_copy", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "reserve_frame_storage_cleanup", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "copy_frame_request_pixels_to_permanent", lambda *args: None)
+
+    def attach_tombstone_fail(*args, **kwargs):
+        raise KeyError("conversation not found")
+
+    monkeypatch.setattr(frame_requests, "attach_frame_request_to_conversation", attach_tombstone_fail)
+
+    with pytest.raises(HTTPException) as exc:
+        await frame_requests.promote_frame_request(
+            "frame-1",
+            FrameRequestPromotion(device_id="desktop-1", account_generation=3, conversation_id="conversation-1"),
+            uid="user-1",
+        )
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "frame_request_not_found"
