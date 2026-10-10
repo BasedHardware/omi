@@ -3,6 +3,7 @@ package com.friend.ios.brain
 import com.friend.ios.brain.IntentRouter.Companion.NO_ACTION
 import com.friend.ios.brain.IntentRouter.Companion.OPEN_APP
 import com.friend.ios.brain.IntentRouter.Companion.decide
+import com.friend.ios.brain.IntentRouter.Companion.isNegated
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -169,5 +170,43 @@ class IntentRouterDecisionTest {
 
         assertFalse(d.declined)
         assertEquals("set_timer", d.action)
+    }
+
+    /**
+     * The sentence the review named: "I meant not to turn on the flashlight". The
+     * original alternation had do-not, don't, never, no-need and without-doing, so a
+     * bare "not" slipped past the hard guard and went to scoring -- where an embedding
+     * will happily pick the inverse action.
+     */
+    @Test
+    fun negationGuardCatchesBareNot() {
+        assertTrue(isNegated("I meant not to turn on the flashlight"))
+    }
+
+    @Test
+    fun negationGuardCatchesTheFormsItAlreadyHad() {
+        assertTrue(isNegated("don't turn on the lights"))
+        assertTrue(isNegated("do not turn on the lights"))
+        assertTrue(isNegated("never turn on the lights"))
+        assertTrue(isNegated("no need to set a timer"))
+        assertTrue(isNegated("without doing anything"))
+    }
+
+    /** A plain request must not trip the guard. */
+    @Test
+    fun plainRequestsAreNotTreatedAsNegated() {
+        assertFalse(isNegated("turn on the flashlight"))
+        assertFalse(isNegated("set a timer for 10 minutes"))
+        assertFalse(isNegated("add a task to buy milk"))
+    }
+
+    /**
+     * The documented cost of a bare "not": sentences that only mention negation are
+     * declined too. Asserted rather than left implicit, because it is a deliberate
+     * trade and not an oversight.
+     */
+    @Test
+    fun mentionsOfNegationDeclineToo() {
+        assertTrue(isNegated("I am not sure whether I should set a timer"))
     }
 }

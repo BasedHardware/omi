@@ -68,8 +68,30 @@ class IntentRouter(private val context: Context) {
          * negated requests executed the inverse of the instruction, which for an
          * agent is worse than any accuracy miss.
          */
+        /**
+         * A prohibition means do not act, so the match has to cover every way English
+         * negates. The bare `not` alternative is what catches "I meant not to turn on
+         * the flashlight", which the other forms miss entirely.
+         *
+         * Bare `not` is deliberately broad rather than clever about scope. The cost is
+         * false positives on sentences that merely mention negation -- "I am not sure
+         * whether I should set a timer" declines instead of scoring -- and that is the
+         * right trade for this class of error. Held-out measurement on the shipped
+         * action set: unguarded, 4 of 5 negated requests executed the inverse of the
+         * instruction, which for an agent is worse than any accuracy miss. A miss
+         * costs one clarifying question; an inverse execution acts on the opposite of
+         * what was asked.
+         */
         private val NEGATION =
-            Regex("\\b(?:don'?t|do\\s+not|never|no\\s+need|without\\s+doing)\\b", RegexOption.IGNORE_CASE)
+            Regex("\\b(?:don'?t|do\\s+not|not|never|no\\s+need|without\\s+doing)\\b", RegexOption.IGNORE_CASE)
+
+        /**
+         * Whether the hard guard should fire. Exposed so the negation rule can be
+         * tested without a model: this is a safety gate, and the review that added the
+         * bare "not" alternative is exactly the kind of one-line regex edit that needs
+         * a test pinning the sentence it was written for.
+         */
+        internal fun isNegated(text: String): Boolean = NEGATION.containsMatchIn(text)
     }
 
     data class Decision(

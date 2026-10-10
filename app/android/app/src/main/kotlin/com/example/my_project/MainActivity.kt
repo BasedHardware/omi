@@ -154,6 +154,14 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The brain channel owns a single-thread executor that the routing worker runs
+        // on after the first load or route. Disposed unconditionally and outside the
+        // isFinishing guard: a configuration change or a system-initiated destroy also
+        // recreates this activity, and without this each recreation leaves another live
+        // executor behind holding a thread that nothing will ever shut down.
+        localBrain?.dispose()
+        localBrain = null
+
         // The engine dies with the activity whether or not it is finishing, so these flags
         // must clear outside the isFinishing guard — a system-initiated destroy otherwise
         // leaves native deferring audio to an engine that is gone (issue #10847).
