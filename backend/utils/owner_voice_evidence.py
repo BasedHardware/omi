@@ -25,7 +25,11 @@ def authorized_owner_segments(
         decision = winning_receipt_decision(receipt, segment)
         if not decision or not decision.get('is_user') or decision.get('person_id') or decision.get('rejection'):
             continue
-        card_authorized = card_generation is not None and decision.get('generation') == card_generation
+        card_authorized = (
+            card_generation is not None
+            and decision.get('generation') == card_generation
+            and not decision.get('segment_only')
+        )
         if decision.get('use_for_speech_training', True) is not False or card_authorized:
             allowed.append(segment['id'])
     return allowed

@@ -3497,7 +3497,7 @@
     "helpAndAbout": "도움말 및 정보",
     "speakerTagPromptTitle": "Omi가 목소리를 알아보도록 도와주세요",
     "speakerTagPromptSubtitle": "최근 이틀간의 목소리를 빠르게 확인해요",
-    "speakerTagPromptIsThisYou": "본인인가요?",
+    "speakerTagPromptIsThisYou": "이 목소리가 본인이었나요?",
     "speakerTagPromptIsThisPerson": "{name} 님인가요?",
     "speakerTagPromptWhoIsThis": "누구인가요?",
     "speakerTagPromptThatsMe": "저예요",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "목소리 일치: {level}",
     "speakerTagPromptHintIdentify": "답할 때마다 Omi가 목소리를 배우고 그 사람의 신뢰도가 올라가요.",
     "speakerTagPromptHintConfirm": "“예”를 누르면 {name}의 신뢰도가 올라가요.",
-    "speakerTagPromptHintOwner": "내 음성 프로필을 정확하게 유지해서 Omi가 나를 다른 사람으로 부르는 일이 없게 해요.",
+    "speakerTagPromptHintOwner": "답변은 재생된 발췌 부분에만 적용됩니다.",
     "speakerTagPromptSavedAs": "{name}(으)로 저장됨",
     "speakerTagPromptSavedAsYou": "나로 저장됨",
     "speakerTagPromptIgnoredNote": "Omi가 이 목소리에 대해 다시 묻지 않아요",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{오늘 수동 실행 1회 남음} other{오늘 수동 실행 {count} 회 남음}}",
     "dreamReportFound": "{fixes, plural, =1{수정 1건} other{수정 {fixes} 건}} · {asks, plural, =1{제안 1건} other{제안 {asks} 건}}",
     "dreamReportDropped": "{count, plural, =1{이전 변경 1건 건너뜀} other{이전 변경 {count} 건 건너뜀}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{개인정보 보호를 위해 리포트 1건 보류} other{개인정보 보호를 위해 리포트 {count} 건 보류}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{개인정보 보호를 위해 리포트 1건 보류} other{개인정보 보호를 위해 리포트 {count} 건 보류}}",
+    "speakerTagPromptExcerptSaved": "이 발췌 부분에 대한 답변이 저장되었습니다."
 }

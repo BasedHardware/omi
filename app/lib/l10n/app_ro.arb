@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Ajutor și despre",
     "speakerTagPromptTitle": "Ajută-l pe Omi să recunoască vocile",
     "speakerTagPromptSubtitle": "O verificare rapidă a vocilor din ultimele două zile",
-    "speakerTagPromptIsThisYou": "Tu ești acesta?",
+    "speakerTagPromptIsThisYou": "Ai fost tu?",
     "speakerTagPromptIsThisPerson": "Este {name}?",
     "speakerTagPromptWhoIsThis": "Cine este?",
     "speakerTagPromptThatsMe": "Sunt eu",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Potrivire vocală: {level}",
     "speakerTagPromptHintIdentify": "Fiecare răspuns învață Omi o voce și crește încrederea în acea persoană.",
     "speakerTagPromptHintConfirm": "Da crește încrederea în {name}.",
-    "speakerTagPromptHintOwner": "Îți menține profilul vocal precis, ca Omi să nu te confunde niciodată cu altcineva.",
+    "speakerTagPromptHintOwner": "Răspunsul tău etichetează doar fragmentul redat.",
     "speakerTagPromptSavedAs": "Salvat ca {name}",
     "speakerTagPromptSavedAsYou": "Salvat ca tine",
     "speakerTagPromptIgnoredNote": "Omi nu te va mai întreba despre această voce",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{A mai rămas 1 rulare manuală azi} other{Au mai rămas {count} de rulări manuale azi}}",
     "dreamReportFound": "{fixes, plural, =1{1 remediere} other{{fixes} de remedieri}} · {asks, plural, =1{1 sugestie} other{{asks} de sugestii}}",
     "dreamReportDropped": "{count, plural, =1{1 modificare mai veche omisă} other{{count} de modificări mai vechi omise}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 raport reținut pentru confidențialitate} other{{count} de rapoarte reținute pentru confidențialitate}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 raport reținut pentru confidențialitate} other{{count} de rapoarte reținute pentru confidențialitate}}",
+    "speakerTagPromptExcerptSaved": "Răspuns salvat pentru acest fragment."
 }

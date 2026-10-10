@@ -11078,7 +11078,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Pemeriksaan singkat suara dari dua hari terakhir';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Apakah ini Anda?';
+  String get speakerTagPromptIsThisYou => 'Apakah ini kamu?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12053,8 +12053,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Menjaga profil suaramu tetap akurat, sehingga Omi tidak pernah menamaimu sebagai orang lain.';
+  String get speakerTagPromptHintOwner => 'Jawabanmu hanya menandai cuplikan yang diputar.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12818,4 +12817,7 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Jawaban disimpan untuk cuplikan ini.';
 }

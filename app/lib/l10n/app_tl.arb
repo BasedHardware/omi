@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Tugma ng boses: {level}",
     "speakerTagPromptHintIdentify": "Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.",
     "speakerTagPromptHintConfirm": "Ang Oo ay nagpapataas ng kumpiyansa kay {name}.",
-    "speakerTagPromptHintOwner": "Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.",
+    "speakerTagPromptHintOwner": "Ang sagot mo ay para lang sa pinatugtog na bahagi.",
     "speakerTagPromptSavedAs": "Na-save bilang {name}",
     "speakerTagPromptSavedAsYou": "Na-save bilang ikaw",
     "speakerTagPromptIgnoredNote": "Hindi na magtatanong si Omi tungkol sa boses na ito",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{1 manual na takbo na lang ngayon} other{{count} manual na takbo na lang ngayon}}",
     "dreamReportFound": "{fixes, plural, =1{1 ayos} other{{fixes} ayos}} · {asks, plural, =1{1 mungkahi} other{{asks} mungkahi}}",
     "dreamReportDropped": "{count, plural, =1{1 lumang pagbabago ang nilaktawan} other{{count} lumang pagbabago ang nilaktawan}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 ulat ang pinigil para sa privacy} other{{count} ulat ang pinigil para sa privacy}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 ulat ang pinigil para sa privacy} other{{count} ulat ang pinigil para sa privacy}}",
+    "speakerTagPromptExcerptSaved": "Na-save ang sagot para sa bahaging ito."
 }

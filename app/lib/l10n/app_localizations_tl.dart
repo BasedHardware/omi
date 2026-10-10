@@ -12142,8 +12142,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.';
+  String get speakerTagPromptHintOwner => 'Ang sagot mo ay para lang sa pinatugtog na bahagi.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12906,4 +12905,7 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Na-save ang sagot para sa bahaging ito.';
 }

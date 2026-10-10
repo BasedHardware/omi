@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Aiuto e informazioni",
     "speakerTagPromptTitle": "Aiuta Omi a riconoscere le voci",
     "speakerTagPromptSubtitle": "Un rapido controllo delle voci degli ultimi due giorni",
-    "speakerTagPromptIsThisYou": "Sei tu?",
+    "speakerTagPromptIsThisYou": "Eri tu?",
     "speakerTagPromptIsThisPerson": "È {name}?",
     "speakerTagPromptWhoIsThis": "Chi è?",
     "speakerTagPromptThatsMe": "Sono io",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Corrispondenza vocale: {level}",
     "speakerTagPromptHintIdentify": "Ogni risposta insegna una voce a Omi e aumenta l'affidabilità di quella persona.",
     "speakerTagPromptHintConfirm": "Sì aumenta l'affidabilità di {name}.",
-    "speakerTagPromptHintOwner": "Mantiene preciso il tuo profilo vocale, così Omi non ti scambia mai per qualcun altro.",
+    "speakerTagPromptHintOwner": "La tua risposta etichetta solo il brano riprodotto.",
     "speakerTagPromptSavedAs": "Salvato come {name}",
     "speakerTagPromptSavedAsYou": "Salvato come te",
     "speakerTagPromptIgnoredNote": "Omi non chiederà più di questa voce",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{1 esecuzione manuale rimasta oggi} other{{count} esecuzioni manuali rimaste oggi}}",
     "dreamReportFound": "{fixes, plural, =1{1 correzione} other{{fixes} correzioni}} · {asks, plural, =1{1 suggerimento} other{{asks} suggerimenti}}",
     "dreamReportDropped": "{count, plural, =1{1 modifica meno recente saltata} other{{count} modifiche meno recenti saltate}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 segnalazione trattenuta per privacy} other{{count} segnalazioni trattenute per privacy}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 segnalazione trattenuta per privacy} other{{count} segnalazioni trattenute per privacy}}",
+    "speakerTagPromptExcerptSaved": "Risposta salvata per questo brano."
 }

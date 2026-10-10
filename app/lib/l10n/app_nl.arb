@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Help en over",
     "speakerTagPromptTitle": "Help Omi stemmen te herkennen",
     "speakerTagPromptSubtitle": "Een snelle check van stemmen uit de afgelopen twee dagen",
-    "speakerTagPromptIsThisYou": "Ben jij dit?",
+    "speakerTagPromptIsThisYou": "Was jij dit?",
     "speakerTagPromptIsThisPerson": "Is dit {name}?",
     "speakerTagPromptWhoIsThis": "Wie is dit?",
     "speakerTagPromptThatsMe": "Dat ben ik",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Stemmatch: {level}",
     "speakerTagPromptHintIdentify": "Elk antwoord leert Omi een stem en verhoogt de zekerheid over die persoon.",
     "speakerTagPromptHintConfirm": "Ja verhoogt de zekerheid over {name}.",
-    "speakerTagPromptHintOwner": "Houdt je eigen stemprofiel scherp, zodat Omi je nooit als iemand anders benoemt.",
+    "speakerTagPromptHintOwner": "Je antwoord labelt alleen het afgespeelde fragment.",
     "speakerTagPromptSavedAs": "Opgeslagen als {name}",
     "speakerTagPromptSavedAsYou": "Opgeslagen als jij",
     "speakerTagPromptIgnoredNote": "Omi vraagt niet meer naar deze stem",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Nog 1 handmatige run vandaag} other{Nog {count} handmatige runs vandaag}}",
     "dreamReportFound": "{fixes, plural, =1{1 oplossing} other{{fixes} oplossingen}} · {asks, plural, =1{1 suggestie} other{{asks} suggesties}}",
     "dreamReportDropped": "{count, plural, =1{1 oudere wijziging overgeslagen} other{{count} oudere wijzigingen overgeslagen}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 melding achtergehouden vanwege privacy} other{{count} meldingen achtergehouden vanwege privacy}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 melding achtergehouden vanwege privacy} other{{count} meldingen achtergehouden vanwege privacy}}",
+    "speakerTagPromptExcerptSaved": "Antwoord opgeslagen voor dit fragment."
 }

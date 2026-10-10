@@ -10899,7 +10899,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
 
   @override
-  String get speakerTagPromptIsThisYou => '본인인가요?';
+  String get speakerTagPromptIsThisYou => '이 목소리가 본인이었나요?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11859,7 +11859,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner => '내 음성 프로필을 정확하게 유지해서 Omi가 나를 다른 사람으로 부르는 일이 없게 해요.';
+  String get speakerTagPromptHintOwner => '답변은 재생된 발췌 부분에만 적용됩니다.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12615,4 +12615,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => '이 발췌 부분에 대한 답변이 저장되었습니다.';
 }

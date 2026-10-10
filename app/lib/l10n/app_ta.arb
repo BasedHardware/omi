@@ -11054,7 +11054,7 @@
     "helpAndAbout": "உதவி மற்றும் பற்றி",
     "speakerTagPromptTitle": "குரல்களை அடையாளம் காண Omi-க்கு உதவுங்கள்",
     "speakerTagPromptSubtitle": "கடந்த இரண்டு நாட்களின் குரல்களை விரைவாகச் சரிபார்க்கவும்",
-    "speakerTagPromptIsThisYou": "இது நீங்களா?",
+    "speakerTagPromptIsThisYou": "இது நீங்கள் தானா?",
     "speakerTagPromptIsThisPerson": "இது {name} ஆ?",
     "speakerTagPromptWhoIsThis": "இது யார்?",
     "speakerTagPromptThatsMe": "இது நான்தான்",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "குரல் பொருத்தம்: {level}",
     "speakerTagPromptHintIdentify": "ஒவ்வொரு பதிலும் Omi-க்கு ஒரு குரலைக் கற்றுத்தந்து, அந்த நபரின் நம்பகத்தன்மையை உயர்த்துகிறது.",
     "speakerTagPromptHintConfirm": "ஆம் என்றால் {name} நம்பகத்தன்மை உயரும்.",
-    "speakerTagPromptHintOwner": "உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.",
+    "speakerTagPromptHintOwner": "உங்கள் பதில் இயக்கப்பட்ட பகுதியை மட்டுமே குறிக்கும்.",
     "speakerTagPromptSavedAs": "{name} ஆகச் சேமிக்கப்பட்டது",
     "speakerTagPromptSavedAsYou": "நீங்களாகச் சேமிக்கப்பட்டது",
     "speakerTagPromptIgnoredNote": "இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{இன்று 1 கைமுறை இயக்கம் மீதம்} other{இன்று {count} கைமுறை இயக்கங்கள் மீதம்}}",
     "dreamReportFound": "{fixes, plural, =1{1 திருத்தம்} other{{fixes} திருத்தங்கள்}} · {asks, plural, =1{1 பரிந்துரை} other{{asks} பரிந்துரைகள்}}",
     "dreamReportDropped": "{count, plural, =1{1 பழைய மாற்றம் தவிர்க்கப்பட்டது} other{{count} பழைய மாற்றங்கள் தவிர்க்கப்பட்டன}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}",
+    "speakerTagPromptExcerptSaved": "இந்தப் பகுதிக்கான பதில் சேமிக்கப்பட்டது."
 }

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-sensitive-derived-cache-outside-owner-lifecycle",
+  "violated_contract": "Sensitive derived voice evidence must retain owner encryption, bounded retention and the deletion lifecycle of its source; a hashed key and TTL do not authorize plaintext biometric payloads in a generic cache.",
+  "canonical_prevention": "Store derived evidence behind the private owner-encrypted storage authority, within the conversation audio prefix and owner write fence. Bound its entry count, dimensions and usable lifetime. Purge derived cache objects for ordinary deletion even when primary audio is retained, and check deletion intent/source existence before and after fills to remove late writes. Exercise actual serialization, encryption/decryption, owner-key isolation, write rejection, deletion races and conversation/account purge through production APIs; mocking the cache writer cannot establish this contract.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_owner_prompt_embedding_cache.py",
+    "backend/tests/unit/test_conversation_tombstones.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/speaker_tag_prompts/embedding_cache.py",
+    "backend/utils/speaker_tag_prompts/service.py",
+    "backend/utils/other/storage.py"
+  ],
+  "status": "open"
+}

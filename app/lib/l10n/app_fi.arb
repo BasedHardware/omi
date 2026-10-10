@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Ohje ja tietoja",
     "speakerTagPromptTitle": "Auta Omia tunnistamaan äänet",
     "speakerTagPromptSubtitle": "Nopea tarkistus kahden viime päivän äänistä",
-    "speakerTagPromptIsThisYou": "Oletko tämä sinä?",
+    "speakerTagPromptIsThisYou": "Olitko tämä sinä?",
     "speakerTagPromptIsThisPerson": "Onko tämä {name}?",
     "speakerTagPromptWhoIsThis": "Kuka tämä on?",
     "speakerTagPromptThatsMe": "Se olen minä",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Äänen osuma: {level}",
     "speakerTagPromptHintIdentify": "Jokainen vastaus opettaa Omille äänen ja nostaa henkilön varmuutta.",
     "speakerTagPromptHintConfirm": "Kyllä nostaa henkilön {name} varmuutta.",
-    "speakerTagPromptHintOwner": "Pitää oman ääniprofiilisi tarkkana, jotta Omi ei koskaan nimeä sinua joksikin toiseksi.",
+    "speakerTagPromptHintOwner": "Vastauksesi merkitsee vain toistetun katkelman.",
     "speakerTagPromptSavedAs": "Tallennettu nimellä {name}",
     "speakerTagPromptSavedAsYou": "Tallennettu sinuksi",
     "speakerTagPromptIgnoredNote": "Omi ei kysy tästä äänestä enää",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{1 manuaalinen ajo jäljellä tänään} other{{count} manuaalista ajoa jäljellä tänään}}",
     "dreamReportFound": "{fixes, plural, =1{1 korjaus} other{{fixes} korjausta}} · {asks, plural, =1{1 ehdotus} other{{asks} ehdotusta}}",
     "dreamReportDropped": "{count, plural, =1{1 vanhempi muutos ohitettu} other{{count} vanhempaa muutosta ohitettu}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 ilmoitus pidätetty yksityisyyden vuoksi} other{{count} ilmoitusta pidätetty yksityisyyden vuoksi}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 ilmoitus pidätetty yksityisyyden vuoksi} other{{count} ilmoitusta pidätetty yksityisyyden vuoksi}}",
+    "speakerTagPromptExcerptSaved": "Vastaus tallennettu tälle katkelmalle."
 }

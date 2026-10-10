@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Palīdzība un par lietotni",
     "speakerTagPromptTitle": "Palīdziet Omi atpazīt balsis",
     "speakerTagPromptSubtitle": "Ātra pēdējo divu dienu balsu pārbaude",
-    "speakerTagPromptIsThisYou": "Vai tas esat jūs?",
+    "speakerTagPromptIsThisYou": "Vai tas bijāt jūs?",
     "speakerTagPromptIsThisPerson": "Vai tas ir {name}?",
     "speakerTagPromptWhoIsThis": "Kas tas ir?",
     "speakerTagPromptThatsMe": "Tas esmu es",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Balss atbilstība: {level}",
     "speakerTagPromptHintIdentify": "Katra atbilde māca Omi balsi un palielina šīs personas pārliecību.",
     "speakerTagPromptHintConfirm": "Jā palielina pārliecību par {name}.",
-    "speakerTagPromptHintOwner": "Uztur jūsu balss profilu precīzu, lai Omi nekad nenosauktu jūs par kādu citu.",
+    "speakerTagPromptHintOwner": "Jūsu atbilde atzīmē tikai atskaņoto fragmentu.",
     "speakerTagPromptSavedAs": "Saglabāts kā {name}",
     "speakerTagPromptSavedAsYou": "Saglabāts kā jūs",
     "speakerTagPromptIgnoredNote": "Omi vairs nejautās par šo balsi",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Šodien atlicis 1 manuāls palaidiens} other{Šodien atlikuši {count} manuāli palaidieni}}",
     "dreamReportFound": "{fixes, plural, =1{1 labojums} other{{fixes} labojumi}} · {asks, plural, =1{1 ieteikums} other{{asks} ieteikumi}}",
     "dreamReportDropped": "{count, plural, =1{1 vecāka izmaiņa izlaista} other{{count} vecākas izmaiņas izlaistas}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 ziņojums aizturēts privātuma dēļ} other{{count} ziņojumi aizturēti privātuma dēļ}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 ziņojums aizturēts privātuma dēļ} other{{count} ziņojumi aizturēti privātuma dēļ}}",
+    "speakerTagPromptExcerptSaved": "Atbilde saglabāta šim fragmentam."
 }

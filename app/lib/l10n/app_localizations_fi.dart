@@ -11072,7 +11072,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Nopea tarkistus kahden viime päivän äänistä';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Oletko tämä sinä?';
+  String get speakerTagPromptIsThisYou => 'Olitko tämä sinä?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12046,8 +12046,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Pitää oman ääniprofiilisi tarkkana, jotta Omi ei koskaan nimeä sinua joksikin toiseksi.';
+  String get speakerTagPromptHintOwner => 'Vastauksesi merkitsee vain toistetun katkelman.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12808,4 +12807,7 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Vastaus tallennettu tälle katkelmalle.';
 }

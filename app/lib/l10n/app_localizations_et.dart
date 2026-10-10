@@ -11063,7 +11063,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Kiire ülevaade viimase kahe päeva häältest';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Kas see oled sina?';
+  String get speakerTagPromptIsThisYou => 'Kas see olid sina?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12035,8 +12035,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Hoiab sinu enda häälprofiili täpsena, et Omi ei nimetaks sind kunagi kellekski teiseks.';
+  String get speakerTagPromptHintOwner => 'Sinu vastus märgistab ainult esitatud lõigu.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12799,4 +12798,7 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Vastus on selle lõigu jaoks salvestatud.';
 }

@@ -11054,7 +11054,7 @@
     "helpAndAbout": "Pomoć i o aplikaciji",
     "speakerTagPromptTitle": "Pomozite Omiju prepoznavati glasove",
     "speakerTagPromptSubtitle": "Brza provjera glasova iz posljednja dva dana",
-    "speakerTagPromptIsThisYou": "Jeste li ovo vi?",
+    "speakerTagPromptIsThisYou": "Jeste li ovo bili vi?",
     "speakerTagPromptIsThisPerson": "Je li ovo {name}?",
     "speakerTagPromptWhoIsThis": "Tko je ovo?",
     "speakerTagPromptThatsMe": "To sam ja",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Podudaranje glasa: {level}",
     "speakerTagPromptHintIdentify": "Svaki odgovor uči Omi jedan glas i povećava pouzdanost te osobe.",
     "speakerTagPromptHintConfirm": "„Da” povećava pouzdanost osobe {name}.",
-    "speakerTagPromptHintOwner": "Održava tvoj glasovni profil točnim da te Omi nikad ne označi kao nekog drugog.",
+    "speakerTagPromptHintOwner": "Vaš odgovor označava samo reproducirani isječak.",
     "speakerTagPromptSavedAs": "Spremljeno kao {name}",
     "speakerTagPromptSavedAsYou": "Spremljeno kao ti",
     "speakerTagPromptIgnoredNote": "Omi više neće pitati o ovom glasu",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Danas je ostalo 1 ručno pokretanje} other{Danas je ostalo {count} ručnih pokretanja}}",
     "dreamReportFound": "{fixes, plural, =1{1 ispravak} other{{fixes} ispravaka}} · {asks, plural, =1{1 prijedlog} other{{asks} prijedloga}}",
     "dreamReportDropped": "{count, plural, =1{1 starija promjena preskočena} other{{count} starijih promjena preskočeno}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 izvješće zadržano zbog privatnosti} other{{count} izvješća zadržano zbog privatnosti}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 izvješće zadržano zbog privatnosti} other{{count} izvješća zadržano zbog privatnosti}}",
+    "speakerTagPromptExcerptSaved": "Odgovor je spremljen za ovaj isječak."
 }

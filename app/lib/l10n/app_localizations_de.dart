@@ -11160,7 +11160,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Ein kurzer Check der Stimmen der letzten zwei Tage';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Bist du das?';
+  String get speakerTagPromptIsThisYou => 'Warst du das?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12137,8 +12137,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Hält dein eigenes Stimmprofil präzise, damit Omi dich nie als jemand anderen benennt.';
+  String get speakerTagPromptHintOwner => 'Deine Antwort kennzeichnet nur den abgespielten Ausschnitt.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12901,4 +12900,7 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Antwort für diesen Ausschnitt gespeichert.';
 }
