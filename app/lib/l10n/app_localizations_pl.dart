@@ -12647,4 +12647,362 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Przypięte osoby pozostają na górze Twojej listy Osób i nie są usuwane przez Uporządkuj.';
+
+  @override
+  String get chatAppsProblemFailed => 'Coś poszło nie tak. Spróbuj ponownie.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return 'Połączono: $app';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Nie udało się odświeżyć. Pokazujemy ostatnio zapisane dane.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Tylko do odczytu. Odpowiadaj Omi w $app.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Dziękujemy. WhatsApp pojawi się tutaj, gdy będzie gotowy.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Na razie użyj Telegrama';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Nie udało się otworzyć: $app. Upewnij się, że aplikacja jest zainstalowana, i spróbuj ponownie.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Co wczoraj obiecałem Samowi?';
+
+  @override
+  String get chatAppsDoesSave => 'Zapisuje wspomnienia i zarządza Twoimi zadaniami';
+
+  @override
+  String get chatAppsOnTheList => 'Jesteś na liście';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Brak czatów';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'W $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage =>
+      'Omi otworzy Telegram z prywatnym linkiem przeznaczonym tylko dla Ciebie.';
+
+  @override
+  String get chatAppsOpenMessages => 'Otwórz Wiadomości';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Rozłączyć $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Zdrowie, finanse i wszystko, co oznaczysz jako prywatne, nie trafia do komunikatorów.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Wyślij Omi jedną wiadomość z numeru, którego chcesz używać. Kod w niej łączy ten numer z Twoim kontem.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Pracujemy nad udostępnieniem Omi w WhatsAppie. Pojawi się tutaj, gdy będzie gotowe.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Tutaj pojawią się Twoje czaty z Omi w $app.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Zobacz czaty';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi przestanie odpowiadać w $app i usunie przechowywaną dla niej historię czatów. Wiadomości, które już są w $app, tam zostaną.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Te czaty są tu tylko do odczytu. Odpowiadaj w $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Dodaj Omi do kontaktów';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi pamięta kontekst w każdej aplikacji';
+
+  @override
+  String get chatAppsWhatsAppMeantime =>
+      'Telegram i iMessage działają już dziś, z tymi samymi wspomnieniami i zadaniami.';
+
+  @override
+  String get chatAppsComingLater => 'Wkrótce';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Zbyt wiele prób. Odczekaj minutę i spróbuj ponownie.';
+
+  @override
+  String get chatAppsMessage => 'Wiadomość';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Otwórz $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Skonfiguruj dwoma dotknięciami';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Nie udało się wczytać komunikatorów';
+
+  @override
+  String get chatAppsInsights => 'Spostrzeżenia od Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Wyłączone: widzisz je tylko w $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Pisz do Omi z Telegrama i iMessage';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Wyślij wiadomość głosową, a Omi na nią odpowie.';
+
+  @override
+  String get chatAppsPartOfPro => 'Komunikatory są częścią Pro';
+
+  @override
+  String get chatAppsMessagesApp => 'Wiadomości';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram na innym urządzeniu?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Pytaj o swój dzień, zapisuj wspomnienia i zarządzaj zadaniami z poziomu Telegrama lub iMessage. Twoje czaty zostają w aplikacji, której używasz, a Omi pamięta, o czym rozmawialiście, wszędzie.';
+
+  @override
+  String get chatAppsTryRemind => 'Przypomnij mi, żebym w niedzielę zadzwonił do mamy';
+
+  @override
+  String get chatAppsChannelsTitle => 'Komunikatory';
+
+  @override
+  String get chatAppsDoesAnswer => 'Odpowiada na pytania o Twoje rozmowy i wspomnienia';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Czaty w $app';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'W ZESTAWIE Z OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Link';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Nigdy nie pisze do innych osób w Twoim imieniu';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Nie połączono';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Twoje czaty z Omi są też przechowywane przez Telegram. Omi odpowiada tylko Tobie, nigdy innym osobom, a rozłączyć możesz w dowolnej chwili.';
+
+  @override
+  String get chatAppsProblemOffline => 'Jesteś offline. Sprawdź połączenie i spróbuj ponownie.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Pisz do Omi ze swojego numeru telefonu';
+
+  @override
+  String get chatAppsPrivateMemories => 'Zachowaj prywatne wspomnienia w aplikacji';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Połącz Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Pozwól Omi wysyłać Ci tutaj podsumowania lub spostrzeżenia.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Czekamy, aż klikniesz Start w Telegramie…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Rozmawiaj z Omi w aplikacjach, z których korzystasz na co dzień.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Połączono jako $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Zapisuj wspomnienia i zarządzaj zadaniami prosto z czatu';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Napisz do Omi, aby połączyć';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Wyślij wiadomość w aplikacji Wiadomości. Ten ekran odświeży się, gdy tylko Omi ją odbierze.';
+
+  @override
+  String get chatAppsShowInApp => 'Pokaż te czaty w aplikacji Omi';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Pobierz nowy kod i wyślij go z aplikacji Wiadomości.';
+
+  @override
+  String get chatAppsNoMessages => 'Brak wiadomości';
+
+  @override
+  String get chatAppsHeroTitle => 'Rozmawiaj z Omi tam, gdzie już rozmawiasz';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage i inne';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kod wygaśnie za $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Ten komunikator został rozłączony.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi odpowiada tylko Tobie. Nigdy nie pisze pierwsza.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Rozłączenie usuwa historię, którą Omi przechowuje dla $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Pisz do Omi w $app w dowolnej chwili.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Spróbuj zapytać';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Wróć tutaj. Potwierdzimy, że się udało.';
+
+  @override
+  String get chatAppsDoesFiles => 'Wysyła i odbiera pliki, zdjęcia i wiadomości głosowe';
+
+  @override
+  String get chatAppsTryWeek => 'Podsumuj mój tydzień w trzech linijkach';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Twoje czaty w $app zostają w $app. Omi nadal wie, o czym rozmawialiście w tej aplikacji i w innych komunikatorach.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp wkrótce';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Ten kod wygasł';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Komunikatory nie są jeszcze dostępne dla Twojego konta.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Co Omi robi w komunikatorach';
+
+  @override
+  String get chatAppsVoiceNotes => 'Wiadomości głosowe';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Jeszcze niedostępne';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Otwórz Wiadomości ponownie';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Połączono: $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Czekamy na Twoją wiadomość';
+
+  @override
+  String get chatAppsEntryTitle => 'Czat z Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Kliknij poniżej Otwórz Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Włączone: pojawiają się w aplikacji Omi jako czaty tylko do odczytu.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Rozłącz $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Kliknij Start w czacie z Omi';
+
+  @override
+  String get chatAppsLocked => 'Wymaga Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Cześć Omi, kod połączenia $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Czat w $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontakty';
+
+  @override
+  String get chatAppsCodeNote => 'Kod działa jednorazowo i wygasa po 10 minutach.';
+
+  @override
+  String get chatAppsMoreComing => 'Kolejne aplikacje wkrótce.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Tymczasem';
+
+  @override
+  String get chatAppsGetNewCode => 'Pobierz nowy kod';
+
+  @override
+  String get chatAppsNotifyMe => 'Powiadom mnie';
+
+  @override
+  String get chatAppsPrefilled => 'Wstępnie wypełnione';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Nie otworzyło się? Wyślij to na numer $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Ten link wygasł. Kliknij Otwórz Telegram, aby uzyskać nowy.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Do: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 }

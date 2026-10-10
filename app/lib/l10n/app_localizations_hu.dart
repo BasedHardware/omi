@@ -12661,4 +12661,361 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'A kitűzött személyek a Személyek listád tetején maradnak, és a Takarítás nem távolítja el őket.';
+
+  @override
+  String get chatAppsProblemFailed => 'Valami hiba történt. Próbáld újra.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return 'A(z) $app csatlakoztatva';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Nem sikerült frissíteni. Az utoljára látott állapot látható.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Csak olvasható. Válaszolj Ominak a(z) $app alkalmazásban.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Köszönjük. A WhatsApp itt jelenik meg, amint elkészül.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Egyelőre Telegram használata';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Nem sikerült megnyitni: $app. Ellenőrizd, hogy telepítve van-e, és próbáld újra.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Mit ígértem tegnap Samnek?';
+
+  @override
+  String get chatAppsDoesSave => 'Elmenti az emlékeket és kezeli a feladataidat';
+
+  @override
+  String get chatAppsOnTheList => 'Listán vagy';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Még nincsenek csevegések';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Itt: $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi megnyitja a Telegramot egy privát linkkel, amely csak a tiéd.';
+
+  @override
+  String get chatAppsOpenMessages => 'Üzenetek megnyitása';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Leválasztod a(z) $app alkalmazást?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Az egészség, a pénz és minden, amit privátnak jelöltél, kimarad a csevegőalkalmazásokból.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Küldj Ominak egy üzenetet arról a számról, amelyet használni szeretnél. Az abban lévő kód összekapcsolja a számot a fiókoddal.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Azon dolgozunk, hogy Omi a WhatsAppban is elérhető legyen. Itt jelenik meg, amint elkészül.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Az Omival a(z) $app alkalmazásban folytatott csevegéseid itt jelennek meg.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Csevegések megtekintése';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi nem válaszol többé a(z) $app alkalmazásban, és törli a hozzá tárolt csevegési előzményeket. A(z) $app alkalmazásban már meglévő üzenetek ott maradnak.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Ezek a csevegések itt csak olvashatók. Válaszolj a(z) $app alkalmazásban.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Omi hozzáadása a Névjegyekhez';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi minden alkalmazásban emlékszik a kontextusra';
+
+  @override
+  String get chatAppsWhatsAppMeantime =>
+      'A Telegram és az iMessage már most működik, ugyanazokkal az emlékekkel és feladatokkal.';
+
+  @override
+  String get chatAppsComingLater => 'Később érkezik';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Túl sok próbálkozás. Várj egy percet, és próbáld újra.';
+
+  @override
+  String get chatAppsMessage => 'Üzenet';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return '$app megnyitása';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Beállítás két koppintással';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Nem sikerült betölteni a csevegőalkalmazásokat';
+
+  @override
+  String get chatAppsInsights => 'Omi meglátásai';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Ki: csak a(z) $app alkalmazásban látod őket.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Írj Ominak Telegramról és iMessage-ből';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Küldj egy hangüzenetet, és Omi válaszol rá.';
+
+  @override
+  String get chatAppsPartOfPro => 'A csevegőalkalmazások a Pro részei';
+
+  @override
+  String get chatAppsMessagesApp => 'Üzenetek';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram másik eszközön?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Kérdezz a napodról, mentsd el az emlékeket és kezeld a feladataidat Telegramból vagy iMessage-ből. A csevegéseid abban az alkalmazásban maradnak, amelyet használsz, Omi pedig mindenhol emlékszik, miről beszélgettetek.';
+
+  @override
+  String get chatAppsTryRemind => 'Emlékeztess, hogy vasárnap felhívjam anyát';
+
+  @override
+  String get chatAppsChannelsTitle => 'Csevegőalkalmazások';
+
+  @override
+  String get chatAppsDoesAnswer => 'Válaszol a beszélgetéseiddel és emlékeiddel kapcsolatos kérdésekre';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app-csevegések';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'AZ OMI PRO RÉSZE';
+
+  @override
+  String get chatAppsLink => 'Link';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Soha nem ír üzenetet más embereknek helyetted';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Nincs csatlakoztatva';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Az Omival folytatott csevegéseidet a Telegram is tárolja. Omi csak neked válaszol, soha másoknak, és bármikor leválaszthatod.';
+
+  @override
+  String get chatAppsProblemOffline => 'Offline vagy. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Írj Ominak a telefonszámodról';
+
+  @override
+  String get chatAppsPrivateMemories => 'Privát emlékek megtartása az alkalmazásban';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Telegram csatlakoztatása';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Engedd, hogy Omi itt küldjön összefoglalót vagy meglátást.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Várakozás arra, hogy az Indításra koppints a Telegramban…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Beszélgess Omival a mindennap használt alkalmazásaidból.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Csatlakoztatva mint $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Mentsd az emlékeket és kezeld a feladatokat közvetlenül a csevegésből';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Írj Ominak a csatlakozáshoz';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Küldd el az üzenetet az Üzenetek alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.';
+
+  @override
+  String get chatAppsShowInApp => 'Csevegések megjelenítése az Omi alkalmazásban';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Kérj új kódot, és küldd el az Üzenetek alkalmazásból.';
+
+  @override
+  String get chatAppsNoMessages => 'Nincsenek üzenetek';
+
+  @override
+  String get chatAppsHeroTitle => 'Csevegj Omival ott, ahol amúgy is csevegsz';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage és más';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'A kód lejár: $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Ezt a csevegőalkalmazást leválasztották.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi csak neked válaszol. Soha nem ír elsőként.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'A leválasztás törli az előzményeket, amelyeket Omi a(z) $app alkalmazáshoz tárol.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Írj Ominak a(z) $app alkalmazásban bármikor.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Próbáld ezt megkérdezni';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Gyere vissza ide. Megerősítjük, hogy sikerült.';
+
+  @override
+  String get chatAppsDoesFiles => 'Fájlokat, fényképeket és hangüzeneteket küld és fogad';
+
+  @override
+  String get chatAppsTryWeek => 'Foglald össze a hetemet három sorban';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'A(z) $app csevegéseid a(z) $app alkalmazásban maradnak. Omi így is tudja, miről beszélgettetek az alkalmazásban és a többi csevegőalkalmazásodban.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'Hamarosan jön a WhatsApp';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Ez a kód lejárt';
+
+  @override
+  String get chatAppsProblemUnavailable => 'A csevegőalkalmazások még nem érhetők el a fiókodhoz.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Mit csinál Omi a csevegőalkalmazásokban';
+
+  @override
+  String get chatAppsVoiceNotes => 'Hangüzenetek';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Még nem érhető el';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Üzenetek újranyitása';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Csatlakoztatva: $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Várakozás az üzenetedre';
+
+  @override
+  String get chatAppsEntryTitle => 'Csevegés Omival';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Koppints lent a Telegram megnyitása gombra';
+
+  @override
+  String get chatAppsShowInAppOn => 'Be: az Omi alkalmazásban csak olvasható csevegésként jelennek meg.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return '$app leválasztása';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Koppints az Indítás gombra az Omival folytatott csevegésedben';
+
+  @override
+  String get chatAppsLocked => 'Omi Pro szükséges';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Szia Omi, összekapcsolási kód: $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Csevegés itt: $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Névjegyek';
+
+  @override
+  String get chatAppsCodeNote => 'A kód egyszer használható, és 10 perc múlva lejár.';
+
+  @override
+  String get chatAppsMoreComing => 'További alkalmazások érkeznek.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Addig is';
+
+  @override
+  String get chatAppsGetNewCode => 'Új kód kérése';
+
+  @override
+  String get chatAppsNotifyMe => 'Értesítést kérek';
+
+  @override
+  String get chatAppsPrefilled => 'Előre kitöltve';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Nem nyílt meg? Küldd el ezt erre a számra: $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Ez a link lejárt. Koppints a Telegram megnyitása gombra egy újért.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Címzett: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 }

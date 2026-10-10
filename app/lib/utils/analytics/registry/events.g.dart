@@ -1857,3 +1857,59 @@ final class ConversationUntitledRendered extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"surface": surface.wireName, "age_bucket": ageBucket.wireName, "summary_retryable": summaryRetryable};
 }
+
+enum ChatAppConnectStartedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppConnectStartedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppConnectStarted extends RegisteredEvent {
+  const ChatAppConnectStarted({required this.channel});
+  final ChatAppConnectStartedChannel channel;
+  @override
+  String get wireName => "Chat App Connect Started";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+enum ChatAppConnectedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppConnectedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppConnected extends RegisteredEvent {
+  const ChatAppConnected({required this.channel});
+  final ChatAppConnectedChannel channel;
+  @override
+  String get wireName => "Chat App Connected";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+enum ChatAppDisconnectedChannel {
+  telegram("telegram"),
+  imessage("imessage");
+  const ChatAppDisconnectedChannel(this.wireName);
+  final String wireName;
+}
+
+final class ChatAppDisconnected extends RegisteredEvent {
+  const ChatAppDisconnected({required this.channel});
+  final ChatAppDisconnectedChannel channel;
+  @override
+  String get wireName => "Chat App Disconnected";
+  @override
+  Map<String, Object> get properties => {"channel": channel.wireName};
+}
+
+final class ChatAppWaitlistJoined extends RegisteredEvent {
+  const ChatAppWaitlistJoined();
+  @override
+  String get wireName => "Chat App Waitlist Joined";
+  @override
+  Map<String, Object> get properties => {};
+}

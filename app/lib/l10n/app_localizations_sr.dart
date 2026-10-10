@@ -12621,4 +12621,358 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Закачени људи остају на врху вашег списка „Људи“ и не уклања их функција „Почисти“.';
+
+  @override
+  String get chatAppsProblemFailed => 'Нешто је пошло наопако. Покушајте поново.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app је повезан';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Освежавање није успело. Приказујемо последње познато стање.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Само за читање. Одговорите Omi-ју у апликацији $app.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Хвала. WhatsApp ће се појавити овде када буде спреман.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'За сада користи Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Није могуће отворити $app. Проверите да ли је инсталиран и покушајте поново.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Шта сам јуче обећао Сави?';
+
+  @override
+  String get chatAppsDoesSave => 'Чува сећања и управља вашим задацима';
+
+  @override
+  String get chatAppsOnTheList => 'На листи';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Још нема разговора';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'У апликацији $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi ће отворити Telegram са приватном везом која је само за вас.';
+
+  @override
+  String get chatAppsOpenMessages => 'Отвори Поруке';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Прекинути везу са $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Здравље, новац и све што сте означили као приватно остаје ван апликација за ћаскање.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Пошаљите Omi једну поруку са броја који желите да користите. Код у њој повезује тај број са вашим налогом.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'Радимо на томе да Omi стигне на WhatsApp. Појавиће се овде када буде спреман.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Разговори које водите са Omi у апликацији $app појављују се овде.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Прикажи разговоре';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi ће престати да одговара у апликацији $app и обрисаће историју разговора коју чува за њу. Поруке које су већ у апликацији $app остају тамо.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Ови разговори су овде само за читање. Одговорите у апликацији $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Додај Omi у контакте';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi памти контекст у свакој апликацији';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram и iMessage већ раде, са истим сећањима и задацима.';
+
+  @override
+  String get chatAppsComingLater => 'Стиже касније';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Превише покушаја. Сачекајте минут и покушајте поново.';
+
+  @override
+  String get chatAppsMessage => 'Порука';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Отвори $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Подесите са два додира';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Није могуће учитати апликације за ћаскање';
+
+  @override
+  String get chatAppsInsights => 'Увиди од Omi-ја';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Искључено: виде се само у апликацији $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Пишите Omi из Telegram-а и iMessage-а';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Пошаљите гласовну белешку и Omi ће одговорити.';
+
+  @override
+  String get chatAppsPartOfPro => 'Апликације за ћаскање су део плана Pro';
+
+  @override
+  String get chatAppsMessagesApp => 'Поруке';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram на другом уређају?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Питајте о свом дану, чувајте сећања и управљајте задацима из Telegram-а или iMessage-а. Ваши разговори остају у апликацији коју користите, а Omi памти о чему сте причали свуда.';
+
+  @override
+  String get chatAppsTryRemind => 'Подсети ме да у недељу назовем маму';
+
+  @override
+  String get chatAppsChannelsTitle => 'Апликације за ћаскање';
+
+  @override
+  String get chatAppsDoesAnswer => 'Одговара на питања о вашим разговорима и сећањима';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Разговори у апликацији $app';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'УКЉУЧЕНО У OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Веза';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Никада не пише другима уместо вас';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Није повезано';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Ваше разговоре са Omi чува и Telegram. Omi одговара само вама, никада другима, а везу можете прекинути кад год желите.';
+
+  @override
+  String get chatAppsProblemOffline => 'Нисте на мрежи. Проверите везу и покушајте поново.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Пишите Omi са свог броја телефона';
+
+  @override
+  String get chatAppsPrivateMemories => 'Задржи приватна сећања у апликацији';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Повежи Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Дозволите да вам Omi овде пошаље резиме или увид.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Чекамо да у Telegram-у додирнете Покрени…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Разговарајте са Omi у апликацијама које већ користите сваког дана.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Повезано као $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Чувајте сећања и управљајте задацима директно из ћаскања';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Пошаљите поруку Omi да се повежете';
+
+  @override
+  String get chatAppsWaitingMessage => 'Пошаљите поруку у апликацији Поруке. Овај екран се ажурира чим је Omi прими.';
+
+  @override
+  String get chatAppsShowInApp => 'Прикажи ове разговоре у апликацији Omi';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Затражите нови код и пошаљите га из апликације Поруке.';
+
+  @override
+  String get chatAppsNoMessages => 'Нема порука';
+
+  @override
+  String get chatAppsHeroTitle => 'Ћаскајте са Omi тамо где већ ћаскате';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage и још';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Код истиче за $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Веза са овом апликацијом за ћаскање је прекинута.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi одговара само вама. Никада не пише први.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Прекидом везе брише се историја коју Omi чува за $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Пишите Omi у апликацији $app било када.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Покушајте да питате';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Вратите се овде. Потврдићемо да је успело.';
+
+  @override
+  String get chatAppsDoesFiles => 'Шаље и прима фајлове, фотографије и гласовне белешке';
+
+  @override
+  String get chatAppsTryWeek => 'Резимирај ми недељу у три реда';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Ваши разговори у апликацији $app остају у апликацији $app. Omi и даље зна о чему сте причали у апликацији и у другим апликацијама за ћаскање.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp стиже';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Овај код је истекао';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Апликације за ћаскање још нису доступне за ваш налог.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Шта Omi ради у апликацијама за ћаскање';
+
+  @override
+  String get chatAppsVoiceNotes => 'Гласовне белешке';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Још није доступно';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Поново отвори Поруке';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Повезано $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Чекамо вашу поруку';
+
+  @override
+  String get chatAppsEntryTitle => 'Ћаскајте са Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Испод додирните Отвори Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Укључено: појављују се у апликацији Omi као разговори само за читање.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Прекини везу са $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'У ћаскању са Omi додирните Покрени';
+
+  @override
+  String get chatAppsLocked => 'Потребан је Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Здраво Omi, код за повезивање $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Ћаскање у апликацији $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Контакти';
+
+  @override
+  String get chatAppsCodeNote => 'Код важи једном и истиче за 10 минута.';
+
+  @override
+  String get chatAppsMoreComing => 'Стижу и друге апликације.';
+
+  @override
+  String get chatAppsInTheMeantime => 'У међувремену';
+
+  @override
+  String get chatAppsGetNewCode => 'Затражи нови код';
+
+  @override
+  String get chatAppsNotifyMe => 'Обавести ме';
+
+  @override
+  String get chatAppsPrefilled => 'Унапред попуњено';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Није се отворило? Пошаљите ово на $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Та веза је истекла. Додирните Отвори Telegram за нову.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'За: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 }

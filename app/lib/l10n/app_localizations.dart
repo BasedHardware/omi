@@ -22520,6 +22520,618 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pinned people stay at the top of your People list and aren\'t removed by Clean Up.'**
   String get pinPersonDescription;
+
+  /// Generic retryable error
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong. Try again.'**
+  String get chatAppsProblemFailed;
+
+  /// Success banner title after linking; app is Telegram or iMessage
+  ///
+  /// In en, this message translates to:
+  /// **'{app} is connected'**
+  String chatAppsIsConnected(String app);
+
+  /// Notice when a refresh failed but earlier data is still shown
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh. Showing what we last saw.'**
+  String get chatAppsRefreshFailed;
+
+  /// Banner above a chat app transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only. Reply to Omi in {app}.'**
+  String chatAppsReadOnlyBanner(String app);
+
+  /// Confirmation after tapping Notify Me
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks. WhatsApp will show up here when it\'s ready.'**
+  String get chatAppsWaitlistConfirmed;
+
+  /// Button that starts connecting Telegram instead
+  ///
+  /// In en, this message translates to:
+  /// **'Use Telegram for Now'**
+  String get chatAppsUseTelegramForNow;
+
+  /// Error when a chat app could not be opened
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open {app}. Make sure it\'s installed and try again.'**
+  String chatAppsCouldNotOpen(String app);
+
+  /// Example question to send Omi; Sam is a person's name
+  ///
+  /// In en, this message translates to:
+  /// **'What did I promise Sam yesterday?'**
+  String get chatAppsTryPromise;
+
+  /// Capability bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Saves memories and manages your tasks'**
+  String get chatAppsDoesSave;
+
+  /// Chip/button after the person asked to be notified about WhatsApp
+  ///
+  /// In en, this message translates to:
+  /// **'On the List'**
+  String get chatAppsOnTheList;
+
+  /// Empty state title
+  ///
+  /// In en, this message translates to:
+  /// **'No chats yet'**
+  String get chatAppsNoChatsTitle;
+
+  /// Settings section header; app is Telegram or iMessage
+  ///
+  /// In en, this message translates to:
+  /// **'In {app}'**
+  String chatAppsInChannel(String app);
+
+  /// Description on the Telegram connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will open Telegram with a private link that\'s only for you.'**
+  String get chatAppsConnectTelegramMessage;
+
+  /// Button that opens Apple's Messages app
+  ///
+  /// In en, this message translates to:
+  /// **'Open Messages'**
+  String get chatAppsOpenMessages;
+
+  /// Confirmation dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {app}?'**
+  String chatAppsDisconnectTitle(String app);
+
+  /// Setting subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Health, money, and anything you marked private stay out of chat apps.'**
+  String get chatAppsPrivateMemoriesSubtitle;
+
+  /// Description on the iMessage connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Send Omi one message from the number you want to use. The code in it links that number to your account.'**
+  String get chatAppsConnectIMessageMessage;
+
+  /// Description on the WhatsApp sheet
+  ///
+  /// In en, this message translates to:
+  /// **'We\'re working on bringing Omi to WhatsApp. It will show up here when it\'s ready.'**
+  String get chatAppsWhatsAppMessage;
+
+  /// Empty state message
+  ///
+  /// In en, this message translates to:
+  /// **'Chats you have with Omi in {app} show up here.'**
+  String chatAppsNoChatsMessage(String app);
+
+  /// Row that opens the list of this chat app's chats
+  ///
+  /// In en, this message translates to:
+  /// **'View Chats'**
+  String get chatAppsViewChats;
+
+  /// Confirmation dialog message
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will stop replying in {app} and delete the chat history it keeps for it. Messages already in {app} stay there.'**
+  String chatAppsDisconnectMessage(String app);
+
+  /// Footer under the chat list
+  ///
+  /// In en, this message translates to:
+  /// **'These chats are read-only here. Reply in {app}.'**
+  String chatAppsReadOnlyFooter(String app);
+
+  /// Button that opens the system new-contact form for Omi's number
+  ///
+  /// In en, this message translates to:
+  /// **'Add Omi to Contacts'**
+  String get chatAppsAddToContacts;
+
+  /// Pro benefit bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi remembers context across every app'**
+  String get chatAppsProPerkContext;
+
+  /// Tip on the WhatsApp sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Telegram and iMessage work today, with the same memories and tasks.'**
+  String get chatAppsWhatsAppMeantime;
+
+  /// Value shown on a setting that is not available yet
+  ///
+  /// In en, this message translates to:
+  /// **'Coming later'**
+  String get chatAppsComingLater;
+
+  /// Error when the person tried too often
+  ///
+  /// In en, this message translates to:
+  /// **'Too many tries. Wait a minute and try again.'**
+  String get chatAppsProblemRateLimited;
+
+  /// Noun used in the copy confirmation, e.g. 'Message copied'
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get chatAppsMessage;
+
+  /// Button that opens a chat app; app is a brand name
+  ///
+  /// In en, this message translates to:
+  /// **'Open {app}'**
+  String chatAppsOpenApp(String app);
+
+  /// Telegram row subtitle before connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Set up in two taps'**
+  String get chatAppsTelegramSubtitle;
+
+  /// Title of the error state on the Chat apps page
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load chat apps'**
+  String get chatAppsLoadFailedTitle;
+
+  /// Setting title
+  ///
+  /// In en, this message translates to:
+  /// **'Insights from Omi'**
+  String get chatAppsInsights;
+
+  /// Switch subtitle when off
+  ///
+  /// In en, this message translates to:
+  /// **'Off: you only see them in {app}.'**
+  String chatAppsShowInAppOff(String app);
+
+  /// Pro benefit bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Text Omi from Telegram and iMessage'**
+  String get chatAppsProPerkText;
+
+  /// Setting subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Send a voice note and Omi will answer it.'**
+  String get chatAppsVoiceNotesSubtitle;
+
+  /// Heading of the upgrade card for free users
+  ///
+  /// In en, this message translates to:
+  /// **'Chat apps are part of Pro'**
+  String get chatAppsPartOfPro;
+
+  /// Name of Apple's Messages app, as shown on the device in this language
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get chatAppsMessagesApp;
+
+  /// Shown before a Copy link button on the Telegram connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Telegram on another device?'**
+  String get chatAppsTelegramOtherDevice;
+
+  /// Description under the Chat apps heading
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about your day, save memories, and manage tasks from Telegram or iMessage. Your chats stay in the app you use, and Omi remembers what you talked about everywhere.'**
+  String get chatAppsHeroMessage;
+
+  /// Example request to send Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me to call Mom on Sunday'**
+  String get chatAppsTryRemind;
+
+  /// Title of the Chat apps section and page, where people connect Telegram or iMessage to chat with Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Chat apps'**
+  String get chatAppsChannelsTitle;
+
+  /// Capability bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Answers questions about your conversations and memories'**
+  String get chatAppsDoesAnswer;
+
+  /// Page title listing a chat app's chats
+  ///
+  /// In en, this message translates to:
+  /// **'{app} chats'**
+  String chatAppsChannelChats(String app);
+
+  /// Small all-caps tag: chat apps come with the Omi Pro plan
+  ///
+  /// In en, this message translates to:
+  /// **'INCLUDED WITH OMI PRO'**
+  String get chatAppsIncludedWithPro;
+
+  /// Noun used in the copy confirmation, e.g. 'Link copied'
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get chatAppsLink;
+
+  /// Capability bullet with a cross: something Omi never does
+  ///
+  /// In en, this message translates to:
+  /// **'Never messages other people for you'**
+  String get chatAppsNeverMessagesOthers;
+
+  /// Empty state when the link no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get chatAppsNotConnectedTitle;
+
+  /// Privacy note on the Telegram connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Your chats with Omi are also stored by Telegram. Omi only answers you, never other people, and you can disconnect anytime.'**
+  String get chatAppsTelegramPrivacyNote;
+
+  /// Error shown when there is no internet connection
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Check your connection and try again.'**
+  String get chatAppsProblemOffline;
+
+  /// iMessage row subtitle before connecting
+  ///
+  /// In en, this message translates to:
+  /// **'Text Omi from your phone number'**
+  String get chatAppsIMessageSubtitle;
+
+  /// Setting title
+  ///
+  /// In en, this message translates to:
+  /// **'Keep private memories in the app'**
+  String get chatAppsPrivateMemories;
+
+  /// Heading of the Telegram connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Telegram'**
+  String get chatAppsConnectTelegramTitle;
+
+  /// Setting subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Let Omi send you a recap or an insight here.'**
+  String get chatAppsInsightsSubtitle;
+
+  /// Status line while waiting for the link to complete
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for you to tap Start in Telegram…'**
+  String get chatAppsTelegramWaiting;
+
+  /// Subtitle under the Chat apps section header on Integrations
+  ///
+  /// In en, this message translates to:
+  /// **'Talk to Omi from the apps you already use every day.'**
+  String get chatAppsEntrySubtitle;
+
+  /// Row subtitle for a connected chat app; handle is a Telegram username or phone number
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {handle}'**
+  String chatAppsConnectedAs(String handle);
+
+  /// Pro benefit bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Save memories and manage tasks right from the chat'**
+  String get chatAppsProPerkSave;
+
+  /// Heading of the iMessage connect sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Text Omi to connect'**
+  String get chatAppsConnectIMessageTitle;
+
+  /// Description while waiting
+  ///
+  /// In en, this message translates to:
+  /// **'Send the message in Messages. This screen updates as soon as Omi gets it.'**
+  String get chatAppsWaitingMessage;
+
+  /// Switch title
+  ///
+  /// In en, this message translates to:
+  /// **'Show these chats in the Omi app'**
+  String get chatAppsShowInApp;
+
+  /// Description when the code expired
+  ///
+  /// In en, this message translates to:
+  /// **'Get a new code and send it from Messages.'**
+  String get chatAppsCodeExpiredMessage;
+
+  /// Empty transcript
+  ///
+  /// In en, this message translates to:
+  /// **'No messages'**
+  String get chatAppsNoMessages;
+
+  /// Large heading on the Chat apps page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with Omi where you already chat'**
+  String get chatAppsHeroTitle;
+
+  /// Row subtitle listing chat apps (brand names stay as-is)
+  ///
+  /// In en, this message translates to:
+  /// **'Telegram, iMessage, and more'**
+  String get chatAppsEntryRowSubtitle;
+
+  /// Countdown; time is like 9:12
+  ///
+  /// In en, this message translates to:
+  /// **'Code expires in {time}'**
+  String chatAppsCodeExpiresIn(String time);
+
+  /// Empty state message
+  ///
+  /// In en, this message translates to:
+  /// **'This chat app was disconnected.'**
+  String get chatAppsNotConnectedMessage;
+
+  /// Note that Omi does not start conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Omi only replies to you. It never texts first.'**
+  String get chatAppsRepliesOnlyNote;
+
+  /// Footer under the disconnect row
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnecting deletes the history Omi keeps for {app}.'**
+  String chatAppsDisconnectFooter(String app);
+
+  /// Success banner subtitle; app is Telegram or Messages
+  ///
+  /// In en, this message translates to:
+  /// **'Message Omi in {app} anytime.'**
+  String chatAppsReplyThereAnytime(String app);
+
+  /// Section header above example questions to send Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Try asking'**
+  String get chatAppsTryAsking;
+
+  /// Step 3
+  ///
+  /// In en, this message translates to:
+  /// **'Come back here. We\'ll confirm it worked.'**
+  String get chatAppsTelegramStepReturn;
+
+  /// Capability bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Sends and receives files, photos, and voice notes'**
+  String get chatAppsDoesFiles;
+
+  /// Example request to send Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize my week in three lines'**
+  String get chatAppsTryWeek;
+
+  /// Footer under a chat app's settings
+  ///
+  /// In en, this message translates to:
+  /// **'Your {app} chats stay in {app}. Omi still knows what you talked about in the app and your other chat apps.'**
+  String chatAppsChannelFooter(String app);
+
+  /// Heading of the WhatsApp sheet
+  ///
+  /// In en, this message translates to:
+  /// **'WhatsApp is coming'**
+  String get chatAppsWhatsAppTitle;
+
+  /// Heading when the one-time code expired
+  ///
+  /// In en, this message translates to:
+  /// **'This code expired'**
+  String get chatAppsCodeExpiredTitle;
+
+  /// Error when the server refuses to start linking
+  ///
+  /// In en, this message translates to:
+  /// **'Chat apps aren\'t available for your account yet.'**
+  String get chatAppsProblemUnavailable;
+
+  /// Heading of a card listing what Omi can do in chat apps
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi does in chat apps'**
+  String get chatAppsWhatOmiDoes;
+
+  /// Setting title
+  ///
+  /// In en, this message translates to:
+  /// **'Voice notes'**
+  String get chatAppsVoiceNotes;
+
+  /// Row subtitle for a chat app that cannot be connected yet
+  ///
+  /// In en, this message translates to:
+  /// **'Not available yet'**
+  String get chatAppsNotAvailableYet;
+
+  /// Button that reopens Apple's Messages app
+  ///
+  /// In en, this message translates to:
+  /// **'Open Messages Again'**
+  String get chatAppsOpenMessagesAgain;
+
+  /// Header subtitle; date is like 'Oct 10, 2026'
+  ///
+  /// In en, this message translates to:
+  /// **'Connected {date}'**
+  String chatAppsConnectedOn(String date);
+
+  /// Heading while waiting for the person's text to arrive
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your text'**
+  String get chatAppsWaitingTitle;
+
+  /// Row title on Integrations that opens the Chat apps page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with Omi'**
+  String get chatAppsEntryTitle;
+
+  /// Step 1; 'Open Telegram' refers to the button label
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Open Telegram below'**
+  String get chatAppsTelegramStepOpen;
+
+  /// Switch subtitle when on
+  ///
+  /// In en, this message translates to:
+  /// **'On: they appear in the Omi app as read-only chats.'**
+  String get chatAppsShowInAppOn;
+
+  /// Destructive row title
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {app}'**
+  String chatAppsDisconnectChannel(String app);
+
+  /// Step 2; 'Start' is Telegram's own button label
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Start in your chat with Omi'**
+  String get chatAppsTelegramStepStart;
+
+  /// Accessibility label for the lock icon on a chat app row for free users
+  ///
+  /// In en, this message translates to:
+  /// **'Requires Omi Pro'**
+  String get chatAppsLocked;
+
+  /// The text message the person sends to Omi. Keep {code} exactly; it is a one-time code
+  ///
+  /// In en, this message translates to:
+  /// **'Hi Omi, link code {code}'**
+  String chatAppsIMessageBody(String code);
+
+  /// Fallback title for an untitled chat
+  ///
+  /// In en, this message translates to:
+  /// **'Chat in {app}'**
+  String chatAppsChatIn(String app);
+
+  /// Name of the system Contacts app
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get chatAppsContactsApp;
+
+  /// Note about the one-time code
+  ///
+  /// In en, this message translates to:
+  /// **'The code works once and expires in 10 minutes.'**
+  String get chatAppsCodeNote;
+
+  /// Footnote under the list of chat apps
+  ///
+  /// In en, this message translates to:
+  /// **'More apps are coming.'**
+  String get chatAppsMoreComing;
+
+  /// Title of a tip
+  ///
+  /// In en, this message translates to:
+  /// **'In the meantime'**
+  String get chatAppsInTheMeantime;
+
+  /// Button to create a new one-time code
+  ///
+  /// In en, this message translates to:
+  /// **'Get New Code'**
+  String get chatAppsGetNewCode;
+
+  /// Button/chip: ask to be told when WhatsApp is available
+  ///
+  /// In en, this message translates to:
+  /// **'Notify Me'**
+  String get chatAppsNotifyMe;
+
+  /// Label: the message text is already filled in
+  ///
+  /// In en, this message translates to:
+  /// **'Prefilled'**
+  String get chatAppsPrefilled;
+
+  /// Label above the code; address is Omi's phone number
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t open? Text this to {address}'**
+  String chatAppsTextThisTo(String address);
+
+  /// Shown when the one-time Telegram link expired
+  ///
+  /// In en, this message translates to:
+  /// **'That link expired. Tap Open Telegram for a new one.'**
+  String get chatAppsLinkExpired;
+
+  /// Recipient line of the message preview; address is Omi's phone number
+  ///
+  /// In en, this message translates to:
+  /// **'To: Omi · {address}'**
+  String chatAppsIMessageTo(String address);
+
+  /// Small all-caps plan tag
+  ///
+  /// In en, this message translates to:
+  /// **'OMI PRO'**
+  String get chatAppsOmiPro;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

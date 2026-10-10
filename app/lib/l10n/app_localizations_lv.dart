@@ -12639,4 +12639,360 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Piespraustās personas paliek jūsu Cilvēku saraksta augšā, un Sakopšana tās nenoņem.';
+
+  @override
+  String get chatAppsProblemFailed => 'Kaut kas nogāja greizi. Mēģiniet vēlreiz.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app ir pievienots';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Neizdevās atsvaidzināt. Rādām to, ko redzējām pēdējo reizi.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Tikai lasīšanai. Atbildiet Omi lietotnē $app.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Paldies. Kad WhatsApp būs gatavs, tas parādīsies šeit.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Pagaidām izmantot Telegram';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Neizdevās atvērt $app. Pārliecinieties, ka tā ir instalēta, un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Ko vakar apsolīju Semam?';
+
+  @override
+  String get chatAppsDoesSave => 'Saglabā atmiņas un pārvalda jūsu uzdevumus';
+
+  @override
+  String get chatAppsOnTheList => 'Sarakstā';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Sarunu vēl nav';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Lietotnē $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi atvērs Telegram ar privātu saiti, kas paredzēta tikai jums.';
+
+  @override
+  String get chatAppsOpenMessages => 'Atvērt lietotni Ziņas';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Atvienot $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Veselība, nauda un viss, ko atzīmējāt kā privātu, paliek ārpus tērzēšanas lietotnēm.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Nosūtiet Omi vienu ziņu no numura, ko vēlaties izmantot. Tajā esošais kods saista šo numuru ar jūsu kontu.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Mēs strādājam, lai Omi nonāktu WhatsApp. Kad tas būs gatavs, tas parādīsies šeit.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Sarunas ar Omi lietotnē $app parādīsies šeit.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Skatīt sarunas';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi pārstās atbildēt lietotnē $app un izdzēsīs tai glabāto sarunu vēsturi. Ziņas, kas jau ir lietotnē $app, tur paliks.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Šīs sarunas šeit ir tikai lasāmas. Atbildiet lietotnē $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Pievienot Omi kontaktiem';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi atceras kontekstu visās lietotnēs';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram un iMessage darbojas jau tagad, ar tām pašām atmiņām un uzdevumiem.';
+
+  @override
+  String get chatAppsComingLater => 'Drīzumā';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Pārāk daudz mēģinājumu. Pagaidiet minūti un mēģiniet vēlreiz.';
+
+  @override
+  String get chatAppsMessage => 'Ziņa';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Atvērt $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Iestatiet ar diviem pieskārieniem';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Neizdevās ielādēt tērzēšanas lietotnes';
+
+  @override
+  String get chatAppsInsights => 'Omi ieskati';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Izslēgts: jūs tās redzat tikai lietotnē $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Rakstiet Omi no Telegram un iMessage';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Nosūtiet balss ziņu, un Omi uz to atbildēs.';
+
+  @override
+  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Pro';
+
+  @override
+  String get chatAppsMessagesApp => 'Ziņas';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram citā ierīcē?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Jautājiet par savu dienu, saglabājiet atmiņas un pārvaldiet uzdevumus no Telegram vai iMessage. Sarunas paliek jūsu izmantotajā lietotnē, un Omi atceras, par ko runājāt, visur.';
+
+  @override
+  String get chatAppsTryRemind => 'Atgādini man svētdien piezvanīt mammai';
+
+  @override
+  String get chatAppsChannelsTitle => 'Tērzēšanas lietotnes';
+
+  @override
+  String get chatAppsDoesAnswer => 'Atbild uz jautājumiem par jūsu sarunām un atmiņām';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app sarunas';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'IEKĻAUTS OMI PRO';
+
+  @override
+  String get chatAppsLink => 'Saite';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Nekad nerakstīs citiem cilvēkiem jūsu vietā';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Nav pievienots';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Jūsu sarunas ar Omi glabā arī Telegram. Omi atbild tikai jums, nekad citiem cilvēkiem, un jūs jebkurā laikā varat atvienot.';
+
+  @override
+  String get chatAppsProblemOffline => 'Jūs esat bezsaistē. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Rakstiet Omi no sava tālruņa numura';
+
+  @override
+  String get chatAppsPrivateMemories => 'Privātās atmiņas paturēt lietotnē';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Pievienot Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Ļaujiet Omi šeit nosūtīt kopsavilkumu vai ieskatu.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Gaidām, kamēr pieskarsieties Sākt Telegram…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Runājiet ar Omi lietotnēs, ko jau izmantojat katru dienu.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Pievienots kā $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Saglabājiet atmiņas un pārvaldiet uzdevumus tieši tērzēšanā';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Uzrakstiet Omi, lai pievienotu';
+
+  @override
+  String get chatAppsWaitingMessage => 'Nosūtiet ziņu lietotnē Ziņas. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.';
+
+  @override
+  String get chatAppsShowInApp => 'Rādīt šīs sarunas Omi lietotnē';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Iegūstiet jaunu kodu un nosūtiet to no lietotnes Ziņas.';
+
+  @override
+  String get chatAppsNoMessages => 'Nav ziņu';
+
+  @override
+  String get chatAppsHeroTitle => 'Tērzējiet ar Omi tur, kur jau tērzējat';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage un citas';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kods beigsies pēc $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Šī tērzēšanas lietotne tika atvienota.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi atbild tikai jums. Pirmā nekad nerakstīs.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Atvienojot tiek dzēsta vēsture, ko Omi glabā par $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Rakstiet Omi lietotnē $app jebkurā laikā.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Pamēģiniet pajautāt';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Atgriezieties šeit. Mēs apstiprināsim, ka izdevās.';
+
+  @override
+  String get chatAppsDoesFiles => 'Sūta un saņem failus, fotoattēlus un balss ziņas';
+
+  @override
+  String get chatAppsTryWeek => 'Apkopo manu nedēļu trijās rindās';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Jūsu $app sarunas paliek lietotnē $app. Omi tāpat zina, par ko runājāt šajā un citās tērzēšanas lietotnēs.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp drīz būs klāt';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Šī koda derīguma termiņš beidzies';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Tērzēšanas lietotnes jūsu kontam vēl nav pieejamas.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Ko Omi dara tērzēšanas lietotnēs';
+
+  @override
+  String get chatAppsVoiceNotes => 'Balss ziņas';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Vēl nav pieejams';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Atvērt lietotni Ziņas vēlreiz';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Pievienots $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Gaidām jūsu ziņu';
+
+  @override
+  String get chatAppsEntryTitle => 'Tērzējiet ar Omi';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Zemāk pieskarieties Atvērt Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Ieslēgts: tās parādās Omi lietotnē kā tikai lasāmas sarunas.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Atvienot $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Sarunā ar Omi pieskarieties Sākt';
+
+  @override
+  String get chatAppsLocked => 'Nepieciešams Omi Pro';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Sveiks, Omi, saistīšanas kods $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Saruna lietotnē $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontakti';
+
+  @override
+  String get chatAppsCodeNote => 'Kods darbojas vienu reizi un beidzas pēc 10 minūtēm.';
+
+  @override
+  String get chatAppsMoreComing => 'Drīz būs vairāk lietotņu.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Pa to laiku';
+
+  @override
+  String get chatAppsGetNewCode => 'Iegūt jaunu kodu';
+
+  @override
+  String get chatAppsNotifyMe => 'Paziņot man';
+
+  @override
+  String get chatAppsPrefilled => 'Aizpildīts iepriekš';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Neatvērās? Nosūtiet šo uz $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired =>
+      'Šīs saites derīguma termiņš beidzies. Pieskarieties Atvērt Telegram, lai iegūtu jaunu.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Kam: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 }
