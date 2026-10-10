@@ -9765,6 +9765,15 @@ class AppLocalizationsBe extends AppLocalizations {
       'Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.';
 
   @override
+  String get pendantLostConnection => 'Кулон страціў сувязь з гэтым тэлефонам.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi перападключыцца сам, калі кулон уключаны і побач.';
+
+  @override
+  String get pendantRecordingSafe => 'Усё, што запісана да гэтага, захавана.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.';
 
@@ -11088,10 +11097,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi перападключыцца сам';

@@ -9722,6 +9722,16 @@ class AppLocalizationsDa extends AppLocalizations {
       'Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.';
 
   @override
+  String get pendantLostConnection => 'Dit vedhæng mistede forbindelsen til denne telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden.';
+
+  @override
+  String get pendantRecordingSafe => 'Alt optaget før dette er i sikkerhed.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.';
 
@@ -11046,10 +11056,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Lageret er næsten fuldt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi genopretter forbindelsen af sig selv';

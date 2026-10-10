@@ -9808,6 +9808,16 @@ class AppLocalizationsTa extends AppLocalizations {
       'Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்.';
 
   @override
+  String get pendantLostConnection => 'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும்.';
+
+  @override
+  String get pendantRecordingSafe => 'இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.';
 
@@ -11139,10 +11149,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi தானாகவே மீண்டும் இணையும்';

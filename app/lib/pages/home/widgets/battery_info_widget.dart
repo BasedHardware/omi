@@ -191,7 +191,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
   }
 }
 
-/// A 36pt header pill inside a 44pt target, announced as one button (device details / connect).
+/// A 36pt glass header pill inside a 44pt target, announced as one button (device details / connect).
 class _DevicePill extends StatelessWidget {
   const _DevicePill({required this.semanticsLabel, required this.onTap, required this.children});
 
@@ -214,7 +214,8 @@ class _DevicePill extends StatelessWidget {
           height: 36,
           margin: _pillTargetMargin,
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+          decoration: OmiGlass.fill(const StadiumBorder()),
+          foregroundDecoration: OmiGlass.rim(const StadiumBorder()),
           child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
         ),
       ),

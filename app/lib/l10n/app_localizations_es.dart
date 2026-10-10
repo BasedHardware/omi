@@ -9762,6 +9762,15 @@ class AppLocalizationsEs extends AppLocalizations {
       'Tu Pendant sigue grabando, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.';
 
   @override
+  String get pendantLostConnection => 'Tu colgante perdió la conexión con este teléfono.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se volverá a conectar solo cuando el colgante esté encendido y cerca.';
+
+  @override
+  String get pendantRecordingSafe => 'Todo lo grabado antes está a salvo.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.';
 
@@ -11091,10 +11100,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Almacenamiento casi lleno';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se volverá a conectar solo';

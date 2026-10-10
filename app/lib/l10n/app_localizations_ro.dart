@@ -9782,6 +9782,15 @@ class AppLocalizationsRo extends AppLocalizations {
       'Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.';
 
   @override
+  String get pendantLostConnection => 'Pandantivul a pierdut conexiunea cu acest telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se va reconecta singur când pandantivul este pornit și în apropiere.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot ce s-a înregistrat înainte este în siguranță.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 
@@ -11111,10 +11120,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se va reconecta singur';

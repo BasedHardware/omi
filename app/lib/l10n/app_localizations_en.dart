@@ -9723,6 +9723,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 
   @override
+  String get pendantLostConnection => 'Your pendant lost its connection to this phone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi reconnects on its own when the pendant is on and nearby.';
+
+  @override
+  String get pendantRecordingSafe => 'Everything recorded before this is safe.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 
@@ -11047,10 +11056,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storage almost full';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi reconnects on its own';

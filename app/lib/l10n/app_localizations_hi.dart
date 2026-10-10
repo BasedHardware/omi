@@ -9715,6 +9715,15 @@ class AppLocalizationsHi extends AppLocalizations {
       'Pendant अभी भी रिकॉर्ड कर रहा है, इसलिए उसमें संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
 
   @override
+  String get pendantLostConnection => 'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया।';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा।';
+
+  @override
+  String get pendantRecordingSafe => 'इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant का स्टोरेज भर गया है और यह अभी भी रिकॉर्डिंग मोड में है, इसलिए संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
 
@@ -11039,10 +11048,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'स्टोरेज लगभग भर गया';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi अपने आप फिर से कनेक्ट हो जाएगा';

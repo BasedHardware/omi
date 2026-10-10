@@ -9755,6 +9755,15 @@ class AppLocalizationsMs extends AppLocalizations {
       'Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 
   @override
+  String get pendantLostConnection => 'Loket anda terputus sambungan dengan telefon ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang dirakam sebelum ini selamat.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 
@@ -11081,10 +11090,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Storan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi akan bersambung semula sendiri';

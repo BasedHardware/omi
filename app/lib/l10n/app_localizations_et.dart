@@ -9725,6 +9725,15 @@ class AppLocalizationsEt extends AppLocalizations {
       'Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.';
 
   @override
+  String get pendantLostConnection => 'Ripats kaotas ühenduse selle telefoniga.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.';
+
+  @override
+  String get pendantRecordingSafe => 'Kõik varem salvestatu on alles.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.';
 
@@ -11051,10 +11060,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi loob ühenduse ise uuesti';

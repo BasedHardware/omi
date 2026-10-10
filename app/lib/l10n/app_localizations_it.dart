@@ -9789,6 +9789,15 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il Pendant sta ancora registrando, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
 
   @override
+  String get pendantLostConnection => 'Il ciondolo ha perso la connessione con questo telefono.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino.';
+
+  @override
+  String get pendantRecordingSafe => 'Tutto ciò che è stato registrato prima è al sicuro.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
 
@@ -11119,10 +11128,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Memoria quasi piena';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi si riconnetterà da solo';

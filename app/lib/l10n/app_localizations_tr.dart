@@ -9745,6 +9745,15 @@ class AppLocalizationsTr extends AppLocalizations {
       'Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
 
   @override
+  String get pendantLostConnection => 'Kolyenin bu telefonla bağlantısı kesildi.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır.';
+
+  @override
+  String get pendantRecordingSafe => 'Bundan önce kaydedilen her şey güvende.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Pendant\'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
 
@@ -11069,10 +11078,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';

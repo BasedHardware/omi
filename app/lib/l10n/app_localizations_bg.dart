@@ -9772,6 +9772,15 @@ class AppLocalizationsBg extends AppLocalizations {
       'Pendant все още записва, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и синхронизирайте отново.';
 
   @override
+  String get pendantLostConnection => 'Висулката загуби връзка с този телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ще се свърже отново сам, когато висулката е включена и наблизо.';
+
+  @override
+  String get pendantRecordingSafe => 'Всичко записано дотук е запазено.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Паметта на Pendant е пълна и той все още е в режим на запис, затова съхраненото аудио не може да бъде прехвърлено. Натиснете бутона на Pendant, за да спрете записа, и след това синхронизирайте отново.';
 
@@ -11100,10 +11109,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi ще се свърже отново сам';

@@ -9737,6 +9737,15 @@ class AppLocalizationsCs extends AppLocalizations {
       'Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.';
 
   @override
+  String get pendantLostConnection => 'Přívěsek ztratil spojení s tímto telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž.';
+
+  @override
+  String get pendantRecordingSafe => 'Vše nahrané předtím je v bezpečí.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
 
@@ -11059,10 +11068,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Úložiště je téměř plné';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';

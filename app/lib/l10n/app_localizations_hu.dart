@@ -9776,6 +9776,16 @@ class AppLocalizationsHu extends AppLocalizations {
       'A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.';
 
   @override
+  String get pendantLostConnection => 'A medál elvesztette a kapcsolatot ezzel a telefonnal.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.';
+
+  @override
+  String get pendantRecordingSafe => 'Minden, amit eddig rögzített, biztonságban van.';
+
+  @override
   String get pendantFullSyncBlocked =>
       'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
 
@@ -11104,10 +11114,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
 
   @override
   String get capturePendantDisconnectedShort => 'Az Omi magától újracsatlakozik';
