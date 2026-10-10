@@ -134,6 +134,27 @@ def test_an_omitted_username_is_not_written_back(calls):
     assert 'updated_at' in written
 
 
+def test_an_explicit_null_username_keeps_the_stored_handle(calls):
+    """Released clients serialize an omitted field as null, not absent.
+
+    The null used to be written over the stored handle, and the response model then
+    failed validation on username=None, turning a no-op edit into a 500.
+    """
+    result = _patch({'username': None})
+
+    assert result['username'] == 'ada'
+    assert calls['usernames'] == []
+    assert 'username' not in calls['updates'][0]
+
+
+def test_an_explicit_null_connected_accounts_does_not_raise(calls):
+    # The old code did `'omi' in data.get('connected_accounts', [])`: a TypeError on null.
+    result = _patch({'connected_accounts': None})
+
+    assert result['status'] == 'ok'
+    assert 'connected_accounts' not in calls['updates'][0]
+
+
 def test_a_persona_owned_by_someone_else_is_rejected(monkeypatch, calls):
     monkeypatch.setattr(apps_router, 'get_available_app_by_id', lambda pid, uid: {**EXISTING, 'uid': 'someone-else'})
 
