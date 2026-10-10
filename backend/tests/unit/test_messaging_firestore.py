@@ -8,7 +8,8 @@ from uuid import uuid4
 import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
-from database.messaging import MessagingStore, key
+from database.messaging import MessagingStore
+from utils.messaging.identity import key
 from testing.messaging.loopback import LoopbackAdapter
 
 

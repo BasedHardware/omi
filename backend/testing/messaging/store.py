@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 from uuid import uuid4
 
-from database.messaging import key
+from utils.messaging.identity import key
 
 
 class MemoryStore:

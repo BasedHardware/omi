@@ -12,7 +12,7 @@ async def prepare(uid, session, messages, principal, *, store=None, token=None):
         await run_blocking(db_executor, require_access, uid)
     except PermissionError:
         return None, None, None
-    store = store or MessagingStore()
+    store = store or await run_blocking(db_executor, MessagingStore)
     # App compatibility treats absent surface as app; no migration of old documents.
     token = token or await run_blocking(db_executor, store.acquire, uid, 'app')
     if token is None:

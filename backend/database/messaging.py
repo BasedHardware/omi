@@ -8,7 +8,6 @@ import json
 import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from uuid import uuid4
 
 from google.cloud import firestore
@@ -18,10 +17,7 @@ from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils import encryption
-
-
-def key(*parts):
-    return sha256(json.dumps(parts, separators=(',', ':')).encode()).hexdigest()
+from utils.messaging.identity import key
 
 
 class MessagingStore:

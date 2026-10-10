@@ -4,7 +4,8 @@ import base64
 import json
 from datetime import datetime, timezone
 
-from database.messaging import MessagingStore, key
+from database.messaging import MessagingStore
+from utils.messaging.identity import key
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, run_blocking, start_background_task
