@@ -8,7 +8,7 @@ Collection: users/{uid}/focus_sessions.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Callable, Iterable, List, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +23,30 @@ class FocusSession(BaseModel):
     message: Optional[str] = Field(default=None, description='Optional user message attached to the session.')
     created_at: datetime = Field(description='When the session was recorded (UTC).')
     duration_seconds: Optional[int] = Field(default=None, ge=0, description='Session duration in seconds, if known.')
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: Iterable[Any],
+        on_error: Optional[Callable[[Any, Exception], None]] = None,
+    ) -> List['FocusSession']:
+        """Build FocusSession objects from raw stored records, skipping any that fail
+        validation so one malformed, non-dict, or legacy document cannot cause FastAPI
+        ResponseValidationError (HTTP 500) for the user.
+        """
+        parsed: List['FocusSession'] = []
+        for record in records:
+            if not isinstance(record, (dict, Mapping)):
+                if on_error is not None:
+                    on_error(record, TypeError(f"Expected dict or Mapping, got {type(record).__name__}"))
+                continue
+            try:
+                item = cls.model_validate(record) if hasattr(cls, 'model_validate') else cls(**record)
+                parsed.append(item)
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the whole batch
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
 
 
 class FocusDistraction(BaseModel):
