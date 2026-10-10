@@ -22,7 +22,6 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
     has_cacheable_prefix,
     prefix_cache_key,
-    model_supports_explicit_cache,
 )
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
 from utils.memory.belief_model import belief_model_enabled
@@ -463,33 +462,7 @@ def extract_l1_memory_archive_items_from_text(
         rejected_memory_examples=rejected_memory_examples,
     )
     static_system = legacy_messages[0][1]
-    explicit_cache_requested = prompt_cache_enabled
-    prefix_candidate = explicit_cache_requested and has_cacheable_prefix(static_system)
-    if llm is not None:
-        model = llm
-    elif get_llm is not None:
-        try:
-            llm_factory = cast(Any, get_llm)
-            model = cast(
-                LlmInvoker,
-                llm_factory(
-                    'memory_l1',
-                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if prefix_candidate else None,
-                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if explicit_cache_requested else None,
-                ),
-            )
-        except Exception as exc:
-            logger.error("Error extracting memory L1 archive items: client_initialization_failed")
-            if strict:
-                raise WorkingObservationExtractionError("client_initialization") from exc
-            return []
-    else:
-        logger.error("Error extracting memory L1 archive items: missing_llm_client")
-        if strict:
-            raise WorkingObservationExtractionError("client_initialization") from CLIENT_IMPORT_ERROR
-        return []
-
-    cache_enabled = bool(prefix_candidate and model_supports_explicit_cache(model))
+    cache_enabled = bool(prompt_cache_enabled and has_cacheable_prefix(static_system))
     static_system_message: dict[str, Any] = (
         {
             'role': 'system',
@@ -519,6 +492,30 @@ def extract_l1_memory_archive_items_from_text(
         ]
     else:
         messages = [static_system_message, {'role': 'user', 'content': legacy_messages[1][1]}]
+
+    if llm is not None:
+        model = llm
+    elif get_llm is not None:
+        try:
+            llm_factory = cast(Any, get_llm)
+            model = cast(
+                LlmInvoker,
+                llm_factory(
+                    'memory_l1',
+                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if cache_enabled else None,
+                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if prompt_cache_enabled else None,
+                ),
+            )
+        except Exception as exc:
+            logger.error("Error extracting memory L1 archive items: client_initialization_failed")
+            if strict:
+                raise WorkingObservationExtractionError("client_initialization") from exc
+            return []
+    else:
+        logger.error("Error extracting memory L1 archive items: missing_llm_client")
+        if strict:
+            raise WorkingObservationExtractionError("client_initialization") from CLIENT_IMPORT_ERROR
+        return []
 
     try:
         with track_usage(uid, Features.MEMORIES):
@@ -578,7 +575,7 @@ def _persist_l1_archive_route_outcomes(
             run_id=run_id or f"l1-archive:{source_id}",
             patch_id=item.archive_id,
             audit_metadata={
-                "source": "utils.llm.working_memory.extract_l1_memory_archive_items_from_text",
+                "source": "utils.llm.working_observations.extract_l1_memory_archive_items_from_text",
                 "source_type": source_type,
                 "archive_id": item.archive_id,
                 "archive_class": item.archive_class.value,
