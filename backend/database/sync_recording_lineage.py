@@ -36,9 +36,14 @@ LINEAGE_FIELD_PATHS = (
 )
 
 
+MAX_LINEAGE_LIMIT = 500
+
+
 def _collection(uid: str, firestore_client: Any) -> Any:
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION)
+    return client.collection('users').document(uid.strip()).collection(CONVERSATIONS_COLLECTION)
 
 
 def _rows(query: Any) -> list[dict[str, Any]]:
@@ -67,6 +72,22 @@ def get_recording_generations(
     Reads at most ``limit + 1`` documents so the caller can tell a complete
     window from a truncated one.
     """
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(origin_id, str) or not origin_id.strip():
+        raise ValueError('origin_id must be a non-empty string')
+    if not isinstance(started_before, datetime):
+        raise ValueError('started_before must be a datetime')
+    if not isinstance(finished_after, datetime):
+        raise ValueError('finished_after must be a datetime')
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+    if limit > MAX_LINEAGE_LIMIT:
+        raise ValueError(f'limit must not exceed {MAX_LINEAGE_LIMIT}')
+
+    uid = uid.strip()
+    origin_id = origin_id.strip()
+
     query = SYNC_RECORDING_LINEAGE_QUERY.build(
         _collection(uid, firestore_client),
         {'recording_origin_id': origin_id, 'started_before': started_before, 'finished_after': finished_after},
@@ -99,6 +120,18 @@ def get_origin_generation(
     uid: str, origin_id: str, *, limit: int, include_capture_evidence: bool = False, firestore_client: Any = None
 ) -> list[dict[str, Any]]:
     """Rows bound to the origin recording id itself, for generations created before the origin stamp."""
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(origin_id, str) or not origin_id.strip():
+        raise ValueError('origin_id must be a non-empty string')
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+    if limit > MAX_LINEAGE_LIMIT:
+        raise ValueError(f'limit must not exceed {MAX_LINEAGE_LIMIT}')
+
+    uid = uid.strip()
+    origin_id = origin_id.strip()
+
     query = (
         _collection(uid, firestore_client)
         .where(filter=FieldFilter('external_data.recording_session_id', '==', origin_id))
