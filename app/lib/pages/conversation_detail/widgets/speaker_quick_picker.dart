@@ -145,7 +145,8 @@ class _SpeakerQuickPickerState extends State<SpeakerQuickPicker> {
               TextField(
                 controller: _search,
                 onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(hintText: l10n.searchPeople, prefixIcon: const Icon(Icons.search, size: 18)),
+                decoration:
+                    InputDecoration(hintText: l10n.searchPeople, prefixIcon: const Icon(Icons.search, size: 18)),
               ),
               const SizedBox(height: OmiSpacing.sm),
             ],
