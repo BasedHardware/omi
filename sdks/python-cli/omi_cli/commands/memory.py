@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from pydantic import ValidationError
 from rich.markup import escape
 
 from omi_cli.client import path_segment
 from omi_cli.errors import NotFoundError, UsageError
-from omi_cli.models import MemoryCategory, MemoryVisibility
+from omi_cli.models import MemoryCategory, MemoryUpdate, MemoryVisibility
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
@@ -24,6 +26,30 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _content_from(value: Optional[str], use_stdin: bool, flag: str, other: str) -> Optional[str]:
+    """Return ``value``, or one memory's content read from stdin when ``flag`` was passed.
+
+    Stdin is never read implicitly. One trailing newline (as added by ``echo``) is
+    dropped; the content is validated against the API limits before any request.
+    """
+    if not use_stdin:
+        return value
+    if value is not None:
+        raise UsageError(message="Conflicting content sources", detail=f"Pass {other} or {flag}, not both.")
+    if sys.stdin.isatty():
+        raise UsageError(message=f"{flag} needs piped input", detail=f"e.g. echo 'likes tea' | omi memory ... {flag}")
+    try:
+        content = sys.stdin.read().removesuffix("\n")
+        if not content.strip():
+            raise UsageError(message="No memory content on stdin")
+        MemoryUpdate(content=content)
+    except UnicodeDecodeError:
+        raise UsageError(message="stdin is not valid UTF-8 text") from None
+    except ValidationError:
+        raise UsageError(message=f"Memory content must be 1-500 characters (stdin had {len(content)})") from None
+    return content
 
 
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
@@ -96,12 +122,18 @@ def get_memory(
 @app.command("create", help="Create a new memory.")
 def create_memory(
     typer_ctx: typer.Context,
-    content: str = typer.Argument(..., help="Memory content (1-500 chars)."),
+    content: Optional[str] = typer.Argument(None, help="Memory content (1-500 chars). Omit when using --stdin."),
     category: Optional[MemoryCategory] = typer.Option(None, "--category", help="Category. Auto-detected if omitted."),
     visibility: MemoryVisibility = typer.Option(MemoryVisibility.private, "--visibility", help="public or private."),
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
+    stdin: bool = typer.Option(False, "--stdin", help="Read the memory content from stdin instead of an argument."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    content = _content_from(content, stdin, "--stdin", "content as an argument")
+    if content is None:
+        raise UsageError(
+            message="No memory content", detail="Pass the content as an argument, or pipe it with --stdin."
+        )
     body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
     if category is not None:
         body["category"] = category.value
@@ -119,8 +151,12 @@ def update_memory(
     category: Optional[MemoryCategory] = typer.Option(None, "--category", help="New category."),
     visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
     tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
+    content_stdin: bool = typer.Option(
+        False, "--content-stdin", help="Read the new content from stdin instead of --content."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    content = _content_from(content, content_stdin, "--content-stdin", "--content")
     body: dict[str, object] = {}
     if content is not None:
         body["content"] = content
@@ -132,7 +168,8 @@ def update_memory(
         body["tags"] = list(tag)
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
+            message="No fields to update",
+            detail="Provide at least one of --content/--content-stdin/--category/--visibility/--tag.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/memories/{path_segment(memory_id)}", json_body=body)
