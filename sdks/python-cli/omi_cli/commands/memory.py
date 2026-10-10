@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -154,3 +156,50 @@ def delete_memory(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")
+
+
+@app.command("export", help="Export memories to CSV format.")
+def export_memories(
+    typer_ctx: typer.Context,
+    limit: int = typer.Option(200, "--limit", min=1, max=1000, help="Max items to export."),
+    categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
+    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="File path to save CSV output."),
+) -> None:
+    """Export memories to CSV format."""
+    ctx = _ctx(typer_ctx)
+    items = []
+    page_size = 100
+    offset = 0
+    with ctx.make_client() as client:
+        while len(items) < limit:
+            fetch_count = min(page_size, limit - len(items))
+            page = client.get(
+                "/v1/dev/user/memories",
+                params={"limit": fetch_count, "offset": offset, "categories": categories},
+            )
+            if not page:
+                break
+            items.extend(page)
+            if len(page) < fetch_count:
+                break
+            offset += len(page)
+
+    fieldnames = ["id", "category", "visibility", "content", "tags", "created_at"]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for m in items:
+        row = dict(m)
+        if isinstance(row.get("tags"), list):
+            row["tags"] = ";".join(str(t) for t in row["tags"])
+        for k, v in row.items():
+            if isinstance(v, str) and v.startswith(("=", "+", "-", "@")):
+                row[k] = "'" + v
+        writer.writerow(row)
+    csv_str = output.getvalue()
+    if output_file:
+        with open(output_file, "w", encoding="utf-8-sig") as f:
+            f.write(csv_str)
+        ctx.renderer.success(f"Exported {len(items)} memories to [bold]{escape(output_file)}[/bold].")
+    else:
+        typer.echo(csv_str, nl=False)
