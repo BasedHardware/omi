@@ -139,6 +139,14 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
         values_file = ROOT / service_config['values_file']
         values = _load_yaml(values_file)
         actual_env = _env_entries_by_name(values.get('env', []))
+        # GKE ports are declared in Helm values, while the host may come from
+        # the manifest's shared ConfigMap. Validate the effective pair.
+        if 'REDIS_DB_HOST' in (service_config.get('env') or {}):
+            port = actual_env.get('REDIS_DB_PORT') or {}
+            if not port.get('value') and not port.get('valueFrom'):
+                errors.append(
+                    ValidationError(f'gke/{service}', 'Redis requires an explicit non-empty REDIS_DB_PORT binding')
+                )
         errors.extend(
             _validate_env_entries(
                 scope=f'gke/{service}',
@@ -175,6 +183,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(_validate_redis_ports(env_config, env))
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
     )
@@ -209,6 +218,42 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
                         'SYNC_LEDGER_FENCE_MODE must default to legacy until protected cutover activation',
                     )
                 )
+    return errors
+
+
+def _validate_redis_ports(env_config: ConfigDict, env: str) -> list[ValidationError]:
+    """A Redis host must not silently fall back to the application's 6379 default.
+
+    The four managed Cloud Run services also carry Redis host secret bindings
+    from existing deployments. Require their ports even without a host entry
+    in the manifest, so removing a port cannot evade this check.
+    """
+    required_services = {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    targets: list[tuple[str, ConfigDict, bool]] = []
+    for group in ('services', 'jobs'):
+        for name, raw in (_as_config_dict(cloud_run.get(group)) or {}).items():
+            scope = f'{env}/cloud_run/{name}' if group == 'services' else f'{env}/cloud_run/jobs/{name}'
+            targets.append((scope, _as_config_dict(raw) or {}, group == 'services' and name in required_services))
+    desktop = _as_config_dict(env_config.get('desktop_backend'))
+    if desktop is not None:
+        targets.append((f'{env}/desktop_backend', desktop, False))
+    errors: list[ValidationError] = []
+    for scope, target, required in targets:
+        bindings = _as_config_dict(target.get('env')) or {}
+        secrets = _as_config_dict(target.get('secrets')) or {}
+        if not required and 'REDIS_DB_HOST' not in bindings and 'REDIS_DB_HOST' not in secrets:
+            continue
+        if not _manifest_env_binding_is_configured(bindings, secrets, 'REDIS_DB_PORT'):
+            errors.append(ValidationError(scope, 'Redis requires an explicit non-empty REDIS_DB_PORT binding'))
+            continue
+        port = _as_config_dict(bindings.get('REDIS_DB_PORT')) or {}
+        if 'value' in port:
+            value = str(port['value'])
+            if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 65535:
+                errors.append(ValidationError(scope, 'REDIS_DB_PORT must be a TCP port from 1 to 65535'))
+        if port.get('provisional'):
+            errors.append(ValidationError(scope, 'REDIS_DB_PORT must not be provisional for a Redis host'))
     return errors
 
 

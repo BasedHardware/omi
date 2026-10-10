@@ -498,6 +498,9 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:
@@ -665,6 +668,9 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:
@@ -818,6 +824,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:
@@ -965,6 +974,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          REDIS_DB_PORT:
+            value: '13151'
+            category: service_discovery
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEDGER_SERVICE:

@@ -68,6 +68,7 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "REDIS_DB_PORT", "value": "13151"},
         {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
         {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
         {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},

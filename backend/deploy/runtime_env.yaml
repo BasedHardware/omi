@@ -596,6 +596,9 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -783,6 +786,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -973,6 +979,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -1151,6 +1160,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -2258,6 +2270,9 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -2495,6 +2510,9 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -2713,6 +2731,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
@@ -2922,6 +2943,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
