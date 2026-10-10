@@ -3,6 +3,9 @@
 import asyncio
 from functools import partial
 from typing import Any
+from collections import Counter
+
+from pydantic import ValidationError
 
 from config.dream_agent import Caps, mode
 from database import dream_store, dream_feedback, review_changes, review_store
@@ -21,6 +24,8 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
         if usage_sink is not None:
             key = 'triage_evidence_chars' if lane == dream_transport.TRIAGE_LANE else 'reasoning_evidence_chars'
             usage_sink[key] = evidence_chars(messages)
+            if lane == dream_transport.MAIN_LANE:
+                usage_sink['reasoning_attempted'] = True
         previous_unknown = bool(usage_sink and usage_sink.get('usage_unknown'))
         if usage_sink is not None:
             usage_sink['usage_unknown'] = True
@@ -215,6 +220,10 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         refund = True
     except Exception as exc:
         report.update(status='failed', error_type=type(exc).__name__)
+        if isinstance(exc, ValidationError):
+            counts = Counter(report.get('validation_errors', {}))
+            counts.update(dream_transport.validation_counts(exc))
+            report['validation_errors'] = dict(counts)
         release = not isinstance(exc, TimeoutError)
         refund = report['tokens'] == 0 and not report['usage_unknown']
         if refund:
@@ -233,6 +242,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         consumed=consumed,
         release=release,
         refund=refund,
+        count_failure=not success and release and report['tokens'] > 0 and report.get('reasoning_attempted', False),
     )
     record_pass(report)
     return report

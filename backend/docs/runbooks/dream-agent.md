@@ -323,3 +323,37 @@ These are offline checks; a deployed canary remains separate acceptance evidence
 User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
 sweep host (currently 24 in the production source declarations), along with the
 same global spend/token-price limits, so GET presents the scheduler's allowance.
+
+## Response validation and bounded failed-record retries
+
+Transport caps array prefixes at the original schema bounds, then validates the
+Plan object and its list types strictly. It validates each retained item in
+`edits`, `questions`, `vocabulary`, `frames`, `feedback`, and `slow_tasks`
+independently; Triage does the same for `clusters`. Invalid items are dropped
+before any effects. Pydantic constraints, Review payload matching, evidence
+checks and feedback privacy gates remain authoritative. An invalid top-level
+object, list type or extra top-level field still fails the pass.
+
+Encrypted run reports and the existing counts-only pass log include
+`dropped_invalid` item counts per processed list and `validation_errors` error
+counts keyed by schema field path and Pydantic type, for example
+`edits.evidence:too_short`. An item with multiple errors contributes one dropped
+item and multiple error counts. Indices are removed; unknown keys become
+`unknown_field`. Values, messages, contexts, provider bodies and reproductions
+never enter diagnostics. Terminal ValidationError failures use the same counts.
+Item dropping also emits the shared degraded fallback event.
+
+A consumed dirty record version receives at most three failed, released passes
+that attempted reasoning and observed model tokens. Settlement increments
+`failed_passes` transactionally. The third such failure removes only that
+version from the dirty queue, recording `poisoned` in the encrypted report,
+plaintext numeric run counters, cumulative queue state and pass log. Product
+records are untouched; this does not apply proposed edits. A product write
+creates a fresh version and resets the streak to zero. Concurrent refreshes and
+unread versions survive settlement. Pre-reasoning failures, refunded admissions
+and retained timeout leases do not advance the streak. The diagnostic watermark
+stays behind unread rows; the dirty set remains the read authority.
+
+`backend/scripts/dream_reasoning_eval.py` exercises the real reasoning lane on a
+verified dev tunnel with invented evidence and no product effects. Fixture and
+five-run counts are under `backend/evals/dream_reasoning/`.
