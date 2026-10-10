@@ -1906,10 +1906,13 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
         lease_epoch=1,
     )
     assert result.value == ('fenced' if claim_status == 'fenced' else 'completed')
+    # New contract (#21111 follow-up): summary indexing runs on BOTH the
+    # claimed path and the completed-fanout re-finalization path, behind the
+    # same guards. Only the claimed path re-runs fanout completion.
     expected = ['claim']
+    if claim_status != 'fenced' and vector_eligible:
+        expected.append('vector')
     if claim_status == 'claimed':
-        if vector_eligible:
-            expected.append('vector')
         expected.append('complete')
     assert events == expected
     if mode == 'jit_processing':
