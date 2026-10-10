@@ -142,7 +142,8 @@ final class ApprovalCardTests: XCTestCase {
         DesktopToolApprovalCardPresentation.denyTitle,
       ])
     XCTAssertEqual(
-      presentation.sessionGrantNote, "Also allows any message or attachment to this recipient for the next hour")
+      presentation.sessionGrantNote,
+      "Allow for This Chat also allows any message or attachment to this recipient for the next hour.")
     XCTAssertTrue(presentation.status.hasPrefix("Waits until "))
     XCTAssertFalse(presentation.isFinal)
   }
@@ -662,5 +663,151 @@ final class ApprovalCardTests: XCTestCase {
     XCTAssertEqual(presentation.targetLabel, "Conversation")
     XCTAssertEqual(presentation.target, "chat123")
     XCTAssertEqual(presentation.preview.map(\.key), ["handle", "limit"])
+  }
+
+  // MARK: - Reading an app window
+
+  private func snapshotFrame(
+    approvalId: String = "disp_snap", resourceRef: String = "com.apple.textedit",
+    preview: [String: Any] = ["window_title": "Untitled"]
+  ) throws -> AgentRuntimeProcess.RuntimeMessage {
+    try runtimeMessage([
+      "type": "approval_requested",
+      "protocolVersion": 2,
+      "approvalId": approvalId,
+      "ownerId": "owner-1",
+      "sessionId": "ses_1",
+      "runId": "run_1",
+      "attemptId": "att_1",
+      "invocationId": "inv_1",
+      "adapterId": "pi-mono",
+      "surfaceKind": "main_chat",
+      "policy": "default_user_approval",
+      "toolName": "ui_snapshot",
+      "capability": "desktop.automation.observe",
+      "operation": "ui_snapshot",
+      "resourceRef": resourceRef,
+      "inputHash": "sha256:abc",
+      "effectClass": "read_only",
+      "title": "Read an app window",
+      "decisionPrompt": "Let Omi read the window of \(resourceRef)?",
+      "preview": preview,
+      "previewTruncated": false,
+      "reason": "Sensitive action requires dispatch or scoped grant.",
+      "options": [
+        ["id": "allow_once", "effect": "allow", "scope": "run"],
+        ["id": "allow_session", "effect": "allow", "scope": "session", "covers": "reading any window of this app"],
+        ["id": "deny", "effect": "deny", "scope": "request"],
+      ],
+      "defaultOptionId": "deny",
+      "requestedAtMs": now.timeIntervalSince1970 * 1_000,
+      "expiresAtMs": (now.timeIntervalSince1970 + 180) * 1_000,
+    ])
+  }
+
+  private func makeSnapshotStore(
+    _ resolver: RecordingResolver, apps: [String: DesktopToolApprovalTargetApp]
+  ) -> DesktopToolApprovalStore {
+    DesktopToolApprovalStore(
+      resolver: { try await resolver.resolve(approvalId: $0, input: $1) }, now: { self.now },
+      resolveApp: { apps[$0] })
+  }
+
+  private static let textEdit = DesktopToolApprovalTargetApp(name: "TextEdit", bundleID: "com.apple.TextEdit")
+
+  func testAWindowReadNamesTheAppOmiResolvedBesideItsBundleID() throws {
+    let store = makeSnapshotStore(RecordingResolver(), apps: ["com.apple.textedit": Self.textEdit])
+    store.ingest(
+      message: try snapshotFrame(preview: ["window_title": "Untitled", "window_id": 4411]))
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
+
+    XCTAssertEqual(presentation.headline, "Read an app window")
+    XCTAssertEqual(presentation.question, "Let Omi read the window of TextEdit?")
+    XCTAssertEqual(presentation.targetLabel, "App")
+    XCTAssertEqual(presentation.target, "TextEdit · com.apple.TextEdit")
+    XCTAssertEqual(presentation.preview.map(\.key), ["window_title", "window_id"], "no element limit row")
+    XCTAssertEqual(
+      presentation.sessionGrantNote, "Allow for This Chat also allows reading any window of TextEdit for the next hour."
+    )
+    XCTAssertEqual(presentation.actions.map(\.answer), [.allowOnce, .allowForSession, .deny])
+  }
+
+  func testAnAppOmiCannotResolveFallsBackToTheKernelsWords() throws {
+    let store = makeSnapshotStore(RecordingResolver(), apps: [:])
+    store.ingest(message: try snapshotFrame(resourceRef: "com.example.unknown"))
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
+
+    XCTAssertEqual(presentation.question, "Let Omi read the window of com.example.unknown?")
+    XCTAssertEqual(presentation.target, "com.example.unknown")
+  }
+
+  func testOnlyAWindowReadLooksItsResourceUpAsAnApp() throws {
+    var lookups: [String] = []
+    let store = DesktopToolApprovalStore(
+      resolver: { _, _ in "" }, now: { self.now },
+      resolveApp: {
+        lookups.append($0)
+        return Self.textEdit
+      })
+    store.ingest(message: try requestedFrame())
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_1")), now: now)
+
+    XCTAssertEqual(lookups, [], "a recipient is never looked up as an app")
+    XCTAssertEqual(presentation.target, "+15551234567")
+    XCTAssertNil(try XCTUnwrap(store.approval(id: "disp_1")).request.targetApp)
+  }
+
+  func testAllowForThisChatOnAWindowReadGrantsThatAppForTheChat() async throws {
+    let resolver = RecordingResolver()
+    let store = makeSnapshotStore(resolver, apps: ["com.apple.textedit": Self.textEdit])
+    store.ingest(message: try snapshotFrame())
+
+    await store.answer(approvalId: "disp_snap", with: .allowForSession)
+
+    let grant = try XCTUnwrap(resolver.calls.first?.input["grant"] as? [String: Any])
+    XCTAssertTrue(grant["runId"] is NSNull)
+    XCTAssertEqual(grant["capability"] as? String, "desktop.automation.observe")
+    XCTAssertEqual(grant["operation"] as? String, "ui_snapshot")
+    XCTAssertEqual(grant["resourcePattern"] as? String, "com.apple.textedit")
+  }
+
+  func testAWindowTitleAndAnAppNameShowTheCharactersHidingInThem() throws {
+    let spoofed = DesktopToolApprovalTargetApp(name: "Text\u{202E}Edit", bundleID: "com.apple.TextEdit")
+    let store = makeSnapshotStore(RecordingResolver(), apps: ["com.apple.textedit": spoofed])
+    store.ingest(message: try snapshotFrame(preview: ["window_title": "Chat\u{2066} with Ria"]))
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
+
+    XCTAssertEqual(presentation.preview.first?.value, "Chat⟨U+2066⟩ with Ria")
+    XCTAssertEqual(presentation.target, "Text⟨U+202E⟩Edit · com.apple.TextEdit")
+  }
+
+  func testAnAppNameCannotForgeTheBundleIDOrRunLong() throws {
+    let spoof = DesktopToolApprovalTargetApp(name: "TextEdit · com.apple.TextEdit", bundleID: "com.evil.app")
+    let store = makeSnapshotStore(RecordingResolver(), apps: ["com.evil.app": spoof])
+    store.ingest(message: try snapshotFrame(resourceRef: "com.evil.app"))
+
+    let presentation = DesktopToolApprovalCardPresentation(
+      approval: try XCTUnwrap(store.approval(id: "disp_snap")), now: now)
+
+    XCTAssertEqual(presentation.target, "TextEdit com.apple.TextEdit · com.evil.app")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName(String(repeating: "A", count: 100)).count, 40)
+    for separator in [
+      "\u{2022}", "\u{2219}", "\u{22C5}", "\u{2027}", "\u{30FB}", "\u{FF65}", "\u{2218}", "\u{0387}", "|", "/",
+    ] {
+      XCTAssertEqual(
+        DesktopToolApprovalRequest.cardAppName("TextEdit \(separator) com.apple.TextEdit"),
+        "TextEdit com.apple.TextEdit",
+        separator)
+    }
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Text\u{2063}Edit\u{E0041}"), "Text⟨U+2063⟩Edit")
+    XCTAssertEqual(DesktopToolApprovalRequest.cardAppName("Café 2 (Beta)"), "Café 2 (Beta)")
   }
 }

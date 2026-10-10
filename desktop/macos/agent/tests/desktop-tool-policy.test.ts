@@ -308,7 +308,9 @@ describe("desktop tool approval requests", () => {
             ? ["desktop.mail.read"]
             : toolName === "capture_screen"
               ? ["desktop.context.screenshot_image"]
-              : ["desktop.messaging.read"],
+              : toolName === "ui_snapshot"
+                ? ["desktop.automation.observe"]
+                : ["desktop.messaging.read"],
       nowMs,
     });
     expect(policy.decision).toBe("dispatch_required");
@@ -350,6 +352,28 @@ describe("desktop tool approval requests", () => {
       service: "auto",
       file_path: "receipt.pdf",
     });
+  });
+
+  it("asks to read one app's window and shows only the window fields", () => {
+    const request = buildDesktopToolApprovalRequest({
+      toolName: "ui_snapshot",
+      toolInput: { bundle_id: "com.apple.TextEdit", pid: 812, window_title: "Untitled", max_nodes: 100 },
+      policy: dispatchRequired("ui_snapshot", "com.apple.textedit"),
+      resourceRef: "com.apple.textedit",
+      nowMs,
+    });
+
+    expect(request).toMatchObject({
+      capability: "desktop.automation.observe",
+      operation: "ui_snapshot",
+      resourceRef: "com.apple.textedit",
+      title: "Read an app window",
+      decisionPrompt: "Let Omi read the window of com.apple.textedit?",
+    });
+    // The app is the target row; the pid and the element limit mean nothing to a person.
+    expect(request.preview).toEqual({ window_title: "Untitled" });
+    expect(request.options.map((option) => option.id)).toEqual(["allow_once", "allow_session", "deny"]);
+    expect(request.options.find((option) => option.id === "allow_session")?.covers).toBe("reading any window of this app");
   });
 
   it("offers a session grant only when there is an exact resource for it to cover", () => {

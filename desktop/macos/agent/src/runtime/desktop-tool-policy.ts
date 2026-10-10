@@ -448,6 +448,7 @@ const APPROVAL_SESSION_GRANT_COVERS: Record<string, string> = {
   read_message_history: "this conversation",
   list_message_chats: "your recent Messages conversations",
   list_mail_messages: "your Mail inbox headers",
+  ui_snapshot: "reading any window of this app",
 };
 
 /**
@@ -500,13 +501,20 @@ const APPROVAL_PREVIEW_FIELDS: Record<string, readonly string[]> = {
   list_mail_messages: ["limit"],
   // Takes no input: the card's question says everything the capture does.
   capture_screen: [],
+  // The app is the card's target row. A pid or an element limit means nothing
+  // to a person deciding; the input hash binds them anyway.
+  ui_snapshot: ["window_title", "window_id"],
 };
 /** Paths are redacted to their final component: the card needs the file name, not the user's directory layout. */
 const APPROVAL_PREVIEW_PATH_FIELDS = new Set(["file_path"]);
 /** The card shows message text and scripts verbatim, so the bound is generous; the input hash binds the exact content. */
 const APPROVAL_PREVIEW_FIELD_BYTES = 4_096;
 
-function approvalCopy(toolName: string, preview: Record<string, DesktopApprovalPreviewValue>): { title: string; decisionPrompt: string } {
+function approvalCopy(
+  toolName: string,
+  preview: Record<string, DesktopApprovalPreviewValue>,
+  resourceRef: string | undefined,
+): { title: string; decisionPrompt: string } {
   switch (toolName) {
     case "send_message":
       return { title: "Send a message", decisionPrompt: `Send this message to ${preview.to ?? "the recipient"}?` };
@@ -527,6 +535,9 @@ function approvalCopy(toolName: string, preview: Record<string, DesktopApprovalP
       return { title: "List Mail messages", decisionPrompt: "List recent Mail messages (headers only, no bodies)?" };
     case "capture_screen":
       return { title: "Take a screenshot", decisionPrompt: "Let Omi take a screenshot of your whole screen?" };
+    case "ui_snapshot":
+      // The kernel knows only the bundle id; the app names it from its own lookup.
+      return { title: "Read an app window", decisionPrompt: `Let Omi read the window of ${resourceRef ?? "this app"}?` };
     default:
       return { title: `Allow ${toolName}`, decisionPrompt: `Allow the agent to run ${toolName}?` };
   }
@@ -561,7 +572,7 @@ export function buildDesktopToolApprovalRequest(input: {
       preview[field] = bounded;
     }
   }
-  const copy = approvalCopy(input.toolName, preview);
+  const copy = approvalCopy(input.toolName, preview, input.resourceRef);
   const resourceRef = input.resourceRef ?? null;
   return {
     policy: DESKTOP_APPROVAL_POLICY,
