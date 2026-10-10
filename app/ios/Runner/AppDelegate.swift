@@ -473,11 +473,21 @@ final class QuickActionsIconPatcher: NSObject {
             result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
             return
         }
-        result([
+        let thermal: String?
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = nil
+        }
+        var snapshot: [String: Any] = [
             "battery_level": Int((level * 100).rounded()),
             "battery_charging": state == .charging || state == .full,
             "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
-        ])
+        ]
+        if let thermal { snapshot["thermal_state"] = thermal }
+        result(snapshot)
     }
 
     // TestFlight environment detection

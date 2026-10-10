@@ -76,6 +76,8 @@ class AnalyticsManager {
 
   static void Function(String? identity, bool enabled)? identityChanged;
   static int get identityEpoch => _identityEpoch;
+  static final ValueNotifier<int> _identityChanges = ValueNotifier(0);
+  static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
@@ -124,6 +126,7 @@ class AnalyticsManager {
     _identityKnown = true;
     _identityEpoch++;
     _boundIdentity = identity;
+    _identityChanges.value = _identityEpoch;
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -589,6 +592,7 @@ class AnalyticsManager {
         final adapter = _adapter;
         if (adapter == null || !_trackingEnabled) return;
         final props = <String, Object>{};
+        final ownedKeys = properties?.keys.toSet() ?? <String>{};
         if (properties != null) {
           properties.forEach((k, v) {
             final coerced = _coerceProperty(v);
@@ -600,7 +604,15 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        props.addAll(_eventContext);
+        for (final entry in _eventContext.entries) {
+          if (!ownedKeys.contains(entry.key)) props.putIfAbsent(entry.key, () => entry.value);
+        }
+        // Only positive integer schema versions are valid. Invalid versions
+        // use the default delivery envelope rather than entering the wire.
+        final schemaVersion = props['schema_version'];
+        if (schemaVersion != null && (schemaVersion is! int || schemaVersion < 1)) {
+          props.remove('schema_version');
+        }
         if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
           props['experiment_context_verified'] = true;
         }
@@ -608,6 +620,7 @@ class AnalyticsManager {
           _QueuedAnalyticsEvent(
             eventName: eventName,
             properties: props,
+            ownedKeys: ownedKeys,
             eventId: const Uuid().v4(),
             occurredAt: DateTime.now().toUtc(),
             identityEpoch: _identityEpoch,
@@ -668,13 +681,19 @@ class AnalyticsManager {
         final event = _queuedEvents.removeAt(0);
         try {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
-          final properties = <String, Object>{...event.properties, ..._globalEventProperties};
+          final properties = <String, Object>{
+            for (final entry in _globalEventProperties.entries)
+              if (!event.ownedKeys.contains(entry.key)) entry.key: entry.value,
+            ...event.properties,
+          };
           // Device lifecycle events already carry this value as `app_build`.
           // Capture-wedge events were emitted without it, so fleet queries on
           // `build` could not attribute a wedge to a release.
           final build = _globalEventProperties['app_build'];
-          if (build != null && _captureWedgeFamilyEvents.contains(event.eventName)) {
-            properties['build'] = build;
+          if (build != null &&
+              _captureWedgeFamilyEvents.contains(event.eventName) &&
+              !event.ownedKeys.contains('build')) {
+            properties.putIfAbsent('build', () => build);
           }
           if (adapter is AnalyticsDeliveryAdapter) {
             await (adapter as AnalyticsDeliveryAdapter).deliver(
@@ -684,7 +703,7 @@ class AnalyticsManager {
                 'event_id': event.eventId,
                 r'$insert_id': event.eventId,
                 'occurred_at': event.occurredAt.toIso8601String(),
-                'schema_version': 1,
+                'schema_version': properties['schema_version'] ?? 1,
                 'client_app_namespace': _clientAppNamespace,
                 'client_app_profile': Env.profile.name,
               },
@@ -2878,7 +2897,9 @@ class _QueuedAnalyticsEvent {
     required this.occurredAt,
     required this.identityEpoch,
     this.attempts = 0,
+    this.ownedKeys = const {},
   });
+  final Set<String> ownedKeys;
   final String eventName;
   final Map<String, Object> properties;
   final String eventId;
@@ -2888,6 +2909,7 @@ class _QueuedAnalyticsEvent {
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
         eventName: eventName,
         properties: properties,
+        ownedKeys: ownedKeys,
         eventId: eventId,
         occurredAt: occurredAt,
         identityEpoch: identityEpoch,

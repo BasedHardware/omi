@@ -1,0 +1,148 @@
+{
+  "project": "based-hardware-dev",
+  "lane": "omi:auto:dream-reasoning",
+  "started_at": "2026-10-10T19:08:42.264480+00:00",
+  "fixture_sha256": "9e06b9da66793be874a2685b99f23e503fde1da0f470e599732e72219500fdfd",
+  "instructions_sha256": "05571e1b1b07bbf695dc0305ae48f4c4cc738a28d7fd935b24bbe8c001e57462",
+  "rows": [
+    {
+      "repeat": 1,
+      "error": null,
+      "kept": {
+        "edits": 2,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "tokens": 2093,
+      "latency_ms": 3146,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 2,
+      "error": null,
+      "kept": {
+        "edits": 2,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "tokens": 2093,
+      "latency_ms": 3018,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 3,
+      "error": null,
+      "kept": {
+        "edits": 2,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "tokens": 2095,
+      "latency_ms": 2925,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 4,
+      "error": null,
+      "kept": {
+        "edits": 2,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "tokens": 2105,
+      "latency_ms": 2700,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 5,
+      "error": null,
+      "kept": {
+        "edits": 2,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "tokens": 2099,
+      "latency_ms": 2610,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    }
+  ],
+  "summary": {
+    "runs": 5,
+    "failed_runs": 0,
+    "kept": {
+      "edits": 10,
+      "questions": 0,
+      "vocabulary": 0,
+      "frames": 0,
+      "feedback": 0,
+      "slow_tasks": 0
+    },
+    "dropped_invalid": {
+      "edits": 0,
+      "questions": 0,
+      "vocabulary": 0,
+      "frames": 0,
+      "feedback": 0,
+      "slow_tasks": 0
+    },
+    "validation_errors": {},
+    "errors_by_type": {},
+    "tokens": 10485,
+    "targets_met": true
+  }
+}
