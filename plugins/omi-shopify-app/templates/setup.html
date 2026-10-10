@@ -453,7 +453,7 @@
             {% endif %}
 
             <div class="action-buttons">
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                <a href="/disconnect?uid={{ uid }}{% if disconnect_sig %}&sig={{ disconnect_sig }}{% endif %}" class="btn btn-danger btn-small">
                     Disconnect Store
                 </a>
             </div>

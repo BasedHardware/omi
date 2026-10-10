@@ -502,7 +502,7 @@
                 <a href="/auth/linear?uid={{ uid }}" class="btn btn-outline btn-small">
                     🔄 Reconnect
                 </a>
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                <a href="/disconnect?uid={{ uid }}{% if disconnect_sig %}&sig={{ disconnect_sig }}{% endif %}" class="btn btn-danger btn-small">
                     Disconnect
                 </a>
             </div>

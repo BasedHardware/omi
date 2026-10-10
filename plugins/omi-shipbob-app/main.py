@@ -410,10 +410,18 @@ def get_inventory_by_product(uid: str, product_name: str) -> Optional[Dict]:
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
+    sig = ""
+
     if not uid:
         return templates.TemplateResponse(
-            "setup.html", {"request": request, "authenticated": False, "error": "Missing user ID"}
+            "setup.html", {"request": request, "authenticated": False, "error": "Missing user ID", "disconnect_sig": sig}
         )
+
+    from shipbob_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
 
     tokens = get_shipbob_tokens(uid)
     authenticated = tokens is not None
@@ -436,6 +444,7 @@ async def home(request: Request, uid: Optional[str] = None):
             "authenticated": authenticated,
             "channels": channels,
             "selected_channel": selected_channel,
+            "disconnect_sig": sig,
         },
     )
 
@@ -597,8 +606,10 @@ async def check_setup(uid: str):
 
 
 @app.get("/disconnect")
-async def disconnect_shipbob(uid: str):
+async def disconnect_shipbob(uid: str = Query(...), sig: str = Query("")):
     """Disconnect ShipBob account."""
+    from shipbob_disconnect_auth import require_disconnect_auth
+    require_disconnect_auth(uid, sig)
     delete_shipbob_tokens(uid)
     return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 

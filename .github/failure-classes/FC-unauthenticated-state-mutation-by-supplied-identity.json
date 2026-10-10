@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "FC-unauthenticated-state-mutation-by-supplied-identity",
+  "violated_contract": "A route that mutates a per-user resource must authenticate that the caller is entitled to act for the identity it names. The disconnect endpoints in eight omi plugins accepted any caller-supplied uid and deleted that user's stored OAuth credentials with no authentication, so a crafted /disconnect?uid=<victim> URL forced any connected user out of their integration while the request log looked like ordinary traffic. The same class of failure hits any webhook, settings, or admin route that keys a state change solely off a client-supplied identity parameter.",
+  "canonical_prevention": "Sign the identity before it is embedded in any link or accepted as a state-change target: compute an HMAC-SHA256 signature of the uid with a deployment-known shared secret (<APP>_DISCONNECT_SECRET), carry the signature in the URL, and have the mutating route verify it with hmac.compare_digest before touching state, failing closed with 503 when the secret is unconfigured and 401 on missing or wrong signatures.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-google-calendar-app/google_calendar_disconnect_auth.py",
+    "plugins/omi-hive-app/hive_disconnect_auth.py",
+    "plugins/omi-linear-app/linear_disconnect_auth.py",
+    "plugins/omi-notion-app/notion_disconnect_auth.py",
+    "plugins/omi-dropbox-app/dropbox_disconnect_auth.py",
+    "plugins/omi-shipbob-app/shipbob_disconnect_auth.py",
+    "plugins/omi-ms365-app/ms365_disconnect_auth.py",
+    "plugins/omi-shopify-app/shopify_disconnect_auth.py",
+    "plugins/omi-google-calendar-app/test_google_calendar_disconnect_auth.py",
+    "plugins/omi-hive-app/test_hive_disconnect_auth.py",
+    "plugins/omi-linear-app/test_linear_disconnect_auth.py",
+    "plugins/omi-notion-app/test_notion_disconnect_auth.py",
+    "plugins/omi-dropbox-app/test_dropbox_disconnect_auth.py",
+    "plugins/omi-shipbob-app/test_shipbob_disconnect_auth.py",
+    "plugins/omi-ms365-app/test_ms365_disconnect_auth.py",
+    "plugins/omi-shopify-app/test_shopify_disconnect_auth.py"
+  ],
+  "scope_hints": [
+    "plugins/*/main.py",
+    "plugins/*/*_disconnect_auth.py",
+    "plugins/*/templates/setup.html"
+  ],
+  "evidence_prs": [],
+  "status": "open"
+}

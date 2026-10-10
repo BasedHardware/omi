@@ -25,7 +25,9 @@ Run: python3 plugins/test_uid_reflection_remaining_apps.py
 
 import asyncio
 import ast
+import contextlib
 import importlib.util
+import os
 import sys
 import types
 from pathlib import Path
@@ -159,6 +161,25 @@ def assert_encoded(value, label):
     assert '%26' in value, f"{label}: ampersand not percent-encoded"
 
 
+@contextlib.contextmanager
+def _signed_disconnect(helper_name, env_attr):
+    """Configure an app's disconnect signing secret and yield its signer.
+
+    The disconnect handlers now require an HMAC-SHA256 signature of the
+    uid (issue #15589), so a caller-supplied uid alone is rejected with
+    401.  These tests verify that the *redirect* still encodes the uid,
+    so they exercise the happy path: configure the secret, sign the uid,
+    and pass the signature through.  The happy path never imports fastapi,
+    so the suite still runs in the dependency-free CI lane.
+    """
+    helper = importlib.import_module(helper_name)
+    os.environ[getattr(helper, env_attr)] = "reflection-test-secret"
+    try:
+        yield helper.sign_uid
+    finally:
+        os.environ.pop(getattr(helper, env_attr), None)
+
+
 def test_dropbox_home_pages_encode_uid():
     module = load_app('omi-dropbox-app')
     hostile = HOSTILE_UID
@@ -177,7 +198,10 @@ def test_dropbox_disconnect_redirect_encodes_uid():
     module = load_app('omi-dropbox-app')
     deleted = []
     module.delete_dropbox_tokens = lambda uid: deleted.append(uid)
-    response = asyncio.run(module.disconnect(uid=HOSTILE_UID))
+    with _signed_disconnect('dropbox_disconnect_auth',
+                            '_DROPBOX_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'dropbox disconnect redirect')
 
 
@@ -189,7 +213,10 @@ def test_gcal_pages_encode_uid():
     assert '/auth/google?uid=' in html
 
     module.delete_google_tokens = lambda uid: None
-    response = asyncio.run(module.disconnect(uid=HOSTILE_UID))
+    with _signed_disconnect('google_calendar_disconnect_auth',
+                            '_GOOGLE_CALENDAR_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'gcal disconnect redirect')
 
     async def fake_form():
@@ -210,7 +237,10 @@ def test_gcal_callback_error_page_escapes_error():
 def test_hive_disconnect_redirect_encodes_uid():
     module = load_app('omi-hive-app')
     module.delete_hive_api_key = lambda uid: True
-    response = asyncio.run(module.disconnect_hive(uid=HOSTILE_UID))
+    with _signed_disconnect('hive_disconnect_auth',
+                            '_HIVE_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect_hive(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'hive disconnect redirect')
 
 
@@ -227,14 +257,20 @@ def test_ms365_setup_redirect_encodes_uid():
 def test_shipbob_disconnect_redirect_encodes_uid():
     module = load_app('omi-shipbob-app')
     module.delete_shipbob_tokens = lambda uid: True
-    response = asyncio.run(module.disconnect_shipbob(uid=HOSTILE_UID))
+    with _signed_disconnect('shipbob_disconnect_auth',
+                            '_SHIPBOB_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect_shipbob(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'shipbob disconnect redirect')
 
 
 def test_shopify_disconnect_redirect_encodes_uid():
     module = load_app('omi-shopify-app')
     module.delete_shopify_tokens = lambda uid: True
-    response = asyncio.run(module.disconnect_shopify(uid=HOSTILE_UID))
+    with _signed_disconnect('shopify_disconnect_auth',
+                            '_SHOPIFY_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect_shopify(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'shopify disconnect redirect')
 
 
@@ -258,7 +294,10 @@ def test_linear_pages_encode_uid():
     assert_encoded(oauth_url, 'linear home oauth_url')
 
     module.delete_linear_tokens = lambda uid: True
-    response = asyncio.run(module.disconnect_linear(uid=HOSTILE_UID))
+    with _signed_disconnect('linear_disconnect_auth',
+                            '_LINEAR_DISCONNECT_SECRET_ENV') as sign:
+        response = asyncio.run(
+            module.disconnect_linear(uid=HOSTILE_UID, sig=sign(HOSTILE_UID)))
     assert_encoded(response.url, 'linear disconnect redirect')
 
 
