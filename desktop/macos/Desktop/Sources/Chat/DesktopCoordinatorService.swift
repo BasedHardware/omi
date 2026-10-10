@@ -425,6 +425,16 @@ final class DesktopCoordinatorService {
     )
   }
 
+  /// Resolve a dispatch with a full `resolve_desktop_dispatch` input (status,
+  /// resolution, optional grant). The approval card uses this so an "allow for
+  /// this chat" answer can carry its session-scoped grant through the same
+  /// signed direct-control path; the dispatch id in the input always wins.
+  func resolveDispatchJSON(dispatchId: String, input: [String: Any]) async throws -> String {
+    var fullInput = input
+    fullInput["dispatchId"] = dispatchId
+    return try await callRuntimeControlTool(ToolName.resolveDispatch, input: fullInput)
+  }
+
   func actionQueue() async -> [DesktopCoordinatorActionQueueItem] {
     let snapshot = await awarenessSnapshot()
     return deriveActionQueue(from: snapshot)

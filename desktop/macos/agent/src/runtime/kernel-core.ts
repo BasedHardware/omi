@@ -185,6 +185,7 @@ function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSessi
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
+  type CancelledToolApproval,
   type RunToolExecutionLease,
   type RunToolCapabilityRevocationReason,
 } from "./run-tool-capability.js";
@@ -236,8 +237,17 @@ export class KernelCore {
    * `render_chat_blocks` at all.
    */
   protected readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
+  protected desktopToolApprovalsEnabled: boolean;
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
+  /**
+   * `approval.resolved` rows the broker's cancellation callback wrote while a
+   * kernel operation was still in progress. They are notified after the event
+   * that caused them, so a card always ends after the thing that ended it.
+   */
+  private derivedApprovalEvents: AgentEvent[] = [];
+  /** True while `appendEvent` is letting the broker react, so derived events publish after the cause. */
+  private deferDerivedApprovalEvents = false;
 
   protected chatFirstCapability(
     sessionId: string,
@@ -254,9 +264,11 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
     this.recoverRunInput = options.recoverRunInput;
+    this.desktopToolApprovalsEnabled = options.desktopToolApprovalsEnabled === true;
     this.toolCapabilities = new RunToolCapabilityBroker({
       store: this.store,
       onRejected: options.onToolCapabilityRejected,
+      onApprovalsCancelled: (cancelled) => this.recordCancelledToolApprovals(cancelled),
       profileForSession: options.toolCapabilityProfileForSession ?? ((sessionId) => {
         const profile = readSessionExecutionProfile(this.store, sessionId);
         return {
@@ -521,6 +533,76 @@ export class KernelCore {
     reason: RunToolCapabilityRevocationReason = "owner_changed",
   ): number {
     return this.toolCapabilities.revokeForOwner(ownerId, reason);
+  }
+
+  /**
+   * The broker closed parked approvals because their authority ended. Record
+   * one `approval.resolved` per card and, when the run itself is still alive
+   * and only waiting on approvals, let it run again so the model receives the
+   * failed tool result instead of a run stuck in `waiting_approval`.
+   */
+  private recordCancelledToolApprovals(cancelled: readonly CancelledToolApproval[]): void {
+    const now = Date.now();
+    for (const approval of cancelled) {
+      this.derivedApprovalEvents.push(this.store.appendEvent({
+        sessionId: approval.sessionId,
+        runId: approval.runId,
+        attemptId: approval.attemptId,
+        type: "approval.resolved",
+        retentionClass: "core",
+        visibility: "ui",
+        payloadJson: JSON.stringify({
+          approvalId: approval.dispatchId,
+          dispatchId: approval.dispatchId,
+          invocationId: approval.invocationId,
+          status: "cancelled",
+          decision: "cancelled",
+          selectedOptionId: null,
+          grantId: null,
+          automatic: true,
+          resolvedBy: "system",
+          resolvedAtMs: now,
+          resolution: { decision: "cancelled", reason: `run_tool_${approval.reason}` },
+        }),
+      }));
+      if (this.toolCapabilities.hasPendingApprovals(approval.runId)) continue;
+      const run = this.store.getOptionalRow("SELECT status FROM runs WHERE run_id = ?", [approval.runId]);
+      const attempt = this.store.getOptionalRow(
+        "SELECT status FROM run_attempts WHERE attempt_id = ?",
+        [approval.attemptId],
+      );
+      if (run?.status !== "waiting_approval" || attempt?.status !== "waiting_approval") continue;
+      this.updateRun(approval.runId, { status: "running", updatedAtMs: now });
+      this.updateAttempt(approval.attemptId, { status: "running", updatedAtMs: now });
+      this.derivedApprovalEvents.push(this.store.appendEvent({
+        sessionId: approval.sessionId,
+        runId: approval.runId,
+        attemptId: approval.attemptId,
+        type: "run.running",
+        retentionClass: "core",
+        visibility: "ui",
+        payloadJson: JSON.stringify({
+          runId: approval.runId,
+          attemptId: approval.attemptId,
+          resumedAfterApprovalId: approval.dispatchId,
+        }),
+      }));
+    }
+    // Inside appendEvent the cause publishes first; anywhere else (owner
+    // revocation, an authority check that revoked) publish right away.
+    if (!this.deferDerivedApprovalEvents) this.publishDerivedApprovalEvents();
+  }
+
+  /** Hand queued derived events to subscribers, or to the open transaction's queue. */
+  private publishDerivedApprovalEvents(): void {
+    if (this.derivedApprovalEvents.length === 0) return;
+    const events = this.derivedApprovalEvents;
+    this.derivedApprovalEvents = [];
+    if (this.transactionDepth > 0) {
+      this.pendingSubscriberEvents.push(...events);
+      return;
+    }
+    for (const event of events) this.notifySubscribers(event);
   }
 
   beginExternalSurfaceRun(input: BeginExternalSurfaceRunInput): BeginExternalSurfaceRunResult {
@@ -2708,12 +2790,22 @@ export class KernelCore {
       visibility: input.visibility ?? "ui",
       payloadJson: JSON.stringify(input.payload ?? {}),
     });
-    this.toolCapabilities.handleKernelEvent(event);
+    // A terminal run/attempt event closes any approval still parked on that
+    // authority; the broker reports each closure and the kernel records it as
+    // its own `approval.resolved`, published after the event that ended it.
+    this.deferDerivedApprovalEvents = true;
+    try {
+      this.toolCapabilities.handleKernelEvent(event);
+    } finally {
+      this.deferDerivedApprovalEvents = false;
+    }
     if (this.transactionDepth > 0) {
       this.pendingSubscriberEvents.push(event);
+      this.publishDerivedApprovalEvents();
       return event;
     }
     this.notifySubscribers(event);
+    this.publishDerivedApprovalEvents();
     return event;
   }
 

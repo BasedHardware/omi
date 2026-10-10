@@ -5,10 +5,14 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  DESKTOP_APPROVAL_TOOLS,
   RunToolCapabilityBroker,
   RunToolCapabilityRejectedError,
+  toolApprovalInvocationBinding,
   type AuthorizedRunToolInvocation,
 } from "../src/runtime/run-tool-capability.js";
+import { desktopToolPolicyInternals, evaluateDesktopToolPolicy } from "../src/runtime/desktop-tool-policy.js";
+import { allOmiToolManifest } from "../src/runtime/omi-tool-manifest.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
 import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
@@ -591,6 +595,58 @@ describe("RunToolCapabilityBroker", () => {
     chat.store.close();
   });
 
+  it("offers the realtime voice screenshot only to realtime voice runs", () => {
+    const allowedFor = (surfaceKind: string) => {
+      const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
+      roots.push(root);
+      const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+      const voice = surfaceKind === "realtime_voice";
+      const session = store.insertSession({
+        ownerId: "owner-1",
+        surfaceKind: voice ? "main_chat" : surfaceKind,
+        defaultAdapterId: "pi-mono",
+        executionRole: "coordinator",
+      });
+      const run = store.insertRun({
+        sessionId: session.sessionId,
+        clientId: "screen-client",
+        requestId: `screen-${surfaceKind}`,
+        status: "running",
+        mode: "act",
+        inputJson: JSON.stringify({
+          prompt: "What is on my screen?",
+          admittedContextSnapshot: { sourceOutcomes: [{ source: "screen", outcome: "available" }] },
+          ...(voice ? { metadata: { externalSurface: { authority: "swift_realtime", turnId: "turn-1" } } } : {}),
+        }),
+      });
+      const attempt = store.insertAttempt({
+        runId: run.runId,
+        attemptNo: 1,
+        status: "running",
+        adapterId: "pi-mono",
+        adapterInstanceId: "worker",
+      });
+      const capability = createBroker(store).register({
+        ownerId: session.ownerId,
+        sessionId: session.sessionId,
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+      });
+      store.close();
+      return capability;
+    };
+
+    for (const surfaceKind of ["main_chat", "floating_bar", "floating_pill", "task_chat", "workstream"]) {
+      const capability = allowedFor(surfaceKind);
+      expect(capability.adapterId, surfaceKind).toBe("pi-mono");
+      expect(capability.allowedToolNames, surfaceKind).toContain("capture_screen");
+      expect(capability.allowedToolNames, surfaceKind).not.toContain("screenshot");
+    }
+    const voice = allowedFor("realtime_voice");
+    expect(voice.surfaceKind).toBe("realtime_voice");
+    expect(voice.allowedToolNames).toContain("screenshot");
+  });
+
   it("keeps capability state internal and revokes it at terminal attempt", () => {
     const { store, session, run, attempt } = fixture();
     const broker = createBroker(store);
@@ -824,6 +880,601 @@ describe("RunToolCapabilityBroker", () => {
       retryPolicy: "safe_retry",
     });
     reopened.close();
+  });
+});
+
+describe("RunToolCapabilityBroker desktop tool approvals", () => {
+  const sendInput = { to: "+15551234567", text: "Running late" };
+
+  function parkedSend(
+    options: Omit<ConstructorParameters<typeof RunToolCapabilityBroker>[0], "store" | "profileForSession"> = {},
+  ) {
+    const fx = fixture();
+    const broker = createBroker(fx.store, options);
+    const capability = broker.register({
+      ownerId: fx.session.ownerId,
+      sessionId: fx.session.sessionId,
+      runId: fx.run.runId,
+      attemptId: fx.attempt.attemptId,
+    });
+    const outcome = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "send-1",
+      toolName: "send_message",
+      toolInput: sendInput,
+      activeOwnerId: fx.session.ownerId,
+    });
+    if (outcome.kind !== "approval_required") throw new Error("expected the send to park");
+    return { ...fx, broker, capability, outcome };
+  }
+
+  function dispatchRow(store: SqliteAgentStore, dispatchId: string) {
+    return store.getRow("SELECT * FROM desktop_dispatches WHERE dispatch_id = ?", [dispatchId]);
+  }
+
+  function counts(store: SqliteAgentStore) {
+    return {
+      dispatches: Number(store.getRow("SELECT COUNT(*) AS count FROM desktop_dispatches").count),
+      ledger: Number(store.getRow("SELECT COUNT(*) AS count FROM tool_invocation_ledger").count),
+    };
+  }
+
+  it("never lets the model name the resource a grant covers", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const send = (invocationId: string, toolInput: Record<string, unknown>) =>
+      broker.authorizeRelayInvocationOrRequestApproval({
+        capabilityRef: capability.capabilityRef,
+        invocationId,
+        toolName: "send_message",
+        toolInput,
+        activeOwnerId: session.ownerId,
+      });
+
+    // Reproduces the review finding: a smuggled resource_ref used to become
+    // the grant pattern, so one approval covered any later recipient that
+    // repeated the same ref. The manifest schema has no such field.
+    expectCode(() => send("forged-ref", { to: "bob", text: "hi", resource_ref: "x" }), "invalid_tool_input");
+    expectCode(() => send("missing-text", { to: "bob" }), "invalid_tool_input");
+    expectCode(() => send("wrong-type", { to: "bob", text: 42 }), "invalid_tool_input");
+    expect(counts(store)).toEqual({ dispatches: 0, ledger: 0 });
+
+    // A session grant the user minted for bob covers bob and nobody else.
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: null,
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourcePattern: "bob",
+      effect: "allow",
+      source: "user",
+      expiresAtMs: Date.now() + 60_000,
+    });
+    expect(send("to-bob", { to: "bob", text: "hi" }).kind).toBe("authorized");
+    const mallory = send("to-mallory", { to: "mallory", text: "hi" });
+    expect(mallory.kind).toBe("approval_required");
+    if (mallory.kind === "approval_required") expect(mallory.dispatch.resourceRef).toBe("mallory");
+    store.close();
+  });
+
+  it("refuses to park an input the card cannot show in full", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expectCode(() => broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "huge-script",
+      toolName: "run_applescript",
+      toolInput: { script: "display dialog \"hi\"\n".repeat(400) },
+      activeOwnerId: session.ownerId,
+    }), "input_too_large_to_approve");
+    // Nothing was prepared: the model shortens the input and calls again.
+    expect(counts(store)).toEqual({ dispatches: 0, ledger: 0 });
+    store.close();
+  });
+
+  it("keeps a hard policy deny rejected instead of parking it", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store, {
+      desktopToolPolicy: (request) => ({
+        ...evaluateDesktopToolPolicy(request),
+        decision: "deny",
+        reason: "denied by test policy",
+      }),
+    });
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expectCode(() => broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "denied",
+      toolName: "send_message",
+      toolInput: sendInput,
+      activeOwnerId: session.ownerId,
+    }), "approval_required");
+    expect(counts(store)).toEqual({ dispatches: 0, ledger: 0 });
+    store.close();
+  });
+
+  it("refuses an approval whose owner or attempt changed while the card was open", () => {
+    const cancelled: unknown[] = [];
+    const { store, session, run, attempt, broker, outcome } = parkedSend({
+      onApprovalsCancelled: (closed) => cancelled.push(...closed),
+    });
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+
+    // Another owner cannot answer this card, and asking revokes the capability.
+    expectCode(
+      () => broker.assertApprovalAuthority({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: "owner-2" }),
+      "owner_mismatch",
+    );
+    expect(dispatchRow(store, outcome.dispatch.dispatchId)).toMatchObject({ status: "cancelled", resolved_by: "system" });
+    expect(readToolInvocation(store, "send-1")).toMatchObject({ status: "failed", errorCode: "run_tool_owner_changed" });
+    expect(cancelled).toEqual([{
+      dispatchId: outcome.dispatch.dispatchId,
+      invocationId: "send-1",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      reason: "owner_changed",
+    }]);
+    expectCode(
+      () => broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId }),
+      "capability_revoked",
+    );
+    store.close();
+  });
+
+  it("refuses an approval once its attempt is no longer the live one", () => {
+    const { store, session, run, attempt, broker, outcome } = parkedSend();
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+    store.execute("UPDATE run_attempts SET status = 'failed' WHERE attempt_id = ?", [attempt.attemptId]);
+    store.insertAttempt({ runId: run.runId, attemptNo: 2, status: "running", adapterId: "acp", adapterInstanceId: "worker-2" });
+
+    expectCode(
+      () => broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId }),
+      "attempt_terminal",
+    );
+    expect(dispatchRow(store, outcome.dispatch.dispatchId).status).toBe("cancelled");
+    expect(readToolInvocation(store, "send-1").status).toBe("failed");
+    store.close();
+  });
+
+  it("reports the approvals it closes on owner revocation", () => {
+    const cancelled: unknown[] = [];
+    const { store, session, run, broker, outcome } = parkedSend({
+      onApprovalsCancelled: (closed) => cancelled.push(...closed),
+    });
+
+    expect(broker.revokeForOwner(session.ownerId)).toBe(1);
+
+    expect(cancelled).toEqual([expect.objectContaining({ dispatchId: outcome.dispatch.dispatchId, reason: "owner_changed" })]);
+    expect(dispatchRow(store, outcome.dispatch.dispatchId).status).toBe("cancelled");
+    expect(broker.hasPendingApprovals(run.runId)).toBe(false);
+    store.close();
+  });
+
+  it("restores a released approval when the surrounding transaction rolls back", () => {
+    const { store, session, run, broker, outcome } = parkedSend();
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+
+    const { released } = broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId });
+    expect(broker.hasPendingApprovals(run.runId)).toBe(false);
+
+    broker.restorePendingApproval(released);
+
+    expect(broker.hasPendingApprovals(run.runId)).toBe(true);
+    expectCode(() => broker.markInvocationDispatched(outcome.invocation), "approval_required");
+    const again = broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId });
+    expect(again.record.invocationId).toBe("send-1");
+    store.close();
+  });
+
+  it("parks a sensitive send behind one approval dispatch bound to the prepared invocation", () => {
+    const { store, session, run, attempt, broker, outcome } = parkedSend({ nowMs: () => 5_000 });
+    const { invocation, dispatch, request } = outcome;
+
+    expect(invocation.canonicalToolName).toBe("send_message");
+    expect(readToolInvocation(store, "send-1")).toMatchObject({ status: "prepared", toolName: "send_message" });
+    expect(dispatch).toMatchObject({
+      kind: "approval",
+      status: "pending",
+      ownerId: session.ownerId,
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      sourceAttemptId: attempt.attemptId,
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourceRef: "+15551234567",
+      recommendedDefault: "deny",
+      expiresAtMs: 5_000 + request.expiresAtMs - request.requestedAtMs,
+    });
+    expect(toolApprovalInvocationBinding(dispatch)).toMatchObject({
+      invocationId: "send-1",
+      toolName: "send_message",
+      inputHash: invocation.inputHash,
+      daemonBootEpoch: broker.daemonBootEpoch,
+    });
+    expect(JSON.parse(dispatch.payloadJson).preview).toEqual(sendInput);
+    expect(broker.hasPendingApprovals(run.runId)).toBe(true);
+
+    // Possession of the invocation object is not authority to dispatch it.
+    expectCode(() => broker.markInvocationDispatched(invocation), "approval_required");
+    expectCode(() => broker.acquireExecutionLease(invocation, () => session.ownerId), "approval_required");
+    expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+    store.close();
+  });
+
+  it("admits exactly the approved invocation once and nothing else", () => {
+    const { store, session, run, broker, outcome } = parkedSend();
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+    store.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+      ownerId: session.ownerId,
+      status: "resolved",
+      resolvedBy: "user",
+      resolutionJson: JSON.stringify({ decision: "allow" }),
+    });
+
+    const { record } = broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId });
+    expect(record).toMatchObject({ invocationId: "send-1", status: "prepared" });
+    expect(broker.hasPendingApprovals(run.runId)).toBe(false);
+    broker.markInvocationDispatched(outcome.invocation);
+    expect(readToolInvocation(store, "send-1").status).toBe("dispatched");
+
+    // The same dispatch cannot admit anything a second time, and a fresh
+    // identical call is a new invocation that has to ask again.
+    expectCode(
+      () => broker.approveInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, activeOwnerId: session.ownerId }),
+      "capability_revoked",
+    );
+    const again = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: outcome.invocation.capabilityRef,
+      invocationId: "send-2",
+      toolName: "send_message",
+      toolInput: sendInput,
+      activeOwnerId: session.ownerId,
+    });
+    expect(again.kind).toBe("approval_required");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+    store.close();
+  });
+
+  it("rejects an approval whose binding no longer matches the prepared invocation", () => {
+    const { store, session, broker, outcome } = parkedSend();
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+
+    expectCode(
+      () => broker.approveInvocation({
+        dispatchId: outcome.dispatch.dispatchId,
+        binding: { ...binding, inputHash: "sha256:tampered" },
+        activeOwnerId: session.ownerId,
+      }),
+      "invocation_replayed",
+    );
+    expectCode(
+      () => broker.approveInvocation({ dispatchId: "disp_unknown", binding, activeOwnerId: session.ownerId }),
+      "capability_revoked",
+    );
+    // A failed approval leaves the invocation parked, not admitted.
+    expectCode(() => broker.markInvocationDispatched(outcome.invocation), "approval_required");
+    expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+    store.close();
+  });
+
+  it("fails a denied or expired invocation closed without ever dispatching it", () => {
+    const { store, session, run, broker, outcome } = parkedSend();
+    const binding = toolApprovalInvocationBinding(outcome.dispatch)!;
+
+    const denied = broker.denyInvocation({ dispatchId: outcome.dispatch.dispatchId, binding, code: "approval_denied" }).record;
+    expect(denied).toMatchObject({ status: "failed", errorCode: "approval_denied", dispatchedAtMs: null });
+    expect(broker.hasPendingApprovals(run.runId)).toBe(false);
+    // The ledger row is terminal, so the dispatch transition has no prepared tuple to claim.
+    expect(() => broker.markInvocationDispatched(outcome.invocation)).toThrow("stale or already dispatched");
+    expect(readToolInvocation(store, "send-1").status).toBe("failed");
+
+    // Denial does not poison the capability: the next sensitive call asks again.
+    const next = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: outcome.invocation.capabilityRef,
+      invocationId: "send-3",
+      toolName: "send_message",
+      toolInput: sendInput,
+      activeOwnerId: session.ownerId,
+    });
+    expect(next.kind).toBe("approval_required");
+    store.close();
+  });
+
+  it("skips the dispatch when a covering scoped grant already exists", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store, { nowMs: () => 10_000 });
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: null,
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourcePattern: "+15551234567",
+      effect: "allow",
+      source: "user",
+      expiresAtMs: 20_000,
+    });
+
+    const covered = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "send-covered",
+      toolName: "send_message",
+      toolInput: sendInput,
+      activeOwnerId: session.ownerId,
+    });
+    const otherRecipient = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "send-other",
+      toolName: "send_message",
+      toolInput: { ...sendInput, to: "+15550000000" },
+      activeOwnerId: session.ownerId,
+    });
+
+    expect(covered.kind).toBe("authorized");
+    expect(otherRecipient.kind).toBe("approval_required");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM desktop_dispatches").count).toBe(1);
+    store.close();
+  });
+
+  it("gives list tools a stable resource so a session grant can name them", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const parked = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "mail-1",
+      toolName: "list_mail_messages",
+      toolInput: { limit: 10 },
+      activeOwnerId: session.ownerId,
+    });
+    if (parked.kind !== "approval_required") throw new Error("expected mail read to park");
+    expect(parked.dispatch.resourceRef).toBe("mail:inbox");
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: null,
+      capability: "desktop.mail.read",
+      operation: "list_mail_messages",
+      resourcePattern: "mail:inbox",
+      effect: "allow",
+      source: "user",
+      expiresAtMs: Date.now() + 60_000,
+    });
+    const covered = broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "mail-2",
+      toolName: "list_mail_messages",
+      toolInput: { limit: 10 },
+      activeOwnerId: session.ownerId,
+    });
+    expect(covered.kind).toBe("authorized");
+    store.close();
+  });
+
+  it("parks every live screenshot behind its own Allow Once card, and no grant covers the next one", () => {
+    const { store, session, run, attempt } = fixture();
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "What is on my screen?",
+        admittedContextSnapshot: { sourceOutcomes: [{ source: "screen", outcome: "available" }] },
+      }),
+      run.runId,
+    ]);
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const capture = (invocationId: string) => broker.authorizeRelayInvocationOrRequestApproval({
+      capabilityRef: capability.capabilityRef,
+      invocationId,
+      toolName: "capture_screen",
+      toolInput: {},
+      activeOwnerId: session.ownerId,
+    });
+
+    const parked = capture("screen-1");
+    if (parked.kind !== "approval_required") throw new Error("expected the screenshot to park");
+    expect(readToolInvocation(store, "screen-1").status).toBe("prepared");
+    expect(parked.dispatch).toMatchObject({
+      kind: "approval",
+      status: "pending",
+      capability: "desktop.context.screenshot_image",
+      operation: "capture_screen",
+      resourceRef: "screen",
+    });
+    expect(parked.request.title).toBe("Take a screenshot");
+    expect(parked.request.options.map((option) => option.id)).toEqual(["allow_once", "deny"]);
+    expectCode(() => broker.markInvocationDispatched(parked.invocation), "approval_required");
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: null,
+      capability: "desktop.context.screenshot_image",
+      operation: "capture_screen",
+      resourcePattern: "screen",
+      effect: "allow",
+      source: "user",
+      expiresAtMs: Date.now() + 60_000,
+    });
+    // Even a well-formed grant row for exactly this resource does not cover a capture.
+    expect(capture("screen-2").kind).toBe("approval_required");
+    store.close();
+  });
+
+  it("closes the pending dispatch when the attempt ends before the user answers", () => {
+    const cancelled: unknown[] = [];
+    const { store, session, run, attempt, broker, outcome } = parkedSend({
+      onApprovalsCancelled: (closed) => cancelled.push(...closed),
+    });
+
+    broker.handleKernelEvent({
+      eventId: "evt_terminal",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      type: "attempt.cancelled",
+      retentionClass: "core",
+      visibility: "ui",
+      payloadJson: "{}",
+      createdAtMs: Date.now(),
+    });
+
+    expect(cancelled).toEqual([{
+      dispatchId: outcome.dispatch.dispatchId,
+      invocationId: "send-1",
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      reason: "attempt_terminal",
+    }]);
+    expect(dispatchRow(store, outcome.dispatch.dispatchId)).toMatchObject({ status: "cancelled", resolved_by: "system" });
+    expect(readToolInvocation(store, "send-1")).toMatchObject({ status: "failed", errorCode: "run_tool_attempt_terminal" });
+    expect(() => store.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+      ownerId: session.ownerId,
+      status: "resolved",
+      resolutionJson: JSON.stringify({ decision: "allow" }),
+    })).toThrow("not pending");
+    store.close();
+  });
+
+  it("never replays a parked invocation across a daemon restart", () => {
+    const { databasePath, store, session, run, outcome } = parkedSend({ daemonBootEpoch: "boot-before" });
+    expect(readToolInvocation(store, "send-1").status).toBe("prepared");
+    store.close();
+
+    const reopened = new SqliteAgentStore({ databasePath });
+    expect(readToolInvocation(reopened, "send-1")).toMatchObject({
+      status: "failed",
+      errorCode: "daemon_restart_before_dispatch",
+      retryPolicy: "never_auto_retry",
+    });
+    expect(dispatchRow(reopened, outcome.dispatch.dispatchId)).toMatchObject({
+      status: "expired",
+      resolved_by: "daemon_startup_reconciliation",
+    });
+    const resolved = reopened.allRows(
+      "SELECT payload_json FROM events WHERE type = 'approval.resolved' AND run_id = ?",
+      [run.runId],
+    );
+    expect(resolved).toHaveLength(1);
+    expect(JSON.parse(String(resolved[0]!.payload_json))).toMatchObject({
+      approvalId: outcome.dispatch.dispatchId,
+      invocationId: "send-1",
+      decision: "expired",
+      automatic: true,
+    });
+    // A user answer that arrives after the restart finds nothing to admit.
+    expect(() => reopened.resolveDesktopDispatch(outcome.dispatch.dispatchId, {
+      ownerId: session.ownerId,
+      status: "resolved",
+      resolutionJson: JSON.stringify({ decision: "allow" }),
+    })).toThrow("not pending");
+
+    // Reconciliation is idempotent: a second open records nothing new.
+    expect(reopened.reconcileStartup().expiredToolApprovalDispatchIds).toEqual([]);
+    expect(reopened.getRow("SELECT COUNT(*) AS count FROM events WHERE type = 'approval.resolved'").count).toBe(1);
+    reopened.close();
+  });
+});
+
+describe("desktop approval set and sensitive policy bundles", () => {
+  /**
+   * Relay-callable tools the policy classifies into a sensitive bundle that
+   * deliberately do not park behind the approval card. Each entry says why;
+   * a sensitive tool neither gated nor justified here fails the test.
+   */
+  const UNGATED_SENSITIVE_TOOLS: Record<string, string> = {
+    // The macOS permission prompt is itself the approval, and Swift already
+    // requires the person's current-turn consent before it opens.
+    request_permission: "native prompt plus current-turn consent",
+    // Scope: not one of the on-device tools issue #20938 gates. Safeguard: it
+    // only types into a Claude or ChatGPT "add custom connector" form that is
+    // already open in the person's signed-in browser. Risk it keeps: it takes
+    // an arbitrary server_url and can press the form's submit button.
+    fill_cloud_connector_form: "outside #20938's device tools; needs the connector form already open",
+  };
+
+  function relayCallable(toolName: string): boolean {
+    const tool = allOmiToolManifest.find((entry) => entry.name === toolName);
+    return Boolean(tool?.adapters["pi-mono"]?.advertised || tool?.adapters["omi-tools-stdio"]?.advertised);
+  }
+
+  function sensitiveBundles(toolName: string): string[] {
+    const descriptor = desktopToolPolicyInternals.descriptorFromToolName(toolName);
+    return (descriptor?.bundles ?? []).filter(desktopToolPolicyInternals.isSensitiveBundle);
+  }
+
+  const relayTools = [...new Set(allOmiToolManifest.map((tool) => tool.name))].filter(relayCallable);
+
+  it("classifies every relay-callable tool on purpose, never by the read-only default", () => {
+    const unclassified = relayTools.filter((name) => !desktopToolPolicyInternals.isExplicitlyClassified(name));
+    expect(unclassified).toEqual([]);
+  });
+
+  it("parks every relay-callable tool in a sensitive bundle, save the justified exceptions", () => {
+    const sensitive = relayTools.filter((name) => sensitiveBundles(name).length > 0);
+    expect(sensitive).toContain("capture_screen");
+    const ungated = sensitive.filter((name) => !DESKTOP_APPROVAL_TOOLS.has(name)).sort();
+    expect(ungated).toEqual(Object.keys(UNGATED_SENSITIVE_TOOLS).sort());
+  });
+
+  it("keeps screen-image tools that are not gated off every chat relay", () => {
+    for (const name of ["get_screenshot", "screenshot"]) {
+      expect(sensitiveBundles(name), name).toEqual(["desktop.context.screenshot_image"]);
+      expect(relayCallable(name), name).toBe(false);
+    }
+  });
+
+  it("classifies show_rewind_evidence as stored-frame text, not pixels for the model", () => {
+    expect(desktopToolPolicyInternals.descriptorFromToolName("show_rewind_evidence")?.bundles)
+      .toEqual(["desktop.context.screen_summary"]);
+  });
+
+  it("keeps every gated tool sensitive and relay-callable, and the local-only exception off the relays", () => {
+    for (const name of DESKTOP_APPROVAL_TOOLS) {
+      expect(sensitiveBundles(name), name).not.toEqual([]);
+      expect(relayCallable(name), name).toBe(true);
+    }
+    expect(relayCallable("get_screenshot")).toBe(false);
+  });
+
+  it("gives every gated tool the long model-side wait so a person has time to answer the card", () => {
+    for (const name of DESKTOP_APPROVAL_TOOLS) {
+      expect(allOmiToolManifest.find((tool) => tool.name === name)?.timeoutClass, name).toBe("long");
+    }
   });
 });
 

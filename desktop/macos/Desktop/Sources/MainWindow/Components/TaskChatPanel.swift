@@ -74,6 +74,9 @@ struct TaskChatPanel: View {
           // way back to the rest of a long thread.
           transcriptWindowPolicy: .compactHome,
           enablesPromptTimeline: false,
+          // Task work runs on the workstream session, so that is where its
+          // device tool approvals ask.
+          approvalSurface: coordinator.activeWorkstreamId.map { AgentSurfaceReference.workstream(workstreamId: $0) },
           // This thread is about one task; the day's summary belongs in the main chat.
           showsDailySummary: false,
           welcomeContent: { taskWelcome }

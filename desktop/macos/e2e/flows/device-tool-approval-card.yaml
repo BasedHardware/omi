@@ -1,0 +1,76 @@
+version: 2
+name: device-tool-approval-card
+tier: manual
+description: Device tool approval card — a sensitive on-device tool call parks behind a card in the thread that asked, Deny never runs it, Allow Once runs it exactly once, and the card closes with the kernel's resolution whoever ended it
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Chat/DesktopToolApprovalStore.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+ToolApprovals.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DesktopToolApprovalCard.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationToolApprovalActions.swift
+  # The chat turn's stall detector pauses while a card waits on the person.
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+ToolApprovalWait.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: No card before any request
+    # Hermetic: the store the card renders starts empty, and the snapshot is
+    # read-only, so this runs on any bundle with the bridge up.
+    bridge.action:
+      name: tool_approval_snapshot
+      params:
+        session_id: ""
+    expect:
+      ok: true
+      result.detail.count: "0"
+      result.detail.pending: "0"
+
+  - id: S2
+    name: An answer for a card that does not exist is refused
+    bridge.action:
+      name: answer_tool_approval
+      params:
+        approval_id: "disp_does_not_exist"
+        answer: deny
+    expect:
+      ok: true
+      result.detail.error: "unknown approval_id"
+
+  - id: S3
+    name: Daemon accepted the card capability
+    # Sent right after the runtime handshake; without it the relay keeps the
+    # immediate approval_required and no card can appear.
+    log.expect:
+      require:
+        - "client_capabilities client=desktop-shell desktopToolApprovals=on"
+
+  - id: S4
+    name: A direct send_message call parks behind a card
+    do: "In main chat ask: 'Call the send_message tool directly right now with to: +1 555 010 0001 and text: Running late, be there in 10. Do not call create_desktop_dispatch and do not ask me first; the app itself will ask me to approve.' Within a few seconds `omi-ctl action tool_approval_snapshot --read-only` shows one pending card for send_message with resourceRef +1 555 010 0001 and answers allow_once, allow_session, deny, and the thread shows the card under the Using send_message row with the recipient, the exact text, the service, three buttons, the covers note and the expiry time."
+
+  - id: S5
+    name: Deny never runs the tool
+    do: "Press Deny (or `omi-ctl action answer_tool_approval approval_id=<id> answer=deny`). The card reads 'Denied, not run' and keeps its preview; the model replies that the message was not sent; the kernel store shows the dispatch resolved by user with decision deny and the ledger row failed with error_code approval_denied and no dispatched_at_ms. Nothing reaches Messages.app."
+
+  - id: S6
+    name: Allow Once runs the tool exactly once
+    do: "Ask for a direct list_message_chats call with limit 3 the same way. Press Allow Once. The card reads 'Allowed once', the app log shows one 'Executing tool: list_message_chats' line, and the ledger shows one row with one dispatched_at_ms and one completed_at_ms. A bundle without Full Disk Access sees the tool fail inside Messages access, which the model reports; that is a permission fact, not an approval one."
+
+  - id: S7
+    name: Waiting on the person is not a stall
+    do: "While a card is pending, past 20 s the tool row reads 'Waiting for your approval' with no 'taking longer than usual' banner, past 90 s the turn is still alive (the app log has no 'tool no-progress guard fired' line), and the composer's stop button still cancels the run with the card reading 'Cancelled, not run'."
+
+  - id: S8
+    name: Expiry closes an unanswered card
+    do: "Ask for a direct list_mail_messages call with limit 1 and leave the card alone for 180 s. The card reads 'Expired, not run', the model is told the approval expired, and the ledger row is failed with error_code approval_expired and no dispatched_at_ms. Nothing runs."
+
+  - id: S9
+    name: Logs clean
+    log.expect:
+      forbid:
+        - "Fatal error"

@@ -792,6 +792,7 @@ final class DesktopAutomationActionRegistry {
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     registerConversationRecordingActions()
+    registerToolApprovalActions()
     register(
       name: "refresh_all_data",
       effects: [.localState, .networkOrModel, .remoteWrite],
