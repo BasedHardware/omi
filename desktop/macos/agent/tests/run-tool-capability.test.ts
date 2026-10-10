@@ -1334,6 +1334,108 @@ describe("RunToolCapabilityBroker desktop tool approvals", () => {
     store.close();
   });
 
+  describe("ui_snapshot", () => {
+    function snapshotBroker() {
+      const fx = fixture();
+      const broker = createBroker(fx.store);
+      const capability = broker.register({
+        ownerId: fx.session.ownerId,
+        sessionId: fx.session.sessionId,
+        runId: fx.run.runId,
+        attemptId: fx.attempt.attemptId,
+      });
+      const snapshot = (invocationId: string, toolInput: Record<string, unknown>) =>
+        broker.authorizeRelayInvocationOrRequestApproval({
+          capabilityRef: capability.capabilityRef,
+          invocationId,
+          toolName: "ui_snapshot",
+          toolInput,
+          activeOwnerId: fx.session.ownerId,
+        });
+      return { ...fx, broker, capability, snapshot };
+    }
+
+    it("parks behind an observe approval scoped to the lowercased app", () => {
+      const { store, capability, snapshot } = snapshotBroker();
+      expect(capability.allowedToolNames).toContain("ui_snapshot");
+
+      const parked = snapshot("snap-1", { bundle_id: " com.apple.TextEdit ", window_title: "Untitled" });
+
+      if (parked.kind !== "approval_required") throw new Error("expected the snapshot to park");
+      expect(parked.dispatch).toMatchObject({
+        capability: "desktop.automation.observe",
+        operation: "ui_snapshot",
+        resourceRef: "com.apple.textedit",
+      });
+      expect(parked.invocation.effectClass).toBe("read_only");
+      expect(parked.invocation.retryPolicy).toBe("safe_retry");
+      expect(parked.request.options.map((option) => option.id)).toEqual(["allow_once", "allow_session", "deny"]);
+      store.close();
+    });
+
+    it("lets a session grant for one app run its next snapshot without a card while another app still asks", () => {
+      const { store, session, snapshot } = snapshotBroker();
+      store.insertGrant({
+        sessionId: session.sessionId,
+        runId: null,
+        capability: "desktop.automation.observe",
+        operation: "ui_snapshot",
+        resourcePattern: "com.apple.textedit",
+        effect: "allow",
+        source: "user",
+        expiresAtMs: Date.now() + 60_000,
+      });
+
+      expect(snapshot("textedit", { bundle_id: "com.apple.TextEdit" }).kind).toBe("authorized");
+      const notes = snapshot("notes", { bundle_id: "com.apple.Notes" });
+      expect(notes.kind).toBe("approval_required");
+      if (notes.kind === "approval_required") expect(notes.dispatch.resourceRef).toBe("com.apple.notes");
+      store.close();
+    });
+
+    it("does not let a wildcard or act grant cover an app", () => {
+      const { store, session, snapshot } = snapshotBroker();
+      for (const [capability, resourcePattern] of [
+        ["desktop.automation.observe", "*"],
+        ["desktop.automation.act", "com.apple.textedit"],
+      ] as const) {
+        store.insertGrant({
+          sessionId: session.sessionId,
+          runId: null,
+          capability,
+          operation: "ui_snapshot",
+          resourcePattern,
+          effect: "allow",
+          source: "user",
+          expiresAtMs: Date.now() + 60_000,
+        });
+      }
+
+      expect(snapshot("textedit", { bundle_id: "com.apple.TextEdit" }).kind).toBe("approval_required");
+      store.close();
+    });
+
+    it("rejects a refused app without writing a dispatch or a ledger row", () => {
+      const { store, snapshot } = snapshotBroker();
+
+      expectCode(() => snapshot("terminal", { bundle_id: "com.apple.Terminal" }), "approval_required");
+      expectCode(() => snapshot("omi", { bundle_id: "com.omi.computer-macos" }), "approval_required");
+      expectCode(() => snapshot("malformed", { bundle_id: "Terminal" }), "approval_required");
+      expect(counts(store)).toEqual({ dispatches: 0, ledger: 0 });
+      store.close();
+    });
+
+    it("holds the input to the manifest schema", () => {
+      const { store, snapshot } = snapshotBroker();
+
+      expectCode(() => snapshot("by-name", { bundle_id: "com.apple.TextEdit", app_name: "TextEdit" }), "invalid_tool_input");
+      expectCode(() => snapshot("no-app", { window_title: "Untitled" }), "invalid_tool_input");
+      expectCode(() => snapshot("empty", { bundle_id: "" }), "invalid_tool_input");
+      expect(counts(store)).toEqual({ dispatches: 0, ledger: 0 });
+      store.close();
+    });
+  });
+
   it("closes the pending dispatch when the attempt ends before the user answers", () => {
     const cancelled: unknown[] = [];
     const { store, session, run, attempt, broker, outcome } = parkedSend({

@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { agentControlCapabilityManifest } from "./control-tool-manifest.js";
 import { toolManifestEntry, type OmiToolManifestEntry } from "./omi-tool-manifest.js";
 import { utf8Excerpt } from "./tool-result-projector.js";
+import { isRefusedUIAutomationBundleId, isWellFormedUIAutomationBundleId } from "./ui-automation-safety-floor.js";
 
 export type DesktopCoordinatorBundle =
   | "desktop.agent_control.read"
@@ -16,6 +17,7 @@ export type DesktopCoordinatorBundle =
   | "desktop.automation.read"
   | "desktop.automation.act_dev_only"
   | "desktop.automation.act"
+  | "desktop.automation.observe"
   | "desktop.contacts.read"
   | "desktop.messaging.read"
   | "desktop.mail.read"
@@ -115,6 +117,10 @@ const MESSAGING_SEND_TOOLS = new Set(["send_message"]);
 // Production actuation, unlike `act_dev_only`: allowed in release bundles but
 // never without a dispatch or an unexpired scoped grant.
 const AUTOMATION_ACT_TOOLS = new Set(["run_applescript"]);
+// Reading another app's window exposes that app's content, so it is as
+// sensitive as a message thread. It is its own bundle so that a grant to read
+// an app never counts as a grant to act in it.
+const AUTOMATION_OBSERVE_TOOLS = new Set(["ui_snapshot"]);
 const LOCAL_READ_TOOLS = new Set([
   "execute_sql",
   "get_daily_recap",
@@ -191,6 +197,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (MAIL_READ_TOOLS.has(tool.name)) bundles.add("desktop.mail.read");
   if (MESSAGING_SEND_TOOLS.has(tool.name)) bundles.add("desktop.messaging.send");
   if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act");
+  if (AUTOMATION_OBSERVE_TOOLS.has(tool.name)) bundles.add("desktop.automation.observe");
   if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
   if (tool.executor.kind === "runtimeControl") {
@@ -210,7 +217,7 @@ function isExplicitlyClassified(toolName: string): boolean {
   return [
     LOCAL_READ_TOOLS, SCREEN_SUMMARY_TOOLS, SCREEN_IMAGE_TOOLS, TASK_WRITE_TOOLS, MEMORY_WRITE_TOOLS,
     LEDGER_WRITE_TOOLS, AUTOMATION_READ_TOOLS, CONTACTS_READ_TOOLS, MESSAGING_READ_TOOLS, MAIL_READ_TOOLS,
-    MESSAGING_SEND_TOOLS, AUTOMATION_ACT_TOOLS, PERMISSION_REQUEST_TOOLS, EXTERNAL_SEND_TOOLS,
+    MESSAGING_SEND_TOOLS, AUTOMATION_ACT_TOOLS, AUTOMATION_OBSERVE_TOOLS, PERMISSION_REQUEST_TOOLS, EXTERNAL_SEND_TOOLS,
   ].some((set) => set.has(toolName));
 }
 
@@ -221,6 +228,7 @@ const SENSITIVE_BUNDLES: readonly DesktopCoordinatorBundle[] = [
   "external.write_send",
   "desktop.automation.act_dev_only",
   "desktop.automation.act",
+  "desktop.automation.observe",
   "desktop.messaging.read",
   "desktop.mail.read",
   "desktop.messaging.send",
@@ -284,6 +292,7 @@ function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): De
 const RESOURCE_SCOPED_GRANT_BUNDLES: ReadonlySet<DesktopCoordinatorBundle> = new Set([
   "desktop.messaging.send",
   "desktop.automation.act",
+  "desktop.automation.observe",
   "desktop.context.screenshot_image",
 ]);
 
@@ -329,6 +338,8 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
       reason: "Desktop automation actuation is only available in dev/test bundles.",
     };
   }
+  const uiTargetDenial = uiAutomationTargetDenial(request, requiredBundles);
+  if (uiTargetDenial) return { decision: "deny", descriptor, requiredBundles, reason: uiTargetDenial };
 
   const requiresDispatch =
     request.includesScreenshotImageBytes === true ||
@@ -362,6 +373,27 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
     return { decision: "deny", descriptor, requiredBundles, reason: "The manifest marks this capability denied." };
   }
   return { decision: "allow", descriptor, requiredBundles, reason: "Selected bundles allow this read-only local operation." };
+}
+
+/**
+ * A UI automation request names its app by bundle id, and the safety floor
+ * refuses some apps outright. Those refusals are hard denies, so no card ever
+ * asks the person to approve something Omi would refuse anyway. Swift checks
+ * the same floor again against the process it actually reads.
+ */
+function uiAutomationTargetDenial(
+  request: DesktopToolPolicyRequest,
+  requiredBundles: readonly DesktopCoordinatorBundle[],
+): string | undefined {
+  if (!requiredBundles.includes("desktop.automation.observe")) return undefined;
+  const target = request.resourceRef;
+  if (!target || !isWellFormedUIAutomationBundleId(target)) {
+    return "UI automation needs a valid bundle_id naming the app.";
+  }
+  if (isRefusedUIAutomationBundleId(target)) {
+    return "Omi never reads this app: Omi itself, terminals, password managers and credential prompts are always refused.";
+  }
+  return undefined;
 }
 
 export const desktopToolPolicyInternals = {

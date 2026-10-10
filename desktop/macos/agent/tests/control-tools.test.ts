@@ -725,6 +725,21 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("evaluates a window read per app and refuses the floor's apps outright", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const evaluate = async (resourceRef: string) => parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "evaluate_desktop_tool_policy", {
+        toolName: "ui_snapshot",
+        selectedBundles: ["desktop.automation.observe"],
+        resourceRef,
+      }),
+    );
+
+    expect(await evaluate("com.apple.textedit")).toMatchObject({ ok: true, policy: { decision: "dispatch_required" } });
+    expect(await evaluate("com.apple.terminal")).toMatchObject({ ok: true, policy: { decision: "deny" } });
+    store.close();
+  });
+
   it("accepts a signed direct-control owner guard when evaluating policy", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = parseToolResult(
@@ -1485,6 +1500,68 @@ describe("agent control tools", () => {
         dispatchId: outcome.dispatch.dispatchId,
         status: "cancelled",
         resolution: {},
+      });
+      await finish();
+      store.close();
+    });
+
+    it("allow for this chat on a window read mints an observe grant for exactly that app", async () => {
+      const live = await liveSendMessageRun("snap-1");
+      live.kernel.setDesktopToolApprovalsEnabled(true);
+      const { store, kernel, sessionId, capabilityRef, finish } = live;
+      const snapshot = (invocationId: string, bundleId: string) =>
+        kernel.authorizeRelayedRunToolInvocationOrRequestApproval({
+          capabilityRef,
+          invocationId,
+          toolName: "ui_snapshot",
+          toolInput: { bundle_id: bundleId },
+          activeOwnerId: "owner",
+        });
+      const parked = snapshot("snap-1", "com.apple.TextEdit");
+      if (parked.kind !== "approval_required") throw new Error("expected ui_snapshot to park");
+      const grant = (resourcePattern: string) => ({
+        runId: null,
+        capability: "desktop.automation.observe",
+        operation: "ui_snapshot",
+        resourcePattern,
+        effect: "allow",
+        source: "user",
+        expiresAtMs: Date.now() + 60 * 60_000,
+      });
+
+      // A grant for some other app than the one the card asked about is refused.
+      const mismatched = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: parked.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+          grant: grant("com.apple.notes"),
+        }),
+      );
+      expect(mismatched.ok).toBe(false);
+      expect(store.getRow("SELECT COUNT(*) AS count FROM grants").count).toBe(0);
+
+      const resolved = parseToolResult(
+        await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+          dispatchId: parked.dispatch.dispatchId,
+          status: "resolved",
+          resolution: { decision: "allow" },
+          grant: grant("com.apple.textedit"),
+        }),
+      );
+      expect(resolved).toMatchObject({
+        ok: true,
+        grant: { sessionId, capability: "desktop.automation.observe", resourcePattern: "com.apple.textedit" },
+      });
+      kernel.markRunToolInvocationDispatched(parked.invocation);
+
+      expect(snapshot("snap-2", "com.apple.textedit").kind).toBe("authorized");
+      const notes = snapshot("snap-3", "com.apple.Notes");
+      expect(notes.kind).toBe("approval_required");
+      await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+        dispatchId: notes.kind === "approval_required" ? notes.dispatch.dispatchId : "",
+        status: "resolved",
+        resolution: { decision: "deny" },
       });
       await finish();
       store.close();
