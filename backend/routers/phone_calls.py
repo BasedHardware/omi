@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -25,6 +26,8 @@ from utils.twilio_service import (
     get_caller_id,
     validate_twilio_signature,
 )
+
+logger = logging.getLogger(__name__)
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
 
@@ -145,10 +148,12 @@ def verify_phone_number(
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Failed to start phone verification for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Failed to start phone verification for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
@@ -239,7 +244,8 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
+        logger.error(f"Failed to generate phone access token for uid {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate token. Please try again later.")
 
 
 # ************************************************
