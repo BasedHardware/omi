@@ -613,6 +613,17 @@ first auth message; the backend fixes its platform to `web` before creating
 the conversation. Missing provenance remains unknown rather than being
 assigned to a different device.
 
+## Summary vectors during durable finalization
+
+The finalizer writes summary vectors only after successful lifecycle persistence
+and a winning fanout claim, after smart-merge donor handling. It indexes every
+structured, non-discarded, non-deleted conversation it processes, including
+already-completed replays and rows whose intelligence bundle is suppressed.
+JIT deferral does not defer this write: `FIRST_OPEN_EFFECTS` remains folder
+assignment and app fanout only, and indexing does not mutate obligation receipts.
+A persistence loss or losing fanout claim emits no vector or other canonical
+side effect. Completed fanout replays do not repeat the write.
+
 ## Duplicate captures across devices
 
 An Omi device paired to the phone app and the macOS app in the same room open

@@ -1276,6 +1276,11 @@ class SharedPreferencesUtil {
     saveString('speaker_label_last_used_ms', jsonEncode(value));
   }
 
+  /// The one-time "label all speakers, then tap Done" tip has been shown on this install.
+  bool get speakerLabelingTipShown => getBool('speakerLabelingTipShown');
+
+  set speakerLabelingTipShown(bool value) => saveBool('speakerLabelingTipShown', value);
+
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;

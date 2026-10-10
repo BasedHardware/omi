@@ -1,6 +1,7 @@
 """Owner-recognition counters: one finalized conversation, live decisions, rollover."""
 
 import asyncio
+import ast
 import importlib
 import importlib.util
 import json
@@ -264,7 +265,23 @@ def test_process_conversation_observes_every_successful_persist():
     assert '_observe_owner_recognition_completion(completed)' in report
     fence = body.index('if not persisted:')
     assert body.index('report_persistence(persisted, completed=conversation)') < fence
-    assert 'return conversation' in body[fence : fence + 400]
+    process = next(
+        node
+        for node in ast.parse(text).body
+        if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
+    )
+    fence_node = next(
+        node
+        for node in process.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.UnaryOp)
+        and isinstance(node.test.op, ast.Not)
+        and isinstance(node.test.operand, ast.Name)
+        and node.test.operand.id == 'persisted'
+    )
+    assert isinstance(fence_node.body[-1], ast.Return)
+    assert isinstance(fence_node.body[-1].value, ast.Name)
+    assert fence_node.body[-1].value.id == 'conversation'
     for marker in (
         'report_persistence(\n                persisted,',
         'if plan.mode == \'store_projection\'',

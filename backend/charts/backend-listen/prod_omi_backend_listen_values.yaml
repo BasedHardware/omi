@@ -233,6 +233,8 @@ env:
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
     value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_RESCUE
+    value: "shadow"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT

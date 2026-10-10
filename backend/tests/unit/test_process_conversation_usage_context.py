@@ -412,12 +412,19 @@ def test_sub_feature_constants_exist():
     assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING
 
 
-def test_fenced_completion_submits_no_derived_work(monkeypatch):
+@pytest.mark.parametrize(
+    'discarded, structured, deleted',
+    [(False, True, False), (True, True, False), (False, False, False), (False, True, True)],
+)
+def test_fenced_completion_submits_nothing(monkeypatch, discarded, structured, deleted):
     input_conversation = MagicMock()
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
 
     completed_conversation = MagicMock()
+    completed_conversation.discarded = discarded
+    completed_conversation.deleted = deleted
+    completed_conversation.structured = MagicMock() if structured else None
     completed_conversation.id = "conversation-fenced"
     completed_conversation.dict.return_value = {"id": "conversation-fenced", "status": "completed"}
 
@@ -427,7 +434,7 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     create_audio_files = MagicMock()
     update_conversation = MagicMock()
     observed_persistence: list[bool] = []
-    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), discarded))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
     monkeypatch.setattr(process_conversation, "submit_with_context", submit)
@@ -456,7 +463,8 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     the result and hands back the entire derived-effect bundle as a deferred
     runner, emitting zero side effects inline.  Only invoking the runner (after
     the durable finalizer has transactionally claimed ownership) emits calendar,
-    usage/app, vector, action/goal, audio, webhook, and memory work.  A losing
+    usage/app, action/goal, audio, webhook, and memory work. The finalizer
+    writes the vector independently behind that same claim.  A losing
     claim that never invokes the runner is a no-side-effect outcome."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
@@ -508,7 +516,8 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     # Invoking the runner (ownership proven) emits every derived effect.
     captured[0]()
     trigger_apps.assert_called_once()
-    assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
+    assert submit.call_count >= 3  # action items, goals, webhook; vector belongs to finalizer
+    assert all(call.args[1] is not process_conversation.save_structured_vector for call in submit.call_args_list)
 
 
 def _explicit_selection_flow_conversation():
@@ -1654,3 +1663,36 @@ def test_unreadable_writer_mode_preserves_legacy_extraction(monkeypatch):
     process_conversation.extract_memories('uid-err', _ledger_gate_conversation('conv-err'))
 
     inner.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'discarded, structured, outcome',
+    [(True, True, 'skipped_discarded'), (False, False, 'skipped_no_structured'), (False, True, 'success')],
+)
+def test_summary_vector_outcomes(monkeypatch, discarded, structured, outcome):
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as metric
+
+    conversation = MagicMock(discarded=discarded, structured=MagicMock() if structured else None)
+    embed = MagicMock(return_value=[0.1])
+    upsert = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation, 'generate_embedding', embed)
+    monkeypatch.setattr(process_conversation, 'upsert_vector2', upsert)
+    before = metric.labels(outcome=outcome)._value.get()
+    assert process_conversation.save_structured_vector('uid', conversation) is (outcome == 'success')
+    assert metric.labels(outcome=outcome)._value.get() == before + 1
+    assert embed.call_count == upsert.call_count == (1 if outcome == 'success' else 0)
+
+
+@pytest.mark.parametrize('discarded, structured', [(False, True), (True, True), (False, False)])
+def test_summary_vector_update_only_keeps_metadata_semantics(monkeypatch, discarded, structured):
+    conversation = MagicMock(discarded=discarded, structured=MagicMock() if structured else None)
+    embed = MagicMock()
+    upsert = MagicMock()
+    update = MagicMock()
+    monkeypatch.setattr(process_conversation, 'generate_embedding', embed)
+    monkeypatch.setattr(process_conversation, 'upsert_vector2', upsert)
+    monkeypatch.setattr(process_conversation, 'update_vector_metadata', update)
+    assert process_conversation.save_structured_vector('uid', conversation, update_only=True)
+    embed.assert_not_called()
+    upsert.assert_not_called()
+    update.assert_called_once()
