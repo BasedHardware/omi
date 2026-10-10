@@ -28,7 +28,15 @@ class _Unchanged(Exception):
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
     'people': {'name', 'aliases', 'organization', 'subtitle'},
-    'conversations': {'user_title', 'structured.title', 'transcript_segments', 'manual_speaker_assignments'},
+    'conversations': {
+        'user_title',
+        'structured.title',
+        'structured.overview',
+        'structured.sections',
+        'structured.note_claims',
+        'transcript_segments',
+        'manual_speaker_assignments',
+    },
     'action_items': {'status', 'completed', 'completed_at'},
 }
 

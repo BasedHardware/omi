@@ -26,6 +26,8 @@ def target_label(ref, row):
     structured = row.get('structured') or {}
     if collection == 'conversations':
         label, kind = row.get('user_title') or structured.get('title'), 'Conversation'
+        if not isinstance(label, str) or not label.strip():
+            return 'Untitled conversation'
     elif collection in {'memories', 'memory_items'}:
         label, kind = row.get('content'), 'Memory'
     elif collection == 'people':

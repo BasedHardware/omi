@@ -639,3 +639,69 @@ def test_real_spelling_fact_has_authority_600(harness):
     assert item['subject_entity_id'] == 'vocabulary:1' and item['content'] == 'Paraform'
     assert item['write_reason'] == 'direct_user_statement'
     assert item['predicate'] == 'vocabulary'
+
+
+@pytest.mark.parametrize('kind', ['title', 'overview'])
+def test_dream_summary_edits_apply_undo_redo_and_suppress(harness, kind):
+    from models.dream_agent import Edit
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    before = {
+        'id': 'synthetic-summary',
+        'structured': {
+            'title': '',
+            'overview': '',
+            'sections': [{'heading': 'Old section'}],
+            'note_claims': [{'text': 'Old claim'}],
+        },
+        'transcript_segments': [{'text': 'We will build a toy boat.'}],
+    }
+    target = user.collection('conversations').document(before['id'])
+    target.set(before)
+    ref = 'conversations/' + before['id']
+    edit = Edit(
+        kind=kind, target=ref, before='', after='Building a toy boat', reason='Missing summary field', evidence=[ref]
+    )
+    assert dream_tools.apply_edit(uid, edit, {ref: before}) == 'applied'
+    after = target.get().to_dict()
+    assert after['structured'][kind] == edit.after
+    if kind == 'overview':
+        assert after['structured']['sections'] == after['structured']['note_claims'] == []
+    change = client.get('/v1/review/changes').json()['changes'][0]
+    assert change['snippet'] == edit.after
+    assert change['refs'][0]['id'] == before['id']
+    assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 200
+    assert target.get().to_dict() == before
+    assert dream_tools.apply_edit(uid, edit, {ref: before}) == 'suppressed'
+    assert client.post(f'/v1/review/changes/{change["change_id"]}/redo').status_code == 200
+    assert target.get().to_dict() == after
+    target.update({'structured.' + kind: 'Direct user correction'})
+    assert client.post(f'/v1/review/changes/{change["change_id"]}/undo').status_code == 409
+
+
+def test_dream_title_and_overview_in_same_pass_share_evidence(harness):
+    from models.dream_agent import Edit
+    from utils import dream_tools
+
+    client, uid, user, db = harness
+    before = {
+        'id': 'synthetic-pair',
+        'structured': {'title': '', 'overview': ''},
+        'transcript_segments': [{'text': 'We will build a toy boat.'}],
+    }
+    target = user.collection('conversations').document(before['id'])
+    target.set(before)
+    ref = 'conversations/' + before['id']
+    for kind in ['title', 'overview']:
+        edit = Edit(
+            kind=kind,
+            target=ref,
+            before='',
+            after='Building a toy boat',
+            reason='Missing summary field',
+            evidence=[ref],
+        )
+        assert dream_tools.apply_edit(uid, edit, {ref: before}) == 'applied'
+    assert target.get().to_dict()['structured']['title'] == 'Building a toy boat'
+    assert target.get().to_dict()['structured']['overview'] == 'Building a toy boat'

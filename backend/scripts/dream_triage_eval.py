@@ -38,9 +38,9 @@ def load_cases(path):
     fixture = json.loads(path.read_text())
     cases = fixture['cases']
     assert fixture['version'] == 1
-    assert len(cases) == 25 and len({case['id'] for case in cases}) == 25
+    assert len(cases) == 29 and len({case['id'] for case in cases}) == 29
     defects = [case for case in cases if case['expected_problem'] is not None]
-    assert len(defects) == 15 and sum(case['canary'] for case in cases) == 1
+    assert len(defects) == 18 and sum(case['canary'] for case in cases) == 1
     assert {case['expected_problem'] for case in defects} == {'spelling', 'duplicates', 'entity', 'tasks', 'quality'}
     for case in cases:
         assert case['records'] and set(case['expected_refs']) <= set(case['records'])
@@ -100,7 +100,7 @@ async def attempt(case, repeat, semaphore):
     return row
 
 
-def summarize(rows):
+def summarize(rows, *, defect_trials=75, clean_trials=50):
     defects = [row for row in rows if row['problem']]
     clean = [row for row in rows if not row['problem']]
     canary = [row for row in rows if row['canary']]
@@ -116,8 +116,8 @@ def summarize(rows):
         'canary_hits': canary_hits,
         'canary_trials': len(canary),
         'errors': errors,
-        'targets_met': len(defects) == 75
-        and len(clean) == 50
+        'targets_met': len(defects) == defect_trials
+        and len(clean) == clean_trials
         and len(canary) == 5
         and errors == 0
         and hits / len(defects) >= 0.85
@@ -158,7 +158,11 @@ async def run(args, cases):
                 semaphore = asyncio.Semaphore(args.concurrency)
                 for repeat in range(1, args.repeats + 1):
                     rows.extend(await asyncio.gather(*(attempt(case, repeat, semaphore) for case in cases)))
-                    summary = summarize(rows)
+                    summary = summarize(
+                        rows,
+                        defect_trials=5 * sum(bool(c['expected_problem']) for c in cases),
+                        clean_trials=5 * sum(not c['expected_problem'] for c in cases),
+                    )
                     report['arms'][name]['summary'] = summary
                     args.output.write_text(json.dumps(report, indent=2) + '\n')
                     print(json.dumps({'arm': name, 'repeat': repeat, **summary}), flush=True)
@@ -182,7 +186,7 @@ def main():
     args = parser.parse_args()
     cases = load_cases(args.fixture)
     if args.check_fixtures:
-        print('25 invented cases: 15 defects, 10 clean; both prompt projections fit.')
+        print('29 invented cases: 18 defects, 11 clean; both prompt projections fit.')
         return
     report = asyncio.run(run(args, cases))
     # Baseline failure is the comparison; candidate failure is blocking.
