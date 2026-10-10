@@ -18,11 +18,13 @@ import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -68,6 +70,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+  bool? _hasDeviceNameStorageFeature;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -102,7 +105,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     super.dispose();
   }
 
-  // Device features: LED dimming and mic gain.
+  // Device features: LED dimming, mic gain and a name stored on the device.
 
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
@@ -112,10 +115,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
+    final hasDeviceNameStorage = (features & OmiFeatures.deviceNameStorage) != 0;
     if (!mounted) return;
     setState(() {
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
+      _hasDeviceNameStorageFeature = hasDeviceNameStorage;
     });
 
     final ratio = hasDimming ? await connection.getLedDimRatio() : null;
@@ -179,6 +184,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         _micGainDebounce?.cancel();
         setState(() => _micGain = value);
         _updateMicGain(value);
+      },
+    );
+  }
+
+  Future<bool> _saveStoredDeviceName(String deviceId, String name) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return await connection?.setStoredDeviceName(name) ?? false;
+  }
+
+  void _renameDevice(BtDevice device) {
+    showRenameDeviceSheet(
+      context,
+      deviceId: device.id,
+      advertisedName: device.name,
+      saveToDevice: _hasDeviceNameStorageFeature == true ? (name) => _saveStoredDeviceName(device.id, name) : null,
+      onSaved: () {
+        if (!mounted) return;
+        setState(() {});
+        OmiFeedback.confirm(context, context.l10n.nameUpdatedSuccessfully);
       },
     );
   }
@@ -316,9 +340,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Forget and unpair. Neither can be undone, so both confirm every time (ux-contract §4).
 
-  Future<void> _clearStoredDevice() async {
+  Future<void> _clearStoredDevice(String deviceId) async {
     await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
     SharedPreferencesUtil().deviceName = '';
+    await SharedPreferencesUtil().clearDeviceCustomName(deviceId);
   }
 
   void _leavePage() {
@@ -339,7 +364,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     // Read the id before the stored device is cleared.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
     if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
-    await _clearStoredDevice();
+    await _clearStoredDevice(deviceId);
     // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
       await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -367,7 +392,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     if (!confirmed) return;
 
-    await _clearStoredDevice();
+    // Read the id before the stored device is cleared.
+    await _clearStoredDevice(provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id);
     final device = provider.connectedDevice;
     if (device != null) {
       provider.markDisconnectIntentional(device.id);
@@ -591,6 +617,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           DeviceInfoGroups(
             pairedDevice: paired,
             isDeviceConnected: connected != null,
+            onRenameDevice: paired != null && paired.id.isNotEmpty ? () => _renameDevice(paired) : null,
             rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
           ),
           gap,

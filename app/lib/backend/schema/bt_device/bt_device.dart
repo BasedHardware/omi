@@ -4,6 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/connectors/bee_connection.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/fieldy_connection.dart';
 import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
@@ -317,6 +318,8 @@ class BtDevice {
   set hardwareRevision(String hardwareRevision) => _hardwareRevision = hardwareRevision;
   set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
   set serialNumber(String? serialNumber) => _serialNumber = serialNumber;
+
+  String get displayName => SharedPreferencesUtil().getDeviceCustomName(id) ?? name;
 
   String getShortId() => BtDevice.shortId(id);
 

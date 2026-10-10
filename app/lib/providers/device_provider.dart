@@ -21,6 +21,7 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/device_custom_names.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
@@ -869,6 +870,31 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
+  /// Brings this phone's name for [device] in line with the one stored on it. The name is
+  /// cosmetic, so a failure here is logged and never reaches the connect flow.
+  Future<void> _syncStoredDeviceName(BtDevice device, int generation) async {
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (!_isCurrent(generation)) return;
+      if (connection == null || (await connection.getFeatures() & OmiFeatures.deviceNameStorage) == 0) return;
+      if (!_isCurrent(generation)) return;
+      final stored = await connection.getStoredDeviceName();
+      if (!_isCurrent(generation) || stored == null) return;
+      final prefs = SharedPreferencesUtil();
+      if (prefs.shouldPushLocalDeviceName(device.id, stored)) {
+        if (await connection.setStoredDeviceName(prefs.getDeviceCustomName(device.id)!) && _isCurrent(generation)) {
+          await prefs.markDeviceNameSynced(device.id);
+        }
+        return;
+      }
+      await prefs.adoptStoredDeviceName(device.id, stored);
+      if (!_isCurrent(generation)) return;
+      notifyListeners();
+    } catch (e) {
+      Logger.debug('Stored device name sync failed: $e');
+    }
+  }
+
   void _onDeviceConnected(BtDevice device, int generation) async {
     final syncOnly = SyncWakeScope.syncOnly;
     Logger.debug('_onConnected inside: $connectedDevice');
@@ -919,6 +945,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
     SharedPreferencesUtil().deviceName = device.name;
+    // Not awaited: its BLE round trips must not hold up the recording sync set up below.
+    unawaited(_syncStoredDeviceName(device, generation));
 
     // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
     // Glass unit becomes DeviceType.openglass once hasImageStream is read. Push

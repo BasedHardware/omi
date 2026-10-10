@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <zephyr/drivers/rtc.h>
 
+#define APP_SETTINGS_DEVICE_NAME_MAX_LEN 128
+
 /**
  * @brief Initialize the settings subsystem.
  *
@@ -91,5 +93,9 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  * @param imu_timestamp Output IMU timestamp counter.
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
+
+int app_settings_save_device_name(const uint8_t *name, uint16_t len);
+
+uint16_t app_settings_get_device_name(uint8_t *buf, uint16_t buf_len);
 
 #endif // SETTINGS_H

@@ -363,10 +363,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       bool isConnecting = provider.connectingToDeviceId == device.id;
       final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
-      final label = () {
-        final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
-        return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
-      }();
+      final label = DeviceUtils.listLabel(device, provider.visibleDeviceList);
       final onTap = !provider.isClicked
           ? () async {
               OmiHaptics.selection();
