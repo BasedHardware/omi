@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "सूचना आणि प्रदर्शन",
     "helpAndAbout": "मदत आणि माहिती",
     "speakerTagPromptTitle": "Omi ला आवाज ओळखायला मदत करा",
-    "speakerTagPromptIsThisYou": "हे तुम्ही आहात का?",
+    "speakerTagPromptIsThisYou": "हे तुम्ही होता का?",
     "speakerTagPromptIsThisPerson": "हे {name} आहेत का?",
     "speakerTagPromptWhoIsThis": "हे कोण आहे?",
     "speakerTagPromptThatsMe": "हा मी आहे",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "कमकुवत जुळणी",
     "voiceMatchMeterLabel": "आवाज जुळणी: {level}",
     "speakerTagPromptHintIdentify": "तुमचे उत्तर Omi ला पुढच्या वेळी हा आवाज ओळखण्यास मदत करते.",
-    "speakerTagPromptHintOwner": "तुमचा आवाज इतरांच्या आवाजांपासून वेगळा ओळखण्यास Omi ला मदत करते.",
+    "speakerTagPromptHintOwner": "तुमचे उत्तर फक्त ऐकवलेल्या उताऱ्याला लेबल करते.",
     "speakerTagPromptSavedAs": "{name} म्हणून सेव्ह केले",
     "speakerTagPromptSavedAsYou": "तुम्ही म्हणून सेव्ह केले",
     "speakerTagPromptIgnoredNote": "Omi या आवाजाबद्दल पुन्हा विचारणार नाही",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 दुरुस्ती} other{{fixes} दुरुस्त्या}} · {asks, plural, =1{1 सूचना} other{{asks} सूचना}}",
     "dreamReportDropped": "{count, plural, =1{1 जुना बदल वगळला} other{{count} जुने बदल वगळले}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}",
+    "speakerTagPromptExcerptSaved": "या उताऱ्यासाठी उत्तर जतन केले.",
     "pinPersonDescription": "पिन केलेले लोक तुमच्या लोक यादीच्या वर राहतात आणि स्वच्छता त्यांना काढत नाही."
 }

@@ -3475,7 +3475,7 @@
     "notificationsAndDisplay": "Bildirimler ve Görünüm",
     "helpAndAbout": "Yardım ve Hakkında",
     "speakerTagPromptTitle": "Omi'nin sesleri tanımasına yardım edin",
-    "speakerTagPromptIsThisYou": "Bu siz misiniz?",
+    "speakerTagPromptIsThisYou": "Bu sen miydin?",
     "speakerTagPromptIsThisPerson": "Bu {name} mi?",
     "speakerTagPromptWhoIsThis": "Bu kim?",
     "speakerTagPromptThatsMe": "Bu benim",
@@ -3722,7 +3722,7 @@
     "voiceMatchWeak": "Zayıf eşleşme",
     "voiceMatchMeterLabel": "Ses eşleşmesi: {level}",
     "speakerTagPromptHintIdentify": "Yanıtınız, Omi'nin bu sesi bir dahaki sefere tanımasına yardımcı olur.",
-    "speakerTagPromptHintOwner": "Omi'nin sizin sesinizi başkalarının sesinden ayırt etmesine yardımcı olur.",
+    "speakerTagPromptHintOwner": "Yanıtın yalnızca oynatılan bölümü etiketler.",
     "speakerTagPromptSavedAs": "{name} olarak kaydedildi",
     "speakerTagPromptSavedAsYou": "Siz olarak kaydedildi",
     "speakerTagPromptIgnoredNote": "Omi bu ses hakkında bir daha sormayacak",
@@ -3922,5 +3922,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 düzeltme} other{{fixes} düzeltme}} · {asks, plural, =1{1 öneri} other{{asks} öneri}}",
     "dreamReportDropped": "{count, plural, =1{1 eski değişiklik atlandı} other{{count} eski değişiklik atlandı}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 bildirim gizlilik nedeniyle tutuldu} other{{count} bildirim gizlilik nedeniyle tutuldu}}",
+    "speakerTagPromptExcerptSaved": "Bu bölüm için yanıt kaydedildi.",
     "pinPersonDescription": "Sabitlenen kişiler Kişiler listenizin en üstünde kalır ve Temizle ile kaldırılmaz."
 }

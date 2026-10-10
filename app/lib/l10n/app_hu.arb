@@ -3536,7 +3536,7 @@
     "notificationsAndDisplay": "Értesítések és megjelenítés",
     "helpAndAbout": "Súgó és névjegy",
     "speakerTagPromptTitle": "Segíts az Ominak felismerni a hangokat",
-    "speakerTagPromptIsThisYou": "Ez te vagy?",
+    "speakerTagPromptIsThisYou": "Te voltál ez?",
     "speakerTagPromptIsThisPerson": "Ez {name}?",
     "speakerTagPromptWhoIsThis": "Ki ez?",
     "speakerTagPromptThatsMe": "Ez én vagyok",
@@ -3783,7 +3783,7 @@
     "voiceMatchWeak": "Gyenge egyezés",
     "voiceMatchMeterLabel": "Hangegyezés: {level}",
     "speakerTagPromptHintIdentify": "A válaszod segít Omi-nak legközelebb felismerni ezt a hangot.",
-    "speakerTagPromptHintOwner": "Segít Omi-nak megkülönböztetni a hangodat más emberek hangjaitól.",
+    "speakerTagPromptHintOwner": "A válaszod csak a lejátszott részletet jelöli meg.",
     "speakerTagPromptSavedAs": "Mentve mint {name}",
     "speakerTagPromptSavedAsYou": "Mentve mint te",
     "speakerTagPromptIgnoredNote": "Omi nem kérdez rá többé erre a hangra",
@@ -3983,5 +3983,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 javítás} other{{fixes} javítás}} · {asks, plural, =1{1 javaslat} other{{asks} javaslat}}",
     "dreamReportDropped": "{count, plural, =1{1 régebbi módosítás kihagyva} other{{count} régebbi módosítás kihagyva}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 jelentés visszatartva adatvédelmi okból} other{{count} jelentés visszatartva adatvédelmi okból}}",
+    "speakerTagPromptExcerptSaved": "Válasz mentve ehhez a részlethez.",
     "pinPersonDescription": "A kitűzött személyek a Személyek listád tetején maradnak, és a Takarítás nem távolítja el őket."
 }

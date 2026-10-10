@@ -10912,7 +10912,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get speakerTagPromptTitle => 'Palīdziet Omi atpazīt balsis';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Vai tas esat jūs?';
+  String get speakerTagPromptIsThisYou => 'Vai tas bijāt jūs?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11870,7 +11870,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Jūsu atbilde palīdzēs Omi nākamreiz atpazīt šo balsi.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Palīdz Omi atšķirt jūsu balsi no citu cilvēku balsīm.';
+  String get speakerTagPromptHintOwner => 'Jūsu atbilde atzīmē tikai atskaņoto fragmentu.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12632,6 +12632,9 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Atbilde saglabāta šim fragmentam.';
 
   @override
   String get pinPersonDescription =>

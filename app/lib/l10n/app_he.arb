@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "התראות ותצוגה",
     "helpAndAbout": "עזרה ואודות",
     "speakerTagPromptTitle": "עזרו ל-Omi לזהות קולות",
-    "speakerTagPromptIsThisYou": "זה אתה?",
+    "speakerTagPromptIsThisYou": "זה היה הקול שלך?",
     "speakerTagPromptIsThisPerson": "זה {name}?",
     "speakerTagPromptWhoIsThis": "מי זה?",
     "speakerTagPromptThatsMe": "זה אני",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "התאמה חלשה",
     "voiceMatchMeterLabel": "התאמת קול: {level}",
     "speakerTagPromptHintIdentify": "התשובה שלך עוזרת ל-Omi לזהות את הקול הזה בפעם הבאה.",
-    "speakerTagPromptHintOwner": "עוזר ל-Omi להבדיל בין הקול שלך לבין קולות של אחרים.",
+    "speakerTagPromptHintOwner": "התשובה שלך מתייגת רק את הקטע שהושמע.",
     "speakerTagPromptSavedAs": "נשמר בשם {name}",
     "speakerTagPromptSavedAsYou": "נשמר כקול שלך",
     "speakerTagPromptIgnoredNote": "Omi לא ישאל שוב על הקול הזה",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{תיקון אחד} other{{fixes} תיקונים}} · {asks, plural, =1{הצעה אחת} other{{asks} הצעות}}",
     "dreamReportDropped": "{count, plural, =1{שינוי ישן אחד דולג} other{{count} שינויים ישנים יותר דולגו}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{דוח אחד נעצר מטעמי פרטיות} other{{count} דוחות נעצרו מטעמי פרטיות}}",
+    "speakerTagPromptExcerptSaved": "התשובה נשמרה עבור קטע זה.",
     "pinPersonDescription": "אנשים מוצמדים נשארים בראש רשימת האנשים שלך ואינם מוסרים על ידי ניקוי."
 }

@@ -11893,7 +11893,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'మీ సమాధానం Omi ఈ వాయిస్‌ను తదుపరిసారి గుర్తించడంలో సహాయపడుతుంది.';
 
   @override
-  String get speakerTagPromptHintOwner => 'మీ వాయిస్‌ను ఇతరుల వాయిస్‌ల నుండి వేరు చేయడంలో Omiకి సహాయపడుతుంది.';
+  String get speakerTagPromptHintOwner => 'మీ సమాధానం ప్లే చేసిన భాగాన్ని మాత్రమే గుర్తిస్తుంది.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12656,6 +12656,9 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'ఈ భాగానికి సమాధానం సేవ్ చేయబడింది.';
 
   @override
   String get pinPersonDescription =>

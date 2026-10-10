@@ -10935,7 +10935,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get speakerTagPromptTitle => 'Ajută-l pe Omi să recunoască vocile';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Tu ești acesta?';
+  String get speakerTagPromptIsThisYou => 'Ai fost tu?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11898,7 +11898,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Răspunsul tău îl ajută pe Omi să recunoască această voce data viitoare.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Ajută Omi să deosebească vocea ta de vocile altora.';
+  String get speakerTagPromptHintOwner => 'Răspunsul tău etichetează doar fragmentul redat.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12659,6 +12659,9 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Răspuns salvat pentru acest fragment.';
 
   @override
   String get pinPersonDescription =>

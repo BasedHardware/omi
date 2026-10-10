@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Сповіщення і відображення",
     "helpAndAbout": "Допомога і про програму",
     "speakerTagPromptTitle": "Допоможіть Omi розпізнавати голоси",
-    "speakerTagPromptIsThisYou": "Це ви?",
+    "speakerTagPromptIsThisYou": "Це були ви?",
     "speakerTagPromptIsThisPerson": "Це {name}?",
     "speakerTagPromptWhoIsThis": "Хто це?",
     "speakerTagPromptThatsMe": "Це я",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Слабкий збіг",
     "voiceMatchMeterLabel": "Збіг голосу: {level}",
     "speakerTagPromptHintIdentify": "Ваша відповідь допомагає Omi наступного разу розпізнати цей голос.",
-    "speakerTagPromptHintOwner": "Допомагає Omi відрізняти ваш голос від голосів інших людей.",
+    "speakerTagPromptHintOwner": "Ваша відповідь позначає лише відтворений уривок.",
     "speakerTagPromptSavedAs": "Збережено як {name}",
     "speakerTagPromptSavedAsYou": "Збережено як ви",
     "speakerTagPromptIgnoredNote": "Omi більше не питатиме про цей голос",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 виправлення} other{{fixes} виправлення}} · {asks, plural, =1{1 пропозиція} other{{asks} пропозиції}}",
     "dreamReportDropped": "{count, plural, =1{1 старішу зміну пропущено} other{{count} старіші зміни пропущено}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 звіт затримано з міркувань конфіденційності} other{{count} звіти затримано з міркувань конфіденційності}}",
+    "speakerTagPromptExcerptSaved": "Відповідь збережено для цього уривка.",
     "pinPersonDescription": "Закріплені люди залишаються вгорі вашого списку «Люди» і не видаляються через «Очищення»."
 }

@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "الإشعارات والعرض",
     "helpAndAbout": "المساعدة وحول التطبيق",
     "speakerTagPromptTitle": "ساعد Omi على التعرّف على الأصوات",
-    "speakerTagPromptIsThisYou": "هل هذا أنت؟",
+    "speakerTagPromptIsThisYou": "هل كان هذا صوتك؟",
     "speakerTagPromptIsThisPerson": "هل هذا {name}؟",
     "speakerTagPromptWhoIsThis": "من هذا؟",
     "speakerTagPromptThatsMe": "هذا أنا",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "تطابق ضعيف",
     "voiceMatchMeterLabel": "تطابق الصوت: {level}",
     "speakerTagPromptHintIdentify": "ردّك يساعد Omi على التعرّف على هذا الصوت في المرة القادمة.",
-    "speakerTagPromptHintOwner": "يساعد Omi على تمييز صوتك عن أصوات الآخرين.",
+    "speakerTagPromptHintOwner": "إجابتك تحدد هوية المتحدث في المقطع المشغّل فقط.",
     "speakerTagPromptSavedAs": "تم الحفظ باسم {name}",
     "speakerTagPromptSavedAsYou": "تم الحفظ باسمك",
     "speakerTagPromptIgnoredNote": "لن يسأل Omi عن هذا الصوت مرة أخرى",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{إصلاح واحد} other{{fixes} إصلاح}} · {asks, plural, =1{اقتراح واحد} other{{asks} اقتراح}}",
     "dreamReportDropped": "{count, plural, =1{تم تخطي تغيير أقدم واحد} other{تم تخطي {count} تغيير أقدم}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{تقرير واحد محجوب حفاظًا على الخصوصية} other{{count} تقرير محجوب حفاظًا على الخصوصية}}",
+    "speakerTagPromptExcerptSaved": "تم حفظ الإجابة لهذا المقطع.",
     "pinPersonDescription": "يبقى الأشخاص المثبَّتون في أعلى قائمة الأشخاص لديك، ولا يُزيلهم التنظيف."
 }

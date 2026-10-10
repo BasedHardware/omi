@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "Обавештења и приказ",
     "helpAndAbout": "Помоћ и о апликацији",
     "speakerTagPromptTitle": "Помозите Omi-ју да препознаје гласове",
-    "speakerTagPromptIsThisYou": "Да ли сте ово ви?",
+    "speakerTagPromptIsThisYou": "Да ли сте то били ви?",
     "speakerTagPromptIsThisPerson": "Да ли је ово {name}?",
     "speakerTagPromptWhoIsThis": "Ко је ово?",
     "speakerTagPromptThatsMe": "То сам ја",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "Слабо подударање",
     "voiceMatchMeterLabel": "Подударање гласа: {level}",
     "speakerTagPromptHintIdentify": "Ваш одговор помаже Omi да следећи пут препозна овај глас.",
-    "speakerTagPromptHintOwner": "Помаже Omi да разликује ваш глас од гласова других људи.",
+    "speakerTagPromptHintOwner": "Ваш одговор означава само пуштени исечак.",
     "speakerTagPromptSavedAs": "Сачувано као {name}",
     "speakerTagPromptSavedAsYou": "Сачувано као ви",
     "speakerTagPromptIgnoredNote": "Omi вас више неће питати за овај глас",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 исправка} other{{fixes} исправки}} · {asks, plural, =1{1 предлог} other{{asks} предлога}}",
     "dreamReportDropped": "{count, plural, =1{1 старија промена прескочена} other{{count} старијих промена прескочено}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 извештај задржан због приватности} other{{count} извештаја задржано због приватности}}",
+    "speakerTagPromptExcerptSaved": "Одговор је сачуван за овај исечак.",
     "pinPersonDescription": "Закачени људи остају на врху вашег списка „Људи“ и не уклања их функција „Почисти“."
 }

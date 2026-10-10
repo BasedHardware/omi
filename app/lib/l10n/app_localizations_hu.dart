@@ -10929,7 +10929,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get speakerTagPromptTitle => 'Segíts az Ominak felismerni a hangokat';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ez te vagy?';
+  String get speakerTagPromptIsThisYou => 'Te voltál ez?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11890,7 +11890,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'A válaszod segít Omi-nak legközelebb felismerni ezt a hangot.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Segít Omi-nak megkülönböztetni a hangodat más emberek hangjaitól.';
+  String get speakerTagPromptHintOwner => 'A válaszod csak a lejátszott részletet jelöli meg.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12654,6 +12654,9 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Válasz mentve ehhez a részlethez.';
 
   @override
   String get pinPersonDescription =>

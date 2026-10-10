@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Aviseringar och visning",
     "helpAndAbout": "Hjälp och om",
     "speakerTagPromptTitle": "Hjälp Omi att känna igen röster",
-    "speakerTagPromptIsThisYou": "Är det här du?",
+    "speakerTagPromptIsThisYou": "Var det här du?",
     "speakerTagPromptIsThisPerson": "Är det här {name}?",
     "speakerTagPromptWhoIsThis": "Vem är det här?",
     "speakerTagPromptThatsMe": "Det är jag",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Svag matchning",
     "voiceMatchMeterLabel": "Röstmatchning: {level}",
     "speakerTagPromptHintIdentify": "Ditt svar hjälper Omi att känna igen den här rösten nästa gång.",
-    "speakerTagPromptHintOwner": "Hjälper Omi att skilja din röst från andras.",
+    "speakerTagPromptHintOwner": "Ditt svar märker bara det spelade utdraget.",
     "speakerTagPromptSavedAs": "Sparad som {name}",
     "speakerTagPromptSavedAsYou": "Sparad som du",
     "speakerTagPromptIgnoredNote": "Omi frågar inte om den här rösten igen",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 korrigering} other{{fixes} korrigeringar}} · {asks, plural, =1{1 förslag} other{{asks} förslag}}",
     "dreamReportDropped": "{count, plural, =1{1 äldre ändring hoppades över} other{{count} äldre ändringar hoppades över}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 rapport hölls tillbaka av sekretesskäl} other{{count} rapporter hölls tillbaka av sekretesskäl}}",
+    "speakerTagPromptExcerptSaved": "Svaret har sparats för detta utdrag.",
     "pinPersonDescription": "Fästa personer ligger överst i din lista över Personer och tas inte bort av Rensa upp."
 }

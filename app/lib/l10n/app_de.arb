@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Benachrichtigungen & Anzeige",
     "helpAndAbout": "Hilfe & Info",
     "speakerTagPromptTitle": "Hilf Omi, Stimmen zu erkennen",
-    "speakerTagPromptIsThisYou": "Bist du das?",
+    "speakerTagPromptIsThisYou": "Warst du das?",
     "speakerTagPromptIsThisPerson": "Ist das {name}?",
     "speakerTagPromptWhoIsThis": "Wer ist das?",
     "speakerTagPromptThatsMe": "Das bin ich",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Schwache Übereinstimmung",
     "voiceMatchMeterLabel": "Stimmübereinstimmung: {level}",
     "speakerTagPromptHintIdentify": "Deine Antwort hilft Omi, diese Stimme beim nächsten Mal zu erkennen.",
-    "speakerTagPromptHintOwner": "Hilft Omi, deine Stimme von der anderer Leute zu unterscheiden.",
+    "speakerTagPromptHintOwner": "Deine Antwort kennzeichnet nur den abgespielten Ausschnitt.",
     "speakerTagPromptSavedAs": "Gespeichert als {name}",
     "speakerTagPromptSavedAsYou": "Als deine Stimme gespeichert",
     "speakerTagPromptIgnoredNote": "Omi fragt nicht mehr nach dieser Stimme",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 Korrektur} other{{fixes} Korrekturen}} · {asks, plural, =1{1 Vorschlag} other{{asks} Vorschläge}}",
     "dreamReportDropped": "{count, plural, =1{1 ältere Änderung übersprungen} other{{count} ältere Änderungen übersprungen}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 Meldung aus Datenschutzgründen zurückgehalten} other{{count} Meldungen aus Datenschutzgründen zurückgehalten}}",
+    "speakerTagPromptExcerptSaved": "Antwort für diesen Ausschnitt gespeichert.",
     "pinPersonDescription": "Angeheftete Personen bleiben oben in deiner Personenliste und werden nicht durch Aufräumen entfernt."
 }

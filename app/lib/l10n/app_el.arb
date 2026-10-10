@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Ειδοποιήσεις & εμφάνιση",
     "helpAndAbout": "Βοήθεια & σχετικά",
     "speakerTagPromptTitle": "Βοηθήστε το Omi να αναγνωρίζει φωνές",
-    "speakerTagPromptIsThisYou": "Είστε εσείς;",
+    "speakerTagPromptIsThisYou": "Ήσουν εσύ;",
     "speakerTagPromptIsThisPerson": "Είναι ο/η {name};",
     "speakerTagPromptWhoIsThis": "Ποιος είναι αυτός;",
     "speakerTagPromptThatsMe": "Είμαι εγώ",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Ασθενής αντιστοίχιση",
     "voiceMatchMeterLabel": "Αντιστοίχιση φωνής: {level}",
     "speakerTagPromptHintIdentify": "Η απάντησή σας βοηθά το Omi να αναγνωρίσει αυτή τη φωνή την επόμενη φορά.",
-    "speakerTagPromptHintOwner": "Βοηθά το Omi να ξεχωρίζει τη δική σας φωνή από τις φωνές των άλλων.",
+    "speakerTagPromptHintOwner": "Η απάντησή σου επισημαίνει μόνο το απόσπασμα που ακούστηκε.",
     "speakerTagPromptSavedAs": "Αποθηκεύτηκε ως {name}",
     "speakerTagPromptSavedAsYou": "Αποθηκεύτηκε ως εσείς",
     "speakerTagPromptIgnoredNote": "Το Omi δεν θα ρωτήσει ξανά για αυτή τη φωνή",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 διόρθωση} other{{fixes} διορθώσεις}} · {asks, plural, =1{1 πρόταση} other{{asks} προτάσεις}}",
     "dreamReportDropped": "{count, plural, =1{1 παλαιότερη αλλαγή παραλείφθηκε} other{{count} παλαιότερες αλλαγές παραλείφθηκαν}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 αναφορά κρατήθηκε για λόγους απορρήτου} other{{count} αναφορές κρατήθηκαν για λόγους απορρήτου}}",
+    "speakerTagPromptExcerptSaved": "Η απάντηση αποθηκεύτηκε για αυτό το απόσπασμα.",
     "pinPersonDescription": "Τα καρφιτσωμένα άτομα παραμένουν στην κορυφή της λίστας «Άτομα» σας και δεν αφαιρούνται από την «Εκκαθάριση»."
 }

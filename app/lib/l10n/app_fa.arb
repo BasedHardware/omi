@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "اطلاع‌رسانی‌ها و نمایش",
     "helpAndAbout": "راهنما و درباره",
     "speakerTagPromptTitle": "به Omi در شناختن صداها کمک کنید",
-    "speakerTagPromptIsThisYou": "این شما هستید؟",
+    "speakerTagPromptIsThisYou": "این صدای شما بود؟",
     "speakerTagPromptIsThisPerson": "این {name} است؟",
     "speakerTagPromptWhoIsThis": "این کیست؟",
     "speakerTagPromptThatsMe": "این من هستم",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "تطبیق ضعیف",
     "voiceMatchMeterLabel": "تطبیق صدا: {level}",
     "speakerTagPromptHintIdentify": "پاسخ شما به Omi کمک می‌کند این صدا را دفعه بعد تشخیص دهد.",
-    "speakerTagPromptHintOwner": "به Omi کمک می‌کند صدای شما را از صدای دیگران تشخیص دهد.",
+    "speakerTagPromptHintOwner": "پاسخ شما فقط بخش پخش‌شده را برچسب‌گذاری می‌کند.",
     "speakerTagPromptSavedAs": "به‌عنوان {name} ذخیره شد",
     "speakerTagPromptSavedAsYou": "به‌عنوان شما ذخیره شد",
     "speakerTagPromptIgnoredNote": "Omi دیگر درباره این صدا نمی‌پرسد",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{۱ اصلاح} other{{fixes} اصلاح}} · {asks, plural, =1{۱ پیشنهاد} other{{asks} پیشنهاد}}",
     "dreamReportDropped": "{count, plural, =1{۱ تغییر قدیمی‌تر نادیده گرفته شد} other{{count} تغییر قدیمی‌تر نادیده گرفته شد}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{۱ گزارش به دلیل حریم خصوصی نگه داشته شد} other{{count} گزارش به دلیل حریم خصوصی نگه داشته شد}}",
+    "speakerTagPromptExcerptSaved": "پاسخ برای این بخش ذخیره شد.",
     "pinPersonDescription": "افرادِ سنجاق‌شده بالای فهرست افراد شما می‌مانند و با پاک‌سازی حذف نمی‌شوند."
 }

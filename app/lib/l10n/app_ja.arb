@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "通知と表示",
     "helpAndAbout": "ヘルプとアプリについて",
     "speakerTagPromptTitle": "Omiが声を聞き分けられるようにしましょう",
-    "speakerTagPromptIsThisYou": "これはあなたですか？",
+    "speakerTagPromptIsThisYou": "これはあなたでしたか？",
     "speakerTagPromptIsThisPerson": "これは {name} さんですか？",
     "speakerTagPromptWhoIsThis": "これは誰ですか？",
     "speakerTagPromptThatsMe": "自分です",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "一致度は低め",
     "voiceMatchMeterLabel": "声の一致度: {level}",
     "speakerTagPromptHintIdentify": "回答すると、次回からOmiがこの声を認識しやすくなります。",
-    "speakerTagPromptHintOwner": "Omiがあなたの声と他の人の声を区別するのに役立ちます。",
+    "speakerTagPromptHintOwner": "回答は再生した抜粋にのみ適用されます。",
     "speakerTagPromptSavedAs": "{name}として保存しました",
     "speakerTagPromptSavedAsYou": "自分として保存しました",
     "speakerTagPromptIgnoredNote": "Omiはこの声について今後尋ねません",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{修正 1 件} other{修正 {fixes} 件}} · {asks, plural, =1{提案 1 件} other{提案 {asks} 件}}",
     "dreamReportDropped": "{count, plural, =1{古い変更 1 件をスキップ} other{古い変更 {count} 件をスキップ}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{プライバシー保護のため 1 件のレポートを保留} other{プライバシー保護のため {count} 件のレポートを保留}}",
+    "speakerTagPromptExcerptSaved": "この抜粋への回答を保存しました。",
     "pinPersonDescription": "ピン留めした人はピープル一覧の上部に残り、整理では削除されません。"
 }

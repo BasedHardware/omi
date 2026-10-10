@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "Obaveštenja i prikaz",
     "helpAndAbout": "Pomoć i o aplikaciji",
     "speakerTagPromptTitle": "Pomozite Omi da prepoznaje glasove",
-    "speakerTagPromptIsThisYou": "Jeste li ovo vi?",
+    "speakerTagPromptIsThisYou": "Jeste li ovo bili vi?",
     "speakerTagPromptIsThisPerson": "Je li ovo {name}?",
     "speakerTagPromptWhoIsThis": "Ko je ovo?",
     "speakerTagPromptThatsMe": "To sam ja",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "Slabo podudaranje",
     "voiceMatchMeterLabel": "Podudaranje glasa: {level}",
     "speakerTagPromptHintIdentify": "Vaš odgovor pomaže Omiju da sljedeći put prepozna ovaj glas.",
-    "speakerTagPromptHintOwner": "Pomaže Omiju da vaš glas razlikuje od glasova drugih ljudi.",
+    "speakerTagPromptHintOwner": "Vaš odgovor označava samo pušteni isječak.",
     "speakerTagPromptSavedAs": "Sačuvano kao {name}",
     "speakerTagPromptSavedAsYou": "Sačuvano kao vi",
     "speakerTagPromptIgnoredNote": "Omi više neće pitati za ovaj glas",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 ispravka} other{{fixes} ispravki}} · {asks, plural, =1{1 prijedlog} other{{asks} prijedloga}}",
     "dreamReportDropped": "{count, plural, =1{1 starija promjena preskočena} other{{count} starijih promjena preskočeno}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 izvještaj zadržan zbog privatnosti} other{{count} izvještaja zadržano zbog privatnosti}}",
+    "speakerTagPromptExcerptSaved": "Odgovor je sačuvan za ovaj isječak.",
     "pinPersonDescription": "Prikvačene osobe ostaju na vrhu vaše liste Osobe i ne uklanja ih Čišćenje."
 }

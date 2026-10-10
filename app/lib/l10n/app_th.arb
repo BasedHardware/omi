@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "การแจ้งเตือนและการแสดงผล",
     "helpAndAbout": "ความช่วยเหลือและเกี่ยวกับ",
     "speakerTagPromptTitle": "ช่วย Omi จดจำเสียง",
-    "speakerTagPromptIsThisYou": "นี่คือคุณใช่ไหม?",
+    "speakerTagPromptIsThisYou": "นี่เป็นคุณหรือเปล่า?",
     "speakerTagPromptIsThisPerson": "นี่คือ {name} ใช่ไหม?",
     "speakerTagPromptWhoIsThis": "นี่คือใคร?",
     "speakerTagPromptThatsMe": "นี่คือฉัน",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "ตรงกันน้อย",
     "voiceMatchMeterLabel": "การจับคู่เสียง: {level}",
     "speakerTagPromptHintIdentify": "คำตอบของคุณช่วยให้ Omi จำเสียงนี้ได้ในครั้งหน้า",
-    "speakerTagPromptHintOwner": "ช่วยให้ Omi แยกเสียงของคุณออกจากเสียงของคนอื่นได้",
+    "speakerTagPromptHintOwner": "คำตอบของคุณจะระบุเฉพาะส่วนที่เล่นเท่านั้น",
     "speakerTagPromptSavedAs": "บันทึกเป็น {name} แล้ว",
     "speakerTagPromptSavedAsYou": "บันทึกเป็นคุณแล้ว",
     "speakerTagPromptIgnoredNote": "Omi จะไม่ถามเกี่ยวกับเสียงนี้อีก",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{แก้ไข 1 รายการ} other{แก้ไข {fixes} รายการ}} · {asks, plural, =1{แนะนำ 1 รายการ} other{แนะนำ {asks} รายการ}}",
     "dreamReportDropped": "{count, plural, =1{ข้ามการเปลี่ยนแปลงเก่า 1 รายการ} other{ข้ามการเปลี่ยนแปลงเก่า {count} รายการ}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{เก็บรายงาน 1 รายการไว้เพื่อความเป็นส่วนตัว} other{เก็บรายงาน {count} รายการไว้เพื่อความเป็นส่วนตัว}}",
+    "speakerTagPromptExcerptSaved": "บันทึกคำตอบสำหรับส่วนนี้แล้ว",
     "pinPersonDescription": "บุคคลที่ปักหมุดจะอยู่บนสุดของรายการบุคคลของคุณ และจะไม่ถูกลบโดยล้างรายการ"
 }

@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "బలహీన మ్యాచ్",
     "voiceMatchMeterLabel": "వాయిస్ మ్యాచ్: {level}",
     "speakerTagPromptHintIdentify": "మీ సమాధానం Omi ఈ వాయిస్‌ను తదుపరిసారి గుర్తించడంలో సహాయపడుతుంది.",
-    "speakerTagPromptHintOwner": "మీ వాయిస్‌ను ఇతరుల వాయిస్‌ల నుండి వేరు చేయడంలో Omiకి సహాయపడుతుంది.",
+    "speakerTagPromptHintOwner": "మీ సమాధానం ప్లే చేసిన భాగాన్ని మాత్రమే గుర్తిస్తుంది.",
     "speakerTagPromptSavedAs": "{name}గా సేవ్ చేయబడింది",
     "speakerTagPromptSavedAsYou": "మీరుగా సేవ్ చేయబడింది",
     "speakerTagPromptIgnoredNote": "ఈ వాయిస్ గురించి Omi మళ్లీ అడగదు",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 సవరణ} other{{fixes} సవరణలు}} · {asks, plural, =1{1 సూచన} other{{asks} సూచనలు}}",
     "dreamReportDropped": "{count, plural, =1{1 పాత మార్పు దాటవేయబడింది} other{{count} పాత మార్పులు దాటవేయబడ్డాయి}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది} other{గోప్యత కోసం {count} నివేదికలు ఆపివేయబడ్డాయి}}",
+    "speakerTagPromptExcerptSaved": "ఈ భాగానికి సమాధానం సేవ్ చేయబడింది.",
     "pinPersonDescription": "పిన్ చేసిన వ్యక్తులు మీ వ్యక్తుల జాబితా పైభాగంలోనే ఉంటారు మరియు శుభ్రం చేయి ద్వారా తీసివేయబడరు."
 }

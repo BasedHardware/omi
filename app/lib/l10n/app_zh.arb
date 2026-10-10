@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "通知与显示",
     "helpAndAbout": "帮助与关于",
     "speakerTagPromptTitle": "帮助 Omi 识别声音",
-    "speakerTagPromptIsThisYou": "这是你吗？",
+    "speakerTagPromptIsThisYou": "刚才是你吗？",
     "speakerTagPromptIsThisPerson": "这是 {name} 吗？",
     "speakerTagPromptWhoIsThis": "这是谁？",
     "speakerTagPromptThatsMe": "是我",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "匹配度低",
     "voiceMatchMeterLabel": "声音匹配：{level}",
     "speakerTagPromptHintIdentify": "你的回答会帮助 Omi 下次识别这个声音。",
-    "speakerTagPromptHintOwner": "帮助 Omi 区分你的声音和其他人的声音。",
+    "speakerTagPromptHintOwner": "你的回答仅标记播放的片段。",
     "speakerTagPromptSavedAs": "已保存为 {name}",
     "speakerTagPromptSavedAsYou": "已保存为你",
     "speakerTagPromptIgnoredNote": "Omi 不会再询问这个声音",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 项修复} other{{fixes} 项修复}} · {asks, plural, =1{1 条建议} other{{asks} 条建议}}",
     "dreamReportDropped": "{count, plural, =1{已跳过 1 项较早的更改} other{已跳过 {count} 项较早的更改}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{出于隐私考虑，已扣留 1 份报告} other{出于隐私考虑，已扣留 {count} 份报告}}",
+    "speakerTagPromptExcerptSaved": "已保存此片段的回答。",
     "pinPersonDescription": "置顶的人员会保留在你的人员列表顶部，且不会被清理删除。"
 }

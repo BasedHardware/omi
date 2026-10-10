@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "அறிவிப்புகள் மற்றும் காட்சி",
     "helpAndAbout": "உதவி மற்றும் பற்றி",
     "speakerTagPromptTitle": "குரல்களை அடையாளம் காண Omi-க்கு உதவுங்கள்",
-    "speakerTagPromptIsThisYou": "இது நீங்களா?",
+    "speakerTagPromptIsThisYou": "இது நீங்கள் தானா?",
     "speakerTagPromptIsThisPerson": "இது {name} ஆ?",
     "speakerTagPromptWhoIsThis": "இது யார்?",
     "speakerTagPromptThatsMe": "இது நான்தான்",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "பலவீனமான பொருத்தம்",
     "voiceMatchMeterLabel": "குரல் பொருத்தம்: {level}",
     "speakerTagPromptHintIdentify": "உங்கள் பதில் அடுத்த முறை இந்தக் குரலை Omi அடையாளம் காண உதவுகிறது.",
-    "speakerTagPromptHintOwner": "உங்கள் குரலை மற்றவர்களின் குரல்களிலிருந்து Omi வேறுபடுத்த உதவுகிறது.",
+    "speakerTagPromptHintOwner": "உங்கள் பதில் இயக்கப்பட்ட பகுதியை மட்டுமே குறிக்கும்.",
     "speakerTagPromptSavedAs": "{name} ஆகச் சேமிக்கப்பட்டது",
     "speakerTagPromptSavedAsYou": "நீங்களாகச் சேமிக்கப்பட்டது",
     "speakerTagPromptIgnoredNote": "இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 திருத்தம்} other{{fixes} திருத்தங்கள்}} · {asks, plural, =1{1 பரிந்துரை} other{{asks} பரிந்துரைகள்}}",
     "dreamReportDropped": "{count, plural, =1{1 பழைய மாற்றம் தவிர்க்கப்பட்டது} other{{count} பழைய மாற்றங்கள் தவிர்க்கப்பட்டன}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}",
+    "speakerTagPromptExcerptSaved": "இந்தப் பகுதிக்கான பதில் சேமிக்கப்பட்டது.",
     "pinPersonDescription": "பின் செய்யப்பட்டவர்கள் உங்கள் மக்கள் பட்டியலின் மேலே இருப்பார்கள்; சுத்தம் செய் அவர்களை நீக்காது."
 }

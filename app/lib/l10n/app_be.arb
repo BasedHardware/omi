@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "Паведамленні і адлюстраванне",
     "helpAndAbout": "Дапамога і пра праграму",
     "speakerTagPromptTitle": "Дапамажыце Omi распазнаваць галасы",
-    "speakerTagPromptIsThisYou": "Гэта вы?",
+    "speakerTagPromptIsThisYou": "Гэта былі вы?",
     "speakerTagPromptIsThisPerson": "Гэта {name}?",
     "speakerTagPromptWhoIsThis": "Хто гэта?",
     "speakerTagPromptThatsMe": "Гэта я",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "Слабое супадзенне",
     "voiceMatchMeterLabel": "Супадзенне голасу: {level}",
     "speakerTagPromptHintIdentify": "Ваш адказ дапаможа Omi распазнаваць гэты голас наступным разам.",
-    "speakerTagPromptHintOwner": "Дапамагае Omi адрозніваць ваш голас ад чужых.",
+    "speakerTagPromptHintOwner": "Ваш адказ пазначае толькі праслуханы ўрывак.",
     "speakerTagPromptSavedAs": "Захавана як {name}",
     "speakerTagPromptSavedAsYou": "Захавана як вы",
     "speakerTagPromptIgnoredNote": "Omi больш не будзе пытацца пра гэты голас",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 выпраўленне} other{{fixes} выпраўленні}} · {asks, plural, =1{1 прапанова} other{{asks} прапановы}}",
     "dreamReportDropped": "{count, plural, =1{1 больш старая змена прапушчана} other{{count} больш старыя змены прапушчаны}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}",
+    "speakerTagPromptExcerptSaved": "Адказ захаваны для гэтага ўрыўка.",
     "pinPersonDescription": "Замацаваныя людзі заўсёды знаходзяцца ўверсе вашага спісу «Людзі» і не выдаляюцца пры Ачыстцы."
 }

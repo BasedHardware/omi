@@ -19842,7 +19842,7 @@ abstract class AppLocalizations {
   /// Question shown under a short audio clip of a speaker
   ///
   /// In en, this message translates to:
-  /// **'Is this you?'**
+  /// **'Was this you?'**
   String get speakerTagPromptIsThisYou;
 
   /// Question under an audio clip; {name} is a person's name
@@ -21330,7 +21330,7 @@ abstract class AppLocalizations {
   /// Hint at the bottom of the 'Is this you?' card.
   ///
   /// In en, this message translates to:
-  /// **'Helps Omi tell your voice apart from other people\'s.'**
+  /// **'Your answer labels only the played excerpt.'**
   String get speakerTagPromptHintOwner;
 
   /// Answered state of the voice card after the user named the voice.
@@ -22508,6 +22508,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
   String dreamReportPrivacyHeld(int count);
+
+  /// No description provided for @speakerTagPromptExcerptSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer saved for this excerpt.'**
+  String get speakerTagPromptExcerptSaved;
 
   /// Subtitle under the Pin switch on a person's page: what pinning does.
   ///

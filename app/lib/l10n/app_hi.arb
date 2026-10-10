@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "सूचनाएं और डिस्प्ले",
     "helpAndAbout": "सहायता और जानकारी",
     "speakerTagPromptTitle": "Omi को आवाज़ें पहचानने में मदद करें",
-    "speakerTagPromptIsThisYou": "क्या यह आप हैं?",
+    "speakerTagPromptIsThisYou": "क्या यह आप थे?",
     "speakerTagPromptIsThisPerson": "क्या यह {name} है?",
     "speakerTagPromptWhoIsThis": "यह कौन है?",
     "speakerTagPromptThatsMe": "यह मैं हूँ",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "कमज़ोर मैच",
     "voiceMatchMeterLabel": "आवाज़ मैच: {level}",
     "speakerTagPromptHintIdentify": "आपका जवाब Omi को अगली बार यह आवाज़ पहचानने में मदद करता है।",
-    "speakerTagPromptHintOwner": "Omi को आपकी आवाज़ को दूसरों की आवाज़ों से अलग पहचानने में मदद करता है।",
+    "speakerTagPromptHintOwner": "आपका जवाब केवल चलाए गए अंश को लेबल करता है।",
     "speakerTagPromptSavedAs": "{name} के रूप में सहेजा गया",
     "speakerTagPromptSavedAsYou": "आपके रूप में सहेजा गया",
     "speakerTagPromptIgnoredNote": "Omi इस आवाज़ के बारे में फिर नहीं पूछेगा",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 सुधार} other{{fixes} सुधार}} · {asks, plural, =1{1 सुझाव} other{{asks} सुझाव}}",
     "dreamReportDropped": "{count, plural, =1{1 पुराना बदलाव छोड़ा गया} other{{count} पुराने बदलाव छोड़े गए}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयता के लिए 1 रिपोर्ट रोकी गई} other{गोपनीयता के लिए {count} रिपोर्ट रोकी गईं}}",
+    "speakerTagPromptExcerptSaved": "इस अंश के लिए जवाब सहेजा गया।",
     "pinPersonDescription": "पिन किए गए लोग आपकी «लोग» सूची में सबसे ऊपर रहते हैं और «सफ़ाई» से नहीं हटते।"
 }

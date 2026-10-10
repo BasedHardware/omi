@@ -3475,7 +3475,7 @@
     "notificationsAndDisplay": "Notifikasi & Tampilan",
     "helpAndAbout": "Bantuan & Tentang",
     "speakerTagPromptTitle": "Bantu Omi mengenali suara",
-    "speakerTagPromptIsThisYou": "Apakah ini Anda?",
+    "speakerTagPromptIsThisYou": "Apakah ini kamu?",
     "speakerTagPromptIsThisPerson": "Apakah ini {name}?",
     "speakerTagPromptWhoIsThis": "Siapa ini?",
     "speakerTagPromptThatsMe": "Itu saya",
@@ -3722,7 +3722,7 @@
     "voiceMatchWeak": "Kurang cocok",
     "voiceMatchMeterLabel": "Kecocokan suara: {level}",
     "speakerTagPromptHintIdentify": "Jawabanmu membantu Omi mengenali suara ini lain kali.",
-    "speakerTagPromptHintOwner": "Membantu Omi membedakan suaramu dari suara orang lain.",
+    "speakerTagPromptHintOwner": "Jawabanmu hanya menandai cuplikan yang diputar.",
     "speakerTagPromptSavedAs": "Disimpan sebagai {name}",
     "speakerTagPromptSavedAsYou": "Disimpan sebagai kamu",
     "speakerTagPromptIgnoredNote": "Omi tidak akan menanyakan suara ini lagi",
@@ -3922,5 +3922,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 perbaikan} other{{fixes} perbaikan}} · {asks, plural, =1{1 saran} other{{asks} saran}}",
     "dreamReportDropped": "{count, plural, =1{1 perubahan lama dilewati} other{{count} perubahan lama dilewati}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 laporan ditahan demi privasi} other{{count} laporan ditahan demi privasi}}",
+    "speakerTagPromptExcerptSaved": "Jawaban disimpan untuk cuplikan ini.",
     "pinPersonDescription": "Orang yang disematkan tetap di bagian atas daftar Orang-mu dan tidak dihapus oleh Bersihkan."
 }

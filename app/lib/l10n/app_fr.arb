@@ -3475,7 +3475,7 @@
     "notificationsAndDisplay": "Notifications et affichage",
     "helpAndAbout": "Aide et à propos",
     "speakerTagPromptTitle": "Aidez Omi à reconnaître les voix",
-    "speakerTagPromptIsThisYou": "Est-ce vous ?",
+    "speakerTagPromptIsThisYou": "Était-ce toi ?",
     "speakerTagPromptIsThisPerson": "Est-ce {name} ?",
     "speakerTagPromptWhoIsThis": "Qui est-ce ?",
     "speakerTagPromptThatsMe": "C’est moi",
@@ -3722,7 +3722,7 @@
     "voiceMatchWeak": "Correspondance faible",
     "voiceMatchMeterLabel": "Correspondance vocale : {level}",
     "speakerTagPromptHintIdentify": "Votre réponse aide Omi à reconnaître cette voix la prochaine fois.",
-    "speakerTagPromptHintOwner": "Aide Omi à distinguer votre voix de celles des autres.",
+    "speakerTagPromptHintOwner": "Ta réponse identifie uniquement l’extrait écouté.",
     "speakerTagPromptSavedAs": "Enregistré comme {name}",
     "speakerTagPromptSavedAsYou": "Enregistré comme vous",
     "speakerTagPromptIgnoredNote": "Omi ne posera plus de questions sur cette voix",
@@ -3922,5 +3922,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 correction} other{{fixes} corrections}} · {asks, plural, =1{1 suggestion} other{{asks} suggestions}}",
     "dreamReportDropped": "{count, plural, =1{1 ancienne modification ignorée} other{{count} anciennes modifications ignorées}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 signalement retenu pour la confidentialité} other{{count} signalements retenus pour la confidentialité}}",
+    "speakerTagPromptExcerptSaved": "Réponse enregistrée pour cet extrait.",
     "pinPersonDescription": "Les personnes épinglées restent en haut de votre liste de Personnes et ne sont pas supprimées par le Nettoyage."
 }

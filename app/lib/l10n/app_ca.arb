@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Notificacions i visualització",
     "helpAndAbout": "Ajuda i informació",
     "speakerTagPromptTitle": "Ajuda l’Omi a reconèixer veus",
-    "speakerTagPromptIsThisYou": "Ets tu?",
+    "speakerTagPromptIsThisYou": "Éreu vosaltres?",
     "speakerTagPromptIsThisPerson": "És {name}?",
     "speakerTagPromptWhoIsThis": "Qui és?",
     "speakerTagPromptThatsMe": "Sóc jo",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Coincidència feble",
     "voiceMatchMeterLabel": "Coincidència de veu: {level}",
     "speakerTagPromptHintIdentify": "La teva resposta ajuda Omi a reconèixer aquesta veu la pròxima vegada.",
-    "speakerTagPromptHintOwner": "Ajuda Omi a distingir la teva veu de la d'altres persones.",
+    "speakerTagPromptHintOwner": "La resposta només etiqueta el fragment reproduït.",
     "speakerTagPromptSavedAs": "Desat com a {name}",
     "speakerTagPromptSavedAsYou": "Desat com a tu",
     "speakerTagPromptIgnoredNote": "Omi no tornarà a preguntar per aquesta veu",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 correcció} other{{fixes} correccions}} · {asks, plural, =1{1 suggeriment} other{{asks} suggeriments}}",
     "dreamReportDropped": "{count, plural, =1{1 canvi anterior omès} other{{count} canvis anteriors omesos}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 informe retingut per privacitat} other{{count} informes retinguts per privacitat}}",
+    "speakerTagPromptExcerptSaved": "Resposta desada per a aquest fragment.",
     "pinPersonDescription": "Les persones fixades es mantenen a dalt de la teva llista de Persones i Neteja no les elimina."
 }

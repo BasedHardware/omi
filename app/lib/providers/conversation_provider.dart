@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 
@@ -1410,6 +1412,26 @@ class ConversationProvider extends ChangeNotifier {
     SiriIntegration.current.queueUpsertConversations([conversation]);
     _groupConversationsByDateWithoutNotify();
 
+    notifyListeners();
+  }
+
+  /// Apply only the server-returned segment IDs; repeated speaker numbers carry no authority.
+  void applySpeakerPromptIdentities(GeneratedSpeakerTagPromptAnswerResponse result) {
+    final identities = {
+      for (final identity in result.segmentIdentities ?? <GeneratedSpeakerTagPromptSegmentIdentity>[])
+        identity.id: identity
+    };
+    final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    for (final row in rows) {
+      if (row.id != result.conversationId) continue;
+      for (final segment in row.transcriptSegments) {
+        final identity = identities[segment.id];
+        if (identity == null) continue;
+        segment.isUser = identity.isUser;
+        segment.personId = identity.personId;
+        segment.speakerLabelSource = 'manual';
+      }
+    }
     notifyListeners();
   }
 

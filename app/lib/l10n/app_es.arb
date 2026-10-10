@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Notificaciones y visualización",
     "helpAndAbout": "Ayuda e información",
     "speakerTagPromptTitle": "Ayuda a Omi a reconocer voces",
-    "speakerTagPromptIsThisYou": "¿Eres tú?",
+    "speakerTagPromptIsThisYou": "¿Eras tú?",
     "speakerTagPromptIsThisPerson": "¿Es {name}?",
     "speakerTagPromptWhoIsThis": "¿Quién es?",
     "speakerTagPromptThatsMe": "Soy yo",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Coincidencia débil",
     "voiceMatchMeterLabel": "Coincidencia de voz: {level}",
     "speakerTagPromptHintIdentify": "Tu respuesta ayuda a Omi a reconocer esta voz la próxima vez.",
-    "speakerTagPromptHintOwner": "Ayuda a Omi a distinguir tu voz de la de otras personas.",
+    "speakerTagPromptHintOwner": "Tu respuesta solo etiqueta el fragmento reproducido.",
     "speakerTagPromptSavedAs": "Guardado como {name}",
     "speakerTagPromptSavedAsYou": "Guardado como tú",
     "speakerTagPromptIgnoredNote": "Omi no volverá a preguntar por esta voz",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 corrección} other{{fixes} correcciones}} · {asks, plural, =1{1 sugerencia} other{{asks} sugerencias}}",
     "dreamReportDropped": "{count, plural, =1{1 cambio anterior omitido} other{{count} cambios anteriores omitidos}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 informe retenido por privacidad} other{{count} informes retenidos por privacidad}}",
+    "speakerTagPromptExcerptSaved": "Respuesta guardada para este fragmento.",
     "pinPersonDescription": "Las personas fijadas se mantienen arriba en tu lista de Personas y Limpieza no las elimina."
 }

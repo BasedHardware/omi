@@ -10884,7 +10884,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get speakerTagPromptTitle => 'Pomozte Omi rozpoznávat hlasy';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Jste to vy?';
+  String get speakerTagPromptIsThisYou => 'Byli jste to vy?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11844,7 +11844,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Vaše odpověď pomůže Omi příště poznat tento hlas.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Pomáhá Omi odlišit váš hlas od hlasů ostatních.';
+  String get speakerTagPromptHintOwner => 'Vaše odpověď označí pouze přehrané úryvky.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12606,6 +12606,9 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Odpověď uložena pro tento úryvek.';
 
   @override
   String get pinPersonDescription => 'Připnuté osoby zůstávají nahoře v seznamu Lidé a Vyčištění je neodstraní.';

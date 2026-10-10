@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "알림 및 표시",
     "helpAndAbout": "도움말 및 정보",
     "speakerTagPromptTitle": "Omi가 목소리를 알아보도록 도와주세요",
-    "speakerTagPromptIsThisYou": "본인인가요?",
+    "speakerTagPromptIsThisYou": "이 목소리가 본인이었나요?",
     "speakerTagPromptIsThisPerson": "{name} 님인가요?",
     "speakerTagPromptWhoIsThis": "누구인가요?",
     "speakerTagPromptThatsMe": "저예요",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "별로 비슷하지 않음",
     "voiceMatchMeterLabel": "목소리 일치: {level}",
     "speakerTagPromptHintIdentify": "답변해 주시면 Omi가 다음에 이 목소리를 알아볼 수 있어요.",
-    "speakerTagPromptHintOwner": "Omi가 내 목소리와 다른 사람의 목소리를 구별하도록 도와줘요.",
+    "speakerTagPromptHintOwner": "답변은 재생된 발췌 부분에만 적용됩니다.",
     "speakerTagPromptSavedAs": "{name}(으)로 저장됨",
     "speakerTagPromptSavedAsYou": "나로 저장됨",
     "speakerTagPromptIgnoredNote": "Omi가 이 목소리에 대해 다시 묻지 않아요",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{수정 1건} other{수정 {fixes} 건}} · {asks, plural, =1{제안 1건} other{제안 {asks} 건}}",
     "dreamReportDropped": "{count, plural, =1{이전 변경 1건 건너뜀} other{이전 변경 {count} 건 건너뜀}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{개인정보 보호를 위해 리포트 1건 보류} other{개인정보 보호를 위해 리포트 {count} 건 보류}}",
+    "speakerTagPromptExcerptSaved": "이 발췌 부분에 대한 답변이 저장되었습니다.",
     "pinPersonDescription": "고정된 사람은 '사람들' 목록 맨 위에 남고 '정리'로 삭제되지 않아요."
 }

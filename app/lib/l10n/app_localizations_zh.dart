@@ -10704,7 +10704,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speakerTagPromptTitle => '帮助 Omi 识别声音';
 
   @override
-  String get speakerTagPromptIsThisYou => '这是你吗？';
+  String get speakerTagPromptIsThisYou => '刚才是你吗？';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11649,7 +11649,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speakerTagPromptHintIdentify => '你的回答会帮助 Omi 下次识别这个声音。';
 
   @override
-  String get speakerTagPromptHintOwner => '帮助 Omi 区分你的声音和其他人的声音。';
+  String get speakerTagPromptHintOwner => '你的回答仅标记播放的片段。';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12405,6 +12405,9 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => '已保存此片段的回答。';
 
   @override
   String get pinPersonDescription => '置顶的人员会保留在你的人员列表顶部，且不会被清理删除。';

@@ -12942,7 +12942,7 @@
     "@speakerTagPromptTitle": {
         "description": "Card title asking the user to label speakers from recent conversations"
     },
-    "speakerTagPromptIsThisYou": "Is this you?",
+    "speakerTagPromptIsThisYou": "Was this you?",
     "@speakerTagPromptIsThisYou": {
         "description": "Question shown under a short audio clip of a speaker"
     },
@@ -14153,7 +14153,7 @@
     "@speakerTagPromptHintIdentify": {
         "description": "Hint at the bottom of the 'Who is this?' card."
     },
-    "speakerTagPromptHintOwner": "Helps Omi tell your voice apart from other people's.",
+    "speakerTagPromptHintOwner": "Your answer labels only the played excerpt.",
     "@speakerTagPromptHintOwner": {
         "description": "Hint at the bottom of the 'Is this you?' card."
     },
@@ -15144,6 +15144,7 @@
             }
         }
     },
+    "speakerTagPromptExcerptSaved": "Answer saved for this excerpt.",
     "pinPersonDescription": "Pinned people stay at the top of your People list and aren't removed by Clean Up.",
     "@pinPersonDescription": {
         "description": "Subtitle under the Pin switch on a person's page: what pinning does."

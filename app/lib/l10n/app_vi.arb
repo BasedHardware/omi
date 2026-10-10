@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Khớp yếu",
     "voiceMatchMeterLabel": "Khớp giọng nói: {level}",
     "speakerTagPromptHintIdentify": "Câu trả lời của bạn giúp Omi nhận ra giọng nói này lần sau.",
-    "speakerTagPromptHintOwner": "Giúp Omi phân biệt giọng nói của bạn với giọng của người khác.",
+    "speakerTagPromptHintOwner": "Câu trả lời của bạn chỉ gắn nhãn đoạn trích đã phát.",
     "speakerTagPromptSavedAs": "Đã lưu là {name}",
     "speakerTagPromptSavedAsYou": "Đã lưu là bạn",
     "speakerTagPromptIgnoredNote": "Omi sẽ không hỏi lại về giọng nói này",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 bản sửa} other{{fixes} bản sửa}} · {asks, plural, =1{1 gợi ý} other{{asks} gợi ý}}",
     "dreamReportDropped": "{count, plural, =1{1 thay đổi cũ hơn đã bị bỏ qua} other{{count} thay đổi cũ hơn đã bị bỏ qua}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 báo cáo bị giữ lại vì quyền riêng tư} other{{count} báo cáo bị giữ lại vì quyền riêng tư}}",
+    "speakerTagPromptExcerptSaved": "Đã lưu câu trả lời cho đoạn trích này.",
     "pinPersonDescription": "Người được ghim sẽ ở đầu danh sách Mọi người của bạn và không bị Dọn dẹp xóa."
 }

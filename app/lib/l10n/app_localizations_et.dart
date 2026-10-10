@@ -10876,7 +10876,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get speakerTagPromptTitle => 'Aita Omil hääli ära tunda';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Kas see oled sina?';
+  String get speakerTagPromptIsThisYou => 'Kas see olid sina?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11835,7 +11835,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Sinu vastus aitab Omil selle hääle järgmine kord ära tunda.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Aitab Omil eristada sinu häält teiste inimeste omast.';
+  String get speakerTagPromptHintOwner => 'Sinu vastus märgistab ainult esitatud lõigu.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12599,6 +12599,9 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Vastus on selle lõigu jaoks salvestatud.';
 
   @override
   String get pinPersonDescription =>

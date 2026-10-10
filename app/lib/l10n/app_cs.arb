@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Oznámení a zobrazení",
     "helpAndAbout": "Nápověda a o aplikaci",
     "speakerTagPromptTitle": "Pomozte Omi rozpoznávat hlasy",
-    "speakerTagPromptIsThisYou": "Jste to vy?",
+    "speakerTagPromptIsThisYou": "Byli jste to vy?",
     "speakerTagPromptIsThisPerson": "Je to {name}?",
     "speakerTagPromptWhoIsThis": "Kdo je to?",
     "speakerTagPromptThatsMe": "To jsem já",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Slabá shoda",
     "voiceMatchMeterLabel": "Shoda hlasu: {level}",
     "speakerTagPromptHintIdentify": "Vaše odpověď pomůže Omi příště poznat tento hlas.",
-    "speakerTagPromptHintOwner": "Pomáhá Omi odlišit váš hlas od hlasů ostatních.",
+    "speakerTagPromptHintOwner": "Vaše odpověď označí pouze přehrané úryvky.",
     "speakerTagPromptSavedAs": "Uloženo jako {name}",
     "speakerTagPromptSavedAsYou": "Uloženo jako váš hlas",
     "speakerTagPromptIgnoredNote": "Omi se na tento hlas už nebude ptát",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 oprava} other{{fixes} oprav}} · {asks, plural, =1{1 návrh} other{{asks} návrhů}}",
     "dreamReportDropped": "{count, plural, =1{1 starší změna přeskočena} other{{count} starších změn přeskočeno}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 hlášení zadrženo z důvodu soukromí} other{{count} hlášení zadrženo z důvodu soukromí}}",
+    "speakerTagPromptExcerptSaved": "Odpověď uložena pro tento úryvek.",
     "pinPersonDescription": "Připnuté osoby zůstávají nahoře v seznamu Lidé a Vyčištění je neodstraní."
 }

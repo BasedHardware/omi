@@ -10886,7 +10886,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get speakerTagPromptTitle => 'Auta Omia tunnistamaan äänet';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Oletko tämä sinä?';
+  String get speakerTagPromptIsThisYou => 'Olitko tämä sinä?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11847,7 +11847,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Vastauksesi auttaa Omia tunnistamaan tämän äänen seuraavalla kerralla.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Auttaa Omia erottamaan äänesi muiden äänistä.';
+  String get speakerTagPromptHintOwner => 'Vastauksesi merkitsee vain toistetun katkelman.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12608,6 +12608,9 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Vastaus tallennettu tälle katkelmalle.';
 
   @override
   String get pinPersonDescription =>

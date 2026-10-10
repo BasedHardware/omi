@@ -3482,7 +3482,7 @@
     "notificationsAndDisplay": "Notifikationer og visning",
     "helpAndAbout": "Hjælp og om",
     "speakerTagPromptTitle": "Hjælp Omi med at genkende stemmer",
-    "speakerTagPromptIsThisYou": "Er det dig?",
+    "speakerTagPromptIsThisYou": "Var det dig?",
     "speakerTagPromptIsThisPerson": "Er det {name}?",
     "speakerTagPromptWhoIsThis": "Hvem er det?",
     "speakerTagPromptThatsMe": "Det er mig",
@@ -3729,7 +3729,7 @@
     "voiceMatchWeak": "Svagt match",
     "voiceMatchMeterLabel": "Stemmematch: {level}",
     "speakerTagPromptHintIdentify": "Dit svar hjælper Omi med at genkende denne stemme næste gang.",
-    "speakerTagPromptHintOwner": "Hjælper Omi med at skelne din stemme fra andres.",
+    "speakerTagPromptHintOwner": "Dit svar mærker kun det afspillede uddrag.",
     "speakerTagPromptSavedAs": "Gemt som {name}",
     "speakerTagPromptSavedAsYou": "Gemt som dig",
     "speakerTagPromptIgnoredNote": "Omi spørger ikke om denne stemme igen",
@@ -3929,5 +3929,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 rettelse} other{{fixes} rettelser}} · {asks, plural, =1{1 forslag} other{{asks} forslag}}",
     "dreamReportDropped": "{count, plural, =1{1 ældre ændring sprunget over} other{{count} ældre ændringer sprunget over}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 rapport tilbageholdt af hensyn til privatlivet} other{{count} rapporter tilbageholdt af hensyn til privatlivet}}",
+    "speakerTagPromptExcerptSaved": "Svaret er gemt for dette uddrag.",
     "pinPersonDescription": "Fastgjorte personer ligger øverst på din Personer-liste og fjernes ikke af Ryd op."
 }

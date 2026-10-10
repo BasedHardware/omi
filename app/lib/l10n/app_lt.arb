@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Pranešimai ir rodinys",
     "helpAndAbout": "Pagalba ir apie",
     "speakerTagPromptTitle": "Padėkite Omi atpažinti balsus",
-    "speakerTagPromptIsThisYou": "Ar tai jūs?",
+    "speakerTagPromptIsThisYou": "Ar tai buvote jūs?",
     "speakerTagPromptIsThisPerson": "Ar tai {name}?",
     "speakerTagPromptWhoIsThis": "Kas tai?",
     "speakerTagPromptThatsMe": "Tai aš",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Silpnas atitikmuo",
     "voiceMatchMeterLabel": "Balso atitikimas: {level}",
     "speakerTagPromptHintIdentify": "Jūsų atsakymas padeda Omi kitą kartą atpažinti šį balsą.",
-    "speakerTagPromptHintOwner": "Padeda Omi atskirti jūsų balsą nuo kitų žmonių balsų.",
+    "speakerTagPromptHintOwner": "Jūsų atsakymas žymi tik paleistą ištrauką.",
     "speakerTagPromptSavedAs": "Išsaugota kaip {name}",
     "speakerTagPromptSavedAsYou": "Išsaugota kaip jūs",
     "speakerTagPromptIgnoredNote": "Omi daugiau nebeklaus apie šį balsą",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 pataisymas} other{{fixes} pataisymų}} · {asks, plural, =1{1 pasiūlymas} other{{asks} pasiūlymų}}",
     "dreamReportDropped": "{count, plural, =1{1 senesnis pakeitimas praleistas} other{{count} senesnių pakeitimų praleista}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 ataskaita sulaikyta dėl privatumo} other{{count} ataskaitų sulaikyta dėl privatumo}}",
+    "speakerTagPromptExcerptSaved": "Atsakymas išsaugotas šiai ištraukai.",
     "pinPersonDescription": "Prisegtieji žmonės lieka viršuje jūsų Žmonių sąraše ir nėra pašalinami per Sutvarkymą."
 }

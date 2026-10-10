@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "اطلاعات اور ڈسپلے",
     "helpAndAbout": "مدد اور تعارف",
     "speakerTagPromptTitle": "Omi کو آوازیں پہچاننے میں مدد کریں",
-    "speakerTagPromptIsThisYou": "کیا یہ آپ ہیں؟",
+    "speakerTagPromptIsThisYou": "کیا یہ آپ تھے؟",
     "speakerTagPromptIsThisPerson": "کیا یہ {name} ہیں؟",
     "speakerTagPromptWhoIsThis": "یہ کون ہے؟",
     "speakerTagPromptThatsMe": "یہ میں ہوں",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "کمزور میچ",
     "voiceMatchMeterLabel": "آواز کا میچ: {level}",
     "speakerTagPromptHintIdentify": "آپ کا جواب اگلی بار Omi کو یہ آواز پہچاننے میں مدد دیتا ہے۔",
-    "speakerTagPromptHintOwner": "Omi کو آپ کی آواز دوسروں کی آواز سے الگ پہچاننے میں مدد دیتا ہے۔",
+    "speakerTagPromptHintOwner": "آپ کا جواب صرف چلائے گئے اقتباس کو لیبل کرتا ہے۔",
     "speakerTagPromptSavedAs": "{name} کے طور پر محفوظ کیا گیا",
     "speakerTagPromptSavedAsYou": "آپ کے طور پر محفوظ کیا گیا",
     "speakerTagPromptIgnoredNote": "Omi اس آواز کے بارے میں دوبارہ نہیں پوچھے گا",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 اصلاح} other{{fixes} اصلاحات}} · {asks, plural, =1{1 تجویز} other{{asks} تجاویز}}",
     "dreamReportDropped": "{count, plural, =1{1 پرانی تبدیلی چھوڑ دی گئی} other{{count} پرانی تبدیلیاں چھوڑ دی گئیں}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 رپورٹ رازداری کے لیے روک لی گئی} other{{count} رپورٹس رازداری کے لیے روک لی گئیں}}",
+    "speakerTagPromptExcerptSaved": "اس اقتباس کے لیے جواب محفوظ ہو گیا۔",
     "pinPersonDescription": "پن کیے گئے لوگ آپ کی لوگوں کی فہرست میں سب سے اوپر رہتے ہیں اور صفائی سے نہیں ہٹتے۔"
 }

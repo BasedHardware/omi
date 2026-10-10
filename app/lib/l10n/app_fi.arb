@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Ilmoitukset ja näyttö",
     "helpAndAbout": "Ohje ja tietoja",
     "speakerTagPromptTitle": "Auta Omia tunnistamaan äänet",
-    "speakerTagPromptIsThisYou": "Oletko tämä sinä?",
+    "speakerTagPromptIsThisYou": "Olitko tämä sinä?",
     "speakerTagPromptIsThisPerson": "Onko tämä {name}?",
     "speakerTagPromptWhoIsThis": "Kuka tämä on?",
     "speakerTagPromptThatsMe": "Se olen minä",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Heikko osuma",
     "voiceMatchMeterLabel": "Äänen osuma: {level}",
     "speakerTagPromptHintIdentify": "Vastauksesi auttaa Omia tunnistamaan tämän äänen seuraavalla kerralla.",
-    "speakerTagPromptHintOwner": "Auttaa Omia erottamaan äänesi muiden äänistä.",
+    "speakerTagPromptHintOwner": "Vastauksesi merkitsee vain toistetun katkelman.",
     "speakerTagPromptSavedAs": "Tallennettu nimellä {name}",
     "speakerTagPromptSavedAsYou": "Tallennettu sinuksi",
     "speakerTagPromptIgnoredNote": "Omi ei kysy tästä äänestä enää",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 korjaus} other{{fixes} korjausta}} · {asks, plural, =1{1 ehdotus} other{{asks} ehdotusta}}",
     "dreamReportDropped": "{count, plural, =1{1 vanhempi muutos ohitettu} other{{count} vanhempaa muutosta ohitettu}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 ilmoitus pidätetty yksityisyyden vuoksi} other{{count} ilmoitusta pidätetty yksityisyyden vuoksi}}",
+    "speakerTagPromptExcerptSaved": "Vastaus tallennettu tälle katkelmalle.",
     "pinPersonDescription": "Kiinnitetyt ihmiset pysyvät Ihmiset-listasi yläosassa, eikä Siivous poista niitä."
 }

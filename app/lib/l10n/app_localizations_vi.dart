@@ -11842,7 +11842,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Câu trả lời của bạn giúp Omi nhận ra giọng nói này lần sau.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Giúp Omi phân biệt giọng nói của bạn với giọng của người khác.';
+  String get speakerTagPromptHintOwner => 'Câu trả lời của bạn chỉ gắn nhãn đoạn trích đã phát.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12603,6 +12603,9 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Đã lưu câu trả lời cho đoạn trích này.';
 
   @override
   String get pinPersonDescription => 'Người được ghim sẽ ở đầu danh sách Mọi người của bạn và không bị Dọn dẹp xóa.';

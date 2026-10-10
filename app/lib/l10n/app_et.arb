@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Teavitused ja kuva",
     "helpAndAbout": "Abi ja teave",
     "speakerTagPromptTitle": "Aita Omil hääli ära tunda",
-    "speakerTagPromptIsThisYou": "Kas see oled sina?",
+    "speakerTagPromptIsThisYou": "Kas see olid sina?",
     "speakerTagPromptIsThisPerson": "Kas see on {name}?",
     "speakerTagPromptWhoIsThis": "Kes see on?",
     "speakerTagPromptThatsMe": "See olen mina",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Nõrk vaste",
     "voiceMatchMeterLabel": "Hääle vaste: {level}",
     "speakerTagPromptHintIdentify": "Sinu vastus aitab Omil selle hääle järgmine kord ära tunda.",
-    "speakerTagPromptHintOwner": "Aitab Omil eristada sinu häält teiste inimeste omast.",
+    "speakerTagPromptHintOwner": "Sinu vastus märgistab ainult esitatud lõigu.",
     "speakerTagPromptSavedAs": "Salvestatud kui {name}",
     "speakerTagPromptSavedAsYou": "Salvestatud sinuna",
     "speakerTagPromptIgnoredNote": "Omi ei küsi selle hääle kohta enam",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 parandus} other{{fixes} parandust}} · {asks, plural, =1{1 soovitus} other{{asks} soovitust}}",
     "dreamReportDropped": "{count, plural, =1{1 vanem muudatus vahele jäetud} other{{count} vanemat muudatust vahele jäetud}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 aruanne hoiti privaatsuse tõttu tagasi} other{{count} aruannet hoiti privaatsuse tõttu tagasi}}",
+    "speakerTagPromptExcerptSaved": "Vastus on selle lõigu jaoks salvestatud.",
     "pinPersonDescription": "Esile tõstetud inimesed jäävad sinu Inimeste loendi ülaossa ega ole Puhastamisega eemaldatavad."
 }

@@ -3475,7 +3475,7 @@
     "notificationsAndDisplay": "Powiadomienia i wyświetlanie",
     "helpAndAbout": "Pomoc i informacje",
     "speakerTagPromptTitle": "Pomóż Omi rozpoznawać głosy",
-    "speakerTagPromptIsThisYou": "Czy to Ty?",
+    "speakerTagPromptIsThisYou": "Czy to był Twój głos?",
     "speakerTagPromptIsThisPerson": "Czy to {name}?",
     "speakerTagPromptWhoIsThis": "Kto to jest?",
     "speakerTagPromptThatsMe": "To ja",
@@ -3722,7 +3722,7 @@
     "voiceMatchWeak": "Słabe dopasowanie",
     "voiceMatchMeterLabel": "Dopasowanie głosu: {level}",
     "speakerTagPromptHintIdentify": "Twoja odpowiedź pomaga Omi rozpoznać ten głos następnym razem.",
-    "speakerTagPromptHintOwner": "Pomaga Omi odróżnić Twój głos od głosów innych osób.",
+    "speakerTagPromptHintOwner": "Twoja odpowiedź oznacza tylko odtworzony fragment.",
     "speakerTagPromptSavedAs": "Zapisano jako {name}",
     "speakerTagPromptSavedAsYou": "Zapisano jako Ty",
     "speakerTagPromptIgnoredNote": "Omi nie zapyta ponownie o ten głos",
@@ -3922,5 +3922,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 poprawka} other{{fixes} poprawki}} · {asks, plural, =1{1 sugestia} other{{asks} sugestii}}",
     "dreamReportDropped": "{count, plural, =1{1 starsza zmiana pominięta} other{{count} starszej zmiany pominięto}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 zgłoszenie wstrzymane ze względu na prywatność} other{{count} zgłoszenia wstrzymano ze względu na prywatność}}",
+    "speakerTagPromptExcerptSaved": "Odpowiedź zapisana dla tego fragmentu.",
     "pinPersonDescription": "Przypięte osoby pozostają na górze Twojej listy Osób i nie są usuwane przez Uporządkuj."
 }

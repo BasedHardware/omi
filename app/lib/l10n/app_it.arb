@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Notifiche e visualizzazione",
     "helpAndAbout": "Aiuto e informazioni",
     "speakerTagPromptTitle": "Aiuta Omi a riconoscere le voci",
-    "speakerTagPromptIsThisYou": "Sei tu?",
+    "speakerTagPromptIsThisYou": "Eri tu?",
     "speakerTagPromptIsThisPerson": "È {name}?",
     "speakerTagPromptWhoIsThis": "Chi è?",
     "speakerTagPromptThatsMe": "Sono io",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Corrispondenza debole",
     "voiceMatchMeterLabel": "Corrispondenza vocale: {level}",
     "speakerTagPromptHintIdentify": "La tua risposta aiuta Omi a riconoscere questa voce la prossima volta.",
-    "speakerTagPromptHintOwner": "Aiuta Omi a distinguere la tua voce da quella degli altri.",
+    "speakerTagPromptHintOwner": "La tua risposta etichetta solo il brano riprodotto.",
     "speakerTagPromptSavedAs": "Salvato come {name}",
     "speakerTagPromptSavedAsYou": "Salvato come te",
     "speakerTagPromptIgnoredNote": "Omi non chiederà più di questa voce",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 correzione} other{{fixes} correzioni}} · {asks, plural, =1{1 suggerimento} other{{asks} suggerimenti}}",
     "dreamReportDropped": "{count, plural, =1{1 modifica meno recente saltata} other{{count} modifiche meno recenti saltate}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 segnalazione trattenuta per privacy} other{{count} segnalazioni trattenute per privacy}}",
+    "speakerTagPromptExcerptSaved": "Risposta salvata per questo brano.",
     "pinPersonDescription": "Le persone fissate restano in cima alla tua lista Persone e non vengono rimosse da Riordina."
 }

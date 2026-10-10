@@ -10904,7 +10904,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get speakerTagPromptTitle => 'Padėkite Omi atpažinti balsus';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ar tai jūs?';
+  String get speakerTagPromptIsThisYou => 'Ar tai buvote jūs?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11864,7 +11864,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Jūsų atsakymas padeda Omi kitą kartą atpažinti šį balsą.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Padeda Omi atskirti jūsų balsą nuo kitų žmonių balsų.';
+  String get speakerTagPromptHintOwner => 'Jūsų atsakymas žymi tik paleistą ištrauką.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12627,6 +12627,9 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Atsakymas išsaugotas šiai ištraukai.';
 
   @override
   String get pinPersonDescription =>

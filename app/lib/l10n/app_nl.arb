@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Meldingen en weergave",
     "helpAndAbout": "Help en over",
     "speakerTagPromptTitle": "Help Omi stemmen te herkennen",
-    "speakerTagPromptIsThisYou": "Ben jij dit?",
+    "speakerTagPromptIsThisYou": "Was jij dit?",
     "speakerTagPromptIsThisPerson": "Is dit {name}?",
     "speakerTagPromptWhoIsThis": "Wie is dit?",
     "speakerTagPromptThatsMe": "Dat ben ik",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Zwakke match",
     "voiceMatchMeterLabel": "Stemmatch: {level}",
     "speakerTagPromptHintIdentify": "Je antwoord helpt Omi deze stem de volgende keer te herkennen.",
-    "speakerTagPromptHintOwner": "Helpt Omi je stem te onderscheiden van die van anderen.",
+    "speakerTagPromptHintOwner": "Je antwoord labelt alleen het afgespeelde fragment.",
     "speakerTagPromptSavedAs": "Opgeslagen als {name}",
     "speakerTagPromptSavedAsYou": "Opgeslagen als jij",
     "speakerTagPromptIgnoredNote": "Omi vraagt niet meer naar deze stem",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 oplossing} other{{fixes} oplossingen}} · {asks, plural, =1{1 suggestie} other{{asks} suggesties}}",
     "dreamReportDropped": "{count, plural, =1{1 oudere wijziging overgeslagen} other{{count} oudere wijzigingen overgeslagen}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 melding achtergehouden vanwege privacy} other{{count} meldingen achtergehouden vanwege privacy}}",
+    "speakerTagPromptExcerptSaved": "Antwoord opgeslagen voor dit fragment.",
     "pinPersonDescription": "Vastgezette mensen blijven bovenaan je lijst met mensen staan en worden niet verwijderd door Opruimen."
 }

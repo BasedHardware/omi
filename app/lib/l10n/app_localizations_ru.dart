@@ -10923,7 +10923,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get speakerTagPromptTitle => 'Помогите Omi узнавать голоса';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Это вы?';
+  String get speakerTagPromptIsThisYou => 'Это были вы?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11885,7 +11885,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Ваш ответ поможет Omi узнать этот голос в следующий раз.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Помогает Omi отличать ваш голос от голосов других людей.';
+  String get speakerTagPromptHintOwner => 'Ваш ответ помечает только воспроизведённый отрывок.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12648,6 +12648,9 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Ответ сохранён для этого отрывка.';
 
   @override
   String get pinPersonDescription =>

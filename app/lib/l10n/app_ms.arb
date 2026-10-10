@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Padanan lemah",
     "voiceMatchMeterLabel": "Padanan suara: {level}",
     "speakerTagPromptHintIdentify": "Jawapan anda membantu Omi mengenali suara ini pada masa akan datang.",
-    "speakerTagPromptHintOwner": "Membantu Omi membezakan suara anda daripada suara orang lain.",
+    "speakerTagPromptHintOwner": "Jawapan anda hanya melabel petikan yang dimainkan.",
     "speakerTagPromptSavedAs": "Disimpan sebagai {name}",
     "speakerTagPromptSavedAsYou": "Disimpan sebagai anda",
     "speakerTagPromptIgnoredNote": "Omi tidak akan bertanya tentang suara ini lagi",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 pembetulan} other{{fixes} pembetulan}} · {asks, plural, =1{1 cadangan} other{{asks} cadangan}}",
     "dreamReportDropped": "{count, plural, =1{1 perubahan lama dilangkau} other{{count} perubahan lama dilangkau}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 laporan ditahan atas sebab privasi} other{{count} laporan ditahan atas sebab privasi}}",
+    "speakerTagPromptExcerptSaved": "Jawapan disimpan untuk petikan ini.",
     "pinPersonDescription": "Orang yang dipin kekal di bahagian atas senarai Orang anda dan tidak dialih keluar oleh Pembersihan."
 }

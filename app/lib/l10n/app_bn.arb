@@ -10877,7 +10877,7 @@
     "notificationsAndDisplay": "বিজ্ঞপ্তি ও প্রদর্শন",
     "helpAndAbout": "সাহায্য ও সম্পর্কে",
     "speakerTagPromptTitle": "Omi-কে কণ্ঠস্বর চিনতে সাহায্য করুন",
-    "speakerTagPromptIsThisYou": "এটা কি আপনি?",
+    "speakerTagPromptIsThisYou": "এটা কি আপনি ছিলেন?",
     "speakerTagPromptIsThisPerson": "এটা কি {name}?",
     "speakerTagPromptWhoIsThis": "এটা কে?",
     "speakerTagPromptThatsMe": "এটা আমি",
@@ -11124,7 +11124,7 @@
     "voiceMatchWeak": "দুর্বল মিল",
     "voiceMatchMeterLabel": "ভয়েস মিল: {level}",
     "speakerTagPromptHintIdentify": "আপনার উত্তর পরের বার Omi-কে এই ভয়েস চিনতে সাহায্য করে।",
-    "speakerTagPromptHintOwner": "Omi-কে আপনার ভয়েস অন্যদের থেকে আলাদা করে চিনতে সাহায্য করে।",
+    "speakerTagPromptHintOwner": "আপনার উত্তর শুধু শোনা অংশটিকে চিহ্নিত করে।",
     "speakerTagPromptSavedAs": "{name} হিসেবে সংরক্ষিত",
     "speakerTagPromptSavedAsYou": "আপনি হিসেবে সংরক্ষিত",
     "speakerTagPromptIgnoredNote": "Omi এই ভয়েস নিয়ে আর জিজ্ঞেস করবে না",
@@ -11324,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{১টি সংশোধন} other{{fixes}টি সংশোধন}} · {asks, plural, =1{১টি পরামর্শ} other{{asks}টি পরামর্শ}}",
     "dreamReportDropped": "{count, plural, =1{১টি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে} other{{count}টি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{গোপনীয়তার জন্য ১টি রিপোর্ট আটকে রাখা হয়েছে} other{গোপনীয়তার জন্য {count}টি রিপোর্ট আটকে রাখা হয়েছে}}",
+    "speakerTagPromptExcerptSaved": "এই অংশের জন্য উত্তর সংরক্ষিত হয়েছে।",
     "pinPersonDescription": "পিন করা মানুষজন আপনার মানুষ তালিকার শীর্ষে থাকে এবং পরিষ্কার করুন দিয়ে সরানো হয় না।"
 }

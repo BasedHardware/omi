@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Известия и показване",
     "helpAndAbout": "Помощ и информация",
     "speakerTagPromptTitle": "Помогнете на Omi да разпознава гласове",
-    "speakerTagPromptIsThisYou": "Това вие ли сте?",
+    "speakerTagPromptIsThisYou": "Това бяхте ли вие?",
     "speakerTagPromptIsThisPerson": "Това {name} ли е?",
     "speakerTagPromptWhoIsThis": "Кой е това?",
     "speakerTagPromptThatsMe": "Това съм аз",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Слабо съвпадение",
     "voiceMatchMeterLabel": "Съвпадение на гласа: {level}",
     "speakerTagPromptHintIdentify": "Вашият отговор помага на Omi да разпознае този глас следващия път.",
-    "speakerTagPromptHintOwner": "Помага на Omi да отличава вашия глас от гласовете на други хора.",
+    "speakerTagPromptHintOwner": "Отговорът ви обозначава само пуснатия откъс.",
     "speakerTagPromptSavedAs": "Запазено като {name}",
     "speakerTagPromptSavedAsYou": "Запазено като вас",
     "speakerTagPromptIgnoredNote": "Omi няма да пита повече за този глас",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 поправка} other{{fixes} поправки}} · {asks, plural, =1{1 предложение} other{{asks} предложения}}",
     "dreamReportDropped": "{count, plural, =1{1 по-стара промяна е пропусната} other{{count} по-стари промени са пропуснати}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 доклад е задържан заради поверителност} other{{count} доклада са задържани заради поверителност}}",
+    "speakerTagPromptExcerptSaved": "Отговорът е запазен за този откъс.",
     "pinPersonDescription": "Закачените хора остават в горната част на вашия списък „Хора“ и не се премахват от „Почистване“."
 }

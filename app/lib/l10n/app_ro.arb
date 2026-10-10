@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Notificări și afișare",
     "helpAndAbout": "Ajutor și despre",
     "speakerTagPromptTitle": "Ajută-l pe Omi să recunoască vocile",
-    "speakerTagPromptIsThisYou": "Tu ești acesta?",
+    "speakerTagPromptIsThisYou": "Ai fost tu?",
     "speakerTagPromptIsThisPerson": "Este {name}?",
     "speakerTagPromptWhoIsThis": "Cine este?",
     "speakerTagPromptThatsMe": "Sunt eu",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Potrivire slabă",
     "voiceMatchMeterLabel": "Potrivire vocală: {level}",
     "speakerTagPromptHintIdentify": "Răspunsul tău îl ajută pe Omi să recunoască această voce data viitoare.",
-    "speakerTagPromptHintOwner": "Ajută Omi să deosebească vocea ta de vocile altora.",
+    "speakerTagPromptHintOwner": "Răspunsul tău etichetează doar fragmentul redat.",
     "speakerTagPromptSavedAs": "Salvat ca {name}",
     "speakerTagPromptSavedAsYou": "Salvat ca tine",
     "speakerTagPromptIgnoredNote": "Omi nu te va mai întreba despre această voce",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 remediere} other{{fixes} de remedieri}} · {asks, plural, =1{1 sugestie} other{{asks} de sugestii}}",
     "dreamReportDropped": "{count, plural, =1{1 modificare mai veche omisă} other{{count} de modificări mai vechi omise}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 raport reținut pentru confidențialitate} other{{count} de rapoarte reținute pentru confidențialitate}}",
+    "speakerTagPromptExcerptSaved": "Răspuns salvat pentru acest fragment.",
     "pinPersonDescription": "Persoanele fixate rămân în partea de sus a listei tale de Persoane și nu sunt eliminate de Curățare."
 }

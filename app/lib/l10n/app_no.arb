@@ -3440,7 +3440,7 @@
     "notificationsAndDisplay": "Varsler og visning",
     "helpAndAbout": "Hjelp og om",
     "speakerTagPromptTitle": "Hjelp Omi med å kjenne igjen stemmer",
-    "speakerTagPromptIsThisYou": "Er dette deg?",
+    "speakerTagPromptIsThisYou": "Var dette deg?",
     "speakerTagPromptIsThisPerson": "Er dette {name}?",
     "speakerTagPromptWhoIsThis": "Hvem er dette?",
     "speakerTagPromptThatsMe": "Det er meg",
@@ -3687,7 +3687,7 @@
     "voiceMatchWeak": "Svakt treff",
     "voiceMatchMeterLabel": "Stemmetreff: {level}",
     "speakerTagPromptHintIdentify": "Svaret ditt hjelper Omi å gjenkjenne denne stemmen neste gang.",
-    "speakerTagPromptHintOwner": "Hjelper Omi å skille stemmen din fra andres.",
+    "speakerTagPromptHintOwner": "Svaret ditt merker bare det avspilte utdraget.",
     "speakerTagPromptSavedAs": "Lagret som {name}",
     "speakerTagPromptSavedAsYou": "Lagret som deg",
     "speakerTagPromptIgnoredNote": "Omi spør ikke om denne stemmen igjen",
@@ -3887,5 +3887,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 rettelse} other{{fixes} rettelser}} · {asks, plural, =1{1 forslag} other{{asks} forslag}}",
     "dreamReportDropped": "{count, plural, =1{1 eldre endring hoppet over} other{{count} eldre endringer hoppet over}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 rapport holdt tilbake av personvernhensyn} other{{count} rapporter holdt tilbake av personvernhensyn}}",
+    "speakerTagPromptExcerptSaved": "Svaret er lagret for dette utdraget.",
     "pinPersonDescription": "Festede personer blir værende øverst i Personer-listen din og fjernes ikke av Rydd opp."
 }

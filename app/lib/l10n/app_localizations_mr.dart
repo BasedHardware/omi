@@ -10893,7 +10893,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get speakerTagPromptTitle => 'Omi ला आवाज ओळखायला मदत करा';
 
   @override
-  String get speakerTagPromptIsThisYou => 'हे तुम्ही आहात का?';
+  String get speakerTagPromptIsThisYou => 'हे तुम्ही होता का?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11851,7 +11851,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'तुमचे उत्तर Omi ला पुढच्या वेळी हा आवाज ओळखण्यास मदत करते.';
 
   @override
-  String get speakerTagPromptHintOwner => 'तुमचा आवाज इतरांच्या आवाजांपासून वेगळा ओळखण्यास Omi ला मदत करते.';
+  String get speakerTagPromptHintOwner => 'तुमचे उत्तर फक्त ऐकवलेल्या उताऱ्याला लेबल करते.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12612,6 +12612,9 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'या उताऱ्यासाठी उत्तर जतन केले.';
 
   @override
   String get pinPersonDescription => 'पिन केलेले लोक तुमच्या लोक यादीच्या वर राहतात आणि स्वच्छता त्यांना काढत नाही.';

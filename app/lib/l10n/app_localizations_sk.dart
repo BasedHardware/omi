@@ -10876,7 +10876,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get speakerTagPromptTitle => 'Pomôžte Omi rozpoznávať hlasy';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ste to vy?';
+  String get speakerTagPromptIsThisYou => 'Boli ste to vy?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11837,7 +11837,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Vaša odpoveď pomôže Omi rozpoznať tento hlas nabudúce.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Pomáha Omi odlíšiť váš hlas od hlasov iných ľudí.';
+  String get speakerTagPromptHintOwner => 'Vaša odpoveď označí iba prehratý úryvok.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12599,6 +12599,9 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Odpoveď uložená pre tento úryvok.';
 
   @override
   String get pinPersonDescription =>

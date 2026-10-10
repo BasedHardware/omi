@@ -11868,7 +11868,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get speakerTagPromptHintIdentify => 'Jawapan anda membantu Omi mengenali suara ini pada masa akan datang.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Membantu Omi membezakan suara anda daripada suara orang lain.';
+  String get speakerTagPromptHintOwner => 'Jawapan anda hanya melabel petikan yang dimainkan.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12632,6 +12632,9 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Jawapan disimpan untuk petikan ini.';
 
   @override
   String get pinPersonDescription =>

@@ -10724,7 +10724,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speakerTagPromptTitle => 'Omi가 목소리를 알아보도록 도와주세요';
 
   @override
-  String get speakerTagPromptIsThisYou => '본인인가요?';
+  String get speakerTagPromptIsThisYou => '이 목소리가 본인이었나요?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11671,7 +11671,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speakerTagPromptHintIdentify => '답변해 주시면 Omi가 다음에 이 목소리를 알아볼 수 있어요.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Omi가 내 목소리와 다른 사람의 목소리를 구별하도록 도와줘요.';
+  String get speakerTagPromptHintOwner => '답변은 재생된 발췌 부분에만 적용됩니다.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12427,6 +12427,9 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => '이 발췌 부분에 대한 답변이 저장되었습니다.';
 
   @override
   String get pinPersonDescription => '고정된 사람은 \'사람들\' 목록 맨 위에 남고 \'정리\'로 삭제되지 않아요.';
