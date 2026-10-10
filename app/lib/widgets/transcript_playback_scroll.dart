@@ -1,7 +1,11 @@
 part of 'transcript.dart';
 
+/// The reading line, this share of the way down the transcript: following keeps the playing line
+/// there, and a paused reader's scroll makes the line there the play point.
+const double _readingLineFraction = 1 / 3;
+
 extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
-  /// Scrolls the playback follow target into the top third. Triggered only on a
+  /// Scrolls the playback follow target to the reading line. Triggered only on a
   /// new target id or a new explicit request — never on position ticks.
   void _followPlaybackTarget() {
     final targetId = widget.followTargetSegmentId;
@@ -9,7 +13,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     if (targetId == _lastFollowTargetId && widget.playbackFollowRequest == _lastFollowRequest) return;
     _lastFollowTargetId = targetId;
     _lastFollowRequest = widget.playbackFollowRequest;
-    _locateSegment(targetId, alignment: 1 / 3);
+    _locateSegment(targetId, alignment: _readingLineFraction);
   }
 
   bool _onUserScroll(UserScrollNotification notification) {
@@ -25,7 +29,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
       _noteUserGesture();
       _captureCurrentPosition();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _isUserScrolling) _reportTopVisibleSegment();
+        if (mounted && _isUserScrolling) _reportReadingSegment();
       });
     } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
       _captureCurrentPosition();
@@ -56,7 +60,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
       // Ballistic momentum carries no drag details; while the reader still owns
       // the scroll it keeps moving the read point.
       if (_isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
-        _reportTopVisibleSegment();
+        _reportReadingSegment();
       }
       return false;
     }
@@ -71,7 +75,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     _noteUserGesture();
     _captureCurrentPosition();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _isUserScrolling) _reportTopVisibleSegment();
+      if (mounted && _isUserScrolling) _reportReadingSegment();
     });
     return false;
   }
@@ -112,7 +116,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   }
 
   /// Scrolls [segmentId] so its row's leading edge sits [alignment] of the way
-  /// down the viewport (1/3 keeps the current line near the top third).
+  /// down the viewport ([_readingLineFraction] puts it on the reading line).
   ///
   /// Pages one viewport at a time until the row is built — a measured
   /// continuation, not an estimate — then lands exactly. A reader gesture or a
@@ -156,47 +160,62 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     }
   }
 
-  /// The reader's intent: called once per drag, and again with the top
-  /// visible segment as it changes. UserScroll/ScrollUpdate carry dragDetails
+  /// The reader's intent: called once per drag, and again with the reading
+  /// segment as it changes. UserScroll/ScrollUpdate carry dragDetails
   /// only for real gestures, so programmatic scrolls never reach this.
   void _noteUserGesture() {
     _locateGeneration++;
     if (_userGestureNotified) return;
     _userGestureNotified = true;
-    // Reset the top-segment dedupe once per gesture: repeated drag updates
-    // must not re-report the same top segment as a fresh reader move.
-    _lastReportedTopSegment = null;
+    // Reset the reading-segment dedupe once per gesture: repeated drag updates
+    // must not re-report the same segment as a fresh reader move.
+    _lastReportedReadingSegment = null;
     widget.onUserScroll?.call();
   }
 
   void _userGestureEnded() {
     _userGestureNotified = false;
-    _reportTopVisibleSegment();
+    _reportReadingSegment();
   }
 
-  /// The topmost partially-visible segment — the smallest top that still
-  /// intersects the viewport. Heading, leading items and the spacing rows are
-  /// not segments; the last line at the viewport's bottom edge still counts.
-  void _reportTopVisibleSegment() {
-    final onTop = widget.onTopVisibleSegmentChanged;
-    if (onTop == null || !_scrollController.hasClients) return;
-    TranscriptSegment? topSegment;
-    var closestTop = double.infinity;
-    final currentScroll = _scrollController.offset;
+  /// The segment at the reading line, [_readingLineFraction] of the way down
+  /// the viewport: the last line whose words start at or above it, so a paused
+  /// reader's play point is where following keeps the playing line. The
+  /// reading line is never lower than the distance scrolled, so at the top of
+  /// the list it is the top edge and the first line is the play point; with
+  /// nothing at or above it, the topmost visible line counts. Heading, leading
+  /// items and the spacing rows are not segments.
+  void _reportReadingSegment() {
+    final onReading = widget.onReadingSegmentChanged;
+    if (onReading == null || !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final readingLine = min(
+      position.viewportDimension * _readingLineFraction,
+      position.pixels - position.minScrollExtent,
+    );
+    TranscriptSegment? atLine;
+    var atLineTop = double.negativeInfinity;
+    TranscriptSegment? topVisible;
+    var topVisibleTop = double.infinity;
     for (final segment in widget.segments) {
       final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) continue;
       final viewport = RenderAbstractViewport.of(renderObject);
-      final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+      final top = viewport.getOffsetToReveal(renderObject, 0).offset - position.pixels;
       final bottom = top + renderObject.size.height;
-      if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
-        closestTop = top;
-        topSegment = segment;
+      if (top <= readingLine && top > atLineTop) {
+        atLine = segment;
+        atLineTop = top;
+      }
+      if (bottom >= 0 && top < position.viewportDimension && top < topVisibleTop) {
+        topVisible = segment;
+        topVisibleTop = top;
       }
     }
-    if (topSegment != null && !identical(topSegment, _lastReportedTopSegment)) {
-      _lastReportedTopSegment = topSegment;
-      onTop(topSegment);
+    final segment = atLine ?? topVisible;
+    if (segment != null && !identical(segment, _lastReportedReadingSegment)) {
+      _lastReportedReadingSegment = segment;
+      onReading(segment);
     }
   }
 }

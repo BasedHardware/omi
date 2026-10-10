@@ -215,7 +215,19 @@ participant lists, the speaker filter and every copied, shared or exported trans
   is `unavailable`), raw ids from different recordings are not comparable, so an unnamed voice is
   the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
   transcript heading omits its speaker count. A saved transcript names each speaker once per turn
-  (consecutive lines from the same voice), so a change of voice is still visible.
+  (consecutive lines from the same voice), so a change of voice is still visible, and sets the turn
+  as one paragraph: its lines flow together. A long turn starts a new paragraph once a minute has
+  passed, under its time when times are shown, and no paragraph holds more than 12 lines (that
+  split adds no time). Where a speaker's label badge changes (a check, then "Likely"), a new
+  paragraph starts under the new badge, without the name. Each line stays its own tap target. Once
+  playback has a point (Play, a line tap, a scrub or a scroll) and the audio maps onto the
+  transcript, the line at the playhead is marked: a bar behind its words only, full ink and a touch
+  more weight, with no change to any other line. The mark fades from line to line, and moves at
+  once with Reduce Motion. Through silence the marked line is the last spoken one (the first line
+  before anyone speaks), so the mark never drops out between lines, while following already scrolls
+  to the next line. Following keeps its line a third
+  of the way down, and a paused scroll moves the play point to the line there. A transcript just
+  opened, or audio that does not map onto the transcript, marks no line.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

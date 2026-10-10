@@ -23,9 +23,11 @@ class ConversationPlaybackController extends ChangeNotifier {
   List<TranscriptSegment> _segments;
   String? _currentSegmentId;
   String? _followTargetSegmentId;
+  String? _markedSegmentId;
   bool _isPlaying = false;
   bool _isLoaded = false;
   bool _isFollowing = true;
+  bool _hasPlayPoint = false;
   int _followRequest = 0;
   int _intentGeneration = 0;
 
@@ -45,6 +47,12 @@ class ConversationPlaybackController extends ChangeNotifier {
   /// silence — never the nearest segment across a gap.
   String? get currentSegmentId => _currentSegmentId;
 
+  /// The line the transcript draws for the playhead: the segment containing
+  /// it, or through silence the last line that started before it (the first
+  /// line before anyone speaks), so the mark steps from line to line and never
+  /// drops out in the gaps. Null while the player has no wall mapping.
+  String? get markedSegmentId => _markedSegmentId;
+
   /// Where the transcript should scroll while following: the containing
   /// segment, or the next one when the playhead sits in silence (the last one
   /// when it runs past the final segment).
@@ -53,6 +61,11 @@ class ConversationPlaybackController extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   bool get isLoaded => _isLoaded;
   bool get isFollowing => _isFollowing;
+
+  /// True once the user has given playback a point: Play, a line tap, a
+  /// waveform scrub or a reader scroll. From then on the transcript marks the
+  /// current line; a page just opened, with nothing touched, marks none.
+  bool get hasPlayPoint => _hasPlayPoint;
 
   /// Bumped on every explicit follow trigger (line tap, scrub, back-to-current)
   /// so the transcript re-scrolls even when the target id did not change.
@@ -82,11 +95,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     // build. If the target ids move, the next reportPlayback picks it up.
     // While the player has no wall mapping, no line may be claimed current —
     // a rebuild must not re-mark one.
-    if (_mapped) {
-      _recomputeTargets();
-    } else {
-      _clearTargets();
-    }
+    _retarget();
   }
 
   void attachSeekHandler(ConversationPlaybackSeekHandler handler) {
@@ -107,7 +116,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     if (_isDisposed) return;
     wallPosition.value = wallSeconds;
     _mapped = mapped;
-    var changed = mapped ? _recomputeTargets() : _clearTargets();
+    var changed = _retarget();
     if (loaded != _isLoaded) {
       _isLoaded = loaded;
       changed = true;
@@ -115,7 +124,10 @@ class ConversationPlaybackController extends ChangeNotifier {
     if (playing != _isPlaying) {
       if (_isPlaying && !playing) _pausedWall = wallSeconds;
       _isPlaying = playing;
-      if (playing) _pausedWall = null;
+      if (playing) {
+        _pausedWall = null;
+        _hasPlayPoint = true;
+      }
       changed = true;
     }
     if (changed) notifyListeners();
@@ -160,6 +172,7 @@ class ConversationPlaybackController extends ChangeNotifier {
   void readerMovedTo(TranscriptSegment segment) {
     if (_isDisposed) return;
     _intentGeneration++;
+    _hasPlayPoint = true;
     if (_isPlaying) {
       suspendFollowing();
       return;
@@ -168,7 +181,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     _pendingWall = segment.start;
     _pendingStrict = false;
     wallPosition.value = segment.start;
-    _recomputeTargets();
+    _retarget();
     notifyListeners();
     // An unloaded reader scroll moves the read point without loading audio;
     // a loaded one repositions the paused player without starting playback.
@@ -184,13 +197,14 @@ class ConversationPlaybackController extends ChangeNotifier {
   void seek(double wallSeconds, {bool play = false, bool strict = false}) {
     if (_isDisposed) return;
     _intentGeneration++;
+    _hasPlayPoint = true;
     _pausedWall = null;
     // Pending is kept on every explicit seek — a stale in-flight seek must
     // never drop the newest intent; the bar clears it only after applying it.
     _pendingWall = wallSeconds;
     _pendingStrict = strict;
     wallPosition.value = wallSeconds;
-    _recomputeTargets();
+    _retarget();
     _isFollowing = true;
     _followRequest++;
     notifyListeners();
@@ -202,10 +216,15 @@ class ConversationPlaybackController extends ChangeNotifier {
   Future<void> _invokeSeek(double wallSeconds, {required bool play, required bool strict}) =>
       _seekHandler?.call(wallSeconds, play: play, strict: strict) ?? Future<void>.value();
 
+  /// Moves the targets to the wall playhead, or clears them while the player has no wall mapping:
+  /// a seek, a reader scroll or a rebuild then claims no line.
+  bool _retarget() => _mapped ? _recomputeTargets() : _clearTargets();
+
   bool _clearTargets() {
-    if (_currentSegmentId == null && _followTargetSegmentId == null) return false;
+    if (_currentSegmentId == null && _followTargetSegmentId == null && _markedSegmentId == null) return false;
     _currentSegmentId = null;
     _followTargetSegmentId = null;
+    _markedSegmentId = null;
     return true;
   }
 
@@ -230,7 +249,15 @@ class ConversationPlaybackController extends ChangeNotifier {
       }
       follow ??= _segments.isEmpty ? null : _segments.last.id;
     }
-    if (current != _currentSegmentId || follow != _followTargetSegmentId) {
+    var marked = current;
+    if (marked == null) {
+      for (final segment in _segments) {
+        if (segment.start <= wall) marked = segment.id;
+      }
+      marked ??= _segments.isEmpty ? null : _segments.first.id;
+    }
+    if (current != _currentSegmentId || follow != _followTargetSegmentId || marked != _markedSegmentId) {
+      _markedSegmentId = marked;
       _currentSegmentId = current;
       _followTargetSegmentId = follow;
       return true;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,7 +20,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart' show conversationLocalDayKey;
-import 'package:omi/ui/ui.dart' show OmiColors, OmiPalette, OmiRadius;
+import 'package:omi/ui/ui.dart' show OmiColors, OmiPalette;
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -243,7 +244,8 @@ Future<_DetailHarness> _pumpDetail(
                           controller.isFollowing && (controller.isPlaying || controller.followRequest > 0),
                       playbackFollowRequest: controller.followRequest,
                       onUserScroll: controller.suspendFollowing,
-                      onTopVisibleSegmentChanged: controller.readerMovedTo,
+                      highlightedSegmentId: controller.hasPlayPoint ? controller.markedSegmentId : null,
+                      onReadingSegmentChanged: controller.readerMovedTo,
                       onSegmentTap: (segment) => harness.seekToSegment?.call(segment.start, segment.end),
                     );
                   },
@@ -278,27 +280,41 @@ List<double> _seekArtifacts(List<String> calls) => [
 
 double _topOf(WidgetTester tester, Key key) => tester.getTopLeft(find.byKey(key)).dy;
 
+/// Taps a transcript line just inside its first character: lines share a paragraph, and the line's
+/// seek key marks where its words start.
+Future<void> _tapLine(WidgetTester tester, String id) =>
+    tester.tapAt(tester.getTopLeft(find.byKey(ValueKey('transcript_seek_$id'))) + const Offset(4, 12));
+
 double _viewportHeight(WidgetTester tester) => tester.getSize(find.byType(ListView)).height;
 
 /// The rendered segment whose row top is closest to (but at or above) the
 /// viewport's top edge — the same "top visible line" the transcript reports.
-TranscriptSegment? _topVisibleSegment(WidgetTester tester, List<TranscriptSegment> segments) {
-  final listTop = tester.getTopLeft(find.byType(ListView)).dy;
+/// The line at the reading line, as the transcript reports it to a paused reader: the last line whose
+/// words start at or above a third of the way down the list (nearer the top while the list is near
+/// its start), else the topmost visible line.
+TranscriptSegment? _readingSegment(WidgetTester tester, List<TranscriptSegment> segments) {
+  final list = find.byType(ListView);
+  final listTop = tester.getTopLeft(list).dy;
   final viewport = _viewportHeight(tester);
-  TranscriptSegment? best;
-  var bestTop = double.infinity;
+  final readingLine = min(viewport / 3, tester.widget<ListView>(list).controller!.offset);
+  TranscriptSegment? atLine;
+  var atLineTop = double.negativeInfinity;
+  TranscriptSegment? topVisible;
+  var topVisibleTop = double.infinity;
   for (final seg in segments) {
     final f = find.byKey(ValueKey('transcript_seek_${seg.id}'));
     if (f.evaluate().isEmpty) continue;
-    final rect = tester.getRect(f);
-    if (rect.bottom - listTop <= 0 || rect.top - listTop >= viewport) continue;
-    final top = rect.top - listTop;
-    if (top < bestTop) {
-      bestTop = top;
-      best = seg;
+    final top = tester.getRect(f).top - listTop;
+    if (top <= readingLine && top > atLineTop) {
+      atLine = seg;
+      atLineTop = top;
+    }
+    if (top >= 0 && top < viewport && top < topVisibleTop) {
+      topVisible = seg;
+      topVisibleTop = top;
     }
   }
-  return best;
+  return atLine ?? topVisible;
 }
 
 /// Platform-channel replies and event-channel emissions settle on the real
@@ -317,16 +333,27 @@ Future<void> _removeDetail(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 200));
 }
 
-Finder _currentFill(Finder scope) => find.ancestor(
-      of: scope,
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is DecoratedBox &&
-            widget.decoration is BoxDecoration &&
-            (widget.decoration as BoxDecoration).color == OmiColors.surface2 &&
-            (widget.decoration as BoxDecoration).borderRadius == OmiRadius.smAll,
-      ),
-    );
+/// The style [text] (one line's words) is drawn in, read from the paragraph's spans.
+TextStyle? _styleOf(WidgetTester tester, String text) {
+  TextStyle? style;
+  for (final paragraph in tester.widgetList<RichText>(find.byType(RichText))) {
+    paragraph.text.visitChildren((span) {
+      // A line's span also holds the word joiner before its words and the space after them.
+      if (span is TextSpan && span.text?.replaceAll('\u2060', '').trim() == text) style = span.style;
+      return style == null;
+    });
+    if (style != null) break;
+  }
+  return style;
+}
+
+Color? _inkOf(WidgetTester tester, String text) => _styleOf(tester, text)?.color;
+
+/// Whether [text] (one line's words) is drawn as the marked line: a touch heavier, as no other is.
+bool _marked(WidgetTester tester, String text) => _styleOf(tester, text)?.shadows != null;
+
+/// The ink of a line nobody marked, when it is not the owner's.
+Color get _resting => OmiColors.textPrimary.withValues(alpha: 0.8);
 
 ServerConversation _snapshotConversation({required double audioSeconds, required double transcriptEnd}) =>
     _conversation(
@@ -458,14 +485,10 @@ void main() {
       findsOneWidget,
       reason: 'the current line is announced to assistive tech as selected',
     );
-    expect(
-      tester
-          .widgetList<RichText>(find.descendant(of: marker, matching: find.byType(RichText)))
-          .map((r) => r.text.style?.color)
-          .where((c) => c == OmiColors.textPrimary),
-      isNotEmpty,
-      reason: 'the current line renders in primary ink, not the dimmed style',
-    );
+    expect(_inkOf(tester, 'Words for seg3'), OmiColors.textPrimary, reason: 'the playing line is full ink');
+    expect(_marked(tester, 'Words for seg3'), isTrue, reason: 'and marked');
+    expect(_inkOf(tester, 'Words for seg2'), _resting, reason: 'no other line changes while the audio plays');
+    expect(_marked(tester, 'Words for seg2'), isFalse);
     final top = _topOf(tester, const ValueKey('transcript_current_seg3'));
     final listTop = tester.getTopLeft(find.byType(ListView)).dy;
     expect(
@@ -501,6 +524,10 @@ void main() {
 
     expect(fetches, 0, reason: 'a pre-Play scrub answers the gesture without loading audio');
     expect(find.byKey(const ValueKey('transcript_current_seg3')), findsOneWidget);
+    expect(_inkOf(tester, 'Words for seg3'), OmiColors.textPrimary, reason: 'the scrubbed line stands out');
+    expect(_marked(tester, 'Words for seg3'), isTrue);
+    expect(_inkOf(tester, 'Words for seg1'), _resting);
+    expect(_marked(tester, 'Words for seg1'), isFalse);
     final painter = tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
     expect(
       painter.progress,
@@ -520,11 +547,11 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -120));
     await tester.pumpAndSettle();
     expect(fetches, 0, reason: 'idle unloaded scrolling never fetches audio');
-    final topSeg = _topVisibleSegment(tester, segments)!;
+    final readingSeg = _readingSegment(tester, segments)!;
     final painterAfterDrag =
         tester.widget<CustomPaint>(find.byKey(const Key('detail_audio_waveform'))).painter as dynamic;
-    expect(painterAfterDrag.progress, moreOrLessEquals(topSeg.start / 120, epsilon: 0.01));
-    expect(topSeg.start, greaterThan(0), reason: 'the drag actually moved the read point');
+    expect(painterAfterDrag.progress, moreOrLessEquals(readingSeg.start / 120, epsilon: 0.01));
+    expect(readingSeg.start, greaterThan(0), reason: 'the drag actually moved the read point');
     expect(scroll.offset, isNot(0));
 
     await tester.tap(find.bySemanticsLabel('Play'));
@@ -534,7 +561,7 @@ void main() {
     expect(fetches, 1);
     expect(
       _seekArtifacts(fake.calls).last,
-      closeTo(topSeg.start, 0.01),
+      closeTo(readingSeg.start, 0.01),
       reason: 'Play applies the newest reader point, not the earlier scrub',
     );
     await _flushPlatform(tester);
@@ -558,7 +585,7 @@ void main() {
       },
     );
 
-    await tester.tap(find.byKey(const ValueKey('transcript_seek_seg2')));
+    await _tapLine(tester, 'seg2');
     await _flushPlatform(tester);
     await _flushPlatform(tester);
 
@@ -626,7 +653,93 @@ void main() {
     await _removeDetail(tester);
   });
 
-  testWidgets('a paused reader drag makes Play start at the new top line', (tester) async {
+  test('a page just opened has no play point until the user plays, taps, scrubs or scrolls', () {
+    final segments = [_segment('seg0', 0, 8), _segment('seg1', 10, 18)];
+    final controller = ConversationPlaybackController(segments: segments);
+    addTearDown(controller.dispose);
+    expect(controller.hasPlayPoint, isFalse);
+    controller.reportPlayback(wallSeconds: 0, playing: false, loaded: true);
+    expect(controller.hasPlayPoint, isFalse, reason: 'loaded audio alone marks no line');
+    expect(controller.currentSegmentId, 'seg0');
+
+    controller.readerMovedTo(segments[1]);
+    expect(controller.hasPlayPoint, isTrue, reason: 'a reader scroll gives playback a point');
+
+    final tapped = ConversationPlaybackController(segments: segments);
+    addTearDown(tapped.dispose);
+    tapped.seek(12);
+    expect(tapped.hasPlayPoint, isTrue, reason: 'a line tap or scrub gives playback a point');
+
+    final played = ConversationPlaybackController(segments: segments);
+    addTearDown(played.dispose);
+    played.reportPlayback(wallSeconds: 1, playing: true, loaded: true);
+    expect(played.hasPlayPoint, isTrue, reason: 'Play gives playback a point');
+  });
+
+  test('without a wall mapping, a scrub or a reader scroll marks no line', () {
+    final segments = [_segment('seg0', 0, 8), _segment('seg1', 10, 18)];
+    final controller = ConversationPlaybackController(segments: segments);
+    addTearDown(controller.dispose);
+    controller.reportPlayback(wallSeconds: 2, playing: false, loaded: true, mapped: false);
+
+    controller.seek(12);
+    expect(controller.markedSegmentId, isNull, reason: 'a scrub claims no line while unmapped');
+    expect(controller.currentSegmentId, isNull);
+    controller.readerMovedTo(segments[1]);
+    expect(controller.markedSegmentId, isNull, reason: 'a reader scroll claims no line while unmapped');
+
+    controller.reportPlayback(wallSeconds: 12, playing: false, loaded: true);
+    expect(controller.markedSegmentId, 'seg1', reason: 'a mapped report marks the line again');
+  });
+
+  test('through silence the marked line is the last spoken one, and the first before anyone speaks', () {
+    final segments = [_segment('seg0', 5, 8), _segment('seg1', 10, 18), _segment('seg2', 40, 48)];
+    final controller = ConversationPlaybackController(segments: segments);
+    addTearDown(controller.dispose);
+
+    controller.reportPlayback(wallSeconds: 2, playing: true, loaded: true);
+    expect(controller.currentSegmentId, isNull);
+    expect(controller.markedSegmentId, 'seg0', reason: 'before anyone speaks, the first line');
+
+    controller.reportPlayback(wallSeconds: 12, playing: true, loaded: true);
+    expect(controller.markedSegmentId, 'seg1');
+
+    controller.reportPlayback(wallSeconds: 25, playing: true, loaded: true);
+    expect(controller.currentSegmentId, isNull, reason: 'the playhead is in silence');
+    expect(controller.markedSegmentId, 'seg1', reason: 'the last spoken line stays marked through silence');
+    expect(controller.followTargetSegmentId, 'seg2', reason: 'following still looks ahead to the next line');
+
+    controller.reportPlayback(wallSeconds: 25, playing: true, loaded: true, mapped: false);
+    expect(controller.markedSegmentId, isNull, reason: 'without a wall mapping no line is marked');
+  });
+
+  testWidgets('a scrub into silence keeps the last spoken line marked, and no other', (tester) async {
+    final fake = _FakeAudioDevice();
+    final segments = [_segment('seg0', 0, 8), _segment('seg1', 30, 38, speakerId: 1), _segment('seg2', 60, 68)];
+    await _pumpDetail(
+      tester,
+      _conversation(segments: segments),
+      fake: fake,
+      fetch: (_) async =>
+          ApiSuccess(_dense([const ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 120)])),
+    );
+
+    // 0:48 on the 120 s wall track: after seg1 ends (0:38), before seg2 starts (1:00).
+    final box = tester.getRect(find.byKey(const Key('detail_audio_waveform')));
+    await tester.tapAt(Offset(box.left + box.width * (48 / 120), box.center.dy));
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const ValueKey('transcript_current_seg1')), findsNothing, reason: 'nobody speaks at 0:48');
+    expect(_inkOf(tester, 'Words for seg1'), OmiColors.textPrimary, reason: 'the last spoken line stays lit');
+    expect(_marked(tester, 'Words for seg1'), isTrue);
+    expect(_inkOf(tester, 'Words for seg0'), _resting);
+    expect(_inkOf(tester, 'Words for seg2'), _resting, reason: 'the next line lights only when it starts');
+    expect(_marked(tester, 'Words for seg2'), isFalse);
+    await _removeDetail(tester);
+  });
+
+  testWidgets('a paused reader drag makes Play start at the line on the reading line', (tester) async {
     final fake = _FakeAudioDevice();
     final segments = [for (var i = 0; i < 12; i++) _segment('seg$i', i * 10.0, i * 10.0 + 8, speakerId: i % 2)];
     await _pumpDetail(
@@ -647,16 +760,25 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -150));
     await tester.pumpAndSettle();
 
-    // The drag itself already seeked the loaded player to the rendered top
-    // line — derive which line that is rather than hardcoding an index.
-    final topSeg = _topVisibleSegment(tester, segments)!;
-    expect(topSeg.start, greaterThan(0), reason: 'the drag moved the top line off the first row');
+    // The drag itself already seeked the loaded player to the line on the
+    // reading line — derive which line that is rather than hardcoding an index.
+    final readingSeg = _readingSegment(tester, segments)!;
+    expect(readingSeg.start, greaterThan(0), reason: 'the drag moved the reading line off the first row');
     expect(
       _seekArtifacts(fake.calls),
-      contains(closeTo(topSeg.start, 0.01)),
-      reason: 'a paused reader drag seeks to the actual rendered top line',
+      contains(closeTo(readingSeg.start, 0.01)),
+      reason: 'a paused reader drag seeks to the line on the reading line, where following keeps the playing line',
     );
     expect(fake.calls.last, isNot('play'));
+    expect(
+      _inkOf(tester, 'Words for ${readingSeg.id}'),
+      OmiColors.textPrimary,
+      reason: 'scrolling while paused lights the line on the reading line',
+    );
+    expect(_marked(tester, 'Words for ${readingSeg.id}'), isTrue);
+    final next = segments[segments.indexOf(readingSeg) + 1];
+    expect(_inkOf(tester, 'Words for ${next.id}'), _resting, reason: 'and no other line');
+    expect(_marked(tester, 'Words for ${next.id}'), isFalse);
 
     fake.calls.clear();
     await tester.tap(find.bySemanticsLabel('Play'));
@@ -762,7 +884,7 @@ void main() {
 
     // Line tap kicks off initialization for a strict play-seek at wall 10;
     // a waveform scrub at wall 40 lands while the fetch is still in flight.
-    await tester.tap(find.byKey(const ValueKey('transcript_seek_seg1')));
+    await _tapLine(tester, 'seg1');
     await tester.pump();
     final waveform = find.byKey(const Key('detail_audio_waveform'));
     final box = tester.getRect(waveform);
@@ -833,15 +955,15 @@ void main() {
     await _flushPlatform(tester);
     fake.calls.clear();
 
-    // A drag that reports a new top line snaps the paused point to that
+    // A drag that reports a new reading line snaps the paused point to that
     // line's start, not the artifact spot (23) it paused inside.
     await tester.drag(find.byType(ListView), const Offset(0, 25));
     await tester.pumpAndSettle();
-    final topSeg = _topVisibleSegment(tester, segments)!;
+    final readingSeg = _readingSegment(tester, segments)!;
     expect(
       _seekArtifacts(fake.calls),
-      contains(closeTo(topSeg.start, 0.01)),
-      reason: 'a reader gesture snaps the read point to the top line start',
+      contains(closeTo(readingSeg.start, 0.01)),
+      reason: 'a reader gesture snaps the read point to the reading line start',
     );
 
     fake.calls.clear();
@@ -990,7 +1112,7 @@ void main() {
     fake.calls.clear();
     fake.failSeeks = true;
 
-    await tester.tap(find.byKey(const ValueKey('transcript_seek_seg2')));
+    await _tapLine(tester, 'seg2');
     await _flushPlatform(tester);
     await _flushPlatform(tester);
 
@@ -1021,7 +1143,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('transcript_seek_seg2')));
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     fake.calls.clear();
-    await tester.tap(find.byKey(const ValueKey('transcript_seek_seg2')));
+    await _tapLine(tester, 'seg2');
     await _flushPlatform(tester);
     await _flushPlatform(tester);
 
@@ -1176,7 +1298,7 @@ void main() {
     await _removeDetail(tester);
   });
 
-  testWidgets('consecutive owner lines carry a migrating current fill', (tester) async {
+  testWidgets('consecutive owner lines pass the mark along while the audio plays', (tester) async {
     final previousPalette = OmiColors.active;
     addTearDown(() => OmiColors.active = previousPalette);
     for (final palette in [OmiPalette.dark, OmiPalette.light]) {
@@ -1203,16 +1325,15 @@ void main() {
 
       expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
       expect(
-        _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
-        findsOneWidget,
-        reason: 'the playing owner line paints its own background (${palette == OmiPalette.dark ? 'dark' : 'light'})',
+        _inkOf(tester, 'Words for s0'),
+        OmiColors.textPrimary,
+        reason: 'the playing owner line is full ink (${palette == OmiPalette.dark ? 'dark' : 'light'})',
       );
-      expect(
-        _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
-        findsNothing,
-        reason: 'the adjacent inactive owner line keeps no fill',
-      );
-      expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s2'))), findsNothing);
+      expect(_marked(tester, 'Words for s0'), isTrue,
+          reason: 'an owner line is always full ink; the mark sets it apart');
+      expect(_marked(tester, 'Words for s1'), isFalse, reason: 'the next owner line in its paragraph is not marked');
+      expect(_inkOf(tester, 'Words for s1'), OmiColors.textPrimary, reason: 'and keeps its own ink');
+      expect(_inkOf(tester, 'Words for s2'), _resting);
 
       fake.emit(playing: true, positionSec: 15);
       await _flushPlatform(tester);
@@ -1220,28 +1341,25 @@ void main() {
 
       expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
       expect(
-        _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
-        findsOneWidget,
-        reason: 'the fill migrates to the newly current owner line',
+        _inkOf(tester, 'Words for s1'),
+        OmiColors.textPrimary,
+        reason: 'the newly playing owner line inside the same paragraph is full ink',
       );
-      expect(
-        _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
-        findsNothing,
-        reason: 'the previous owner line clears its fill',
-      );
+      expect(_marked(tester, 'Words for s1'), isTrue, reason: 'the mark moves to it');
+      expect(_marked(tester, 'Words for s0'), isFalse, reason: 'and leaves the previous owner line');
       expect(
         find.ancestor(
           of: find.byKey(const ValueKey('transcript_current_s1')),
           matching: find.byWidgetPredicate((w) => w is Semantics && w.properties.selected == true),
         ),
         findsOneWidget,
-        reason: 'the selected announcement survives the fill',
+        reason: 'the paragraph holding the playing line is announced as selected',
       );
       await _removeDetail(tester);
     }
   });
 
-  testWidgets('consecutive non-owner lines carry a migrating current fill', (tester) async {
+  testWidgets('consecutive non-owner lines pass the mark along while the audio plays', (tester) async {
     final fake = _FakeAudioDevice();
     final segments = [
       _segment('s0', 0, 8, speakerId: 2),
@@ -1263,16 +1381,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.byKey(const ValueKey('transcript_current_s0')), findsOneWidget);
-    expect(
-      _currentFill(find.byKey(const ValueKey('transcript_seek_s0'))),
-      findsOneWidget,
-      reason: 'the playing non-owner line paints its own background',
-    );
-    expect(
-      _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
-      findsNothing,
-      reason: 'the adjacent inactive line keeps no fill',
-    );
+    expect(_inkOf(tester, 'Words for s0'), OmiColors.textPrimary, reason: 'the playing non-owner line is full ink');
+    expect(_marked(tester, 'Words for s0'), isTrue);
+    expect(_inkOf(tester, 'Words for s1'), _resting, reason: 'the next line in its paragraph keeps its ink');
+    expect(_marked(tester, 'Words for s1'), isFalse);
 
     fake.emit(playing: true, positionSec: 15);
     await _flushPlatform(tester);
@@ -1280,11 +1392,13 @@ void main() {
 
     expect(find.byKey(const ValueKey('transcript_current_s1')), findsOneWidget);
     expect(
-      _currentFill(find.byKey(const ValueKey('transcript_seek_s1'))),
-      findsOneWidget,
-      reason: 'the fill migrates between same-speaker non-owner lines',
+      _inkOf(tester, 'Words for s1'),
+      OmiColors.textPrimary,
+      reason: 'full ink moves between same-speaker non-owner lines',
     );
-    expect(_currentFill(find.byKey(const ValueKey('transcript_seek_s0'))), findsNothing);
+    expect(_marked(tester, 'Words for s1'), isTrue);
+    expect(_inkOf(tester, 'Words for s0'), _resting, reason: 'the line it left is back at its own ink');
+    expect(_marked(tester, 'Words for s0'), isFalse);
     await _removeDetail(tester);
   });
 
