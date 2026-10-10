@@ -28,7 +28,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   // Step 1: Single press - ask a question
   bool voiceSessionActive = false;
   bool questionSent = false;
+  bool questionFailed = false;
   String? aiResponse;
+  String? userQuestion;
+  int? returnStep;
 
   // Step 2: Voice reply preference. Null until the step is visited so a user
   // who skips the tutorial before this point keeps their existing preference.
@@ -43,6 +46,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool showSingleTapHint = false;
 
   Timer? _hintTimer;
+  Timer? _questionTimeoutTimer;
+  DateTime? _voiceSessionStartedAt;
   bool _disposed = false;
 
   void startOnboarding() {
@@ -58,7 +63,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     transcriptionComplete = false;
     voiceSessionActive = false;
     questionSent = false;
+    questionFailed = false;
     aiResponse = null;
+    userQuestion = null;
+    returnStep = null;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
@@ -66,9 +74,19 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     showSingleTapHint = false;
     _hintTimer?.cancel();
     _hintTimer = null;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    _voiceSessionStartedAt = null;
   }
 
   void advanceStep() {
+    if (returnStep != null) {
+      final target = returnStep!;
+      returnStep = null;
+      currentStep = target;
+      notifyListeners();
+      return;
+    }
     if (currentStep < totalSteps - 1) {
       currentStep++;
       notifyListeners();
@@ -77,6 +95,9 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    if (currentStep == allSetStep) {
+      returnStep = allSetStep;
+    }
     currentStep = step;
     notifyListeners();
   }
@@ -98,6 +119,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     isOnboardingActive = false;
     _hintTimer?.cancel();
     _hintTimer = null;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
     notifyListeners();
   }
 
@@ -140,18 +163,58 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      _voiceSessionStartedAt = DateTime.now();
+      questionFailed = false;
+      _questionTimeoutTimer?.cancel();
+      _questionTimeoutTimer = null;
       notifyListeners();
     } else {
-      // Second press — question is being sent
+      // Second press — question is being sent or empty
       voiceSessionActive = false;
-      questionSent = true;
+      var elapsed = Duration.zero;
+      if (_voiceSessionStartedAt != null) {
+        elapsed = DateTime.now().difference(_voiceSessionStartedAt!);
+      }
+
+      if (elapsed < const Duration(milliseconds: 700)) {
+        // Double-pressed without speaking / too fast to capture speech
+        questionSent = false;
+        questionFailed = true;
+      } else {
+        questionSent = true;
+        questionFailed = false;
+        _startQuestionTimeout();
+      }
       notifyListeners();
     }
   }
 
-  void onVoiceResponseReceived(String response) {
+  void _startQuestionTimeout() {
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = Timer(const Duration(seconds: 8), () {
+      if (questionSent && aiResponse == null) {
+        onVoiceQuestionFailed();
+      }
+    });
+  }
+
+  void onVoiceQuestionFailed() {
     if (currentStep != askQuestionStep) return;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    voiceSessionActive = false;
+    questionSent = false;
+    questionFailed = true;
+    notifyListeners();
+  }
+
+  void onVoiceResponseReceived(String response, {String? question}) {
+    if (currentStep != askQuestionStep) return;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
     aiResponse = response;
+    if (question != null) userQuestion = question;
+    questionFailed = false;
     notifyListeners();
   }
 
@@ -218,6 +281,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _hintTimer?.cancel();
+    _questionTimeoutTimer?.cancel();
     super.dispose();
   }
 }

@@ -1,0 +1,3 @@
+{
+  "change": "Recover from empty or no-speech questions with retry hint in pendant tutorial and restore previous answer when revisiting from summary."
+}
