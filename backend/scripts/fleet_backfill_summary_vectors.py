@@ -101,6 +101,49 @@ def save_state(path: Path, state: dict) -> None:
     tmp.rename(path)
 
 
+def load_state_durable(path: Path) -> dict:
+    """Local state, mirrored to Firestore for cross-execution resume.
+
+    A Cloud Run execution's /tmp dies with the task; the Firestore mirror at
+    `_meta/summary_vector_backfill_state` lets a rerun resume where the last
+    one stopped. Local file stays the working copy (fast, atomic).
+    """
+    state = load_state(path)
+    try:
+        from database._client import get_firestore_client
+
+        doc = get_firestore_client().collection('_meta').document('summary_vector_backfill_state').get()
+        if doc.exists:
+            remote = doc.to_dict() or {}
+            remote_done = remote.get('done') or {}
+            if len(remote_done) > len(state.get('done', {})):
+                state['done'] = remote_done
+            remote_failed = remote.get('failed') or {}
+            if len(remote_failed) > len(state.get('failed', {})):
+                state['failed'] = remote_failed
+    except Exception as error:
+        print(f'state mirror read failed (continuing local): {type(error).__name__}', file=sys.stderr)
+    return state
+
+
+def save_state_durable(path: Path, state: dict) -> None:
+    save_state(path, state)
+    try:
+        from database._client import get_firestore_client
+
+        get_firestore_client().collection('_meta').document('summary_vector_backfill_state').set(
+            {
+                'done': state.get('done', {}),
+                'failed': state.get('failed', {}),
+                'started_at': state.get('started_at'),
+                'updated_at': state.get('updated_at'),
+            },
+            merge=True,
+        )
+    except Exception as error:
+        print(f'state mirror write failed (local only): {type(error).__name__}', file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--uid-file', help='one uid per line')
@@ -140,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             print('Refusing --apply: no vector index configured.', file=sys.stderr)
             return 2
 
-    state = load_state(state_path)
+    state = load_state_durable(state_path)
     if state.get('started_at') is None:
         state['started_at'] = datetime.now(timezone.utc).isoformat()
 
@@ -171,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         except Exception as error:
             state['failed'][uid] = type(error).__name__
-            save_state(state_path, state)
+            save_state_durable(state_path, state)
             print(json.dumps({'uid': uid, 'outcome': 'select_failed', 'error': type(error).__name__}))
             exit_code = 1
             time.sleep(args.sleep)
@@ -183,10 +226,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             state['done'][uid] = record
             state['failed'].pop(uid, None)
-        save_state(state_path, state)
+        save_state_durable(state_path, state)
         print(json.dumps({'uid': uid, 'outcome': 'applied' if args.apply else 'preview', **record}))
         time.sleep(args.sleep)
-    save_state(state_path, state)
+    save_state_durable(state_path, state)
     print(
         json.dumps(
             {'mode': mode_str, 'finished': True, 'done_total': len(state['done']), 'failed_total': len(state['failed'])}
