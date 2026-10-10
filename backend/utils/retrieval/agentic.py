@@ -1899,8 +1899,6 @@ user chose not to send; acknowledge that rather than retrying.
     if projection is not None:
         configurable['tool_projection'] = projection
         configurable['tools'] = list(projection.registry.values())
-    if runtime is not None and runtime.withhold_private_memories:
-        configurable['withhold_private_memories'] = True
 
     # Store config in context variable for tools that use agent_config_context
     agent_config_context.set({"configurable": configurable})
