@@ -24,7 +24,9 @@ def test_offered_codes_round_trip_unchanged():
     # A code that normalizes to something else would leave the picker showing one
     # language while the account stores another.
     drifted = [
-        (code, normalize_user_language(code)) for code, _ in PRIMARY_LANGUAGE_OPTIONS if normalize_user_language(code) != code
+        (code, normalize_user_language(code))
+        for code, _ in PRIMARY_LANGUAGE_OPTIONS
+        if normalize_user_language(code) != code
     ]
     assert drifted == [], f"code changes on save: {drifted}"
 
@@ -61,3 +63,10 @@ def test_alias_map_still_resolves_the_offered_names():
         resolved = LANGUAGE_NAME_TO_BASE.get(name.lower())
         if resolved is not None:
             assert resolved == base, f"alias '{name}' resolves to {resolved}, not {base}"
+
+
+def test_gujarati_is_offered_and_supported():
+    assert ('gu', 'Gujarati') in PRIMARY_LANGUAGE_OPTIONS
+    assert normalize_user_language('gu') == 'gu'
+    assert normalize_user_language('gujarati') == 'gu'
+    assert normalize_user_language('Gujarati') == 'gu'

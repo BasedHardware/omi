@@ -80,6 +80,7 @@ class HomeProvider extends ChangeNotifier {
     'French (Canada)': 'fr-CA',
     'German (Switzerland)': 'de-CH',
     'Greek': 'el',
+    'Gujarati': 'gu',
     'Hebrew': 'he',
     'Hungarian': 'hu',
     'Indonesian': 'id',
