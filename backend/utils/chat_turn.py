@@ -1,12 +1,12 @@
+"""Chat turn service shared by the app route and messaging workers."""
+
 from config.messaging import cohort_enabled
 from utils.messaging import app_awareness
 from utils.messaging.projection import surface_runtime
 from utils.messaging.contracts import ReentryEvent
 
-"""Chat turn service shared by the app route and messaging workers."""
-
 from dataclasses import dataclass, field, replace
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 import logging
 import asyncio
 import json
@@ -29,6 +29,8 @@ from models.chat import (
     ChatEvidenceEnvelope,
     ChatSession,
     Message,
+    MessageSender,
+    MessageType,
     SendMessageRequest,
     ResponseMessage,
     MessageConversation,
@@ -40,13 +42,13 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota
-from utils.other.chat_file import _safe_file_chats
+from utils.other.chat_file import safe_file_chats
 from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.log_sanitizer import sanitize_pii
 from utils.chat_followup import followup_content_blocks
 from utils.observability.fallback import record_fallback
-from utils.journey_metrics_contract import resolve_client_kind_from_headers
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.product_metrics import record_product_event
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 
@@ -114,8 +116,8 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=now,
-        sender='human',
-        type='text',
+        sender=MessageSender.human,
+        type=MessageType.text,
         app_id=compat_app_id,
         chat_session_id=chat_session.id if chat_session else None,
     )
@@ -150,8 +152,8 @@ def _build_quota_exceeded_reply(
         id=str(uuid.uuid4()),
         text=canned,
         created_at=datetime.now(timezone.utc),
-        sender='ai',
-        type='text',
+        sender=MessageSender.ai,
+        type=MessageType.text,
         app_id=compat_app_id,
         chat_session_id=chat_session.id if chat_session else None,
     )
@@ -172,8 +174,8 @@ def _build_quota_accounting_unavailable_reply(compat_app_id: Optional[str]) -> R
         id=str(uuid.uuid4()),
         text=("Usage accounting is temporarily unavailable. Please retry in a moment — " "your message was not saved."),
         created_at=datetime.now(timezone.utc),
-        sender='ai',
-        type='text',
+        sender=MessageSender.ai,
+        type=MessageType.text,
         app_id=compat_app_id,
     )
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
@@ -200,7 +202,7 @@ def _record_chat_quota_question(
     )
 
 
-def _record_chat_quota_question_best_effort(
+def record_chat_quota_question_best_effort(
     uid: str,
     *,
     idempotency_key: str,
@@ -324,14 +326,14 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         id=str(uuid.uuid4()),
         text=data.text,
         created_at=datetime.now(timezone.utc),
-        sender='human',
-        type='text',
+        sender=MessageSender.human,
+        type=MessageType.text,
         app_id=compat_app_id,
     )
     # Ensure chat session exists when files are attached
     if data.file_ids and not chat_session:
-        chat_session = acquire_chat_session(uid, compat_app_id)
-        chat_session = ChatSession(**chat_session) if isinstance(chat_session, dict) else chat_session
+        acquired_session: Any = acquire_chat_session(uid, compat_app_id)
+        chat_session = ChatSession(**acquired_session) if isinstance(acquired_session, dict) else acquired_session
 
     if data.file_ids is not None and chat_session:
         new_file_ids = chat_session.retrieve_new_file(data.file_ids)
@@ -341,7 +343,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
-            files = _safe_file_chats([f for f in files if f])
+            files = safe_file_chats([f for f in files if f])
             message.files = files
 
     if chat_session:
@@ -382,7 +384,9 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
     if runtime is None and try_acquire_goal_extraction_lock(uid):
         llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
-    app = get_available_app_by_id(compat_app_id, uid) if runtime is None else None
+    # Preserve the legacy optional app lookup, including its None input.
+    legacy_app_id: Any = compat_app_id
+    app = get_available_app_by_id(legacy_app_id, uid) if runtime is None else None
     app = App.deserialize_safe(app) if app else None
 
     app_id_from_app = app.id if app else None
@@ -436,9 +440,9 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             id=ai_message_id,
             text=response,
             created_at=datetime.now(timezone.utc),
-            sender='ai',
+            sender=MessageSender.ai,
             app_id=app_id_from_app,
-            type='text',
+            type=MessageType.text,
             memories_id=memories_id,
             chart_data=chart_data,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
@@ -490,9 +494,8 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         callback_data = {}
         app_context = None
         app_store = None
-        app_lease = None
         if runtime is None and chat_session is not None and cohort_enabled(uid):
-            app_runtime, app_store, app_lease = await app_awareness.prepare(
+            app_runtime, app_store, _ = await app_awareness.prepare(
                 uid, chat_session, messages, principal, store=options.app_store, token=options.app_lease
             )
             if app_runtime is not None:
@@ -529,14 +532,15 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     id=str(uuid.uuid4()),
                     text=response,
                     created_at=datetime.now(timezone.utc),
-                    sender='ai',
+                    sender=MessageSender.ai,
                     app_id=app_id_from_app,
-                    type='text',
+                    type=MessageType.text,
                 )
                 if chat_session:
                     ai_message.chat_session_id = chat_session.id
                 ask_for_nps = False
             if app_store is not None:
+                assert chat_session is not None
                 await app_awareness.record(app_store, uid, chat_session.id, ai_message)
             response_message = ResponseMessage(**ai_message.model_dump())
             response_message.ask_for_nps = ask_for_nps
@@ -574,7 +578,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 chat_session=chat_session,
                 context=data.context,
                 platform=x_app_platform,
-                client_kind=mobile_journey_attempt.client_kind,
+                client_kind=cast(ClientKind, mobile_journey_attempt.client_kind),
                 client_tz=chat_tz,
                 device_tool_names=set(data.device_tools or ()),
                 shaped_invocation=True,

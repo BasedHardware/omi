@@ -276,7 +276,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     chat_file.FileChatTool = MagicMock()
     # routers.chat imports this name; these suites never exercise the file branch (their
     # file_ids are empty), so a stub that returns nothing keeps the module importable.
-    chat_file._safe_file_chats = MagicMock(return_value=[])
+    chat_file.safe_file_chats = MagicMock(return_value=[])
     # routers.chat imports this name; the stub must carry it or the module fails to load. A local
     # subclass keeps the real module (PIL, openai, database) out of these suites' import graph.
     chat_file.UnsupportedChatFileError = type('UnsupportedChatFileError', (Exception,), {})

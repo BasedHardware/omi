@@ -1,7 +1,5 @@
 from database.chat_history_window import (
     cache_aligned_history_limit,
-    CHAT_HISTORY_BASE_VISIBLE_MESSAGES,
-    CHAT_HISTORY_APPEND_EPOCH_MESSAGES,
 )
 from database.channel_visibility import visible_sessions
 import copy

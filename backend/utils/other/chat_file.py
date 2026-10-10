@@ -67,7 +67,7 @@ def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChat
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
-def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
     A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
@@ -281,7 +281,7 @@ class FileChatTool:
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments (non-streaming, agentic tool path)."""
         files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
-        files = _safe_file_chats(files_data)
+        files = safe_file_chats(files_data)
         return self._ask_files(question, files)
 
     async def process_chat_with_file_stream(
@@ -299,7 +299,7 @@ class FileChatTool:
             files_data = await run_blocking(
                 db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
             )
-            files = _safe_file_chats(files_data)
+            files = safe_file_chats(files_data)
         except Exception:
             callback.end_nowait()
             raise

@@ -11,3 +11,6 @@ tests/unit/test_chat_session_app_identity.py
 tests/unit/test_chat_session_selection.py
 tests/unit/test_app_message_chat_session.py
 tests/unit/test_chat_session_normalize.py
+tests/unit/test_chat_file_gateway_surface.py
+tests/unit/test_chat_file_skip_malformed.py
+tests/unit/test_chat_send_malformed_file_guard.py
