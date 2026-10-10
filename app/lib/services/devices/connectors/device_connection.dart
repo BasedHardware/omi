@@ -736,6 +736,25 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  Future<void> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+  }
+
+  Future<void> performSetDeviceName(String name) async {
+    throw UnsupportedError('$runtimeType does not support setting custom device name');
+  }
+
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    return null;
+  }
+
+  Future<String?> performGetDeviceName() async => null;
+
   /// Called when the server transcription WebSocket reconnects after a
   /// network-only outage (BLE stayed connected throughout). Override to
   /// re-initialize device streaming if the device may have stopped sending

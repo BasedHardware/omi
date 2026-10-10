@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12411,4 +12412,197 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pinPersonDescription => '置顶的人员会保留在你的人员列表顶部，且不会被清理删除。';
+
+  @override
+  String get buildAndShareApp => '构建并分享您自己的应用';
+
+  @override
+  String get membersAndCounting => '8000+名成员并且还在增加。';
+
+  @override
+  String get privacyIntro => '在 Omi，我们致力于保护您的隐私。此页面允许您控制数据的保存和使用方式。';
+
+  @override
+  String get dataProtectionDesc => '默认情况下，您的数据受强加密保护。';
+
+  @override
+  String get transcriptionConfig => '配置 STT 提供商';
+
+  @override
+  String get importDataConfig => '从其他来源导入数据';
+
+  @override
+  String get understandingSubtitle => '从您的对话中理解的单词数。';
+
+  @override
+  String get rememberingSubtitle => '为您记住的事实和细节。';
+
+  @override
+  String get debugLogsDesc => '帮助诊断问题';
+
+  @override
+  String get deleteKnowledgeGraphMessage => '这将删除所有导出的图谱数据（节点和连接）。您的原始记忆保持安全。';
+
+  @override
+  String get deleteKnowledgeGraphDesc => '删除所有节点和连接';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc => '随着我们模型的改进，我们可以为您的录音提供更好的转录结果。';
+
+  @override
+  String get bestInClassTranscription => '一流的转录';
+
+  @override
+  String get optimizedForConversation => '为对话优化';
+
+  @override
+  String get highAccuracy => '高精度';
+
+  @override
+  String get privacyFirst => '隐私至上';
+
+  @override
+  String get keepGoing => '继续加油';
+
+  @override
+  String get personalGrowthJourney => '您的个人成长之旅，AI 倾听您的每一句话。';
+
+  @override
+  String get alwaysInContext => '始终包含在上下文中';
+
+  @override
+  String get configureSttProvider => '配置 STT 提供商';
+
+  @override
+  String get clearAllNodesAndConnections => '清除所有节点和连接';
+
+  @override
+  String get welcomeToOmiDescription => '欢迎来到Omi！您的AI伴侣已准备好帮助您进行对话、任务等。';
+
+  @override
+  String get conversationsProcessedAutomatically => '对话会自动处理';
+
+  @override
+  String get getInsightsInstantly => '立即获取见解和摘要';
+
+  @override
+  String get dailyScoreDescription => '帮助您更好地专注于\n执行的评分。';
+
+  @override
+  String get startConversation => '开始对话，让魔法开始';
+
+  @override
+  String get wearableAiCompanion => '可穿戴AI伴侣';
+
+  @override
+  String get organizeAndControlMemories => '整理和控制您的记忆';
+
+  @override
+  String get setAllMemoriesToPrivate => '将所有记忆设置为私密可见性';
+
+  @override
+  String get setAllMemoriesToPublic => '将所有记忆设置为公开可见性';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => '选择您的首选语言以获得最佳 Omi 体验';
+
+  @override
+  String get enableFeaturesForBestExperience => '启用功能以在您的设备上获得最佳 Omi 体验。';
+
+  @override
+  String get deliveryTimeDescription => '何时接收您的每日摘要';
+
+  @override
+  String get configureSTTProvider => '配置 STT 提供商';
+
+  @override
+  String get setConversationEndDescription => '设置对话何时自动结束';
+
+  @override
+  String get clearNodesDescription => '清除所有节点和连接';
+
+  @override
+  String get deleteKnowledgeGraphWarning => '这将删除所有派生的知识图谱数据。您的原始记忆仍然安全。';
+
+  @override
+  String get createAndShareYourApp => '创建并分享您的应用';
+
+  @override
+  String get e2eeDescription => '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
+
+  @override
+  String get secureEncryptionDescription =>
+      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+
+  @override
+  String get e2eeCardDescription => '启用以获得最大安全性，只有您可以访问您的数据。点击了解更多。';
+
+  @override
+  String get yourOmiUnleashed => '您的Omi，解放了。选择无限版，开启无限可能。';
+
+  @override
+  String get privacyIntroText => '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
+
+  @override
+  String get commitmentText => '我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。';
+
+  @override
+  String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
+
+  @override
+  String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
+
+  @override
+  String get howPeopleWorks => '创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！';
+
+  @override
+  String get buildAndShareYourCustomApp => '构建并分享您的自定义应用';
+
+  @override
+  String get onboardingChooseYourPreference => '选择您的偏好';
+
+  @override
+  String get onboardingGrantRequiredAccess => '授予所需权限';
+
+  @override
+  String get apiEnvironmentDescription => '选择要连接的服务器';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '您的通话保持私密和安全';
+
+  @override
+  String get omisStorageDesc => '当 Omi 未连接到手机时，它会将音频存储在内置存储器中。您永远不会丢失任何录音。';
+
+  @override
+  String get permissionsSetupDescription => '启用一些权限，让 Omi 发挥它的魔力。';
+
+  @override
+  String get architectSubtitle => '高级用户 AI — 数千次对话 + 代理自动化';
+
+  @override
+  String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
+
+  @override
+  String get speakerTagPromptSubtitle => '快速确认最近两天的声音';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '保留 $name，并预期对方会出现在你的对话中';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi 会在匹配相近的声音前先询问你。';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '选“是”会提升 $name 的可信度。';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '给我们 5 星好评对我们真的很有帮助 ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return '最多 25 个字节（当前 $count 个字节，非 ASCII 字符占用多个字节）';
+  }
 }

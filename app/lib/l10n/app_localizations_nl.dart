@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12646,4 +12647,211 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Vastgezette mensen blijven bovenaan je lijst met mensen staan en worden niet verwijderd door Opruimen.';
+
+  @override
+  String get buildAndShareApp => 'Bouw en deel je aangepaste app';
+
+  @override
+  String get membersAndCounting => '8000+ leden en groeiend.';
+
+  @override
+  String get privacyIntro =>
+      'Bij Omi zijn we toegewijd aan het beschermen van je privacy. Deze pagina stelt je in staat om te bepalen hoe je gegevens worden opgeslagen en gebruikt.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Je gegevens zijn standaard beveiligd met sterke encryptie. Bekijk hieronder je instellingen en toekomstige privacy-opties.';
+
+  @override
+  String get transcriptionConfig => 'STT-provider configureren';
+
+  @override
+  String get importDataConfig => 'Gegevens importeren uit andere bronnen';
+
+  @override
+  String get understandingSubtitle => 'Woorden begrepen uit je gesprekken.';
+
+  @override
+  String get rememberingSubtitle => 'Feiten en details voor je onthouden.';
+
+  @override
+  String get debugLogsDesc => 'Helpt bij het diagnosticeren van problemen';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Je originele herinneringen blijven veilig. De graaf wordt na verloop van tijd of bij het volgende verzoek opnieuw opgebouwd.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Alle knooppunten en verbindingen wissen';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Naarmate ons model verbetert, kunnen we betere transcriptieresultaten voor je opnames bieden.';
+
+  @override
+  String get bestInClassTranscription => 'Beste transcriptie zonder configuratie';
+
+  @override
+  String get optimizedForConversation => 'Geoptimaliseerd voor gesprekken';
+
+  @override
+  String get highAccuracy => 'Hoge nauwkeurigheid';
+
+  @override
+  String get privacyFirst => 'Privacy eerst';
+
+  @override
+  String get keepGoing => 'Ga zo door, je doet het geweldig';
+
+  @override
+  String get personalGrowthJourney => 'Jouw persoonlijke groeireis met AI die naar elk woord luistert.';
+
+  @override
+  String get alwaysInContext => 'Altijd in context';
+
+  @override
+  String get configureSttProvider => 'STT-provider configureren';
+
+  @override
+  String get clearAllNodesAndConnections => 'Alle knooppunten en verbindingen wissen';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Welkom bij Omi! Je AI-metgezel is klaar om je te helpen met gesprekken, taken en meer.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Gesprekken worden automatisch verwerkt';
+
+  @override
+  String get getInsightsInstantly => 'Krijg direct inzichten en samenvattingen';
+
+  @override
+  String get dailyScoreDescription => 'Een score om je te helpen\nbeter te focussen op uitvoering.';
+
+  @override
+  String get startConversation => 'Begin een gesprek en laat de magie beginnen';
+
+  @override
+  String get wearableAiCompanion => 'Draagbare AI-metgezel';
+
+  @override
+  String get organizeAndControlMemories => 'Organiseer en beheer je herinneringen';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Alle herinneringen op privé zetten';
+
+  @override
+  String get setAllMemoriesToPublic => 'Alle herinneringen op openbaar zetten';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Selecteer uw voorkeurstaal voor de beste Omi-ervaring';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Schakel functies in voor de beste Omi-ervaring op uw apparaat.';
+
+  @override
+  String get deliveryTimeDescription => 'Wanneer je dagelijkse samenvatting ontvangen';
+
+  @override
+  String get configureSTTProvider => 'STT-provider configureren';
+
+  @override
+  String get setConversationEndDescription => 'Instellen wanneer gesprekken automatisch eindigen';
+
+  @override
+  String get clearNodesDescription => 'Wis alle knooppunten en verbindingen';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Dit verwijdert alle afgeleide kennisgrafiekgegevens. Uw originele herinneringen blijven veilig.';
+
+  @override
+  String get createAndShareYourApp => 'Maak en deel uw app';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-encryptie is de gouden standaard voor privacy. Wanneer ingeschakeld, worden uw gegevens op uw apparaat versleuteld voordat ze naar onze servers worden verzonden. Dit betekent dat niemand, zelfs Omi niet, toegang heeft tot uw inhoud.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Uw gegevens worden versleuteld met een voor u unieke sleutel op onze servers, gehost op Google Cloud. Dit betekent dat uw ruwe inhoud ontoegankelijk is voor iedereen, inclusief Omi-medewerkers of Google, rechtstreeks vanuit de database.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Schakel in voor maximale beveiliging waarbij alleen u toegang heeft tot uw gegevens. Tik om meer te weten te komen.';
+
+  @override
+  String get yourOmiUnleashed => 'Uw Omi, ontketend. Ga unlimited voor eindeloze mogelijkheden.';
+
+  @override
+  String get privacyIntroText =>
+      'Bij Omi nemen we uw privacy zeer serieus. We willen transparant zijn over de gegevens die we verzamelen en hoe we deze gebruiken. Dit moet u weten:';
+
+  @override
+  String get commitmentText =>
+      'We zijn toegewijd om de verzamelde gegevens alleen te gebruiken om Omi een beter product voor u te maken. Uw privacy en vertrouwen zijn van het grootste belang voor ons.';
+
+  @override
+  String get thankYouText =>
+      'Bedankt dat u een gewaardeerde gebruiker van Omi bent. Als u vragen of zorgen heeft, neem dan gerust contact met ons op via team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Uw originele herinneringen blijven veilig. De grafiek wordt in de loop van de tijd of bij het volgende verzoek opnieuw opgebouwd.';
+
+  @override
+  String get howPeopleWorks =>
+      'Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bouw en deel je aangepaste app';
+
+  @override
+  String get onboardingChooseYourPreference => 'Kies je voorkeur';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Verleen de vereiste toegang';
+
+  @override
+  String get apiEnvironmentDescription => 'Kies met welke server verbinding wordt gemaakt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Je gesprekken blijven privé en veilig';
+
+  @override
+  String get omisStorageDesc =>
+      'Wanneer uw Omi niet verbonden is met uw telefoon, slaat het audio lokaal op in het ingebouwde geheugen. U verliest nooit een opname.';
+
+  @override
+  String get permissionsSetupDescription => 'Schakel een paar machtigingen in zodat Omi zijn magie kan doen.';
+
+  @override
+  String get architectSubtitle => 'Geavanceerde AI — duizenden chats + agentautomatisering';
+
+  @override
+  String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Een snelle check van stemmen uit de afgelopen twee dagen';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Bewaar $name en verwacht deze persoon in je gesprekken';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vraagt het eerst voordat vergelijkbare stemmen worden gekoppeld.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja verhoogt de zekerheid over $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 sterren helpen ons echt enorm ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return 'Max. 25 bytes ($count bytes, niet-ASCII gebruikt meerdere bytes)';
+  }
 }

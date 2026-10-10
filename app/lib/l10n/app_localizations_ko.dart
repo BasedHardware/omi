@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12433,4 +12434,201 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pinPersonDescription => '고정된 사람은 \'사람들\' 목록 맨 위에 남고 \'정리\'로 삭제되지 않아요.';
+
+  @override
+  String get buildAndShareApp => '맞춤형 앱을 만들고 공유하세요';
+
+  @override
+  String get membersAndCounting => '8000+명의 회원이 있으며 계속 증가하고 있습니다.';
+
+  @override
+  String get privacyIntro => 'Omi는 귀하의 개인정보 보호에 최선을 다하고 있습니다. 이 페이지에서 데이터 저장 및 사용 방법을 제어할 수 있습니다.';
+
+  @override
+  String get dataProtectionDesc => '귀하의 데이터는 기본적으로 강력한 암호화로 보호됩니다. 아래에서 설정 및 향후 개인정보 옵션을 검토하세요.';
+
+  @override
+  String get transcriptionConfig => 'STT 제공업체 구성';
+
+  @override
+  String get importDataConfig => '다른 소스에서 데이터 가져오기';
+
+  @override
+  String get understandingSubtitle => '대화에서 이해한 단어 수입니다.';
+
+  @override
+  String get rememberingSubtitle => '당신을 위해 기억된 사실과 세부 정보입니다.';
+
+  @override
+  String get debugLogsDesc => '문제 진단에 도움이 됩니다';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      '파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => '모든 노드 및 연결 지우기';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc => '모델이 개선됨에 따라 녹음에 대한 더 나은 변환 결과를 제공할 수 있습니다.';
+
+  @override
+  String get bestInClassTranscription => '설정이 필요 없는 최고 수준의 음성 변환';
+
+  @override
+  String get optimizedForConversation => '대화에 최적화';
+
+  @override
+  String get highAccuracy => '높은 정확도';
+
+  @override
+  String get privacyFirst => '개인정보 보호 우선';
+
+  @override
+  String get keepGoing => '계속하세요, 잘하고 있습니다';
+
+  @override
+  String get personalGrowthJourney => '모든 말을 듣는 AI와 함께하는 개인 성장 여정.';
+
+  @override
+  String get alwaysInContext => '항상 컨텍스트에 포함';
+
+  @override
+  String get configureSttProvider => 'STT 제공업체 구성';
+
+  @override
+  String get clearAllNodesAndConnections => '모든 노드와 연결 지우기';
+
+  @override
+  String get welcomeToOmiDescription => 'Omi에 오신 것을 환영합니다! AI 동반자가 대화, 작업 등을 도와드릴 준비가 되었습니다.';
+
+  @override
+  String get conversationsProcessedAutomatically => '대화는 자동으로 처리됩니다';
+
+  @override
+  String get getInsightsInstantly => '즉시 인사이트와 요약을 얻으세요';
+
+  @override
+  String get dailyScoreDescription => '실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.';
+
+  @override
+  String get startConversation => '대화를 시작하고 마법을 시작하세요';
+
+  @override
+  String get wearableAiCompanion => '웨어러블 AI 컴패니언';
+
+  @override
+  String get organizeAndControlMemories => '메모리를 정리하고 관리하세요';
+
+  @override
+  String get setAllMemoriesToPrivate => '모든 메모리를 비공개로 설정';
+
+  @override
+  String get setAllMemoriesToPublic => '모든 메모리를 공개로 설정';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => '최고의 Omi 경험을 위해 선호하는 언어를 선택하세요';
+
+  @override
+  String get enableFeaturesForBestExperience => '기기에서 최고의 Omi 경험을 위해 기능을 활성화하세요.';
+
+  @override
+  String get deliveryTimeDescription => '일일 요약을 받을 시간';
+
+  @override
+  String get configureSTTProvider => 'STT 제공업체 구성';
+
+  @override
+  String get setConversationEndDescription => '대화가 자동으로 종료되는 시기 설정';
+
+  @override
+  String get clearNodesDescription => '모든 노드와 연결 지우기';
+
+  @override
+  String get deleteKnowledgeGraphWarning => '파생된 모든 지식 그래프 데이터가 삭제됩니다. 원래 메모리는 안전하게 유지됩니다.';
+
+  @override
+  String get createAndShareYourApp => '앱을 만들고 공유하세요';
+
+  @override
+  String get e2eeDescription =>
+      '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get secureEncryptionDescription =>
+      '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get e2eeCardDescription => '최대 보안을 위해 활성화하면 본인만 데이터에 접근할 수 있습니다. 자세히 알아보려면 탭하세요.';
+
+  @override
+  String get yourOmiUnleashed => '당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.';
+
+  @override
+  String get privacyIntroText =>
+      'Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:';
+
+  @override
+  String get commitmentText => '우리는 수집한 데이터를 Omi를 더 나은 제품으로 만드는 데만 사용할 것을 약속합니다. 귀하의 개인정보와 신뢰는 우리에게 가장 중요합니다.';
+
+  @override
+  String get thankYouText => 'Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
+
+  @override
+  String get howPeopleWorks => '사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!';
+
+  @override
+  String get buildAndShareYourCustomApp => '맞춤 앱을 만들고 공유하세요';
+
+  @override
+  String get onboardingChooseYourPreference => '선호 설정을 선택하세요';
+
+  @override
+  String get onboardingGrantRequiredAccess => '필요한 권한을 허용하세요';
+
+  @override
+  String get apiEnvironmentDescription => '연결할 서버를 선택하세요';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get omisStorageDesc => 'Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.';
+
+  @override
+  String get permissionsSetupDescription => 'Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.';
+
+  @override
+  String get architectSubtitle => '파워유저 AI — 수천 건의 채팅 + 에이전트 자동화';
+
+  @override
+  String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
+
+  @override
+  String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name을(를) 목록 위에 두고, 대화에 등장할 사람으로 기억해요';
+  }
+
+  @override
+  String get pinPersonHonestLine => '비슷한 목소리를 매칭하기 전에 Omi가 확인합니다.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '“예”를 누르면 $name의 신뢰도가 올라가요.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '별 5개를 주시면 큰 힘이 됩니다 ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return '최대 25바이트(현재 $count바이트, 비ASCII 문자는 여러 바이트를 사용합니다)';
+  }
 }

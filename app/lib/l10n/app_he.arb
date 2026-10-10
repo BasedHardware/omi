@@ -11325,5 +11325,187 @@
     "dreamReportDropped": "{count, plural, =1{שינוי ישן אחד דולג} other{{count} שינויים ישנים יותר דולגו}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{דוח אחד נעצר מטעמי פרטיות} other{{count} דוחות נעצרו מטעמי פרטיות}}",
     "speakerTagPromptExcerptSaved": "התשובה נשמרה עבור קטע זה.",
-    "pinPersonDescription": "אנשים מוצמדים נשארים בראש רשימת האנשים שלך ואינם מוסרים על ידי ניקוי."
+    "pinPersonDescription": "אנשים מוצמדים נשארים בראש רשימת האנשים שלך ואינם מוסרים על ידי ניקוי.",
+    "buildAndShareApp": "בנה ושתף אפליקציה מותאמת אישית",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ חברים וסופר.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "ב-Omi, אנחנו מתחייבים להגן על הפרטיות שלך. דף זה מאפשר לך לשלוט בכיצד הנתונים שלך מאוחסנים ומשומשים.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה. בדוק את ההגדרות שלך ואפשרויות הפרטיות העתידיות להלן.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "קבע ספק STT",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "ייבא נתונים ממקורות אחרים",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "מילים שהובנו מהשיחות שלך.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "עובדות ופרטים שנזכרו עבורך.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "עוזר לאבחן בעיות",
+    "deleteKnowledgeGraphMessage": "פעולה זו תמחק את כל נתוני גרף הידע הנגזרים (צמתים וחיבורים). הזיכרונות המקוריים שלך יישארו בטוחים. הגרף יוחדש לאורך זמן או בעת הבקשה הבאה.",
+    "deleteKnowledgeGraphDesc": "נקה את כל הצמתים וההתחברויות",
+    "enhanceTranscriptAccuracyDesc": "כשהמודל שלנו משתפר, אנחנו יכולים לספק תוצאות תמלול טובות יותר לההקלטות שלך.",
+    "bestInClassTranscription": "תמלול מהטובים ביותר ללא הגדרה",
+    "optimizedForConversation": "מותאם לשיחה",
+    "highAccuracy": "דיוק גבוה",
+    "privacyFirst": "פרטיות קודם כל",
+    "keepGoing": "המשך, אתה עושה טוב מאוד",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "מסע הצמיחה האישי שלך עם בינה מלאכותית שמקשיבה לכל מילה שלך.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "configureSttProvider": "הגדר ספק STT",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "נקה את כל הצמתים והחיבורים",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "ברוכים הבאים ל-Omi! עוזר ה-AI שלך מוכן לסייע לך בשיחות, משימות ועוד.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "שיחות מעובדות באופן אוטומטי",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "קבל תובנות וסיכומים באופן מיידי",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "ניקוד שיעזור לך\nלהתמקד בביצוע.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "התחל שיחה והנח הקסם יתחיל",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "בן לוויה AI ללבישה",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "ארגן ושלוט בזיכרונות",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "הגדר את כל הזיכרונות לגלויות פרטיות",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "הגדר את כל הזיכרונות לגלויות ציבוריות",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "בחר את השפה המועדפת עליך לחוויית Omi הטובה ביותר",
+    "enableFeaturesForBestExperience": "הפעל תכונות לחוויית Omi הטובה ביותר בהתקנה שלך.",
+    "deliveryTimeDescription": "כמתי תקבל את הסיכום היומי שלך",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "הגדר ספק STT",
+    "setConversationEndDescription": "הגדר מתי שיחות מסתיימות באופן אוטומטי",
+    "clearNodesDescription": "נקה את כל הצמתים וההתחברויות",
+    "deleteKnowledgeGraphWarning": "זה ימחק את כל נתוני גרף הידע שהוכלו. הזיכרונות המקוריים שלך נשמרים בבטחון.",
+    "createAndShareYourApp": "צור ושתף את האפליקציה שלך",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "הצפנה מקצה לקצה היא התקן הזהב לפרטיות. כאשר זה מופעל, הנתונים שלך מוצפנים בהתקן שלך לפני שהם נשלחים לשרתים שלנו. זה אומר שאף אחד, אפילו Omi, לא יכול לגשת לתוכן שלך.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "הנתונים שלך מוצפנים עם מפתח ייחודי לך בשרתים שלנו, מתוחזקים על Google Cloud. זה אומר שהתוכן הגולמי שלך לא נגיש לאף אחד, כולל צוות Omi או Google, ישירות מ-DB.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "הפעל לאבטחה מקסימלית שבה רק אתה יכול לגשת לנתונים שלך. לחץ כדי ללמוד עוד.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "ה-Omi שלך, משוחרר. עברו ללימיטציה עבור אפשרויות אינסופיות.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "ב-Omi, אנחנו לוקחים את הפרטיות שלך ברצינות רבה. אנחנו רוצים להיות שקופים לגבי הנתונים שאנחנו אוספים וכיצד אנחנו משתמשים בהם כדי לשפר את המוצר שלך. הנה מה שאתה צריך לדעת:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "אנחנו מחויבים להשתמש בנתונים שאנחנו אוספים רק כדי לעשות את Omi למוצר טוב יותר בשבילך. הפרטיות והאמון שלך הם חיוניים לנו.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "תודה על היותך משתמש מוערך של Omi. אם יש לך שאלות או חששות, אתה מוזמן לפנות אלינו ל-team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "זה יימחק את כל נתוני תרשים הידע הנגזרות (צמתים וחיבורים). הזכרונות המקוריים שלך יישארו בטוחים. התרשים יבנה מחדש לאורך זמן או בבקשה הבאה.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "ברגע שנוצרת אדם, אתה יכול ללכת לתמלול שיחה, ולהקצות להם את הקטעים המתאימים שלהם, בדרך זו Omi יוכל גם לזהות את הדיבור שלהם!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "בנה ושתף את האפליקציה המותאמת שלך",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "בחר את ההעדפה שלך",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "הגרם גישה נדרשת",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "בחר איזו backend להתחבר אליה",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "השיחות שלך נשמרות פרטיות ובטוחות",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "כאשר ה-Omi שלך לא מחובר לטלפון, הוא מאחסן אודיו מקומית בזיכרון המובנה שלו. אתה לעולם לא מאבד הקלטה.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "הפעל כמה הרשאות כדי ש-Omi יוכל לעשות הקסם שלו.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה",
+    "backgroundModeNote": "כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.",
+    "alwaysInContext": "תמיד בהקשר",
+    "speakerTagPromptSubtitle": "בדיקה מהירה של קולות מהיומיים האחרונים",
+    "pinPersonSubtitle": "השאר את {name} בראש הרשימה וצפה לו בשיחות שלך",
+    "pinPersonHonestLine": "Omi שואל לפני התאמת קולות דומים.",
+    "speakerTagPromptHintConfirm": "\"כן\" מעלה את רמת הביטחון ב-{name}.",
+    "onboardingRatingPromptBody": "דירוג של 5 כוכבים עוזר לנו מאוד ❤️",
+    "maxDeviceNameBytesExceeded": "מקסימום 25 בתים ({count} בתים, תווי non-ASCII משתמשים במספר בתים)"
 }

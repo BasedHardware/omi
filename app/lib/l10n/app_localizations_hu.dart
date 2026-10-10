@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12661,4 +12662,211 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'A kitűzött személyek a Személyek listád tetején maradnak, és a Takarítás nem távolítja el őket.';
+
+  @override
+  String get buildAndShareApp => 'Építsd meg és oszd meg egyedi alkalmazásodat';
+
+  @override
+  String get membersAndCounting => '8000+ tag és számuk folyamatosan nő.';
+
+  @override
+  String get privacyIntro =>
+      'Az Omi-nál elkötelezettek vagyunk az adatvédelem iránt. Ez az oldal lehetővé teszi az adataid tárolásának és felhasználásának szabályozását.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Az adataid alapértelmezetten erős titkosítással védettek. Tekintsd át a beállításaidat és a jövőbeli adatvédelmi lehetőségeket alább.';
+
+  @override
+  String get transcriptionConfig => 'STT szolgáltató beállítása';
+
+  @override
+  String get importDataConfig => 'Adatok importálása más forrásokból';
+
+  @override
+  String get understandingSubtitle => 'A beszélgetéseidből megértett szavak.';
+
+  @override
+  String get rememberingSubtitle => 'Számodra megjegyzett tények és részletek.';
+
+  @override
+  String get debugLogsDesc => 'Segít a problémák diagnosztizálásában';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Ez törli az összes származtatott tudásgráf adatot (csomópontok és kapcsolatok). Az eredeti emlékeid biztonságban maradnak. A gráf idővel vagy a következő kérésre újjáépül.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Összes csomópont és kapcsolat törlése';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Ahogy a modellünk fejlődik, jobb átírási eredményeket tudunk biztosítani a felvételeidhez.';
+
+  @override
+  String get bestInClassTranscription => 'Legjobb átírás a kategóriában, zéró beállítással';
+
+  @override
+  String get optimizedForConversation => 'Beszélgetésre optimalizált';
+
+  @override
+  String get highAccuracy => 'Nagy pontosság';
+
+  @override
+  String get privacyFirst => 'Adatvédelem az első';
+
+  @override
+  String get keepGoing => 'Csak így tovább, nagyszerűen csinálod';
+
+  @override
+  String get personalGrowthJourney => 'Személyes növekedési utazásod AI-val, amely minden szavadra figyel.';
+
+  @override
+  String get alwaysInContext => 'Mindig a kontextusban';
+
+  @override
+  String get configureSttProvider => 'STT szolgáltató konfigurálása';
+
+  @override
+  String get clearAllNodesAndConnections => 'Összes csomópont és kapcsolat törlése';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Üdvözöljük az Omi-ban! Az AI társad készen áll, hogy segítsen a beszélgetésekben, feladatokban és még sok másban.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'A beszélgetések automatikusan feldolgozásra kerülnek';
+
+  @override
+  String get getInsightsInstantly => 'Szerezzen betekintéseket és összefoglalókat azonnal';
+
+  @override
+  String get dailyScoreDescription => 'Egy pontszám, amely segít jobban\na végrehajtásra összpontosítani.';
+
+  @override
+  String get startConversation => 'Kezdjen el beszélgetni, és hagyja, hogy a varázslat kezdetét vegye';
+
+  @override
+  String get wearableAiCompanion => 'Hordható AI társ';
+
+  @override
+  String get organizeAndControlMemories => 'Szervezd és irányítsd az emlékezetedet';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Minden emlékezet beállítása privát láthatóságra';
+
+  @override
+  String get setAllMemoriesToPublic => 'Minden emlékezet beállítása nyilvános láthatóságra';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Válassza ki a preferált nyelvét a legjobb Omi élményért';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Engedélyezze a funkciókat a legjobb Omi élményért az eszközén.';
+
+  @override
+  String get deliveryTimeDescription => 'Mikor kapja meg a napi összefoglalót';
+
+  @override
+  String get configureSTTProvider => 'STT szolgáltató konfigurálása';
+
+  @override
+  String get setConversationEndDescription => 'Állítsa be, mikor érjenek véget automatikusan a beszélgetések';
+
+  @override
+  String get clearNodesDescription => 'Összes csomópont és kapcsolat törlése';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Ez törli az összes származtatott tudásgráf adatot. Az eredeti emlékei biztonságban maradnak.';
+
+  @override
+  String get createAndShareYourApp => 'Hozza létre és ossza meg alkalmazását';
+
+  @override
+  String get e2eeDescription =>
+      'A végpontok közötti titkosítás a magánélet aranystandardja. Ha engedélyezve van, az adatait az eszközén titkosítjuk, mielőtt elküldenénk a szervereinkre. Ez azt jelenti, hogy senki, még az Omi sem férhet hozzá a tartalmához.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Az adatait egy Önnek egyedi kulccsal titkosítjuk a szervereink, amelyek a Google Cloudon vannak. Ez azt jelenti, hogy a nyers tartalma senkinek sem hozzáférhető, beleértve az Omi személyzetét vagy a Google-t, közvetlenül az adatbázisból.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Engedélyezze a maximális biztonságot, ahol csak ön férhet hozzá adataihoz. Érintse meg a további információkért.';
+
+  @override
+  String get yourOmiUnleashed => 'Az Omi-ja, szabadjára engedve. Váljon korlátlanná a végtelen lehetőségekért.';
+
+  @override
+  String get privacyIntroText =>
+      'Az Ominál nagyon komolyan vesszük az adatvédelmet. Átláthatóak szeretnénk lenni az általunk gyűjtött adatokról és azok felhasználásáról. Íme, amit tudnia kell:';
+
+  @override
+  String get commitmentText =>
+      'Elkötelezettek vagyunk amellett, hogy az általunk gyűjtött adatokat csak arra használjuk, hogy az Omi jobb termék legyen az Ön számára. Adatainak védelme és bizalma kiemelten fontos számunkra.';
+
+  @override
+  String get thankYouText =>
+      'Köszönjük, hogy az Omi értékes felhasználója. Ha kérdése vagy aggálya van, forduljon hozzánk a team@basedhardware.com címen.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Ez törli az összes származtatott tudásgráf adatot (csomópontokat és kapcsolatokat). Az eredeti emlékei biztonságban maradnak. A gráf idővel vagy a következő kérésnél újraépül.';
+
+  @override
+  String get howPeopleWorks =>
+      'Ha létrehoz egy személyt, elmehet egy beszélgetés átiratához, és hozzárendelheti a megfelelő szegmenseket, így az Omi képes lesz felismerni az ő beszédét is!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Építsd és oszd meg egyedi alkalmazásod';
+
+  @override
+  String get onboardingChooseYourPreference => 'Válaszd ki a preferenciádat';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Szükséges hozzáférés megadása';
+
+  @override
+  String get apiEnvironmentDescription => 'Válassza ki a csatlakozási szervert';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Hívásai privátok és biztonságosak maradnak';
+
+  @override
+  String get omisStorageDesc =>
+      'Amikor az Omi nincs csatlakoztatva a telefonjához, a hangot helyileg tárolja a beépített memóriájában. Soha nem veszít el egy felvételt sem.';
+
+  @override
+  String get permissionsSetupDescription => 'Engedélyezz néhány jogosultságot, hogy az Omi varázsolhasson.';
+
+  @override
+  String get architectSubtitle => 'Haladó AI — ezernyi chat + ügynök automatizáció';
+
+  @override
+  String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Gyors ellenőrzés az elmúlt két nap hangjairól';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name marad a lista elején, és számíthatsz rá a beszélgetéseidben';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Az Omi rákérdez, mielőtt hasonló hangokat párosítana.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Az Igen növeli $name megbízhatóságát.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Az 5 csillagos értékelés nagyon sokat segít nekünk ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return 'Legfeljebb 25 bájt ($count bájt, a nem ASCII karakterek több bájtot használnak)';
+  }
 }

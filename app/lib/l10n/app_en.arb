@@ -15148,5 +15148,227 @@
     "pinPersonDescription": "Pinned people stay at the top of your People list and aren't removed by Clean Up.",
     "@pinPersonDescription": {
         "description": "Subtitle under the Pin switch on a person's page: what pinning does."
+    },
+    "buildAndShareApp": "Build and share your custom app",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ members and counting.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Your data is secured by default with strong encryption. Review your settings and future privacy options below.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "Configure STT provider",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "Import data from other sources",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Words understood from your conversations.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Facts and details remembered for you.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Helps diagnose issues",
+    "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+    "deleteKnowledgeGraphDesc": "Clear all nodes and connections",
+    "enhanceTranscriptAccuracyDesc": "As our model improves, we can provide better transcription results for your recordings.",
+    "bestInClassTranscription": "Best in class transcription with zero setup",
+    "optimizedForConversation": "Optimized for conversation",
+    "highAccuracy": "High accuracy",
+    "privacyFirst": "Privacy first",
+    "keepGoing": "Keep going, you are doing great",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "alwaysInContext": "Always in context",
+    "@alwaysInContext": {
+        "description": "Description for baseline memory being always in context"
+    },
+    "configureSttProvider": "Configure STT provider",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Clear all nodes and connections",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Conversations are processed automatically",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Get insights and summaries instantly",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "A score to help you better\nfocus on execution.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Start a conversation and let the magic begin",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Wearable AI companion",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Organize and control your memories",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Set all memories to private visibility",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Set all memories to public visibility",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
+    "enableFeaturesForBestExperience": "Enable features for the best Omi experience on your device.",
+    "deliveryTimeDescription": "When to receive your daily summary",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "Configure STT provider",
+    "setConversationEndDescription": "Set when conversations auto-end",
+    "clearNodesDescription": "Clear all nodes and connections",
+    "deleteKnowledgeGraphWarning": "This will delete all derived knowledge graph data. Your original memories remain safe.",
+    "createAndShareYourApp": "Create and share your app",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Omi, can access your content.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Enable for maximum security where only you can access your data. Tap to learn more.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Your Omi, unleashed. Go unlimited for endless possibilities.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here's what you need to know:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Build and share your custom app",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "Choose your preference",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Grant required access",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Choose which backend to connect to",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Your calls stay private and secure",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Enable a few permissions so Omi can work its magic.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations",
+    "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
+    "@backgroundModeNote": {
+        "description": "Caveat note shown in the Background Mode sheet"
+    },
+    "speakerTagPromptSubtitle": "A quick check on voices from the last two days",
+    "@speakerTagPromptSubtitle": {
+        "description": "Card subtitle for the speaker tagging prompt"
+    },
+    "pinPersonSubtitle": "Keep {name}, and expect them in your conversations",
+    "@pinPersonSubtitle": {
+        "description": "What pinning a person means, under the Pin switch.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "pinPersonHonestLine": "Omi asks before matching close voices.",
+    "@pinPersonHonestLine": {
+        "description": "Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them."
+    },
+    "speakerTagPromptHintConfirm": "Yes raises {name}'s confidence.",
+    "@speakerTagPromptHintConfirm": {
+        "description": "Hint at the bottom of the 'Is this <name>?' card.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "onboardingRatingPromptBody": "Rating us 5 stars really helps us out ❤️",
+    "@onboardingRatingPromptBody": {
+        "description": "Store rating pre-prompt body"
+    },
+    "maxDeviceNameBytesExceeded": "Max 25 bytes ({count} bytes, non-ASCII uses multiple bytes)",
+    "@maxDeviceNameBytesExceeded": {
+        "description": "Error message shown when device name exceeds 25 UTF-8 bytes limit in rename dialog",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "26"
+            }
+        }
     }
 }

@@ -11325,5 +11325,187 @@
     "dreamReportDropped": "{count, plural, =1{1 பழைய மாற்றம் தவிர்க்கப்பட்டது} other{{count} பழைய மாற்றங்கள் தவிர்க்கப்பட்டன}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}",
     "speakerTagPromptExcerptSaved": "இந்தப் பகுதிக்கான பதில் சேமிக்கப்பட்டது.",
-    "pinPersonDescription": "பின் செய்யப்பட்டவர்கள் உங்கள் மக்கள் பட்டியலின் மேலே இருப்பார்கள்; சுத்தம் செய் அவர்களை நீக்காது."
+    "pinPersonDescription": "பின் செய்யப்பட்டவர்கள் உங்கள் மக்கள் பட்டியலின் மேலே இருப்பார்கள்; சுத்தம் செய் அவர்களை நீக்காது.",
+    "buildAndShareApp": "உங்கள் தனிப்பயன பயன்பாடு உருவாக்கி பகிர்ந்து கொள்ளுங்கள்",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ உறுப்பினர்கள் மற்றும் எண்ணுதல்.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "Omi இல், நாங்கள் உங்கள் தனியுரிமையைக் காப்பாற்ற உறுதிபட்டுள்ளோம். இந்தப் பக்கம் உங்கள் தரவை எவ்வாறு சேமிக்கப்பட்டு பயன்படுத்தப்படுகிறது என்பதை கட்டுப்படுத்த அनुमति கொடுக்கிறது.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "உங்கள் தரவு வலுவான என்ற்িப்ட்ஸனுடன் இயல்பாக பாதுகாக்கப்படுகிறது. உங்கள் அமைப்புகளைப் பரிசோதிக்கவும் மற்றும் கீழே உள்ள எதிர்கால தனியுரிமை விருப்பங்களைப் பரிசோதிக்கவும்.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "STT வழங்குநரைக் கட்டமைக்கவும்",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "மற்ற ஆதாரங்களிலிருந்து தரவை இறக்குமதி",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "உங்கள் உரையாடல்களில் இருந்து புரிந்துகொள்ளப்பட்ட சொற்கள்.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "உங்களுக்கு நினைவுபடுத்தப்பட்ட உண்மைகள் மற்றும் விவரங்கள்.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "சிக்கல்களைக் கண்டறிய உதவுங்கள்",
+    "deleteKnowledgeGraphMessage": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவையும் நீக்கும் (முனைப்புகள் மற்றும் இணைப்புகள்). உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும். வரைபடம் கால மற்றும் அல்லது அடுத்த கோரிக்கை மீது மீண்டும் உருவாக்கப்படும்.",
+    "deleteKnowledgeGraphDesc": "அனைத்து முனைप்புகள் மற்றும் இணைப்புகள் அழிக்கவும்",
+    "enhanceTranscriptAccuracyDesc": "எங்கள் மாதிரி উন்নত, நாங்கள் உங்கள் பதிவுகளுக்கு சிறந்த வேண்டுகோள் முடிவுகள் வழங்க முடியும்.",
+    "bestInClassTranscription": "பூஜ்ய அமைப்பின் சிறந்த தட்டச்சு",
+    "optimizedForConversation": "உரையாடலுக்கு உகந்த",
+    "highAccuracy": "உচ்ச நிர்ভুலத்தன்மை",
+    "privacyFirst": "தனிமை முதல்",
+    "keepGoing": "தொடர்ந்து செல்லவும், நீங்கள் நன்றாக செய்கிறீர்கள்",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "உங்கள் ஒவ்வொரு வார்த்தைக்கும் கேட்கும் AI உடன் உங்கள் தனிப்பட்ட வளர்ச்சி பயணம்.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "configureSttProvider": "STT வழங்குநரைக் கட்டமைக்கவும்",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "அனைத்து முனைகள் மற்றும் இணைப்புகளைத் தெளிவு செய்",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Omi க்கு வரவேற்கிறோம்! உங்கள் AI தோழி உரையாடல், பணிகள் மற்றும் பலவற்றை உங்களுக்கு உதவ தயாரிக்கப்பட்டுள்ளார்.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "உரையாடல்கள் தானாக செயலாக்கப்படுகின்றன",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "உடனடியாக நுண்ணறிவு மற்றும் சுருக்கங்களைப் பெறவும்",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "செயல்படுத்தலில் நீங்கள் நன்கு\nமையாமவில்லை மதிப்பெண்.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "ஒரு உரையாடல் தொடங்கி மந்திரம் தொடங்கட்டும்",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "அணிந்துகொள்ள AI தோழி",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "உங்கள் நினைவுகளை ஒழுங்கு செய்க மற்றும் கட்டுப்பாட்டு",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "அனைத்து நினைவுகளை தனிப்பட்ட பார்வையாக அமைக்கவும்",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "அனைத்து நினைவுகளை பொது பார்வையாக அமைக்கவும்",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "சிறந்த Omi அভிজ্ঞதைக்கான உங்கள் விரும்பிய மொழியைத் தேர்ந்தெடுக்கவும்",
+    "enableFeaturesForBestExperience": "உங்கள் சாதனத்தில் சிறந்த Omi அভிজ்ஞதைக்கான அம்சங்களை செயல்படுத்தவும்.",
+    "deliveryTimeDescription": "உங்கள் தினசரி சுருக்கத்தைப் பெற வேண்டிய நேரம்",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "STT வழங்குநரை கட்டமைக்கவும்",
+    "setConversationEndDescription": "உரையாடல்கள் தானாக முடியும் நேரத்தை அமைக்கவும்",
+    "clearNodesDescription": "அனைத்து முனைகள் மற்றும் இணைப்புகளைத் துடைக்கவும்",
+    "deleteKnowledgeGraphWarning": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவையும் நீக்கும். உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும்.",
+    "createAndShareYourApp": "உங்கள் பயன்பாட்டை உருவாக்கி பகிரவும்",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "End-to-end encryption இரகசியதைக்கான தங்கம் தரமாகும். செயல்படுத்தப்பட்டபோது, உங்கள் தரவு நம் சர்வரிற்கு அனுப்பப்படுவதற்கு முன் உங்கள் சாதனத்தில் குறியாக்கம் செய்யப்படுகிறது. இதன் பொருள் யாரும், Omi கூட, உங்கள் உள்ளடக்கத்தை அணுக முடியாது.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "உங்கள் தரவு Google Cloud இல் புலனாய்வு செய்யப்பட்ட சர்வரில் உங்களுக்கு தனிப்பட்ட விசையுடன் குறியாக்கம் செய்யப்படுகிறது. இதன் பொருள் உங்கள் மூல உள்ளடக்கம் Omi ஊழியர்கள் அல்லது Google உட்பட, தரவுதளத்திலிருந்து நேரடியாக அணுக முடியாது.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "அதிகம் பாதுகாப்புக்கு செயல்படுத்தவும். தட்டவும் மேலும் அறிய.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "உங்கள் Omi, வெளியிடப்பட்டது. வரம்பிலா வாய்ப்புகளுக்கு வரம்பற்றதாக செல்லவும்.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "Omi இல், நாங்கள் உங்கள் தனியுரிமையை மிகவும் தீவிரமாக எடுத்துக்கொள்கிறோம். நாம் சேகரிக்கும் தரவு மற்றும் அதை உங்களுக்கான எங்கள் தயாரிப்பை மேம்படுத்த எவ்வாறு பயன்படுத்துகிறோம் என்பது பற்றி நாங்கள் வெளிப்படையாக இருக்க விரும்புகிறோம். நீங்கள் தெரிந்து கொள்ள வேண்டிய விஷயங்கள் இங்கே உள்ளன:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "நாங்கள் சேகரிக்கும் தரவை Omi ஐ உங்களுக்கு சிறந்த தயாரிப்பாக செய்ய பயன்படுத்த பிரতிசெரிக்கப் பட்டுள்ளோம். உங்கள் தனியுரிமை மற்றும் நம்பிக்கை எங்களுக்கு மிக முக்கியம்.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Omi இன் மதிப்புள்ள ব்যবহারকாரராக இருந்தமைக்கு நன்றி. உங்களுக்கு ஏதேனும் கேள்விகள் அல்லது கவலைகள் இருந்தால், team@basedhardware.com ஐக்கு தொடர்பு கொள்ளவும்.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவு (முனைகள் மற்றும் இணைப்புகள்) நீக்கும். உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும். வரைபடம் সময়ের சாக்கில் அல்லது அடுத்த요request இல் மறுபடியும் உருவாக்கப்படும்.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "ஒரு ব்যக்தி உருவாக்கப்பட்டவுடன், நீங்கள் ஒரு உரையாடல் பதிவுக்குச் சென்று அவர்களை அவர்களின் தொடர்புடைய பிரிவுகளுக்கு நியமித்து, Omi அவர்களின் பேச்சை உணர்ந்து கொள்ள முடியும்!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "உங்கள் கூறப்பட்ட பயன்பாட்டை உருவாக்கி பகிர்ந்து கொள்ளுங்கள்",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "உங்கள் விருப்பத்தைத் தேர்ந்தெடுக்கவும்",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "தேவையான அணுகலை வழங்கவும்",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "எந்த பின்தளத்துடன் இணைக்க வேண்டுமென்பதை தேர்வு செய்யவும்",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "உங்கள் அழைப்புகள் தனிப்பட்ட மற்றும் பாதுகாப்பாக இருக்கும்",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "உங்கள் Omi உங்கள் தொலைபேசிக்குத் தொடர்புபடாமல் இருக்கும்போது, அது ஆடியோவை அதன் உள்ளமைக்கப்பட்ட நினைவகத்தில் உள்ளூரில் சேமிக்கிறது। நீங்கள் ஒருபோதும் ஒரு பதிவை இழக்கமாட்டீர்கள்.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Omi தன் மாயாவிற்கு பணிய சில அனுமதிகளை இயக்கவும்.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்",
+    "backgroundModeNote": "தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.",
+    "alwaysInContext": "எப்போதும் சூழலில்",
+    "speakerTagPromptSubtitle": "கடந்த இரண்டு நாட்களின் குரல்களை விரைவாகச் சரிபார்க்கவும்",
+    "pinPersonSubtitle": "{name}-ஐ வைத்திருங்கள், உங்கள் உரையாடல்களில் அவர்களை எதிர்பாருங்கள்",
+    "pinPersonHonestLine": "ஒத்த குரல்களைப் பொருத்தும் முன் Omi கேட்கும்.",
+    "speakerTagPromptHintConfirm": "ஆம் என்றால் {name} நம்பகத்தன்மை உயரும்.",
+    "onboardingRatingPromptBody": "5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️",
+    "maxDeviceNameBytesExceeded": "அதிகபட்சம் 25 பைட்டுகள் ({count} பைட்டுகள், ASCII அல்லாதவை பல பைட்டுகளைப் பயன்படுத்துகின்றன)"
 }

@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12639,4 +12640,212 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Orang yang dipin kekal di bahagian atas senarai Orang anda dan tidak dialih keluar oleh Pembersihan.';
+
+  @override
+  String get buildAndShareApp => 'Bina dan kongsi aplikasi tersuai anda';
+
+  @override
+  String get membersAndCounting => '8000+ ahli dan terus bertambah.';
+
+  @override
+  String get privacyIntro =>
+      'Di Omi, kami komited untuk melindungi privasi anda. Halaman ini membolehkan anda mengawal cara data anda disimpan dan digunakan.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Data anda dijamin secara lalai dengan penyulitan yang kukuh. Semak tetapan dan pilihan privasi masa depan anda di bawah.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurasikan penyedia STT';
+
+  @override
+  String get importDataConfig => 'Import data dari sumber lain';
+
+  @override
+  String get understandingSubtitle => 'Perkataan yang difahami daripada perbualan anda.';
+
+  @override
+  String get rememberingSubtitle => 'Fakta dan butiran diingati untuk anda.';
+
+  @override
+  String get debugLogsDesc => 'Membantu mendiagnosis masalah';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Ini akan memadam semua data graf pengetahuan terbitan (nod dan sambungan). Ingatan asal anda akan kekal selamat. Graf akan dibina semula dari semasa ke semasa atau atas permintaan seterusnya.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Kosongkan semua nod dan sambungan';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Apabila model kami bertambah baik, kami boleh memberikan hasil transkripsi yang lebih baik untuk rakaman anda.';
+
+  @override
+  String get bestInClassTranscription => 'Transkripsi terbaik dalam kelasnya tanpa persediaan';
+
+  @override
+  String get optimizedForConversation => 'Dioptimumkan untuk perbualan';
+
+  @override
+  String get highAccuracy => 'Ketepatan tinggi';
+
+  @override
+  String get privacyFirst => 'Privasi utama';
+
+  @override
+  String get keepGoing => 'Teruskan, anda buat dengan baik';
+
+  @override
+  String get personalGrowthJourney =>
+      'Perjalanan pertumbuhan peribadi anda dengan AI yang mendengar setiap perkataan anda.';
+
+  @override
+  String get alwaysInContext => 'Sentiasa dalam konteks';
+
+  @override
+  String get configureSttProvider => 'Konfigurasikan pembekal STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Kosongkan semua nod dan sambungan';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Selamat datang ke Omi! Pendamping AI anda bersedia membantu anda dengan perbualan, tugasan, dan banyak lagi.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Perbualan diproses secara automatik';
+
+  @override
+  String get getInsightsInstantly => 'Dapatkan pandangan dan ringkasan dengan segera';
+
+  @override
+  String get dailyScoreDescription => 'Skor untuk membantu anda\nfokus pada pelaksanaan.';
+
+  @override
+  String get startConversation => 'Mulakan perbualan dan biarkan keajaiban bermula';
+
+  @override
+  String get wearableAiCompanion => 'Teman AI boleh pakai';
+
+  @override
+  String get organizeAndControlMemories => 'Atur dan kawal memori anda';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Tetapkan semua memori kepada keterlihatan peribadi';
+
+  @override
+  String get setAllMemoriesToPublic => 'Tetapkan semua memori kepada keterlihatan awam';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Pilih bahasa pilihan anda untuk pengalaman Omi terbaik';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Dayakan ciri untuk pengalaman Omi terbaik pada peranti anda.';
+
+  @override
+  String get deliveryTimeDescription => 'Bila menerima ringkasan harian anda';
+
+  @override
+  String get configureSTTProvider => 'Konfigurasikan pembekal STT';
+
+  @override
+  String get setConversationEndDescription => 'Tetapkan bila perbualan tamat secara automatik';
+
+  @override
+  String get clearNodesDescription => 'Kosongkan semua nod dan sambungan';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Ini akan memadam semua data graf pengetahuan yang diperoleh. Ingatan asal anda kekal selamat.';
+
+  @override
+  String get createAndShareYourApp => 'Cipta dan kongsi aplikasi anda';
+
+  @override
+  String get e2eeDescription =>
+      'Penyulitan hujung ke hujung adalah standard emas untuk privasi. Apabila diaktifkan, data anda disulitkan pada peranti anda sebelum dihantar ke pelayan kami. Ini bermakna tiada sesiapa, malah Omi, boleh mengakses kandungan anda.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Omi atau Google, terus dari pangkalan data.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktifkan untuk keselamatan maksimum di mana hanya anda boleh mengakses data anda. Ketik untuk mengetahui lebih lanjut.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi anda, dibebaskan. Pilih tanpa had untuk kemungkinan tanpa batas.';
+
+  @override
+  String get privacyIntroText =>
+      'Di Omi, kami mengambil privasi anda dengan sangat serius. Kami ingin telus tentang data yang kami kumpul dan cara kami menggunakannya. Inilah yang perlu anda ketahui:';
+
+  @override
+  String get commitmentText =>
+      'Kami komited untuk menggunakan data yang kami kumpul hanya untuk menjadikan Omi produk yang lebih baik untuk anda. Privasi dan kepercayaan anda adalah yang paling penting bagi kami.';
+
+  @override
+  String get thankYouText =>
+      'Terima kasih kerana menjadi pengguna Omi yang dihargai. Jika anda mempunyai sebarang soalan atau kebimbangan, sila hubungi kami di team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Ini akan memadamkan semua data graf pengetahuan terbitan (nod dan sambungan). Memori asal anda akan kekal selamat. Graf akan dibina semula dari semasa ke semasa atau atas permintaan seterusnya.';
+
+  @override
+  String get howPeopleWorks =>
+      'Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bina dan kongsi aplikasi tersuai anda';
+
+  @override
+  String get onboardingChooseYourPreference => 'Pilih keutamaan anda';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Berikan akses yang diperlukan';
+
+  @override
+  String get apiEnvironmentDescription => 'Pilih pelayan yang hendak disambungkan';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan anda kekal peribadi dan selamat';
+
+  @override
+  String get omisStorageDesc =>
+      'Apabila Omi anda tidak disambungkan ke telefon, ia menyimpan audio secara tempatan dalam memori terbina dalam. Anda tidak akan kehilangan rakaman.';
+
+  @override
+  String get permissionsSetupDescription => 'Dayakan beberapa kebenaran supaya Omi boleh melakukan keajaibannya.';
+
+  @override
+  String get architectSubtitle => 'AI kuasa — ribuan sembang + automasi ejen';
+
+  @override
+  String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Semakan pantas suara dari dua hari lepas';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Simpan $name dan jangka mereka dalam perbualan anda';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi bertanya sebelum memadankan suara yang hampir sama.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ya meningkatkan keyakinan terhadap $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Memberi kami 5 bintang sangat membantu kami ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return 'Maksimum 25 bait ($count bait, bukan ASCII menggunakan berbilang bait)';
+  }
 }

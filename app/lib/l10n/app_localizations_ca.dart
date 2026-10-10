@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -12678,4 +12679,213 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Les persones fixades es mantenen a dalt de la teva llista de Persones i Neteja no les elimina.';
+
+  @override
+  String get buildAndShareApp => 'Construïu i compartiu la vostra aplicació personalitzada';
+
+  @override
+  String get membersAndCounting => '8000+ membres i sumant.';
+
+  @override
+  String get privacyIntro =>
+      'A Omi, estem compromesos a protegir la vostra privadesa. Aquesta pàgina us permet controlar com s\'emmagatzemen i utilitzen les vostres dades.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Les vostres dades estan protegides per defecte amb un xifratge fort. Reviseu la vostra configuració i opcions futures de privadesa a continuació.';
+
+  @override
+  String get transcriptionConfig => 'Configurar proveïdor STT';
+
+  @override
+  String get importDataConfig => 'Importar dades d\'altres fonts';
+
+  @override
+  String get understandingSubtitle => 'Paraules enteses de les vostres converses.';
+
+  @override
+  String get rememberingSubtitle => 'Fets i detalls recordats per a vosaltres.';
+
+  @override
+  String get debugLogsDesc => 'Ajuda a diagnosticar problemes';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els vostres records originals restaran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Esborrar tots els nodes i connexions';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'A mesura que el nostre model millora, podem proporcionar millors resultats de transcripció per als vostres enregistraments.';
+
+  @override
+  String get bestInClassTranscription => 'Transcripció de millor qualitat sense configuració';
+
+  @override
+  String get optimizedForConversation => 'Optimitzat per a converses';
+
+  @override
+  String get highAccuracy => 'Alta precisió';
+
+  @override
+  String get privacyFirst => 'Privadesa primer';
+
+  @override
+  String get keepGoing => 'Continueu, ho esteu fent molt bé';
+
+  @override
+  String get personalGrowthJourney => 'El teu viatge de creixement personal amb IA que escolta cada paraula teva.';
+
+  @override
+  String get alwaysInContext => 'Sempre en context';
+
+  @override
+  String get configureSttProvider => 'Configura el proveïdor STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Esborra tots els nodes i connexions';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Benvingut a Omi! El teu company d\'IA està preparat per ajudar-te amb converses, tasques i molt més.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Les converses es processen automàticament';
+
+  @override
+  String get getInsightsInstantly => 'Obtén informació i resums a l\'instant';
+
+  @override
+  String get dailyScoreDescription => 'Una puntuació per ajudar-te\na centrar-te en l\'execució.';
+
+  @override
+  String get startConversation => 'Comença una conversa i deixa que la màgia comenci';
+
+  @override
+  String get wearableAiCompanion => 'Company d\'IA portàtil';
+
+  @override
+  String get organizeAndControlMemories => 'Organitza i controla els teus records';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Establir tots els records com a privats';
+
+  @override
+  String get setAllMemoriesToPublic => 'Establir tots els records com a públics';
+
+  @override
+  String get selectPreferredLanguageForBestExperience =>
+      'Seleccioneu el vostre idioma preferit per a la millor experiència Omi';
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Activeu les funcions per a la millor experiència Omi al vostre dispositiu.';
+
+  @override
+  String get deliveryTimeDescription => 'Quan rebre el teu resum diari';
+
+  @override
+  String get configureSTTProvider => 'Configura el proveïdor STT';
+
+  @override
+  String get setConversationEndDescription => 'Estableix quan finalitzen automàticament les converses';
+
+  @override
+  String get clearNodesDescription => 'Esborra tots els nodes i connexions';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.';
+
+  @override
+  String get createAndShareYourApp => 'Crea i comparteix la teva aplicació';
+
+  @override
+  String get e2eeDescription =>
+      'El xifratge d\'extrem a extrem és l\'estàndard d\'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d\'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Omi, pot accedir al teu contingut.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d\'Omi o Google, directament des de la base de dades.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activa per a la màxima seguretat on només tu pots accedir a les teves dades. Toca per saber-ne més.';
+
+  @override
+  String get yourOmiUnleashed => 'El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.';
+
+  @override
+  String get privacyIntroText =>
+      'A Omi, ens prenem molt seriosament la teva privadesa. Volem ser transparents sobre les dades que recollim i com les utilitzem per millorar el producte. Això és el que has de saber:';
+
+  @override
+  String get commitmentText =>
+      'Estem compromesos a utilitzar les dades que recollim només per fer d\'Omi un producte millor per a tu. La teva privadesa i confiança són primordials per a nosaltres.';
+
+  @override
+  String get thankYouText =>
+      'Gràcies per ser un usuari valorat d\'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els teus records originals romandran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.';
+
+  @override
+  String get howPeopleWorks =>
+      'Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Crea i comparteix la teva aplicació personalitzada';
+
+  @override
+  String get onboardingChooseYourPreference => 'Tria la teva preferència';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Concedeix l\'accés requerit';
+
+  @override
+  String get apiEnvironmentDescription => 'Canvia entre els entorns de producció i staging de l\'API';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get omisStorageDesc =>
+      'Quan el vostre Omi no està connectat al telèfon, emmagatzema l\'àudio localment a la seva memòria integrada. Mai perdreu cap enregistrament.';
+
+  @override
+  String get permissionsSetupDescription => 'Activeu uns quants permisos perquè Omi pugui fer la seva màgia.';
+
+  @override
+  String get architectSubtitle => 'IA avançada — milers de xats + automatitzacions d\'agent';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Una revisió ràpida de les veus dels últims dos dies';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Conserva $name i compta que apareixerà a les teves converses';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi pregunta abans d\'associar veus semblants.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Dir que sí augmenta la confiança en $name.';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Valorar-nos amb 5 estrelles ens ajuda molt ❤️';
+
+  @override
+  String maxDeviceNameBytesExceeded(int count) {
+    return 'Màxim 25 bytes ($count bytes, els caràcters no ASCII utilitzen diversos bytes)';
+  }
 }
