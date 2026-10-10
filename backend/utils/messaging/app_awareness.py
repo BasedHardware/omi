@@ -7,14 +7,14 @@ from utils.messaging.history import append_digest, history_tool
 from utils.messaging.projection import SurfaceRuntime
 
 
-async def prepare(uid, session, messages, principal):
+async def prepare(uid, session, messages, principal, *, store=None, token=None):
     try:
         await run_blocking(db_executor, require_access, uid)
     except PermissionError:
         return None, None, None
-    store = MessagingStore()
+    store = store or MessagingStore()
     # App compatibility treats absent surface as app; no migration of old documents.
-    token = await run_blocking(db_executor, store.acquire, uid, 'app')
+    token = token or await run_blocking(db_executor, store.acquire, uid, 'app')
     if token is None:
         raise RuntimeError('App surface already has an active turn')
     events = await run_blocking(db_executor, store.events, uid, session.id)
@@ -51,3 +51,16 @@ async def record(store, uid, session_id, message):
             'content': message.text,
         },
     )
+
+
+def acquire(uid):
+    """Admit the enabled app surface before quota or message persistence."""
+    try:
+        require_access(uid)
+    except PermissionError:
+        return None, None
+    store = MessagingStore()
+    token = store.acquire(uid, 'app')
+    if token is None:
+        raise RuntimeError('App surface already has an active turn')
+    return store, token

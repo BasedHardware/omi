@@ -5,7 +5,7 @@ from utils.messaging.contracts import ReentryEvent
 
 """Chat turn service shared by the app route and messaging workers."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 import logging
 import asyncio
@@ -18,6 +18,7 @@ from typing import Optional
 from utils.executors import db_executor, llm_executor, run_blocking
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import iterate_in_threadpool
 import database.chat as chat_db
 import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
@@ -58,6 +59,8 @@ class TurnOptions:
     app_id: str | None = None
     platform: str | None = None
     headers: Mapping[str, str] = field(default_factory=dict)
+    app_store: Any = None
+    app_lease: str | None = None
     request: Any = None  # Optional analytics context; never required by background callers.
 
 
@@ -242,7 +245,7 @@ def _required_chat_quota_provider() -> str | None:
     return 'anthropic' if get_chat_agent_route() == CHAT_AGENT_ROUTE_DIRECT else None
 
 
-def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, options=None):
+def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, options=None):
     """Shared turn preparation, quota, persistence and SSE producer; no Request required.
 
     Synchronous preparation must run on db_executor for background async callers.
@@ -489,7 +492,9 @@ def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opti
         app_store = None
         app_lease = None
         if runtime is None and chat_session is not None and cohort_enabled(uid):
-            app_runtime, app_store, app_lease = await app_awareness.prepare(uid, chat_session, messages, principal)
+            app_runtime, app_store, app_lease = await app_awareness.prepare(
+                uid, chat_session, messages, principal, store=options.app_store, token=options.app_lease
+            )
             if app_runtime is not None:
                 app_context = surface_runtime.set(app_runtime)
         answered = False
@@ -631,8 +636,6 @@ def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opti
             reset_usage_context(usage_token)
             if app_context is not None:
                 surface_runtime.reset(app_context)
-                if stream_exhausted:
-                    await run_blocking(db_executor, app_store.release, uid, 'app', app_lease)
             if not journey_attempt.finished:
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
@@ -668,3 +671,31 @@ def _assert_target_surface(surface, session, runtime):
         raise HTTPException(status_code=404, detail='Chat session not found')
     if runtime is not None and runtime.session_id and (not session or session['id'] != runtime.session_id):
         raise PermissionError('Turn targets a different surface session')
+
+
+class _LeasedReplySink:
+    def __init__(self, delegate, store, uid, token):
+        self.delegate, self.store, self.uid, self.token = delegate, store, uid, token
+
+    def response(self, stream, *, media_type):
+        async def leased():
+            source = stream if hasattr(stream, '__aiter__') else iterate_in_threadpool(stream)
+            async for frame in source:
+                yield frame
+            await run_blocking(db_executor, self.store.release, self.uid, 'app', self.token)
+
+        return self.delegate.response(leased(), media_type=media_type)
+
+
+def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, options=None):
+    principal.authorize(uid)
+    options = options or TurnOptions()
+    if surface == 'app' and cohort_enabled(uid):
+        try:
+            store, lease = app_awareness.acquire(uid)
+        except RuntimeError:
+            raise HTTPException(status_code=409, detail='A chat turn is already running') from None
+        if store is not None:
+            options = replace(options, app_store=store, app_lease=lease)
+            reply_sink = _LeasedReplySink(reply_sink, store, uid, lease)
+    return _run_chat_turn(uid, surface, session, message, reply_sink, principal=principal, options=options)

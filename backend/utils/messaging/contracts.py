@@ -77,6 +77,10 @@ class Principal:
     task_id: str | None = None
 
     def __post_init__(self):
+        if self.allowed_tools is not None:
+            object.__setattr__(self, 'allowed_tools', frozenset(self.allowed_tools))
+        if self.expires_at is not None and self.expires_at.tzinfo is None:
+            raise ValueError('Principal expiry must be timezone aware')
         if self.task_id and (self.allowed_tools is None or self.expires_at is None):
             raise ValueError('Task principals require a tool subset and expiry')
 

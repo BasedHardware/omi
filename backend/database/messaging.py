@@ -16,6 +16,7 @@ from google.api_core.exceptions import AlreadyExists
 
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils import encryption
 
 
@@ -68,7 +69,7 @@ class MessagingStore:
             uid = token['uid']
             user = self.user(uid).get(transaction=tx).to_dict()
             deletion = account_deletion_document(uid, firestore_client=self.db).get(transaction=tx)
-            if deletion.exists:
+            if _deletion_blocks(deletion):
                 raise PermissionError('Account deletion in progress')
             if not user or user.get('deleted') or user.get('deletion_requested_at'):
                 raise PermissionError('Account unavailable')
@@ -266,7 +267,7 @@ class MessagingStore:
     def _assert_session_link(self, tx, uid, session):
         user = self.user(uid).get(transaction=tx).to_dict()
         deletion = account_deletion_document(uid, firestore_client=self.db).get(transaction=tx)
-        if not user or deletion.exists:
+        if not user or _deletion_blocks(deletion):
             raise PermissionError('Account removed or deleting')
         link_id = session.get('channel_link_id')
         if link_id:
@@ -309,3 +310,11 @@ class MessagingStore:
                     if len(paths) >= limit:
                         return paths
         return paths
+
+
+def _deletion_blocks(snapshot):
+    return account_deletion_blocks_access(
+        normalize_account_deletion_status(
+            marker_exists=snapshot.exists, raw_status=(snapshot.to_dict() or {}).get('wipe_status')
+        )
+    )

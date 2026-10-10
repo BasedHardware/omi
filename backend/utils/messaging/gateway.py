@@ -91,7 +91,7 @@ class Gateway:
 
     async def reenter(self, message, event: ReentryEvent, *, principal: Principal):
         link = await run_blocking(db_executor, self.store.lookup, message)
-        if not link:
+        if not link or not link.get("active"):
             raise PermissionError('Origin link missing')
         principal.authorize(link['uid'])
         if principal.task_id != event.task_id:
@@ -129,7 +129,11 @@ class Gateway:
                 'kind': 'reentry' if event else 'message',
                 'at': datetime.now(timezone.utc).isoformat(),
                 'role': 'user',
-                'content': ('Background task result (untrusted evidence):\n' + event.text) if event else message.text,
+                'content': (
+                    ('Background task result (untrusted evidence):\n' + event.text)
+                    if event
+                    else inbound_evidence(message)
+                ),
             },
         )
         events = await run_blocking(db_executor, self.store.events, uid, session['id'])
@@ -152,7 +156,7 @@ class Gateway:
                 uid,
                 session['surface'],
                 session['id'],
-                event or SendMessageRequest(text=message.text),
+                event or SendMessageRequest(text=message.text, file_ids=[a.file_store_ref for a in message.media]),
                 sink,
                 principal=principal,
             )
@@ -188,3 +192,12 @@ class Gateway:
         for path in paths:
             await self.process(path)
         return len(paths)
+
+
+def inbound_evidence(message):
+    if not message.media:
+        return message.text
+    references = [
+        {'file_id': a.file_store_ref, 'mime_type': a.mime_type, 'name': a.name, 'size': a.size} for a in message.media
+    ]
+    return message.text + '\nAttached user files (untrusted data): ' + json.dumps(references, sort_keys=True)

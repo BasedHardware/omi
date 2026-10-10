@@ -30,8 +30,8 @@ async def summarize(uid, text):
 
 async def append_digest(store, uid, session, events, *, summary=summarize):
     since = events[-1].get('at', '') if events else ''
-    # Existing reader owns decryption. Bounded recent history, across all surfaces.
-    rows = await run_blocking(db_executor, recent_activity, uid)
+    # Existing paginated reader owns decryption; scan to the surface watermark.
+    rows = await run_blocking(db_executor, recent_activity, uid, since)
     activity = [
         row for row in rows if row.get('chat_session_id') != session['id'] and row['created_at'].isoformat() > since
     ]
@@ -50,24 +50,35 @@ async def append_digest(store, uid, session, events, *, summary=summarize):
     await run_blocking(db_executor, store.append_event, uid, session['id'], event)
 
 
-def recent_activity(uid):
-    # Existing iterator is global and decrypts; keep a bounded newest window.
+def recent_activity(uid, since=""):
+    # The iterator is newest-first and paginated. Never silently drop older activity.
     rows = []
     for row in chat_db.iter_all_messages(uid, batch_size=100):
-        rows.append(row)
-        if len(rows) >= 100:
+        if since and row["created_at"].isoformat() <= since:
             break
+        rows.append(row)
     return sorted(rows, key=lambda r: (r['created_at'], r['id']))
 
 
 def history_tool(uid):
     async def search_chat_history(query: str) -> str:
-        """Search recent chat messages across the user's app and channel surfaces."""
-        rows = await run_blocking(db_executor, recent_activity, uid)
-        matches = [r for r in rows if query.casefold() in r.get('text', '').casefold()]
+        """Search chat messages across all of the user's app and channel surfaces."""
+        matches = await run_blocking(db_executor, search_history, uid, query)
         return json.dumps(
             [{'id': r['id'], 'session': r.get('chat_session_id'), 'text': r.get('text', '')} for r in matches[-20:]],
             default=str,
         )
 
     return StructuredTool.from_function(coroutine=search_chat_history)
+
+
+def search_history(uid, query):
+    if not query.strip():
+        return []
+    matches = []
+    for row in chat_db.iter_all_messages(uid, batch_size=100):
+        if query.casefold() in row.get('text', '').casefold():
+            matches.append(row)
+            if len(matches) == 20:
+                break
+    return list(reversed(matches))

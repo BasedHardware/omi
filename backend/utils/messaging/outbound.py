@@ -28,6 +28,8 @@ class ChannelReplySink:
 
     async def _send(self, *, text=None, artifact=None, draft=False):
         authorize_send(self.adapter.capabilities, self.kind, self.message.received_at)
+        if text is not None and len(text) > self.adapter.capabilities.max_text_len:
+            raise ValueError('Adapter renderer exceeded max_text_len')
         if self.guard is not None:
             await self.guard()  # link revocation, account deletion, future rate/ratio admission
         await self.adapter.send(self.message, text=text, artifact=artifact, draft=draft)
@@ -45,6 +47,4 @@ class ChannelReplySink:
 
     async def finish(self, text):
         for part in self.adapter.render(text):
-            if len(part) > self.adapter.capabilities.max_text_len:
-                raise ValueError('Adapter renderer exceeded max_text_len')
             await self._send(text=part)

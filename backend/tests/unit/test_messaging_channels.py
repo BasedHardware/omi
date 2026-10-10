@@ -93,7 +93,7 @@ def test_digest_append_only_and_byte_prefix_stable(monkeypatch):
             'created_at': datetime.now(timezone.utc),
         }
     ]
-    monkeypatch.setattr(history, 'recent_activity', lambda uid: rows)
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": rows)
     mount = Mount(instructions='stable', skills=('channel skill',), cache_breakpoint=True)
     before = mount.messages([{'role': e['role'], 'content': e['content']} for e in old])
     asyncio.run(history.append_digest(store, 'u', session, old))
@@ -110,7 +110,7 @@ def test_long_digest_uses_summary_once(monkeypatch):
     monkeypatch.setattr(
         history,
         'recent_activity',
-        lambda uid: [
+        lambda uid, since="": [
             {
                 'id': 'other',
                 'chat_session_id': 'elsewhere',
@@ -137,7 +137,7 @@ def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
     message = adapter.parse(body)[0]
     proof = store.mint('u', adapter.channel, adapter.provider, 'token')['proof']
     store.consume(proof, message)
-    monkeypatch.setattr(history, 'recent_activity', lambda uid: [])
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": [])
     entered, proceed = None, None
     active = 0
     maximum = 0
@@ -247,7 +247,7 @@ def test_app_return_appends_channel_activity_without_rewriting_prefix(monkeypatc
     monkeypatch.setattr(app_awareness, 'MessagingStore', lambda: store)
     monkeypatch.setattr(app_awareness, 'require_access', lambda uid: None)
     other = []
-    monkeypatch.setattr(history, 'recent_activity', lambda uid: other)
+    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="": other)
     first = SimpleNamespace(id='human1', text='first', sender='human', created_at=datetime.now(timezone.utc))
 
     async def run():
@@ -300,3 +300,16 @@ def test_access_uses_existing_subscription_authority_and_defaults_off(monkeypatc
     monkeypatch.setattr(access, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan=PlanType.basic))
     with pytest.raises(PermissionError):
         access.require_access('u')
+
+
+def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    rows = [
+        dict(id=str(i), created_at=now - timedelta(seconds=i), text='needle' if i == 140 else 'other')
+        for i in range(160)
+    ]
+    monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda uid, batch_size: iter(rows))
+    assert len(history.recent_activity('u', rows[150]['created_at'].isoformat())) == 150
+    assert history.search_history('u', 'needle')[0]['id'] == '140'

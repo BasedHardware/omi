@@ -129,14 +129,14 @@ silently mirrored into the default app conversation. Linking visibility does not
 another account access. Existing app sessions logically have `surface=app`.
 
 A returning surface appends hidden activity from other sessions since its last event.
-Recent activity comes from the existing decrypted message iterator (100 messages per
-turn). Under 800 tokens it is verbatim; larger activity uses a cheap `chat_graph` model
+Activity comes from the existing decrypted message iterator, paging until the surface
+watermark (100 messages per page). Under 800 tokens it is verbatim; larger activity uses a cheap `chat_graph` model
 through a one-turn shaped mount. The resulting digest is persisted once. It never edits
 an earlier event. The stable mount prefix and all earlier serialized model messages
 remain byte-identical across a surface switch. Enabled linked app turns use the same
 append-only event log; the default mobile history-window contract is unchanged when off.
-`search_chat_history` searches the recent cross-surface window, returning up to 20 results.
-These are bounded recent-history primitives, not a new full-text index.
+`search_chat_history` searches across history, returning the newest 20 matches.
+These paginated scans are not a new full-text index; large accounts may need an index.
 
 A surface event log has a 500 KB ceiling. Exhaustion fails closed and requires an explicit
 new session; silently truncating/re-summarizing the cached prefix is forbidden. Long-lived
@@ -190,3 +190,20 @@ fixtures. `loopback.py` supplies the reference adapter and scripted provider. Th
 Firestore suite runs only with `MESSAGING_TEST_FIRESTORE_HOST=127.0.0.1:<port>` and uses
 anonymous credentials and a random `demo-` project. It exercises real emulator
 transactions, duplicate claims, lease ownership, proof replay races and deletion.
+
+## Reproduce validation
+
+```sh
+BACKEND_UNIT_TEST_FILE_LIST="$PWD/backend/testing/messaging/unit-files.txt" bash backend/test.sh > /tmp/messaging-unit.log 2>&1
+rg 'passed|failed|ERROR' /tmp/messaging-unit.log
+# Start a local Firestore emulator first; this host is explicitly loopback-only.
+printf '%s\n' tests/unit/test_messaging_firestore.py > /tmp/messaging-emulator-files.txt
+MESSAGING_TEST_FIRESTORE_HOST=127.0.0.1:18885 BACKEND_UNIT_TEST_FILE_LIST=/tmp/messaging-emulator-files.txt bash backend/test.sh > /tmp/messaging-emulator.log 2>&1
+rg 'passed|failed|ERROR' /tmp/messaging-emulator.log
+make preflight
+```
+
+Enabled app turns acquire their surface lease before quota or persistence. A concurrent
+app request gets 409 before any write; channel contenders remain pending in the inbox.
+An app stream cancelled after admission retains its lease for ambiguous-work recovery,
+like channel workers. No such lease or new IO is added to flag-off mobile requests.
