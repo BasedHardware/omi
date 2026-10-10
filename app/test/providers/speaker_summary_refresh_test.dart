@@ -515,4 +515,206 @@ void main() {
     provider.dispose();
     list.dispose();
   });
+
+  group('labeling pass', () {
+    ServerConversation twoVoices({String id = 'c'}) {
+      final value = conversation(id: id);
+      value.transcriptSegments.add(
+        TranscriptSegment(
+          id: 's2',
+          text: 'Second synthetic voice',
+          speaker: 'SPEAKER_01',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 4,
+          end: 7,
+        ),
+      );
+      return value;
+    }
+
+    ({ConversationDetailProvider provider, List<String> reprocessed, List<(String, bool?, String?)> saves}) harness({
+      Future<bool> Function()? save,
+    }) {
+      final reprocessed = <String>[];
+      final saves = <(String, bool?, String?)>[];
+      final provider = ConversationDetailProvider(
+        assignSpeaker: (id, ids, {isUser, personId, speakerId}) {
+          saves.add((ids.join(','), isUser, personId));
+          return save?.call() ?? Future.value(true);
+        },
+        fetchConversation: (id) async => twoVoices(id: id),
+        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+          expectSync(requireSpeakerReceipt, isTrue);
+          reprocessed.add(id);
+          return twoVoices(id: id);
+        },
+      );
+      select(provider, twoVoices());
+      return (provider: provider, reprocessed: reprocessed, saves: saves);
+    }
+
+    testWidgets('pauses between labels never regenerate; Done regenerates once', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      expect(h.provider.speakerLabelingSessionActive, isTrue);
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      await tester.pump(const Duration(seconds: 10));
+      expect(await h.provider.assignSpeaker(['s2'], 'jordan'), isTrue);
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, isEmpty);
+      expect(h.provider.speakerLabelingSessionLineCount, 2);
+
+      h.provider.confirmSpeakerLabelingSession();
+      expect(h.provider.speakerLabelingSessionActive, isFalse);
+      expect(h.reprocessed, ['c']);
+      await tester.pump();
+      h.provider.confirmSpeakerLabelingSession();
+      h.provider.leaveSpeakerLabelingSession('c');
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, ['c']);
+      h.provider.dispose();
+      await tester.pump();
+      expect(h.reprocessed, ['c']);
+    });
+
+    testWidgets('a pass that changed nothing regenerates nothing', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      h.provider.confirmSpeakerLabelingSession();
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, isEmpty);
+      expect(h.provider.trackedSpeakerConversationIds, isEmpty);
+      h.provider.dispose();
+    });
+
+    testWidgets('Done while a save is in flight regenerates once, after it lands', (tester) async {
+      final save = Completer<bool>();
+      final h = harness(save: () => save.future);
+      h.provider.beginSpeakerLabelingSession();
+      final assignment = h.provider.assignSpeaker(['s'], 'maya');
+      h.provider.confirmSpeakerLabelingSession();
+      expect(h.reprocessed, isEmpty);
+      save.complete(true);
+      expect(await assignment, isTrue);
+      await tester.pump();
+      expect(h.reprocessed, ['c']);
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, ['c']);
+      expect(h.provider.trackedSpeakerConversationIds, isEmpty);
+      h.provider.dispose();
+    });
+
+    testWidgets('leaving the page mid-pass auto-confirms once; Done afterwards is a no-op', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      h.provider.leaveSpeakerLabelingSession('another-conversation');
+      expect(h.provider.speakerLabelingSessionActive, isTrue);
+      h.provider.leaveSpeakerLabelingSession('c');
+      expect(h.provider.speakerLabelingSessionActive, isFalse);
+      await tester.pump();
+      expect(h.reprocessed, ['c']);
+      h.provider.confirmSpeakerLabelingSession();
+      h.provider.dispose();
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, ['c']);
+      expect(h.provider.trackedSpeakerConversationIds, isEmpty);
+    });
+
+    testWidgets('a page under another detail page cannot end the top one\'s pass', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      h.provider.confirmSpeakerLabelingSession(conversationId: 'page-underneath');
+      expect(h.provider.speakerLabelingSessionActive, isTrue);
+      expect(h.reprocessed, isEmpty);
+      h.provider.confirmSpeakerLabelingSession(conversationId: 'c');
+      expect(h.reprocessed, ['c']);
+      await tester.pump();
+      h.provider.dispose();
+    });
+
+    testWidgets('labeling again after Done starts a new pass with its own single regeneration', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      h.provider.confirmSpeakerLabelingSession();
+      await tester.pump();
+      expect(h.reprocessed, ['c']);
+
+      h.provider.beginSpeakerLabelingSession();
+      expect(h.provider.speakerLabelingSessionLineCount, 0);
+      expect(await h.provider.assignSpeaker(['s2'], 'jordan'), isTrue);
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, ['c']);
+      h.provider.confirmSpeakerLabelingSession();
+      await tester.pump();
+      expect(h.reprocessed, ['c', 'c']);
+      h.provider.dispose();
+    });
+
+    testWidgets('switching conversations mid-pass flushes the old pass through the exit path', (tester) async {
+      final h = harness();
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      select(h.provider, twoVoices(id: 'next'));
+      expect(h.provider.speakerLabelingSessionActive, isFalse);
+      await tester.pump();
+      expect(h.reprocessed, ['c']);
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, ['c']);
+      h.provider.dispose();
+    });
+
+    testWidgets('Undo puts back and re-saves each line\'s previous label', (tester) async {
+      final h = harness();
+      final segments = h.provider.conversation.transcriptSegments;
+      segments.first.personId = 'alex';
+      segments.last.isUser = true;
+      h.provider.beginSpeakerLabelingSession();
+      expect(h.provider.canUndoSpeakerLabel, isFalse);
+      expect(await h.provider.assignSpeaker(['s', 's2'], 'maya'), isTrue);
+      expect(segments.map((s) => (s.isUser, s.personId)), [(false, 'maya'), (false, 'maya')]);
+      expect(h.provider.speakerLabelingSessionLineCount, 2);
+      expect(h.provider.canUndoSpeakerLabel, isTrue);
+
+      expect(await h.provider.undoLastSpeakerLabel(), isTrue);
+      expect(segments.map((s) => (s.isUser, s.personId)), [(false, 'alex'), (true, null)]);
+      expect(h.saves, [
+        ('s,s2', false, 'maya'),
+        ('s', false, 'alex'),
+        ('s2', true, null),
+      ]);
+      expect(h.provider.speakerLabelingSessionLineCount, 0);
+      expect(h.provider.canUndoSpeakerLabel, isFalse);
+      expect(h.provider.speakerLabelingSessionActive, isTrue);
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.reprocessed, isEmpty);
+      h.provider.dispose();
+    });
+
+    testWidgets('a failed Undo leaves the lines as the server still has them', (tester) async {
+      var accept = true;
+      final h = harness(save: () async => accept);
+      final segment = h.provider.conversation.transcriptSegments.first;
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isTrue);
+      accept = false;
+      expect(await h.provider.undoLastSpeakerLabel(), isFalse);
+      expect(segment.personId, 'maya');
+      expect(h.provider.canUndoSpeakerLabel, isFalse);
+      h.provider.dispose();
+    });
+
+    testWidgets('a label that failed to save is not counted and has nothing to undo', (tester) async {
+      final h = harness(save: () async => false);
+      h.provider.beginSpeakerLabelingSession();
+      expect(await h.provider.assignSpeaker(['s'], 'maya'), isFalse);
+      expect(h.provider.speakerLabelingSessionLineCount, 0);
+      expect(h.provider.canUndoSpeakerLabel, isFalse);
+      h.provider.dispose();
+    });
+  });
 }

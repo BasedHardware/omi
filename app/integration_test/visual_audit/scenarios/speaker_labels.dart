@@ -125,12 +125,14 @@ Future<void> _scrollToTop(AuditRun a) async {
   await a.settle();
 }
 
+/// Tapping a name names that voice's lines by default; the outcome card waits for the labeling
+/// pass to end, so Done follows the tag.
 Future<void> _tagFirstSpeakerAsMaya(AuditRun a) async {
   await _scrollToTop(a);
   await a.tap(find.text('Speaker 1').first);
   await a.tap(find.text('Maya Chen'));
-  await a.tap(find.byType(Checkbox).first);
   await a.tap(find.text('Save'));
+  await a.tap(find.byKey(const Key('speaker_labeling_done')));
 }
 
 /// The live page with one voice whose label was carried in from the previous conversation.
