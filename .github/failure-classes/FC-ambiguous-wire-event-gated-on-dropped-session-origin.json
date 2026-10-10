@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-ambiguous-wire-event-gated-on-dropped-session-origin",
+  "violated_contract": "When one wire event means different things depending on which producer generation or which earlier event started the session (the Omi button's release code 5 ends a legacy hold-to-talk question but also trails every tap gesture on current firmware), the consumer must keep the session's origin as typed state for the session's lifetime and gate the ambiguous event on it. Deleting that origin flag as 'legacy tracking' re-reads the newer producer's trailing event as the legacy terminator and silently kills the session.",
+  "canonical_prevention": "Record the origin (which event or producer opened the session) on the session object or a sibling typed field at creation, consult it wherever an event with more than one meaning is handled, and keep a behavioural test that replays both producers' event sequences (tap then release stays open; hold then release closes) so a later cleanup cannot remove the gate without a failing test.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/capture_button_dispatch_test.dart"
+  ],
+  "evidence_prs": [
+    12477
+  ],
+  "scope_hints": [
+    "app/lib/services/capture/capture_controller.dart",
+    "omi/firmware/common/button_gesture.c"
+  ],
+  "status": "open"
+}
