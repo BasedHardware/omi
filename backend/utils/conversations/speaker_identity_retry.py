@@ -31,7 +31,7 @@ def _retry_batch(
     uid: str, conversation_ids: tuple[str, ...], *, remaining_passes: int = MAX_LATE_IDENTITY_PASSES
 ) -> RetryRound:
     attempted = 0
-    pending = []
+    pending: list[str] = []
     for index, conversation_id in enumerate(conversation_ids):
         if attempted >= remaining_passes:
             record_retry('late', 'skipped', 'pass_limit', len(conversation_ids) - index)
@@ -41,7 +41,7 @@ def _retry_batch(
             raw = speaker_resolution.conversations_db.get_conversation(uid, conversation_id)
             failure = 'processing_error'
             skip = speaker_resolution.completed_identity_retry_skip_reason(raw)
-            if skip == 'not_completed' and raw.get('status') in ('processing', 'in_progress'):
+            if skip == 'not_completed' and raw is not None and raw.get('status') in ('processing', 'in_progress'):
                 # Keep the attempt open. Finalization runs in another process;
                 # only a fresh completed snapshot can enter identity repair.
                 pending.append(conversation_id)
