@@ -6,9 +6,7 @@ prefix is unchanged) and a volatile PEOPLE IN THIS CONVERSATION block naming the
 non-owner people and the account owner from ``ConversationPromptPrefix``.
 """
 
-from typing import Callable
-
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
 GENERAL_TITLE_RULES = '''TITLE
 - Write a specific headline of at most 10 words about the central topic or outcome.
@@ -20,12 +18,9 @@ GENERAL_TITLE_RULES = '''TITLE
   themselves or being addressed by name. Never invent or "correct" a name.'''
 
 
-def general_title_static_instructions(format_instructions: str, legacy_static: Callable[[str], str]) -> str:
-    """Insert the TITLE rules just before the parser schema, like the rich rules do."""
-    base = legacy_static(format_instructions)
-    if base.count(format_instructions) != 1:
-        return f'{base}\n\n{GENERAL_TITLE_RULES}'
-    return base.replace(format_instructions, f'{GENERAL_TITLE_RULES}\n\n{format_instructions}')
+def general_title_static_instructions(instructions: str, format_instructions: str) -> str:
+    """Append general title rules before the shaped writer's parser schema."""
+    return f'{instructions}\n\n{GENERAL_TITLE_RULES}\n\n{format_instructions}'
 
 
 def title_people_block(prefix: ConversationPromptPrefix) -> str:
@@ -37,9 +32,3 @@ def title_people_block(prefix: ConversationPromptPrefix) -> str:
     if prefix.owner_names:
         lines.append(f'- Account owner (never name them in the title): {", ".join(prefix.owner_names)}')
     return '\n'.join(lines)
-
-
-def with_title_people(volatile_instructions: str, prefix: ConversationPromptPrefix) -> str:
-    """Append the per-call people block to the general-path volatile suffix."""
-    block = title_people_block(prefix)
-    return f'{volatile_instructions}\n\n{block}' if block else volatile_instructions

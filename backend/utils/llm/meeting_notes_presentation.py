@@ -57,6 +57,25 @@ def has_note_content(structured: Structured) -> bool:
     )
 
 
+def enforce_static_conversation_note_presentation(
+    structured: Structured,
+    transcript_segment_ids: Optional[Iterable[object]],
+    *,
+    title_people: Sequence[str] = (),
+) -> None:
+    """Apply presentation repairs within shaped notes' single model-turn budget."""
+    report = enforce_structured_presentation_contract(structured, transcript_segment_ids, safe_fallback=True)
+    structured.title, led = lead_title_with_people(
+        structured.title, presentable_title_people(title_people, transcript_segment_ids)
+    )
+    if led:
+        report.repairs.add('title_people_lead')
+    _record_contract(
+        outcome='static_repair' if report.repairs else 'passed',
+        reasons=sorted(report.repairs | report.violations) or ['ok'],
+    )
+
+
 def enforce_conversation_note_presentation(
     structured: Structured,
     *,
@@ -66,14 +85,8 @@ def enforce_conversation_note_presentation(
     extraction_parser: Any,
     transcript_segment_ids: Optional[Iterable[object]],
     post_parse_validator: Optional[Callable[[Structured], None]] = None,
-    title_people: Sequence[str] = (),
 ) -> Structured:
-    """Apply static repair, one targeted revision, then a sanitized fallback.
-
-    ``title_people`` (general-path notes only) holds the title-naming contract
-    (#3602): a title that names none of them is led by their names, and one that
-    names any of them is kept as written; how many it names is left to the prompt.
-    """
+    """Apply static repair, one targeted revision, then a sanitized fallback."""
 
     report = enforce_structured_presentation_contract(structured, transcript_segment_ids)
     outcome = 'passed'
@@ -111,14 +124,6 @@ def enforce_conversation_note_presentation(
             _record_fallback(reason='other')
     elif report.repairs:
         outcome = 'static_repair'
-
-    structured.title, led = lead_title_with_people(
-        structured.title, presentable_title_people(title_people, transcript_segment_ids)
-    )
-    if led:
-        report.repairs.add('title_people_lead')
-        if outcome == 'passed':
-            outcome = 'static_repair'
 
     _record_contract(outcome=outcome, reasons=sorted(report.repairs | report.violations) or ['ok'])
     return structured

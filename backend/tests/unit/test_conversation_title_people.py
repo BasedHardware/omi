@@ -15,8 +15,10 @@ name is the account owner. These tests pin the contract:
   meeting notes, are untouched.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -36,10 +38,15 @@ def isolated_imports():
     with stub_modules({}):
         import utils.conversations.transcript_for_llm  # noqa: F401
         import utils.llm.conversation_processing  # noqa: F401
-        import utils.llm.conversation_prompt_prefix  # noqa: F401
+        import utils.llm.conversation_prompt_context  # noqa: F401
         import utils.llm.meeting_notes_validation  # noqa: F401
 
         yield
+
+
+@pytest.fixture(autouse=True)
+def shaped_notes_enabled(monkeypatch):
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
 
 
 def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None, scope=None, seconds=None):
@@ -101,13 +108,14 @@ def _people():
 
 def _prefix_for(conversation, monkeypatch, *, owner_name='David', people=None, calendar_context=None):
     from utils.conversations import transcript_for_llm
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: owner_name)
     transcript, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map(
         'uid-1', conversation, _people() if people is None else people
     )
     return build_conversation_prompt_prefix(
+        uid='uid-1',
         conversation_id='conv-names',
         transcript=transcript,
         started_at=STARTED_AT,
@@ -125,7 +133,7 @@ def _notes(prefix, monkeypatch, *, title, rich=False, roster=None):
     captured: dict = {}
 
     class Model:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             captured['messages'] = messages
             return SimpleNamespace(
                 content=json.dumps(
@@ -142,7 +150,12 @@ def _notes(prefix, monkeypatch, *, title, rich=False, roster=None):
             )
 
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_a, **_k: Model())
-    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+
+    @asynccontextmanager
+    async def isolated_model(model):
+        yield model
+
+    monkeypatch.setattr(conversation_processing, 'isolated_notes_model', isolated_model)
     structured = conversation_processing.get_conversation_notes(
         prefix,
         started_at=STARTED_AT,
@@ -157,7 +170,7 @@ def _notes(prefix, monkeypatch, *, title, rich=False, roster=None):
 
 
 def _text(message) -> str:
-    content = message.content
+    content = message['content'] if isinstance(message, dict) else message.content
     if isinstance(content, list):
         return '\n'.join(part.get('text', '') for part in content if isinstance(part, dict))
     return str(content)
@@ -206,7 +219,7 @@ def test_prefix_title_people_exclude_owner_and_minor_speakers(monkeypatch):
 
 def test_title_people_do_not_change_shared_prefix_bytes(monkeypatch):
     from utils.conversations import transcript_for_llm
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
     conversation = _three_party_conversation()
     prefix = _prefix_for(conversation, monkeypatch)
@@ -423,6 +436,66 @@ def test_owner_own_person_record_is_never_a_title_person(monkeypatch):
     assert prefix.owner_names == ('David',)
 
 
+@pytest.mark.parametrize(
+    ('owner_name', 'person_name'),
+    [
+        ('José', 'Jose\u0301 Garcia'),
+        ('Jose\u0301', 'JOSÉ Garcia'),
+    ],
+)
+def test_canonically_equivalent_owner_record_never_leads_the_title(monkeypatch, owner_name, person_name):
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('s1', SARAH_LONG, is_user=False, person_id='p-owner'),
+        ]
+    )
+
+    prefix = _prefix_for(conversation, monkeypatch, owner_name=owner_name, people=[_person('p-owner', person_name)])
+    structured, _ = _notes(prefix, monkeypatch, title='Q2 Budget Review')
+
+    assert prefix.title_people == ()
+    assert prefix.owner_names == (owner_name,)
+    assert structured.title == 'Q2 Budget Review'
+
+
+@pytest.mark.parametrize('second_speaker', ['SPEAKER_01', 'SPEAKER_02'])
+def test_canonically_equivalent_names_combine_talk_share_across_scopes(monkeypatch, second_speaker):
+    # Each spelling is below the ten-percent floor alone. Their combined share
+    # qualifies, including when the rendered speaker id is reused across sources.
+    first_name = 'Jose\u0301 Garcia'
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('o1', SARAH_LONG, scope='conv-a', seconds=88),
+            _seg(
+                'a1',
+                SARAH_SHORT,
+                speaker='SPEAKER_01',
+                is_user=False,
+                person_id='p-first',
+                scope='conv-a',
+                seconds=6,
+            ),
+            _seg(
+                'b1',
+                SARAH_SHORT,
+                speaker=second_speaker,
+                is_user=False,
+                person_id='p-second',
+                scope='conv-b',
+                seconds=6,
+            ),
+        ]
+    )
+
+    prefix = _prefix_for(
+        conversation, monkeypatch, people=[_person('p-first', first_name), _person('p-second', 'JOSÉ Garcia')]
+    )
+    structured, _ = _notes(prefix, monkeypatch, title='Q2 Budget Review')
+
+    assert prefix.title_people == (first_name,)
+    assert structured.title == f'{first_name}: Q2 Budget Review'
+
+
 def test_title_people_are_ordered_most_spoken_first(monkeypatch):
     # Sarah speaks first; Lee speaks later and more, so Lee leads.
     conversation = SimpleNamespace(
@@ -563,6 +636,28 @@ def test_title_rules_are_static_while_names_stay_volatile(monkeypatch):
     assert 'PEOPLE IN THIS CONVERSATION' in volatile
     assert '- Sarah Chen' in volatile
     assert '- Account owner (never name them in the title): David' in volatile
+    evidence = json.loads(volatile)
+    assert evidence['capture_evidence'] == prefix.shaped_context
+    assert 'PEOPLE IN THIS CONVERSATION' in evidence['title_people']
+
+
+def test_shaped_title_prompt_bytes_are_pinned_to_the_literal_fixture(monkeypatch):
+    from langchain_core.output_parsers import PydanticOutputParser
+    from models.structured_extraction import StructuredExtraction
+    from utils.llm.conversation_processing import notes_mount
+    from utils.llm.shaped_agent import SHARED_CONTRACT
+
+    fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
+    base = fixture['legacy_static'].removesuffix('FORMAT')
+    assert fixture['general_static'].startswith(base)
+    title_rules = fixture['general_static'][len(base) :].removesuffix('\n\nFORMAT')
+    schema = PydanticOutputParser(pydantic_object=StructuredExtraction).get_format_instructions()
+    expected = f'{SHARED_CONTRACT}\n\n{notes_mount().instructions}\n\n{title_rules}\n\n{schema}'
+
+    prefix = _prefix_for(_three_party_conversation(), monkeypatch)
+    _, messages = _notes(prefix, monkeypatch, title='Budget Review')
+
+    assert _text(messages[0]) == expected
 
 
 def test_title_that_omits_identified_person_is_led_by_their_name(monkeypatch):
@@ -598,7 +693,7 @@ def test_title_that_already_names_the_person_is_kept(monkeypatch, title):
 )
 def test_the_model_title_is_kept_whenever_it_names_a_listed_person(monkeypatch, title, expected):
     """How many people a title names is the prompt's job; the repair only leads a title naming nobody."""
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     prefix = ConversationPromptPrefix(
         conversation_id='conv-three',
@@ -881,7 +976,7 @@ def test_title_lead_repair_is_counted_under_the_title_contract_version(monkeypat
 )
 def test_the_title_lead_never_brings_back_what_presentation_removed(monkeypatch, title_people, expected):
     """The lead runs after placeholder and transcript-ID sanitization, so it must not add either."""
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     prefix = ConversationPromptPrefix(
         conversation_id='conv-ids',
@@ -898,7 +993,7 @@ def test_the_title_lead_never_brings_back_what_presentation_removed(monkeypatch,
 
 def test_rich_meeting_notes_titles_are_left_to_the_roster_rules(monkeypatch):
     from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
     roster = MeetingRoster(
         entries=(
@@ -918,5 +1013,8 @@ def test_rich_meeting_notes_titles_are_left_to_the_roster_rules(monkeypatch):
 
     structured, messages = _notes(prefix, monkeypatch, title='Budget Sync', rich=True, roster=roster)
 
+    from utils.llm.conversation_title_people import GENERAL_TITLE_RULES
+
     assert structured.title == 'Budget Sync'
+    assert GENERAL_TITLE_RULES not in _text(messages[0])
     assert 'PEOPLE IN THIS CONVERSATION' not in _text(messages[1])

@@ -120,11 +120,11 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
     if clusters is None:
         return (), ()
     owner_name = _one_line(getattr(source_map, 'owner_name', None) or '')
-    owner_fold = owner_name.casefold()
+    owner_fold = unicodedata.normalize('NFC', owner_name).casefold()
     owner_first = owner_fold.split()[0] if owner_fold else ''
 
     def identity(name: str) -> str:
-        fold = name.casefold()
+        fold = unicodedata.normalize('NFC', name).casefold()
         return _OWNER_IDENTITY if owner_first and (fold == owner_fold or fold.split()[0] == owner_first) else fold
 
     identities: dict[int, set[str]] = {}
@@ -148,7 +148,7 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
         name = _one_line(cluster.names[0])
         if not name or strip_speaker_placeholders(name) != name:
             continue
-        fold = name.casefold()
+        fold = unicodedata.normalize('NFC', name).casefold()
         display.setdefault(fold, name)
         spoken[fold] = spoken.get(fold, 0) + talk(cluster)
     # No talk at all names nobody: a share of nothing is no evidence of who spoke.
