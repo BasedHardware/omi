@@ -870,7 +870,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ArtifactStatus(rawValue: raw) ?? ._unknown
+      if let exact = ArtifactStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ArtifactStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1019,7 +1024,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = CandidateAction(rawValue: raw) ?? ._unknown
+      if let exact = CandidateAction(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = CandidateAction(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1250,7 +1260,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = CandidateStatus(rawValue: raw) ?? ._unknown
+      if let exact = CandidateStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = CandidateStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1262,7 +1277,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = CandidateSubjectKind(rawValue: raw) ?? ._unknown
+      if let exact = CandidateSubjectKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = CandidateSubjectKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1365,7 +1385,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = CategoryEnum(rawValue: raw) ?? ._unknown
+      if let exact = CategoryEnum(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = CategoryEnum(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1433,7 +1458,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ContextMatchSignal(rawValue: raw) ?? ._unknown
+      if let exact = ContextMatchSignal(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ContextMatchSignal(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1845,7 +1875,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ConversationProcessingState(rawValue: raw) ?? ._unknown
+      if let exact = ConversationProcessingState(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ConversationProcessingState(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1875,7 +1910,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ConversationSource(rawValue: raw) ?? ._unknown
+      if let exact = ConversationSource(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ConversationSource(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1916,7 +1956,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ConversationStatus(rawValue: raw) ?? ._unknown
+      if let exact = ConversationStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ConversationStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -1929,7 +1974,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = ConversationVisibility(rawValue: raw) ?? ._unknown
+      if let exact = ConversationVisibility(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = ConversationVisibility(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2255,7 +2305,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = EvidenceKind(rawValue: raw) ?? ._unknown
+      if let exact = EvidenceKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = EvidenceKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2317,7 +2372,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = EvidenceScope(rawValue: raw) ?? ._unknown
+      if let exact = EvidenceScope(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = EvidenceScope(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2440,7 +2500,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = FeedbackSubjectKind(rawValue: raw) ?? ._unknown
+      if let exact = FeedbackSubjectKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = FeedbackSubjectKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2571,7 +2636,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = FrameRequestCleanupState(rawValue: raw) ?? ._unknown
+      if let exact = FrameRequestCleanupState(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = FrameRequestCleanupState(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2675,7 +2745,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = FrameRequestState(rawValue: raw) ?? ._unknown
+      if let exact = FrameRequestState(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = FrameRequestState(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -2920,7 +2995,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = GoalProgressEventKind(rawValue: raw) ?? ._unknown
+      if let exact = GoalProgressEventKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = GoalProgressEventKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3039,7 +3119,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = GoalSource(rawValue: raw) ?? ._unknown
+      if let exact = GoalSource(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = GoalSource(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3054,7 +3139,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = GoalStatus(rawValue: raw) ?? ._unknown
+      if let exact = GoalStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = GoalStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3067,8 +3157,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      let normalized = raw.split(separator: ".").last.map(String.init) ?? raw
-      self = GoalType(rawValue: normalized) ?? ._unknown
+      if let exact = GoalType(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = GoalType(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3335,7 +3429,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = InterventionSurface(rawValue: raw) ?? ._unknown
+      if let exact = InterventionSurface(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = InterventionSurface(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3353,7 +3452,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = LedgerWriteReason(rawValue: raw) ?? ._unknown
+      if let exact = LedgerWriteReason(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = LedgerWriteReason(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3427,7 +3531,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = MemoryCategory(rawValue: raw) ?? ._unknown
+      if let exact = MemoryCategory(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = MemoryCategory(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3712,7 +3821,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = MemoryItemStatus(rawValue: raw) ?? ._unknown
+      if let exact = MemoryItemStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = MemoryItemStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3725,7 +3839,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = MemoryKind(rawValue: raw) ?? ._unknown
+      if let exact = MemoryKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = MemoryKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3738,7 +3857,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = MemoryLayer(rawValue: raw) ?? ._unknown
+      if let exact = MemoryLayer(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = MemoryLayer(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3770,7 +3894,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = MemorySubjectScope(rawValue: raw) ?? ._unknown
+      if let exact = MemorySubjectScope(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = MemorySubjectScope(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -3963,7 +4092,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = OpenLoopKind(rawValue: raw) ?? ._unknown
+      if let exact = OpenLoopKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = OpenLoopKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -4035,7 +4169,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = OpenLoopStatus(rawValue: raw) ?? ._unknown
+      if let exact = OpenLoopStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = OpenLoopStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -4559,7 +4698,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = RecommendationSubjectKind(rawValue: raw) ?? ._unknown
+      if let exact = RecommendationSubjectKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = RecommendationSubjectKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -4867,7 +5011,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = SubjectAttribution(rawValue: raw) ?? ._unknown
+      if let exact = SubjectAttribution(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = SubjectAttribution(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5171,7 +5320,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskIntelligenceFeedbackAction(rawValue: raw) ?? ._unknown
+      if let exact = TaskIntelligenceFeedbackAction(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskIntelligenceFeedbackAction(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5184,7 +5338,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskIntelligenceFeedbackReason(rawValue: raw) ?? ._unknown
+      if let exact = TaskIntelligenceFeedbackReason(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskIntelligenceFeedbackReason(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5200,7 +5359,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskIntelligenceOutcomeCode(rawValue: raw) ?? ._unknown
+      if let exact = TaskIntelligenceOutcomeCode(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskIntelligenceOutcomeCode(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5243,7 +5407,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskOwner(rawValue: raw) ?? ._unknown
+      if let exact = TaskOwner(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskOwner(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5256,7 +5425,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskPriority(rawValue: raw) ?? ._unknown
+      if let exact = TaskPriority(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskPriority(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5270,7 +5444,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskStatus(rawValue: raw) ?? ._unknown
+      if let exact = TaskStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5422,7 +5601,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = TaskWorkflowMode(rawValue: raw) ?? ._unknown
+      if let exact = TaskWorkflowMode(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = TaskWorkflowMode(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5823,7 +6007,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = WorkstreamEventKind(rawValue: raw) ?? ._unknown
+      if let exact = WorkstreamEventKind(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = WorkstreamEventKind(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5888,7 +6077,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = WorkstreamSensitivity(rawValue: raw) ?? ._unknown
+      if let exact = WorkstreamSensitivity(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = WorkstreamSensitivity(rawValue: unqualified) ?? ._unknown
     }
   }
 
@@ -5902,7 +6096,12 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = WorkstreamStatus(rawValue: raw) ?? ._unknown
+      if let exact = WorkstreamStatus(rawValue: raw) {
+        self = exact
+        return
+      }
+      let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = WorkstreamStatus(rawValue: unqualified) ?? ._unknown
     }
   }
 
