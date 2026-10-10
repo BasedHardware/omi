@@ -1982,3 +1982,23 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1
     assert 'Firestore source mismatch' in check.stdout
+
+
+def test_notifications_job_deploy_restores_singleton_before_action_and_reattaches():
+    workflow = yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_notifications_job.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    deploy_index = next(i for i, step in enumerate(steps) if step.get('id') == 'deploy')
+    deploy = steps[deploy_index]
+    assert deploy['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+    assert deploy['with']['job'] == '${{ env.SERVICE }}'
+    assert deploy['with']['env_vars'] == '${{ steps.runtime-env.outputs.notifications_job_env_vars }}'
+    assert deploy['with']['secrets'] == '${{ steps.runtime-env.outputs.notifications_job_secrets }}'
+    assert '--container' not in deploy['with']['flags']
+    detach = steps[deploy_index - 1]
+    attach = steps[deploy_index + 1]
+    assert 'attach_cloud_run_gmp_sidecar.py' in detach['run']
+    assert '--job --detach' in detach['run']
+    assert 'attach_cloud_run_gmp_sidecar.py' in attach['run']
+    assert '--job' in attach['run'] and '--detach' not in attach['run']
+    assert 'if' not in detach and 'if' not in attach
+    assert workflow['concurrency']['cancel-in-progress'] is False
