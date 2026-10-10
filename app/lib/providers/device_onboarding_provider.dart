@@ -43,6 +43,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool showSingleTapHint = false;
 
   Timer? _hintTimer;
+  Timer? _autoSubmitTimer;
   bool _disposed = false;
 
   void startOnboarding() {
@@ -66,6 +67,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     showSingleTapHint = false;
     _hintTimer?.cancel();
     _hintTimer = null;
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = null;
   }
 
   void advanceStep() {
@@ -98,6 +101,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     isOnboardingActive = false;
     _hintTimer?.cancel();
     _hintTimer = null;
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = null;
     notifyListeners();
   }
 
@@ -140,17 +145,43 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      _startAutoSubmitTimer();
       notifyListeners();
     } else {
       // Second press — question is being sent
+      _autoSubmitTimer?.cancel();
+      _autoSubmitTimer = null;
       voiceSessionActive = false;
       questionSent = true;
       notifyListeners();
     }
   }
 
+  void _startAutoSubmitTimer() {
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = Timer(const Duration(seconds: 15), () {
+      if (currentStep == askQuestionStep && voiceSessionActive) {
+        onQuestionSubmitted();
+      }
+    });
+  }
+
+  void onQuestionSubmitted() {
+    if (currentStep != askQuestionStep) return;
+    if (!voiceSessionActive && questionSent) return;
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = null;
+    voiceSessionActive = false;
+    questionSent = true;
+    notifyListeners();
+  }
+
   void onVoiceResponseReceived(String response) {
     if (currentStep != askQuestionStep) return;
+    _autoSubmitTimer?.cancel();
+    _autoSubmitTimer = null;
+    voiceSessionActive = false;
+    questionSent = true;
     aiResponse = response;
     notifyListeners();
   }
@@ -218,6 +249,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _hintTimer?.cancel();
+    _autoSubmitTimer?.cancel();
     super.dispose();
   }
 }
