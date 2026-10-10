@@ -69,7 +69,8 @@ def prod_backend_sync_runtime_env(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolate_optional_capture_metadata(monkeypatch):
-    """Keyframe and overlap behavior have focused service/transaction tests."""
+    """External effects have focused service/transaction tests."""
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', MagicMock())
     monkeypatch.setattr(persisted_finalizer.conversations_db, "get_conversations_finished_after", lambda *a, **kw: [])
 
     async def disabled(*_args, **_kwargs):
@@ -2170,3 +2171,74 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     )
     # The failure is still owned by webhook health, which disables the app after 72h.
     record_failure.assert_called_once_with('omi-google-drive-integration', 401, 'HTTP 401')
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'claim_status,deleted,discarded,structured,emits',
+    [
+        ('claimed', False, False, True, True),
+        ('claimed', True, False, True, False),
+        ('claimed', False, True, True, False),
+        ('claimed', False, False, False, False),
+        ('fenced', False, False, True, False),
+        ('completed', False, False, True, False),
+    ],
+)
+async def test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
+    monkeypatch, claim_status, deleted, discarded, structured, emits
+):
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.completed,
+        discarded=discarded,
+        structured=SimpleNamespace(title='Meeting') if structured else None,
+    )
+    events = []
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    def claim(*args):
+        events.append('claim')
+        return {'status': claim_status, 'fanout_key': 'fixture'}
+
+    vector = MagicMock(side_effect=lambda *args: events.append('vector'))
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {'id': conversation.id, 'status': 'completed', 'deleted': deleted},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
+    monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', AsyncMock())
+    monkeypatch.setattr(persisted_finalizer, 'record_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim)
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', MagicMock(return_value=True)
+    )
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        conversation.id,
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == (
+        ConversationFinalizationDisposition.fenced
+        if claim_status == 'fenced'
+        else ConversationFinalizationDisposition.completed
+    )
+    if emits:
+        vector.assert_called_once_with('uid-1', conversation)
+        assert events == ['claim', 'vector']
+    else:
+        vector.assert_not_called()
