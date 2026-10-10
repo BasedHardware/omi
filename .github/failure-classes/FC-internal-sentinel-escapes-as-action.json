@@ -10,9 +10,8 @@
   "evidence_prs": [],
   "scope_hints": [
     "app/android/app/src/main/kotlin/com/friend/ios/brain/**",
-    "app/lib/services/brain/**",
-    "app/react-native/src/services/localBrainRouter.ts",
-    "app/react-native/src/services/localConversations.ts"
+    "app/android/app/src/test/java/com/friend/ios/brain/**",
+    "app/lib/services/brain/**"
   ],
   "status": "open"
 }
