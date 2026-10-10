@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from database.messaging import MessagingStore
+
 import asyncio
 import logging
 from threading import Event
@@ -386,6 +388,9 @@ def background_wipe_user_data(
         current_operation = 'agent_vm'
         heartbeat()
         delete_agent_vm_for_account(uid)
+        current_operation = 'messaging_channels'
+        heartbeat()
+        MessagingStore().delete_account(uid)
         current_operation = 'api_credentials'
         heartbeat()
         delete_account_credentials(uid)

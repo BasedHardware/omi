@@ -28,6 +28,7 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from routers import messaging
 from routers import (
     dream_cohort,
     dream_report,
@@ -216,6 +217,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(messaging.router)
 app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
 app.include_router(dream_report.router)
