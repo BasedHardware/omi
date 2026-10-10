@@ -1097,7 +1097,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// owns no hold — the same shape the automation harness uses — so it mints an
   /// `.automation` turn, opens the input window, and hands over text.
   @discardableResult
-  func runWakeWordTurn(_ command: String) async -> Bool {
+  func runWakeWordTurn(_ command: String, isOriginCurrent: @MainActor () -> Bool) async -> Bool {
     let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
 
@@ -1111,6 +1111,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub: no realtime transport available for the wake word")
       return false
     }
+    guard isOriginCurrent() else { return false }  // account switched during warm-up
 
     let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)
     // Without a route the reducer has nothing to commit against: `commitTurn` is refused as
@@ -1142,6 +1143,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
     // Supply the user side before committing: the journal and the chat bubble read the
     // provider's input transcription, and this turn gives it nothing real to transcribe.
+    guard isOriginCurrent() else {  // account switched while the input window opened
+      _ = cancelTurn(turnID: turnID)
+      return false
+    }
     wakeWordInputTranscript = trimmed
     guard await session?.sendSpokenCommand(trimmed) == true else {
       log("RealtimeHub: wake word command could not be queued for the session")

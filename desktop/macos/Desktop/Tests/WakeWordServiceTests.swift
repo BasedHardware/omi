@@ -174,3 +174,71 @@ final class WakeWordServiceTests: XCTestCase {
     XCTAssertFalse(RealtimeHubCommitResult.rejectedNoSession.handsOffWakeWordCommand)
   }
 }
+
+/// The realtime path can wait seconds for its transport. An account switch in that window
+/// must not dispatch the first account's command as the second, by either path.
+@MainActor
+final class WakeWordAccountIsolationTests: XCTestCase {
+  private let authority = RuntimeOwnerAuthorityTestFixture()
+
+  override func tearDown() async throws {
+    await authority.restore()
+  }
+
+  private func origin() async throws -> RuntimeOwnerAuthorizationSnapshot {
+    await authority.establish(authOwnerID: "wake-word-account-a")
+    return try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+  }
+
+  func testAnAccountSwitchDuringWarmupRevokesTheRealtimeDispatch() async throws {
+    let origin = try await origin()
+    var signedIn = true
+    var stillAuthorized: Bool?
+    var fellBack: [String] = []
+
+    await WakeWordService.dispatchRealtime(
+      "order food",
+      origin: origin,
+      isCurrent: { _ in signedIn },
+      runRealtime: { _, isOriginCurrent in
+        signedIn = false  // account B signs in while the transport warms up
+        stillAuthorized = isOriginCurrent()
+        return false
+      },
+      fallback: { fellBack.append($0) })
+
+    XCTAssertEqual(stillAuthorized, false, "realtime must see the switch before sending")
+    XCTAssertTrue(fellBack.isEmpty, "the chat fallback must not run as the new account")
+  }
+
+  func testTheSameAccountFallsBackToChatWhenRealtimeIsUnavailable() async throws {
+    let origin = try await origin()
+    var fellBack: [String] = []
+
+    await WakeWordService.dispatchRealtime(
+      "order food", origin: origin, isCurrent: { _ in true }, runRealtime: { _, _ in false },
+      fallback: { fellBack.append($0) })
+
+    XCTAssertEqual(fellBack, ["order food"])
+  }
+
+  func testAHandedCommandNeverAlsoGoesToChat() async throws {
+    let origin = try await origin()
+    var fellBack: [String] = []
+
+    await WakeWordService.dispatchRealtime(
+      "order food", origin: origin, isCurrent: { _ in true }, runRealtime: { _, _ in true },
+      fallback: { fellBack.append($0) })
+
+    XCTAssertTrue(fellBack.isEmpty)
+  }
+
+  func testTheDefaultCheckRejectsASnapshotFromBeforeAnAccountSwitch() async throws {
+    let origin = try await origin()
+    XCTAssertTrue(RuntimeOwnerIdentity.isAuthorizationCurrent(origin))
+
+    await authority.establish(authOwnerID: "wake-word-account-b")
+
+    XCTAssertFalse(RuntimeOwnerIdentity.isAuthorizationCurrent(origin))
+  }
+}

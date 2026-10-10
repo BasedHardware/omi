@@ -38,12 +38,32 @@ final class WakeWordService {
     // words are already transcribed, so what moves is the reply — the model speaks its own
     // answer, barge-in is native rather than text-matched, and a follow-up continues in the
     // same session. Detection is unchanged; both paths read the same ambient transcript.
-    Task { @MainActor in
-      let handed = await RealtimeHubController.shared.runWakeWordTurn(command)
-      guard !handed else { return }
-      log("WakeWord: realtime session unavailable — falling back to the chat path")
-      FloatingControlBarManager.shared.submitSpokenCommand(command)
+    guard let origin = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      return log("WakeWord: no signed-in account — ignoring the command")
     }
+    Task { @MainActor in await WakeWordService.dispatchRealtime(command, origin: origin) }
+  }
+
+  /// Hands a command to the realtime session, or to chat if that fails, only while the
+  /// account that spoke it is still signed in. The realtime path can wait seconds for its
+  /// transport; an account switch in that window must not send A's command as B.
+  static func dispatchRealtime(
+    _ command: String,
+    origin: RuntimeOwnerAuthorizationSnapshot,
+    isCurrent: @escaping @MainActor (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    },
+    runRealtime: @MainActor (String, @escaping @MainActor () -> Bool) async -> Bool = {
+      await RealtimeHubController.shared.runWakeWordTurn($0, isOriginCurrent: $1)
+    },
+    fallback: @MainActor (String) -> Void = { FloatingControlBarManager.shared.submitSpokenCommand($0) }
+  ) async {
+    guard !(await runRealtime(command, { isCurrent(origin) })) else { return }
+    guard isCurrent(origin) else {
+      return log("WakeWord: account changed before the command was dispatched — dropping it")
+    }
+    log("WakeWord: realtime session unavailable — falling back to the chat path")
+    fallback(command)
   }
   private(set) var lastTriggeredCommand: String?
 
