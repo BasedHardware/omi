@@ -1,8 +1,8 @@
 # Messaging channels foundation
 
 Stage A provides channel-neutral contracts, shared turn execution, durable admission,
-and a loopback harness. No real provider is registered, no external messaging
-credentials are needed, and no channel is enabled by default.
+and a loopback harness. [Stage B adapters](messaging-adapters.md) add opt-in Telegram
+and iMessage providers; no channel is enabled by default.
 
 ## Shared turn and mobile compatibility
 

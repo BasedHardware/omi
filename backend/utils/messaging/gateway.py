@@ -1,7 +1,10 @@
 """Webhook admission and separately invoked durable workers; no provider branches."""
 
+import asyncio
 import base64
+import logging
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from database.messaging import MessagingStore
@@ -10,7 +13,7 @@ from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access
-from utils.messaging.contracts import Artifact, ChannelMessage, Principal, ReentryEvent
+from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment, Principal, ReentryEvent
 from utils.messaging.history import append_digest, history_tool
 from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
@@ -53,7 +56,10 @@ class Gateway:
             return False
         payload['received_at'] = datetime.fromisoformat(payload['received_at'])
         payload['media'] = tuple(Artifact(**a) for a in payload['media'])
+        payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
         message = ChannelMessage(**payload)
+        if hasattr(self.adapter, 'admitted'):
+            await self.adapter.admitted(message)
         link = await run_blocking(db_executor, self.store.lookup, message)
         if message.link_proof:
             try:
@@ -88,7 +94,37 @@ class Gateway:
             await run_blocking(db_executor, self.store.retry, path)
             return False
         try:
-            await self._turn(uid, session, message, link, Principal(uid))
+
+            async def guard():
+                await run_blocking(db_executor, self._assert_link, message, link)
+
+            sink = ChannelReplySink(self.adapter, message, guard=guard)
+            if message.command == 'help':
+                await sink.finish(
+                    'Chat with your Omi agent about your memories, tasks and files. '
+                    'Reply undo within 5 minutes to reverse the last supported write. '
+                    'Use /unlink to disconnect. Messages are used only to serve your chat.'
+                )
+            elif message.command == 'undo':
+                from utils.messaging.undo import UndoStore
+
+                await sink.finish(await run_blocking(db_executor, UndoStore(self.store).undo, uid, session['id']))
+            else:
+                if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
+                    message = replace(
+                        message, attachments=tuple(item for item in message.attachments if not item.voice)
+                    )
+                if (
+                    link.get('voice_notes', True) is False
+                    and not message.text.strip()
+                    and not message.attachments
+                    and not message.media
+                ):
+                    await sink.finish('Voice notes are turned off for this chat. Send a text message instead.')
+                else:
+                    if hasattr(self.adapter, 'prepare'):
+                        message = await self.adapter.prepare(message, uid, session, guard)
+                    await self._turn(uid, session, message, link, Principal(uid))
             await run_blocking(db_executor, self.store.complete, path)
         except BaseException:
             # Ambiguous billable/effect work: leave running + lease, never blindly replay.
@@ -155,10 +191,14 @@ class Gateway:
             session['id'],
             guard,
             self.store.persist_message,
-            link.get('keep_private_memories_in_app', True) is not False,
+            write_reports=[],
+            withhold_private_memories=link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)
+        typing_stop = asyncio.Event()
+        typing_task = start_background_task(_refresh_typing(sink, typing_stop), name='messaging-typing')
         try:
+            await sink.typing()
             stream = await run_blocking(
                 db_executor,
                 self.turn,
@@ -173,7 +213,8 @@ class Gateway:
                 if frame.startswith('data: '):
                     await sink.text(frame[6:].removesuffix('\n\n').replace('__CRLF__', '\n'))
                 elif frame.startswith('done: '):
-                    answer = json.loads(base64.b64decode(frame[6:].strip()))['text']
+                    response = json.loads(base64.b64decode(frame[6:].strip()))
+                    answer = response['text']
                     await run_blocking(
                         db_executor,
                         self.store.append_event,
@@ -187,11 +228,24 @@ class Gateway:
                             'content': answer,
                         },
                     )
-                    await sink.finish(answer)
+                    if runtime.write_reports:
+                        response['text'] += '\n\n' + '\n'.join(runtime.write_reports)
+                    await sink.finish_payload(response)
             if event:
                 for artifact in event.artifacts:
                     await sink.artifact(artifact)
         finally:
+            typing_stop.set()
+            typing_task.cancel()
+            try:
+                await typing_task
+            except asyncio.CancelledError:
+                pass
+            # A failed typing stop must not mask the original turn/delivery error.
+            try:
+                await sink.typing(False)
+            except Exception as error:
+                logging.getLogger(__name__).warning('Messaging typing stop failed error_type=%s', type(error).__name__)
             surface_runtime.reset(context_token)
 
     async def drain(self, *, limit=100):
@@ -210,3 +264,18 @@ def inbound_evidence(message):
         {'file_id': a.file_store_ref, 'mime_type': a.mime_type, 'name': a.name, 'size': a.size} for a in message.media
     ]
     return message.text + '\nAttached user files (untrusted data): ' + json.dumps(references, sort_keys=True)
+
+
+async def _refresh_typing(sink, stop):
+    interval = getattr(sink.adapter, 'typing_interval', 60)
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), interval)
+        except asyncio.TimeoutError:
+            try:
+                await sink.typing()
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging typing refresh failed error_type=%s', type(error).__name__
+                )
+                return

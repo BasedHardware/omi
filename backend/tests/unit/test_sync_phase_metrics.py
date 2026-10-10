@@ -286,6 +286,7 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
     )
     handler.decorator_list = []
     namespace = {
+        'app': SimpleNamespace(state=SimpleNamespace()),
         'batch_pressure': SimpleNamespace(stop=AsyncMock()),
         'drain_background_tasks': AsyncMock(),
         'shutdown_managed_spend_ledger': AsyncMock(),

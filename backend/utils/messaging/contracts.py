@@ -18,6 +18,17 @@ class Artifact:
 
 
 @dataclass(frozen=True)
+class InboundAttachment:
+    """Verified provider reference; never a model-supplied fetch authority."""
+
+    reference: str
+    name: str
+    mime_type: str
+    size: int = 0
+    voice: bool = False
+
+
+@dataclass(frozen=True)
 class ChannelMessage:
     channel: str
     provider: str
@@ -30,6 +41,8 @@ class ChannelMessage:
     reply_to: str | None = None
     link_proof: str | None = None
     unlink: bool = False
+    command: str | None = None
+    attachments: tuple[InboundAttachment, ...] = ()
     display_name: str | None = None
 
     def __post_init__(self):
