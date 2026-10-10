@@ -130,7 +130,9 @@ struct BrowserExtensionSetup: View {
       .padding(.horizontal, OmiSpacing.page)
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        featureRow(icon: "checkmark.shield", text: "Uses a Chromium browser extension for secure access")
+        featureRow(
+          icon: "checkmark.shield",
+          text: "Uses a browser extension (Chrome, Arc, or similar) to read pages you're signed in to")
         featureRow(icon: "key", text: "One-time auth token setup")
         featureRow(icon: "bolt", text: "No more Allow/Reject popups")
       }

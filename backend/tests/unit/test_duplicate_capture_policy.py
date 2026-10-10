@@ -77,6 +77,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(finalizer, 'process_conversation', process)
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'save_structured_vector', MagicMock())
     monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
     monkeypatch.setattr(finalizer, 'record_finalized_meeting_receipt', MagicMock())
     monkeypatch.setattr(

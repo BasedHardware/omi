@@ -29,6 +29,8 @@ from utils.conversations.search import (
     keyword_search_conversation_ids,
     parse_exact_conversation_reference,
 )
+from utils.metrics import OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.tools.conversation_jit import (
     MAX_JIT_CONVERSATIONS,
@@ -470,6 +472,7 @@ def search_conversations_tool(
     - Understanding overall themes or patterns in conversations
 
     **When NOT to use this tool:**
+    - Not for recency/latest questions; use get_conversations_tool for those.
     - For user preferences/facts (use get_memories_tool for "what's my favorite X?", "do I like Y?")
 
     **Tip:** For best results, use descriptive phrases about the event or concept you're looking for.
@@ -580,6 +583,19 @@ def search_conversations_tool(
 
     conversations_data: List[Dict[str, Any]] = []
     transcript_search = ChatTranscriptSearch([], False)
+    keyword_degraded = False
+    active_path = 'firestore'
+
+    def with_keyword_note(result: str) -> str:
+        if keyword_degraded:
+            return result + '\n\n[Keyword index temporarily unavailable; results are semantic-only]'
+        return result
+
+    def record_path(path: str, count: int, degraded: bool = False) -> None:
+        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(
+            path=path, outcome='degraded' if degraded else ('ok' if count else 'empty')
+        ).inc()
+
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
@@ -606,13 +622,24 @@ def search_conversations_tool(
                 c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
             ]
             if not conversations_data:
+                record_path('firestore', 0)
                 return f"No conversations found matching query: '{query}'"
         else:
             # Search title/overview, summary vectors, and indexed transcript chunks. Share
             # one embedding across both vector namespaces when the index is available.
-            keyword_ids = keyword_search_conversation_ids(
-                uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
-            )
+            active_path = 'keyword'
+            try:
+                keyword_ids = keyword_search_conversation_ids(
+                    uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
+                )
+            except Exception:  # Keyword errors must not discard semantic results.
+                keyword_degraded = True
+                record_fallback(
+                    component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
+                )
+            if query.strip():
+                record_path('keyword', len(keyword_ids), keyword_degraded)
+            active_path = 'vector'
             index_available = getattr(vector_db, 'index', None) is not None
             query_vector = vector_db.embeddings.embed_query(query) if index_available else None
             vector_ids = vector_db.query_vectors(
@@ -623,6 +650,8 @@ def search_conversations_tool(
                 k=limit,
                 **({'query_vector': query_vector} if query_vector is not None else {}),
             )
+            record_path('vector', len(vector_ids), not index_available)
+            active_path = 'transcript'
             transcript_search = search_chat_transcript_chunks(
                 uid,
                 query,
@@ -633,10 +662,13 @@ def search_conversations_tool(
                 index_available=index_available,
                 search_transcript_chunks=vector_db.search_transcript_chunks,
             )
+            record_path('transcript', len(transcript_search.conversation_ids), not transcript_search.searched)
             conversation_ids = merge_chat_conversation_ids(
                 keyword_ids, transcript_search.conversation_ids, vector_ids, limit
             )
 
+        if scoped_id or exact_conversation_id:
+            record_path('firestore', len(conversations_data))
         if jit_enabled:
             conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
 
@@ -663,13 +695,16 @@ def search_conversations_tool(
                 "⚠️ search_conversations_tool - no results query_mode=%s",
                 'exact-reference' if exact_conversation_id else 'semantic',
             )
-            return msg
+            return with_keyword_note(msg)
 
         if not scoped_id and not exact_conversation_id:
+            active_path = 'firestore'
             conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            record_path('firestore', len(conversations_data))
             if not conversations_data:
-                return f"No conversations found matching '{query}'. " + chat_transcript_coverage_note(
-                    transcript_search.searched
+                return with_keyword_note(
+                    f"No conversations found matching '{query}'. "
+                    + chat_transcript_coverage_note(transcript_search.searched)
                 )
             conversations_data = [
                 c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)
@@ -682,24 +717,27 @@ def search_conversations_tool(
                 c for c in conversations_data if conversation_matches_date_range(c, start_bound, end_bound)
             ]
             if not conversations_data:
-                return f"No conversations found matching '{query}'. " + chat_transcript_coverage_note(
-                    transcript_search.searched
+                return with_keyword_note(
+                    f"No conversations found matching '{query}'. "
+                    + chat_transcript_coverage_note(transcript_search.searched)
                 )
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
         if jit_enabled:
             logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
-            return format_active_jit_conversations(
-                conversations_data,
-                configurable=cast(Dict[str, Any], configurable),
-                query=None if exact_conversation_id else query,
-                max_transcript_segments=max_transcript_segments if include_transcript else 0,
-                coverage_note=(
-                    chat_transcript_coverage_note(False)
-                    if not exact_conversation_id and not scoped_id and not transcript_search.searched
-                    else None
-                ),
+            return with_keyword_note(
+                format_active_jit_conversations(
+                    conversations_data,
+                    configurable=cast(Dict[str, Any], configurable),
+                    query=None if exact_conversation_id else query,
+                    max_transcript_segments=max_transcript_segments if include_transcript else 0,
+                    coverage_note=(
+                        chat_transcript_coverage_note(False)
+                        if not exact_conversation_id and not scoped_id and not transcript_search.searched
+                        else None
+                    ),
+                )
             )
 
         # Only load people if transcripts will be included
@@ -785,8 +823,9 @@ def search_conversations_tool(
 
         logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
 
-        return result
+        return with_keyword_note(result)
 
     except Exception as e:
+        record_path(active_path, 0, degraded=True)
         logger.warning("search_conversations_tool vector search failed (%s)", type(e).__name__)
-        return "Found vector search results but encountered an error processing them."
+        return with_keyword_note("Found vector search results but encountered an error processing them.")
