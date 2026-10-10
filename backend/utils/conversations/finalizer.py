@@ -321,7 +321,7 @@ async def finalize_persisted_conversation(
                 ):
                     await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
                 else:
-                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
+                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
             except Exception as error:
                 OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
                 logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)

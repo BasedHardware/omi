@@ -13,8 +13,8 @@ Design contracts (mirror the per-user script's runbook):
 - Dry-run by default; --apply required for writes. Cost sign-off reads the
   dry-run totals across the whole list first.
 - A uid whose run fails (non-zero exit / error budget stop) goes to `failed`
-  and the driver CONTINUES to the next uid; rerunning the driver retries only
-  failed + not-yet-done uids.
+  and the driver CONTINUES to the next uid; rerunning the driver skips done
+  uids, and `--retry-failed` retries the failed ones.
 - State file writes are atomic (tmp + rename) after every uid, so a killed
   run loses at most the in-flight uid.
 - Embedding/Pinecone call rate is bounded by the per-user script itself
@@ -35,7 +35,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -141,22 +141,32 @@ def load_state_durable(path: Path, uids: list[str]) -> dict:
     return state
 
 
-def save_state_durable(path: Path, state: dict, uids: list[str]) -> None:
+def save_state_durable(path: Path, state: dict, dirty_uids: list[str]) -> None:
+    """Persist only the shards that this run actually changed.
+
+    `dirty_uids` are the uids whose done/failed entries changed since load.
+    Shards with no changed entries are never written: a merge write of an
+    empty map would erase resume entries recorded by another execution, and
+    rewriting untouched shards would multiply fleet write cost by the shard
+    count.
+    """
     save_state(path, state)
+    if not dirty_uids:
+        return
     try:
         from database._client import get_firestore_client
 
         col = get_firestore_client().collection(MIRROR_COLLECTION)
-        shards: dict[str, dict] = {}
-        for uid in uids:
-            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})
-        for uid, record in state.get('done', {}).items():
-            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})['done'][uid] = record
-        for uid, reason in state.get('failed', {}).items():
-            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})['failed'][uid] = reason
-        for shard_id, payload in shards.items():
-            payload['updated_at'] = state.get('updated_at')
-            col.document(shard_id).set(payload, merge=True)
+        dirty_shards = sorted({_mirror_doc_id(uid) for uid in dirty_uids})
+        for shard_id in dirty_shards:
+            done = {u: rec for u, rec in state.get('done', {}).items() if _mirror_doc_id(u) == shard_id}
+            failed = {u: why for u, why in state.get('failed', {}).items() if _mirror_doc_id(u) == shard_id}
+            if not done and not failed:
+                continue
+            col.document(shard_id).set(
+                {'done': done, 'failed': failed, 'updated_at': state.get('updated_at')},
+                merge=True,
+            )
     except Exception as error:
         print(f'state mirror write failed (local only): {type(error).__name__}', file=sys.stderr)
 
@@ -232,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as error:
             if args.apply:
                 state['failed'][uid] = type(error).__name__
-                save_state_durable(state_path, state, uids)
+                save_state_durable(state_path, state, [uid])
             print(json.dumps({'uid': uid, 'outcome': 'select_failed', 'error': type(error).__name__}))
             exit_code = 1
             time.sleep(args.sleep)
@@ -250,11 +260,11 @@ def main(argv: list[str] | None = None) -> int:
         else:
             state['done'][uid] = record
             state['failed'].pop(uid, None)
-        save_state_durable(state_path, state, uids)
+        save_state_durable(state_path, state, [uid])
         print(json.dumps({'uid': uid, 'outcome': 'applied', **record}))
         time.sleep(args.sleep)
     if args.apply:
-        save_state_durable(state_path, state, uids)
+        save_state_durable(state_path, state, [])
     print(
         json.dumps(
             {'mode': mode_str, 'finished': True, 'done_total': len(state['done']), 'failed_total': len(state['failed'])}
