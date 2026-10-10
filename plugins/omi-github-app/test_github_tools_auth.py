@@ -152,7 +152,7 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         main_path = APP_DIR / "main.py"
-        cls.tree = ast.parse(main_path.read_text())
+        cls.tree = ast.parse(main_path.read_text(encoding="utf-8"))
 
     def _extract_routes(self):
         route_guards = {}
@@ -197,7 +197,7 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
 
     def test_import_fails_closed_without_noop_lambda_fallback(self):
         """Assert main.py does not define a no-op lambda fallback for require_github_tools_auth."""
-        main_source = (APP_DIR / "main.py").read_text()
+        main_source = (APP_DIR / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("require_github_tools_auth = lambda", main_source)
 
 
