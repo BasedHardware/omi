@@ -195,3 +195,64 @@ def test_conversation_update_rejects_empty_title(authed_profile, respx_mock, cli
     result = cli_runner.invoke(app, ["conversation", "update", "c1", "--title", bad_title])
     assert result.exit_code == 1
     assert "Invalid title" in result.stderr
+
+
+def test_conversation_list_rejects_inverted_date_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "list",
+            "--start-date",
+            "2026-10-01T00:00:00Z",
+            "--end-date",
+            "2026-09-01T00:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid date filter range" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
+def test_conversation_create_rejects_inverted_datetime_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "create",
+            "--text",
+            "hello",
+            "--started-at",
+            "2026-10-01T12:00:00Z",
+            "--finished-at",
+            "2026-10-01T10:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid datetime range" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_rejects_inverted_datetime_range(
+    authed_profile, respx_mock, cli_runner, tmp_path
+) -> None:
+    f = tmp_path / "valid_segments.json"
+    f.write_text('{"transcript_segments": [{"text": "hi"}]}')
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "from-segments",
+            str(f),
+            "--started-at",
+            "2026-10-01T12:00:00Z",
+            "--finished-at",
+            "2026-10-01T10:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid datetime range" in result.stderr.lower()
+    assert not respx_mock.calls
