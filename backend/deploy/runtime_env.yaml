@@ -2086,7 +2086,7 @@ environments:
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '4', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BUCKET_SCREEN_FRAMES:
