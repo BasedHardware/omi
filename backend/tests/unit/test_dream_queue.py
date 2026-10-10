@@ -151,7 +151,7 @@ def test_single_huge_conversation_is_admitted_and_acknowledged(queue, monkeypatc
     messages = dream_prompt.evidence_message(records, Triage, 8000)
     value = json.loads(messages[0]['content'])['records']['conversations/0']
     assert len(value) >= 600
-    assert value.startswith('SPEAKER_00: HEAD') and value.endswith('TAIL')
+    assert value.startswith('title: \noverview: \nSPEAKER_00: HEAD') and value.endswith('TAIL')
     assert 'chars omitted' in value
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     assert dream_store.dirty_count(UID) == 0

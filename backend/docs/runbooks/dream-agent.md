@@ -357,3 +357,22 @@ stays behind unread rows; the dirty set remains the read authority.
 `backend/scripts/dream_reasoning_eval.py` exercises the real reasoning lane on a
 verified dev tunnel with invented evidence and no product effects. Fixture and
 five-run counts are under `backend/evals/dream_reasoning/`.
+
+Conversation `title` and `overview` edits require that conversation as evidence,
+exact `before`, a nonempty bounded `after` (120/1,000 characters), and nonempty
+speech. Reasoning limits them to empty/generic or transcript-contradicted fields,
+in the conversation's dominant language; non-English and mixed-language speech
+are valid and never translated. User titles, locks and visibility are respected.
+Apply fences speech and the fields it owns; separate title/overview edits can
+share a pass snapshot. Review journals each edit with undo and durable suppression.
+Overview edits clear old sections/claims atomically, preserving them for undo.
+Shadow reports proposals without applying them; no mode or cohort change is made.
+
+Feedback must be a generic invented failure description, with no success reports
+for clean input. Before shadow persistence or developer storage, the privacy gate
+normalizes Unicode and rejects supplied refs/IDs, full evidence text, short quoted
+substrings (including scripts without word boundaries), four-word overlap and
+proper names/vocabulary. Names are collected conservatively; lexical checks cannot
+prove absence of arbitrary semantic paraphrases. Invented language/quality evals
+and final five-repeat dev receipts are under `evals/dream_triage/quality-results.json`
+and `evals/dream_reasoning/quality-results.json`.

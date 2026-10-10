@@ -169,6 +169,11 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                     if edit.target not in records or any(ref not in records for ref in edit.evidence):
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
+                    try:
+                        dream_tools.validate_summary_edit(edit, records[edit.target])
+                    except (ValueError, review_store.ReviewConflict):
+                        outcomes.append({'key': key, 'status': 'invalid_evidence'})
+                        continue
                     allowed = await run_blocking(db_executor, review_changes.agent_change_allowed, uid, key)
                     if not allowed:
                         status = 'suppressed'
