@@ -317,6 +317,7 @@ for _reason in (
     'no_pcm',
     'stale_generation',
     'already_mapped',
+    'authority_unavailable',
 ):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 

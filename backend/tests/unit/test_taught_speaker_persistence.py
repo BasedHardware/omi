@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import numpy as np
 import pytest
 
+from database import _client as firestore_client_module
 from database import speaker_learning as speaker_learning_db
 from database import speaker_learning_jobs as speaker_learning_jobs_db
 from database import users
@@ -34,6 +35,7 @@ from utils import speaker_sample, speaker_audio
 @pytest.fixture
 def world(monkeypatch):
     store = StrictFirestore()
+    monkeypatch.setattr(firestore_client_module, 'get_firestore_client', lambda: store)
     person_path = ('users', 'account-a', 'people', 'person-1')
     conversation_path = ('users', 'account-a', 'conversations', 'teach-1')
     person = {'id': 'person-1', 'name': 'Synthetic Alex', 'speech_samples_version': 3}

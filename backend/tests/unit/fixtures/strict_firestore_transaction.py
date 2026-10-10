@@ -94,6 +94,13 @@ class StrictFirestoreDocument:
                 ["is_locked"],
                 ["folder_id"],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+                [
+                    'deleted',
+                    'discarded',
+                    'is_locked',
+                    'manual_speaker_assignments',
+                    'manual_speaker_assignments_compressed',
+                ],
             ):
                 raise UnsupportedFirestoreOperationError(
                     "only privacy, folder membership and speaker-receipt projections are supported"

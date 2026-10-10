@@ -1,0 +1,4 @@
+{
+  "change": "Long Apple Watch recordings no longer build up in your phone's memory, so the app is less likely to be closed partway through one",
+  "platforms": ["ios"]
+}

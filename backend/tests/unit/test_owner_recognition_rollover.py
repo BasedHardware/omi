@@ -9,6 +9,7 @@ import pytest
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from database import conversations as conversations_db
+from database import live_owner_continuity as continuity_cache
 from routers.listen.speakers import SpeakerMatcher
 from tests.unit.test_live_speaker_carry import _CarryHarness, _segment, _stamped_epoch, SCOPE
 from tests.unit.test_listen_speaker_id_failover import FailoverStack, CONV, UID
@@ -16,6 +17,7 @@ from tests.unit.test_speaker_match import _live_matcher, _segment as audio_segme
 from utils.observability.owner_recognition import LIVE_SPEAKER_ROLLOVER
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.stt.speaker_match import select_speaker_match
+from utils.live_owner_continuity import OwnerContinuity
 
 
 @pytest.mark.anyio
@@ -131,6 +133,8 @@ async def test_carry_arbitrates_voice_matched_during_donor_read(monkeypatch):
         matcher.person_embeddings['user'] = owner
 
     async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
         if fn is mod.conversations_db.get_conversation:
             await matcher.match(1, dict(audio_segment('new', 6, 5), speaker_id_scope=SCOPE))
             assert matcher.speaker_to_person[1][0] == 'user'
@@ -176,6 +180,8 @@ async def test_carry_revalidates_current_prints_and_corrects_emitted_owner(monke
     incoming = [TranscriptSegment(**_segment(f'new{v}', speaker_id=v)) for v in (0, 1)]
 
     async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
         return {'id': 'old'} if fn.__name__ == 'get_conversation' else {}
 
     async def load():
@@ -211,6 +217,7 @@ async def test_completed_roster_margin_rejection_withdraws_delivered_and_persist
         matcher, host, emitted = _live_matcher(monkeypatch, [query])
         stack.state.audio_ring_buffer = host.state.audio_ring_buffer
         matcher.host = stack.host
+        matcher.continuity = OwnerContinuity(matcher)
         stack.host.speakers = matcher
         stack.host.emit_speaker_suggestion = lambda *args, **kw: emitted.append(args)
         stack.host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))
@@ -258,3 +265,133 @@ async def test_completed_roster_margin_rejection_withdraws_delivered_and_persist
         assert any(args[0] == 1 and not args[1] for args in emitted), 'withdraw early suggestion'
     finally:
         stack.restore()
+
+
+@pytest.mark.anyio
+async def test_rollover_keeps_competing_voice_when_paid_roster_becomes_owner_only(monkeypatch):
+    """A previously named peer becomes an owner contender on free downgrade."""
+    from routers.listen import speakers as mod
+
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    winner = np.array([[0.47, -np.sqrt(1 - 0.47**2)]], dtype=np.float32)
+    peer = np.array([[0.6, 0.8]], dtype=np.float32)
+    matcher, host, _ = _live_matcher(monkeypatch, [np.array([[-1.0, 0.0]], dtype=np.float32)])
+    matcher._profile_conversation_id = 'old'
+    matcher.person_embeddings = {
+        'user': {'embedding': owner, 'name': 'Owner'},
+        'peer': {'embedding': peer, 'name': 'Peer'},
+    }
+    matcher.speaker_to_person = {0: ('user', 'Owner'), 1: ('peer', 'Peer')}
+    matcher._mapping_origin = {0: 'automatic', 1: 'automatic'}
+    matcher._voice_centroids = {0: winner, 1: peer}
+    matcher._voice_distances = {0: {'user': 0.53, 'peer': 1.0}, 1: {'user': 0.4, 'peer': 0.0}}
+    matcher._voice_decisions = {v: select_speaker_match(d) for v, d in matcher._voice_distances.items()}
+    matcher._voice_scopes = {0: SCOPE, 1: SCOPE}
+    matcher.speaker_evidence = {v: deque([(e, 5.0)], maxlen=3) for v, e in matcher._voice_centroids.items()}
+    host.request.uid = 'u'
+    host.state.speaker_id_enabled = True
+    host.receiver = SimpleNamespace(speaker_provider_epoch=SimpleNamespace(current_scope=SCOPE))
+
+    async def load():
+        matcher.person_embeddings = {'user': {'embedding': owner, 'name': 'Owner'}}
+
+    async def read(fn, *args, **kwargs):
+        if fn is continuity_cache.authority_snapshot:
+            return {conversation: {} for conversation in args[1]}
+        return {'id': 'old'} if fn is mod.conversations_db.get_conversation else {}
+
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence = SimpleNamespace(call=read)
+    matcher.note_rollover_carry(set())
+    await matcher.refresh_for_conversation('next', owner_carry_scope=SCOPE, owner_carry_donor={'id': 'old'})
+    assert matcher.speaker_to_person == {}
+    assert matcher.voice_identity_status[0] == SpeakerIdentityStatus.ambiguous
+    assert matcher._voice_distances[1]['user'] == pytest.approx(0.4)
+    assert matcher._voice_decisions[1].person_id is None
+    assert 1 in matcher._competition_only
+    assert 'peer' not in matcher.person_embeddings
+    await matcher.match(2, dict(audio_segment('unrelated', 20, 5), speaker_id_scope=SCOPE))
+    assert not matcher.speaker_to_person, 'later arbitration must never promote retained peer evidence'
+    assert matcher._voice_decisions[1].person_id is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'case,reason',
+    [
+        ('no_scope', 'no_scope'),
+        ('no_donor', 'donor_unavailable'),
+        ('deleted', 'donor_ineligible'),
+        ('old_scope', 'scope_changed'),
+        ('no_evidence', 'no_evidence'),
+        ('manual', 'manual_override'),
+        ('profile_unavailable', 'profile_unavailable'),
+        ('profile_changed', 'profile_changed'),
+        ('read_failed', 'donor_unavailable'),
+        ('late_manual', 'manual_override'),
+        ('restart', 'scope_changed'),
+        ('voiceprint', 'voiceprint_rejected'),
+        ('capacity', 'voice_capacity'),
+        ('carry', 'automatic'),
+    ],
+)
+async def test_rollover_logs_bounded_reason_for_each_prior_owner(monkeypatch, caplog, case, reason):
+    import logging
+    from routers.listen import speakers as mod
+
+    matcher, host, _ = _live_matcher(monkeypatch, [])
+    owner = matcher.person_embeddings['user']
+    vector = owner['embedding']
+    matcher._profile_conversation_id = 'old'
+    matcher.speaker_to_person = {0: ('user', 'Owner')}
+    matcher._mapping_origin = {0: 'automatic'}
+    matcher._voice_decisions = {0: select_speaker_match({'user': 0.0})}
+    matcher._voice_centroids = {0: vector}
+    matcher.speaker_evidence = {0: deque([(vector, 5.0)], maxlen=3)}
+    matcher._voice_scopes = {0: 'obsolete' if case == 'old_scope' else SCOPE}
+    scope = None if case == 'no_scope' else SCOPE
+    donor = {} if case == 'no_donor' else {'id': 'old'}
+    if case == 'deleted':
+        donor['deleted'] = True
+    manual = {'speakers': {'0': {'rejection': {'kind': 'not_me'}}}}
+    if case == 'manual':
+        donor['manual_speaker_assignments'] = manual
+    if case == 'no_evidence':
+        matcher._voice_centroids.clear()
+    host.request.uid = 'u'
+    host.state.speaker_id_enabled = True
+    host.receiver = SimpleNamespace(
+        speaker_provider_epoch=SimpleNamespace(current_scope='new' if case == 'restart' else SCOPE)
+    )
+
+    async def load():
+        if case != 'profile_unavailable':
+            matcher.person_embeddings = {'user': owner}
+        if case == 'profile_changed':
+            matcher.person_embeddings['user'] = {'embedding': np.array([[0.0, 1.0]]), 'name': 'Owner'}
+        if case == 'voiceprint':
+            matcher.person_embeddings['peer'] = {'embedding': vector, 'name': 'Peer'}
+
+    async def read(fn, *args, **kwargs):
+        if case == 'read_failed':
+            raise RuntimeError('offline')
+        if fn is continuity_cache.authority_snapshot:
+            return {
+                conversation: (manual if case == 'late_manual' and conversation == 'old' else {})
+                for conversation in args[1]
+            }
+        if fn is mod.conversations_db.get_conversation:
+            return dict(donor, manual_speaker_assignments=manual) if case == 'late_manual' else donor
+        return {}
+
+    if case == 'capacity':
+        monkeypatch.setattr(matcher, '_admit_voice', lambda v: None)
+    matcher._load_profiles = AsyncMock(side_effect=load)
+    host.persistence = SimpleNamespace(call=read)
+    matcher.note_rollover_carry(set())
+    with caplog.at_level(logging.INFO, logger='utils.observability.owner_recognition'):
+        await matcher.refresh_for_conversation('next', owner_carry_scope=scope, owner_carry_donor=donor)
+    observations = [r.message for r in caplog.records if r.message.startswith('live_speaker_rollover')]
+    assert len(observations) == 1
+    assert f'reason={reason}' in observations[0]
+    assert 'target=owner' in observations[0]

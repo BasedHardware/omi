@@ -651,6 +651,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "PR 12935: speech availability must return on deadline without awaiting shared downloads, and recognition cleanup must precede retry"
+  - id: ios-watch-audio-chunk-relay
+    command: ["ruby", "app/ios/test/watch_audio_chunk_relay_test.rb"]
+    triggers: ["app/ios/Runner/WatchAudioChunkRelay.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/watch_audio_chunk_relay_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Issue 20479: the iPhone must forward each Apple Watch audio chunk as it arrives and keep none of the recording in memory"
   - id: ios-flutter-launch-engine-guard
     command: ["ruby", "app/ios/test/flutter_launch_engine_guard_test.rb"]
     triggers: ["app/ios/Runner/FlutterLaunchEngineGuard.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/test/flutter_launch_engine_guard_test.rb", ".github/checks-manifest.yaml"]

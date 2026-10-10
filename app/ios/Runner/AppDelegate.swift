@@ -119,8 +119,6 @@ final class QuickActionsIconPatcher: NSObject {
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
     var rayBanMetaHostApi: RayBanMetaHostApiImpl?
-  private var audioChunks: [Int: (Data, Double)] = [:] // (audioData, sampleRate)
-  private var nextExpectedChunkIndex: Int = 0
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
   private static let periodicSyncIdentifier = "com.omi.recording-sync.refresh"
@@ -765,53 +763,17 @@ final class QuickActionsIconPatcher: NSObject {
             return
         }
 
-        audioChunks[chunkIndex] = (audioChunk, sampleRate)
-
-        if isLast {
-            reassembleAndSendAudioData()
-        } else {
-            // Prepend 3 dummy bytes so downstream can uniformly strip headers
-            var prefixedChunk = Data([0x00, 0x00, 0x00])
-            prefixedChunk.append(audioChunk)
-            let flutterData = FlutterStandardTypedData(bytes: prefixedChunk)
-            self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
-                }
-            }
-        }
-    }
-
-    private func reassembleAndSendAudioData() {
-        // Sort chunks by index and combine them
-        let sortedChunks = audioChunks.sorted(by: { $0.key < $1.key })
-        var combinedData = Data()
-        var sampleRate: Double = 48000.0 // Default fallback
-
-        for (_, chunkTuple) in sortedChunks {
-            let (chunkData, chunkSampleRate) = chunkTuple
-            combinedData.append(chunkData)
-            sampleRate = chunkSampleRate
-        }
-
-        // Prepend 3 dummy bytes for full buffer as well
-        var prefixed = Data([0x00, 0x00, 0x00])
-        prefixed.append(combinedData)
-        let flutterData = FlutterStandardTypedData(bytes: prefixed)
-        self.flutterWatchAPI?.onAudioData(audioData: flutterData) { result in
+        // Each chunk goes straight to Flutter's capture path, the only consumer of Watch audio.
+        guard let payload = WatchAudioChunkRelay.flutterPayload(for: audioChunk) else { return }
+        let flutterData = FlutterStandardTypedData(bytes: payload)
+        self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
             switch result {
             case .success:
                 break
             case .failure(let error):
-                print("Complete audio data sent to Flutter - Error: \(error.message)")
+                print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
             }
         }
-
-        audioChunks.removeAll()
-        nextExpectedChunkIndex = 0
     }
 }
 
@@ -841,8 +803,6 @@ extension AppDelegate: WCSessionDelegate {
             switch method {
             case "startRecording":
                 self.isRecordingActive = true
-                self.audioChunks.removeAll()
-                self.nextExpectedChunkIndex = 0
                 
                 DispatchQueue.main.async {
                     self.flutterWatchAPI?.onRecordingStarted() { result in
