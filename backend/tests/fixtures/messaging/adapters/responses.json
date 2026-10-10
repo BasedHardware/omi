@@ -1,0 +1,39 @@
+{
+  "rate_limit": {
+    "status": 429,
+    "body": {
+      "ok": false,
+      "error_code": 429,
+      "parameters": {
+        "retry_after": 2
+      }
+    },
+    "headers": {
+      "Retry-After": "2"
+    }
+  },
+  "server_error": {
+    "status": 503,
+    "body": {
+      "error": "synthetic unavailable"
+    },
+    "headers": {}
+  },
+  "telegram_ok": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "result": {
+        "message_id": 71
+      }
+    },
+    "headers": {}
+  },
+  "linq_ok": {
+    "status": 200,
+    "body": {
+      "id": "fixture-receipt"
+    },
+    "headers": {}
+  }
+}

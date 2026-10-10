@@ -104,6 +104,20 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
 _async_openai: AsyncOpenAI | None = None
 
 
+def download_owned_chat_file(uid: str, file_id: str, *, max_bytes: int) -> bytes:
+    """Resolve and bound bytes for a file owned by the current user."""
+    rows = chat_db.get_chat_files(uid, [file_id])
+    if len(rows) != 1:
+        raise PermissionError('Owned file unavailable')
+    data = bytearray()
+    with _get_sync_openai().files.with_streaming_response.content(rows[0]['openai_file_id']) as response:
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError('Owned file too large')
+    return bytes(data)
+
+
 def _get_async_openai() -> AsyncOpenAI:
     global _async_openai
     if _async_openai is None:

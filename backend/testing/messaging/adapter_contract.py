@@ -20,7 +20,9 @@ class AdapterContract:
         body, headers = signed_message()
         gateway = Gateway(adapter, store=MemoryStore())
         with pytest.raises(PermissionError):
-            asyncio.run(gateway.webhook(body + b' ', headers))
+            # Telegram authenticates a shared header rather than signing bytes.
+            # Body-tampering rejection belongs in HMAC-provider fixture tests.
+            asyncio.run(gateway.webhook(body, {name: 'invalid' for name in headers}))
 
     def test_dedup_and_fast_ack(self, adapter, signed_message):
         store = MemoryStore()
@@ -42,7 +44,7 @@ class AdapterContract:
         async def run():
             reply = await gateway.webhook(*signed_message())
             await gateway.process(reply['jobs'][0])
-            assert [s['text'] for s in adapter.sent] == ['Link your account in Omi to chat here.']
+            assert [s['text'] for s in adapter.sent] == list(adapter.render('Link your account in Omi to chat here.'))
 
         asyncio.run(run())
 

@@ -10,7 +10,8 @@ Anthropic's native streaming contract.
 from __future__ import annotations
 from dataclasses import replace
 from utils.retrieval.chat_mount import chat_mount
-from utils.messaging.projection import ToolProjection, surface_runtime
+from utils.messaging.projection import project_runtime_tools, surface_runtime
+from utils.messaging.undo import prepare_channel_write
 
 
 import base64
@@ -687,6 +688,7 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
         else None
     )
     try:
+        await prepare_channel_write(configurable['user_id'], tool_name)
         result = await tool_obj.ainvoke(tool_input, config=config)
     except asyncio.CancelledError:
         if attempt is not None:
@@ -1852,13 +1854,8 @@ user chose not to send; acknowledge that rather than retrying.
     runtime = surface_runtime.get()
     projection = None
     if runtime is not None:
-        projection = ToolProjection.build(
-            core_tools,
-            (*runtime.tools, *device_tools),
-            (*app_tools, perplexity_web_search_tool),
-            device_names=DEVICE_TOOL_NAMES,
-            live_devices=runtime.surface == 'app',
-            principal=runtime.principal,
+        projection = project_runtime_tools(
+            runtime, core_tools, device_tools, (*app_tools, perplexity_web_search_tool), DEVICE_TOOL_NAMES
         )
         tool_registry = dict(projection.registry)
         tool_schemas = [_langchain_tool_to_openai(t) for t in tool_registry.values()]
