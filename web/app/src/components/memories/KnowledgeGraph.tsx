@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useKnowledgeGraph';
 import type { KnowledgeGraphNodeType } from '@/types/conversation';
 import SpriteText from 'three-spritetext';
+import { t, tn } from '@/lib/i18n';
 
 // Dynamically import ForceGraph3D to avoid SSR issues
 // Using react-force-graph-3d (standalone package) instead of react-force-graph
@@ -36,6 +37,25 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
 });
 
 // Sphere boundary radius - all nodes will be contained within this
+function nodeTypeLabel(type: KnowledgeGraphNodeType | 'user'): string {
+  switch (type) {
+    case 'user':
+      return t('You');
+    case 'person':
+      return t('person');
+    case 'place':
+      return t('place');
+    case 'organization':
+      return t('organization');
+    case 'thing':
+      return t('thing');
+    case 'concept':
+      return t('concept');
+    default:
+      return type;
+  }
+}
+
 const SPHERE_RADIUS = 200;
 const INITIAL_CAMERA_DISTANCE = 400;
 
@@ -310,10 +330,10 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
           <Network className="w-10 h-10 text-text-quaternary" />
         </div>
         <h3 className="text-lg font-medium text-text-primary mb-2">
-          Knowledge graph is empty
+          {t('Knowledge graph is empty')}
         </h3>
         <p className="text-sm text-text-tertiary max-w-sm mb-4">
-          Add more memories to build your personal knowledge network.
+          {t('Add more memories to build your personal knowledge network.')}
         </p>
       </div>
     );
@@ -360,7 +380,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search nodes..."
+            placeholder={t('Search nodes...')}
             className={cn(
               'w-full pl-9 pr-8 py-2 rounded-lg',
               'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
@@ -380,8 +400,8 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
         </div>
         {searchResults.size > 0 && (
           <p className="mt-1 text-xs text-text-quaternary">
-            {searchResults.size} nodes found
-          </p>
+            {tn(searchResults.size, '{count} node found', '{count} nodes found')}
+              </p>
         )}
       </div>
 
@@ -397,10 +417,10 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
               ? 'bg-white/20 border-white/50 text-white'
               : 'bg-bg-tertiary/80 border-bg-quaternary text-text-secondary hover:text-text-primary',
           )}
-          title={showAllLabels ? 'Hide labels' : 'Show all labels'}
+          title={showAllLabels ? t('Hide labels') : t('Show all labels')}
         >
           <Tag className="w-4 h-4" />
-          <span className="text-sm">Labels</span>
+          <span className="text-sm">{t('Labels')}</span>
         </button>
 
         {/* Reset view */}
@@ -412,10 +432,10 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
-          title="Reset view"
+          title={t('Reset view')}
         >
           <RotateCcw className="w-4 h-4" />
-          <span className="text-sm">Reset</span>
+          <span className="text-sm">{t('Reset')}</span>
         </button>
 
       </div>
@@ -430,7 +450,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
-          title="Zoom in"
+          title={t('Zoom in')}
         >
           <ZoomIn className="w-5 h-5" />
         </button>
@@ -442,7 +462,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
-          title="Zoom out"
+          title={t('Zoom out')}
         >
           <ZoomOut className="w-5 h-5" />
         </button>
@@ -450,7 +470,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 p-3 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary">
-        <p className="text-xs text-text-quaternary mb-2">Node Types</p>
+        <p className="text-xs text-text-quaternary mb-2">{t('Node Types')}</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           {(
             Object.entries(NODE_COLORS) as [KnowledgeGraphNodeType | 'user', string][]
@@ -461,7 +481,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                 style={{ backgroundColor: color }}
               />
               <span className="text-xs text-text-tertiary capitalize">
-                {type === 'user' ? 'You' : type}
+                {nodeTypeLabel(type)}
               </span>
             </div>
           ))}
@@ -470,7 +490,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
 
       {/* Controls hint */}
       <div className="absolute bottom-4 right-4 text-xs text-text-quaternary">
-        Drag to rotate • Scroll to zoom • Click node to select
+        {t('Drag to rotate • Scroll to zoom • Click node to select')}
       </div>
 
       {/* Selected node panel */}
@@ -510,7 +530,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
 
             {selectedNode.aliases.length > 0 && (
               <div className="mt-2">
-                <p className="text-xs text-text-quaternary mb-1">Also known as:</p>
+                <p className="text-xs text-text-quaternary mb-1">{t('Also known as:')}</p>
                 <div className="flex flex-wrap gap-1">
                   {selectedNode.aliases.map((alias, i) => (
                     <span
@@ -526,8 +546,12 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
 
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-bg-quaternary">
               <span className="text-sm text-text-tertiary">
-                {selectedNode.memoryIds.length} related memories
-              </span>
+                {tn(
+                    selectedNode.memoryIds.length,
+                    '{count} related memory',
+                    '{count} related memories',
+                  )}
+                </span>
               {selectedNode.memoryIds.length > 0 && onNodeSelect && (
                 <button
                   onClick={() => onNodeSelect(selectedNode.id, selectedNode.memoryIds)}
@@ -537,8 +561,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                     'transition-colors',
                   )}
                 >
-                  View Memories
-                  <ExternalLink className="w-3 h-3" />
+                  {t('View Memories')}<ExternalLink className="w-3 h-3" />
                 </button>
               )}
             </div>

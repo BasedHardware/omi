@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { t } from '@/lib/i18n';
 
 export interface PageToolbarSearch {
   value: string;
@@ -59,8 +60,8 @@ export function PageToolbar({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') search.onSubmit?.(search.value);
                 }}
-                placeholder={search.placeholder ?? 'Search'}
-                aria-label={search.placeholder ?? 'Search'}
+                placeholder={search.placeholder ?? t('Search')}
+                aria-label={search.placeholder ?? t('Search')}
                 className="pl-9 pr-8"
               />
               {search.value && (
@@ -70,7 +71,7 @@ export function PageToolbar({
                     search.onChange('');
                     search.onSubmit?.('');
                   }}
-                  aria-label="Clear search"
+                  aria-label={t('Clear search')}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded-element p-1 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-primary"
                 >
                   <X className="h-3.5 w-3.5" />

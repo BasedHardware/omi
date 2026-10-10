@@ -3,6 +3,7 @@
 import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { App } from '@/types/apps';
+import { t } from '@/lib/i18n';
 
 interface AppDisabledNoticeProps {
   app: App;
@@ -32,19 +33,21 @@ export function AppDisabledNotice({
         <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="font-medium text-text-primary">
-            This app is disabled and cannot be installed
+            {t('This app is disabled and cannot be installed')}
           </p>
           <p className="text-sm text-text-secondary mt-1">
             {app.disabled_reason === 'webhook_failures'
-              ? 'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'
-              : 'It was disabled by Omi.'}
-            {app.disabled_at && ` Disabled on ${app.disabled_at.slice(0, 10)}.`}
-            {app.disabled_error && ` Last error: ${app.disabled_error}.`}
+              ? t('Its endpoint failed for 72 hours in a row, so deliveries were stopped.')
+              : t('It was disabled by Omi.')}
+            {app.disabled_at &&
+              ` ${t('Disabled on {date}.', { date: app.disabled_at.slice(0, 10) })}`}
+            {app.disabled_error &&
+              ` ${t('Last error: {error}.', { error: app.disabled_error })}`}
           </p>
           {isOwner ? (
             <>
               <p className="text-sm text-text-tertiary mt-2">
-                Fix the endpoint first — re-enabling re-checks every configured URL.
+                {t('Fix the endpoint first — re-enabling re-checks every configured URL.')}
               </p>
               <button
                 onClick={onReEnable}
@@ -60,13 +63,13 @@ export function AppDisabledNotice({
                 ) : (
                   <RotateCcw className="w-4 h-4" />
                 )}
-                Re-enable
+                {t('Re-enable')}
               </button>
               {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
             </>
           ) : (
             <p className="text-sm text-text-tertiary mt-2">
-              Its developer has to re-enable it.
+              {t('Its developer has to re-enable it.')}
             </p>
           )}
         </div>

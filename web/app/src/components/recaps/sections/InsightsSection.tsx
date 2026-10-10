@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UnresolvedQuestion, DecisionMade, KnowledgeNugget } from '@/types/recap';
+import { t } from '@/lib/i18n';
 
 const MAX_VISIBLE_ITEMS = 3;
 
@@ -38,7 +39,7 @@ export function InsightsSection({
     <div className="flex gap-4">
       {/* Unresolved Questions */}
       <InsightColumn
-        title="Questions"
+        title={t('Questions')}
         icon={HelpCircle}
         iconColor="text-warning"
         bgColor="bg-warning/5"
@@ -54,7 +55,7 @@ export function InsightsSection({
 
       {/* Decisions Made */}
       <InsightColumn
-        title="Decisions"
+        title={t('Decisions')}
         icon={ArrowRight}
         iconColor="text-success"
         bgColor="bg-success/5"
@@ -70,7 +71,7 @@ export function InsightsSection({
 
       {/* Learnings */}
       <InsightColumn
-        title="Learnings"
+        title={t('Learnings')}
         icon={Lightbulb}
         iconColor="text-text-primary"
         bgColor="bg-white/[0.08]"
@@ -150,7 +151,7 @@ function InsightColumn({
                     'text-text-tertiary hover:text-text-primary',
                     'hover:bg-white/[0.14] transition-colors',
                   )}
-                  title="View source conversation"
+                  title={t('View source conversation')}
                 >
                   <MessageSquare className="w-3 h-3" />
                 </button>

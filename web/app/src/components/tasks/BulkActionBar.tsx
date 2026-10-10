@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { t, tn } from '@/lib/i18n';
 
 interface BulkActionBarProps {
   selectedCount: number;
@@ -47,15 +48,23 @@ const menuItemClass =
   'flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary';
 
 const SNOOZE_OPTIONS = [
-  { days: 0, label: 'Today' },
-  { days: 1, label: 'Tomorrow' },
-  { days: 7, label: 'Next week' },
+  { days: 0, get label() {
+    return t('Today');
+  } },
+  { days: 1, get label() {
+    return t('Tomorrow');
+  } },
+  { days: 7, get label() {
+    return t('Next week');
+  } },
 ] as const;
 
 const EXPORT_OPTIONS = [
   { format: 'csv' as const, label: 'CSV', Icon: FileText },
   { format: 'json' as const, label: 'JSON', Icon: FileJson },
-  { format: 'markdown' as const, label: 'Markdown', Icon: FileCode },
+  { format: 'markdown' as const, get label() {
+    return t('Markdown')
+  }, Icon: FileCode },
 ];
 
 function MenuPanel({
@@ -257,7 +266,7 @@ export function BulkActionBar({
             ) : (
               <Square className="w-4 h-4" />
             )}
-            <span>Select All</span>
+            <span>{t('Select All')}</span>
           </button>
           <div className="w-px h-6 bg-bg-quaternary" />
         </>
@@ -265,13 +274,13 @@ export function BulkActionBar({
 
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">
-          {selectedCount} selected
+          {tn(selectedCount, '{count} selected', '{count} selected')}
         </span>
         {!inline && (
           <button
             onClick={onClear}
             className="p-1 rounded hover:bg-bg-tertiary text-text-quaternary hover:text-text-secondary transition-colors"
-            title="Clear selection"
+            title={t('Clear selection')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -296,7 +305,7 @@ export function BulkActionBar({
               )}
             >
               <Clock className="w-4 h-4" />
-              <span>Snooze</span>
+              <span>{t('Snooze')}</span>
               <ChevronDown className="w-3 h-3" />
             </button>
 
@@ -323,7 +332,7 @@ export function BulkActionBar({
             )}
           >
             <Check className="w-4 h-4" />
-            <span>Complete</span>
+            <span>{t('Complete')}</span>
           </button>
         )}
 
@@ -339,7 +348,7 @@ export function BulkActionBar({
           )}
         >
           <Trash2 className="w-4 h-4" />
-          <span>Delete</span>
+          <span>{t('Delete')}</span>
         </button>
 
         {(onCopy || onExport) && (
@@ -357,10 +366,10 @@ export function BulkActionBar({
               'transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
-            title="Copy to clipboard"
+            title={t('Copy to clipboard')}
           >
             <Copy className="w-4 h-4" />
-            <span>Copy</span>
+            <span>{t('Copy')}</span>
           </button>
         )}
 
@@ -379,7 +388,7 @@ export function BulkActionBar({
               )}
             >
               <Download className="w-4 h-4" />
-              <span>Export</span>
+              <span>{t('Export')}</span>
               <ChevronDown className="w-3 h-3" />
             </button>
 
@@ -406,7 +415,7 @@ export function BulkActionBar({
               'transition-colors',
             )}
           >
-            Done
+            {t('Done')}
           </button>
         </>
       )}
@@ -415,7 +424,7 @@ export function BulkActionBar({
         <div ref={overflowRef} className="relative">
           <button
             type="button"
-            aria-label="More actions"
+            aria-label={t('More actions')}
             aria-haspopup="menu"
             aria-expanded={openMenu === 'overflow'}
             disabled={selectedCount === 0}
@@ -440,7 +449,7 @@ export function BulkActionBar({
               >
                 {!hideSnooze && onSnooze && (
                   <div className="hidden max-[1199px]:block">
-                    <MenuLabel>Snooze</MenuLabel>
+                    <MenuLabel>{t('Snooze')}</MenuLabel>
                     <SnoozeItems onSnooze={onSnooze} onDone={closeMenu} menuitem />
                     <MenuSeparator />
                   </div>
@@ -455,7 +464,7 @@ export function BulkActionBar({
                     className="hidden text-success hover:bg-success/10 max-[1429px]:flex"
                   >
                     <Check className="h-3.5 w-3.5" />
-                    Complete
+                    {t('Complete')}
                   </MenuItem>
                 )}
                 <MenuItem
@@ -467,7 +476,7 @@ export function BulkActionBar({
                   className="hidden text-error hover:bg-error/10 max-[1429px]:flex"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete
+                  {t('Delete')}
                 </MenuItem>
                 {(onCopy || onExport) && (
                   <MenuSeparator className="hidden max-[1429px]:block" />
@@ -481,13 +490,13 @@ export function BulkActionBar({
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    Copy
+                    {t('Copy')}
                   </MenuItem>
                 )}
                 {onCopy && onExport && <MenuSeparator />}
                 {onExport && (
                   <>
-                    <MenuLabel>Export</MenuLabel>
+                    <MenuLabel>{t('Export')}</MenuLabel>
                     <ExportItems onExport={onExport} onDone={closeMenu} menuitem />
                   </>
                 )}

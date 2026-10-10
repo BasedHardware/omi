@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loadUiCatalog, setUiLanguageForTesting } from '@/lib/i18n';
 import {
   CLAUDE_CONNECTOR_OAUTH,
   SECTION_INFO,
@@ -57,6 +58,21 @@ describe('SECTION_INFO', () => {
     expect(Object.keys(SECTION_INFO).sort()).toEqual(
       SETTINGS_SECTIONS.map((section) => section.id).sort(),
     );
+  });
+
+  it('reads titles in the UI language at render time, not at module load', async () => {
+    // This module was imported (and SECTION_INFO built) while the UI was English.
+    await loadUiCatalog('es');
+    setUiLanguageForTesting('es');
+    try {
+      expect(SECTION_INFO.account.title).toBe('Cuenta');
+      expect(SECTION_INFO.privacy.description).not.toBe(
+        'Data permissions and training settings',
+      );
+    } finally {
+      setUiLanguageForTesting('en');
+    }
+    expect(SECTION_INFO.account.title).toBe('Account');
   });
 });
 

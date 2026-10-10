@@ -1,6 +1,7 @@
 'use client';
 
 import { Brain } from 'lucide-react';
+import { t } from '@/lib/i18n';
 
 function MemoryCardSkeleton() {
   return (
@@ -30,7 +31,7 @@ export default function MemoriesLoading() {
           <div className="p-2 rounded-lg bg-bg-tertiary">
             <Brain className="w-5 h-5 text-text-secondary" />
           </div>
-          <h1 className="text-xl font-semibold text-text-primary font-display">Memories</h1>
+          <h1 className="text-xl font-semibold text-text-primary font-display">{t('Memories')}</h1>
         </div>
       </div>
 

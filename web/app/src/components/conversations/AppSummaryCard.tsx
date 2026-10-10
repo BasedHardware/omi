@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { getApp } from '@/lib/api';
 import type { AppResponse } from '@/types/conversation';
 import type { App } from '@/types/apps';
+import { t } from '@/lib/i18n';
 
 /**
  * Parse markdown content into sections based on h2 headers
@@ -133,13 +134,13 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-medium text-text-primary truncate">
             {loading ? (
-              <span className="text-text-tertiary">Loading...</span>
+              <span className="text-text-tertiary">{t('Loading...')}</span>
             ) : isDeleted ? (
               <span className="text-text-tertiary italic">
-                Template no longer available
+                {t('Template no longer available')}
               </span>
             ) : (
-              app?.name || 'App Summary'
+              app?.name || t('App Summary')
             )}
           </h4>
           {!isDeleted && app?.description && (

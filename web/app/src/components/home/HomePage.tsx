@@ -19,6 +19,7 @@ import { GoalDetailSheet } from './GoalDetailSheet';
 import { HomeTaskList } from './HomeTaskList';
 import { cn } from '@/lib/utils';
 import type { MessageFile } from '@/types/conversation';
+import { t } from '@/lib/i18n';
 
 /**
  * Home — the one place Omi answers from.
@@ -191,7 +192,7 @@ export function HomePage() {
             <>
               {historyMessages.length > 0 && (
                 <section
-                  aria-label="Chat history"
+                  aria-label={t('Chat history')}
                   className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10"
                 >
                   <ChatTranscript
@@ -206,7 +207,7 @@ export function HomePage() {
               )}
               <motion.section
                 ref={currentsRef}
-                aria-label="Currents"
+                aria-label={t('Currents')}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25 }}
@@ -219,18 +220,18 @@ export function HomePage() {
               >
                 <Image
                   src="/logo.png"
-                  alt="Omi"
+                  alt={t('Omi')}
                   width={40}
                   height={40}
                   className="rounded-full"
                 />
                 <h1 className="mt-5 text-center text-2xl font-semibold text-text-primary">
-                  {name ? `Hey ${name}. I'm ready.` : "I'm ready."}
+                  {name ? t("Hey {name}. I'm ready.", { name }) : t("I'm ready.")}
                 </h1>
 
                 <div className="mt-8 w-full">
                   <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
-                    Currents
+                    {t('Currents')}
                   </h2>
                   <HomeTaskList
                     items={tasks}
@@ -262,7 +263,7 @@ export function HomePage() {
                 <section className="mt-12 w-full">
                   <header className="flex items-baseline justify-between gap-4">
                     <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-quaternary">
-                      Goals
+                      {t('Goals')}
                     </h2>
                     <button
                       type="button"
@@ -270,7 +271,7 @@ export function HomePage() {
                       className="flex items-center gap-1.5 rounded-element px-2 py-1 text-xs text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Set a goal
+                      {t('Set a goal')}
                     </button>
                   </header>
 
@@ -291,7 +292,7 @@ export function HomePage() {
                     >
                       <Target className="mx-auto h-6 w-6 text-text-quaternary" />
                       <p className="mt-2 text-sm text-text-quaternary">
-                        Set a goal and Omi will track progress against it.
+                        {t('Set a goal and Omi will track progress against it.')}
                       </p>
                     </button>
                   ) : (
@@ -313,7 +314,7 @@ export function HomePage() {
               </motion.section>
               {(exchangeStart !== null || isStreaming) && (
                 <section
-                  aria-label="Current chat"
+                  aria-label={t('Current chat')}
                   className="mx-auto flex min-h-full max-w-3xl flex-col justify-end px-4 py-8 sm:px-6 sm:py-10"
                 >
                   <ChatTranscript
@@ -355,7 +356,7 @@ export function HomePage() {
             isStreaming={isStreaming}
             disabled={isLoading}
             appId={selectedAppId ?? undefined}
-            placeholder={isLive ? 'Talk with Omi live...' : 'Ask anything...'}
+            placeholder={isLive ? t('Talk with Omi live...') : t('Ask anything...')}
             recording={{
               isActive: isLive,
               level: live.level,

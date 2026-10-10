@@ -8,6 +8,7 @@ import { useRecording } from '@/hooks/useRecording';
 import { AudioModeSelector } from './AudioModeSelector';
 import { RecordingControls } from './RecordingControls';
 import { LiveTranscriptCompact } from './LiveTranscript';
+import { t } from '@/lib/i18n';
 
 /**
  * Floating recording widget that appears at the bottom-left of the screen.
@@ -106,7 +107,7 @@ export function RecordingWidget() {
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-bg-tertiary">
                     <span className="text-sm font-medium text-text-primary">
-                      Live Transcript
+                      {t('Live Transcript')}
                     </span>
                     <button
                       onClick={() => setWidgetExpanded(false)}
@@ -184,7 +185,7 @@ export function RecordingWidget() {
                     )}
                   >
                     <Mic className="w-5 h-5" />
-                    <span className="font-medium">Start Recording</span>
+                    <span className="font-medium">{t('Start Recording')}</span>
                   </button>
                 ) : !isWidgetExpanded ? (
                   // Recording but collapsed - show mini status

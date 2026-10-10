@@ -2,6 +2,7 @@
 
 import { Twitter, Linkedin, Github } from 'lucide-react';
 import Image from '@tschk/moonshine-next/image';
+import { t } from '@/lib/i18n';
 
 export function Footer() {
   return (
@@ -10,14 +11,14 @@ export function Footer() {
         <div>
           <Image
             src="/omi-white.webp"
-            alt="Omi Logo"
+            alt={t('Omi Logo')}
             width={146}
             height={64}
             className="h-auto w-[70px]"
           />
-          <p className="mt-1 text-gray-500">Made in San Francisco</p>
+          <p className="mt-1 text-gray-500">{t('Made in San Francisco')}</p>
           <a href="mailto:team@basedhardware.com" className="hover:underline">
-            team@basedhardware.com
+            {t('team@basedhardware.com')}
           </a>
           <div className="mt-3 flex items-center gap-3">
             <a
@@ -49,7 +50,7 @@ export function Footer() {
 
         <div className="grid grid-cols-3 gap-10 md:gap-20">
           <ul className="flex flex-col gap-3">
-            <li className="font-bold">Products</li>
+            <li className="font-bold">{t('Products')}</li>
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
@@ -57,7 +58,7 @@ export function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                OpenGlass
+                {t('OpenGlass')}
               </a>
             </li>
             <li>
@@ -67,7 +68,7 @@ export function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi AI
+                {t('Omi AI')}
               </a>
             </li>
             <li>
@@ -77,12 +78,12 @@ export function Footer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Buy Omi
+                {t('Buy Omi')}
               </a>
             </li>
           </ul>
           <ul className="flex flex-col gap-3">
-            <li className="font-bold">Other</li>
+            <li className="font-bold">{t('Other')}</li>
             <li>
               <a
                 href="https://airtable.com/appyGfrqMxoUaD1mg/shrswR2uD1LRoFkFX"
@@ -90,7 +91,7 @@ export function Footer() {
                 rel="noreferrer"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                Residency
+                {t('Residency')}
               </a>
             </li>
             <li>
@@ -100,7 +101,7 @@ export function Footer() {
                 rel="noreferrer"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                Affiliate
+                {t('Affiliate')}
               </a>
             </li>
             <li>
@@ -110,7 +111,7 @@ export function Footer() {
                 rel="noreferrer"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                Privacy
+                {t('Privacy')}
               </a>
             </li>
             <li>
@@ -120,18 +121,18 @@ export function Footer() {
                 rel="noreferrer"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                Discord
+                {t('Discord')}
               </a>
             </li>
           </ul>
           <ul className="flex flex-col gap-3">
-            <li className="font-bold">Company</li>
+            <li className="font-bold">{t('Company')}</li>
             <li>
               <a
                 href="https://www.omi.me/pages/about"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                About
+                {t('About')}
               </a>
             </li>
             <li>
@@ -139,7 +140,7 @@ export function Footer() {
                 href="https://airtable.com/appyGfrqMxoUaD1mg/shrkALjXdq7mJMM1W"
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
-                Invest
+                {t('Invest')}
               </a>
             </li>
           </ul>

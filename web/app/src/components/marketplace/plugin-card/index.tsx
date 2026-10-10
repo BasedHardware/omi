@@ -15,6 +15,7 @@ import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import type { Plugin } from '../types';
 import { formatInstalls } from '../utils/format';
+import { t } from '@/lib/i18n';
 
 export interface PluginCardProps {
   plugin: Plugin;
@@ -120,7 +121,7 @@ export const PluginCard = memo(function PluginCard({ plugin }: PluginCardProps) 
                   </span>
                 </div>
               ) : (
-                <span className="text-sm text-[#6C8EEF]">New</span>
+                <span className="text-sm text-[#6C8EEF]">{t('New')}</span>
               )}
               <div className="flex items-center text-gray-400">
                 <Download className="mr-1 h-3.5 w-3.5" />
@@ -128,7 +129,7 @@ export const PluginCard = memo(function PluginCard({ plugin }: PluginCardProps) 
               </div>
             </div>
             <div className="inline-flex items-center justify-center rounded-md bg-[#2A3142] px-4 py-1.5 text-xs font-medium text-white transition-all duration-300 group-hover:scale-105 group-hover:bg-[#353D52]">
-              Learn More
+              {t('Learn More')}
             </div>
           </div>
         </div>

@@ -16,6 +16,7 @@ import {
   navigateToDesktopDownload,
   parseReferralEnvironment,
 } from '@/lib/referrals';
+import { t } from '@/lib/i18n';
 
 export function getAuthErrorMessage(
   error: unknown,
@@ -26,26 +27,28 @@ export function getAuthErrorMessage(
       ? String(error.code)
       : '';
   if (code === 'auth/unauthorized-domain') {
-    return 'This sign-in link is not enabled for this web address yet.';
+    return t('This sign-in link is not enabled for this web address yet.');
   }
   if (code === 'auth/popup-blocked') {
-    return 'Your browser blocked the sign-in window. Allow pop-ups and try again.';
+    return t('Your browser blocked the sign-in window. Allow pop-ups and try again.');
   }
   if (
     code === 'auth/popup-closed-by-user' ||
     code === 'auth/redirect-cancelled-by-user'
   ) {
-    return 'The sign-in window was closed before sign-in finished.';
+    return t('The sign-in window was closed before sign-in finished.');
   }
   if (code === 'auth/operation-not-supported-in-this-environment') {
-    return 'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.';
+    return t(
+      'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.',
+    );
   }
   if (code === 'auth/configuration-not-found') {
-    return 'Sign-in is not configured in this local preview.';
+    return t('Sign-in is not configured in this local preview.');
   }
   return provider
-    ? `Failed to sign in with ${provider}. Please try again.`
-    : 'Sign-in failed. Please try again.';
+    ? t('Failed to sign in with {provider}. Please try again.', { provider })
+    : t('Sign-in failed. Please try again.');
 }
 
 const omiMarkDots = [
@@ -106,13 +109,13 @@ export function LoginClient() {
       });
       if (!result.claimed) {
         referralClaimStarted.current = false;
-        setReferralClaimFailure('This free month is only available to new accounts.');
+        setReferralClaimFailure(t('This free month is only available to new accounts.'));
         return;
       }
       navigateToDesktopDownload();
     } catch (claimError) {
       referralClaimStarted.current = false;
-      setReferralClaimFailure('We could not apply this referral. Please try again.');
+      setReferralClaimFailure(t('We could not apply this referral. Please try again.'));
       console.error(claimError);
     }
   }, [referralCode, referralEnvironment]);
@@ -163,7 +166,7 @@ export function LoginClient() {
       <div className="flex min-h-screen items-center justify-center bg-bg-primary">
         <div className="flex flex-col items-center gap-3 text-sm text-text-tertiary">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-          {isReferralFlow && <span>Activating your free month...</span>}
+          {isReferralFlow && <span>{t('Activating your free month...')}</span>}
         </div>
       </div>
     );
@@ -174,14 +177,14 @@ export function LoginClient() {
       <div className="flex min-h-screen items-center justify-center bg-black px-5 text-center">
         <div className="max-w-sm">
           <h1 className="font-display text-2xl font-semibold text-text-primary">
-            Referral unavailable
+            {t('Referral unavailable')}
           </h1>
           <p className="mt-2 text-sm text-text-tertiary">{referralClaimFailure}</p>
           <a
             href="https://macos.omi.me"
             className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-white px-5 font-medium text-black hover:bg-gray-100"
           >
-            Download Omi
+            {t('Download Omi')}
           </a>
         </div>
       </div>
@@ -224,7 +227,7 @@ export function LoginClient() {
         */}
         <Image
           src="/login-bg.png"
-          alt="Omi Product"
+          alt={t('Omi Product')}
           fill
           className="object-contain object-center sm:object-cover"
           priority
@@ -257,7 +260,7 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.1 }}
               className="mb-1 text-center font-display text-2xl font-semibold text-text-primary"
             >
-              {isReferralFlow ? 'One free month of Operator' : 'Omi'}
+              {isReferralFlow ? t('One free month of Operator') : t('Omi')}
             </motion.h1>
 
             {/* Tagline */}
@@ -267,7 +270,9 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.3 }}
               className="mb-8 text-sm text-text-tertiary"
             >
-              {isReferralFlow ? 'Create your account to claim it' : 'thought to action'}
+              {isReferralFlow
+                ? t('Create your account to claim it')
+                : t('thought to action')}
             </motion.p>
 
             {/*
@@ -291,7 +296,11 @@ export function LoginClient() {
                 whileHover={{ scale: 1.03 }}
                 transition={{ duration: 0.3 }}
               >
-                <div className="group relative h-16 w-16" role="img" aria-label="Omi">
+                <div
+                  className="group relative h-16 w-16"
+                  role="img"
+                  aria-label={t('Omi')}
+                >
                   {/* Blue glow effect - outer */}
                   <div className="absolute inset-[-10px] rounded-full bg-blue-500/15 blur-xl transition-all duration-500 group-hover:bg-blue-500/25" />
                   {/* Purple glow effect - inner */}
@@ -330,7 +339,7 @@ export function LoginClient() {
                 <button
                   onClick={handleAppleSignIn}
                   disabled={isSigningIn !== null || signInUnavailable}
-                  aria-label="Sign in with Apple"
+                  aria-label={t('Sign in with Apple')}
                   className={cn(
                     'flex h-12 w-full items-center justify-center gap-3 rounded-lg px-4',
                     'border border-white/10 bg-black font-medium text-white',
@@ -349,7 +358,9 @@ export function LoginClient() {
                   )}
                   <TextSwap
                     text={
-                      isSigningIn === 'apple' ? 'Connecting...' : 'Continue with Apple'
+                      isSigningIn === 'apple'
+                        ? t('Connecting...')
+                        : t('Continue with Apple')
                     }
                   />
                 </button>
@@ -358,7 +369,7 @@ export function LoginClient() {
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={isSigningIn !== null || signInUnavailable}
-                  aria-label="Sign in with Google"
+                  aria-label={t('Sign in with Google')}
                   className={cn(
                     'flex h-12 w-full items-center justify-center gap-3 rounded-lg px-4',
                     'bg-white font-medium text-black',
@@ -392,7 +403,9 @@ export function LoginClient() {
                   )}
                   <TextSwap
                     text={
-                      isSigningIn === 'google' ? 'Connecting...' : 'Continue with Google'
+                      isSigningIn === 'google'
+                        ? t('Connecting...')
+                        : t('Continue with Google')
                     }
                   />
                 </button>
@@ -424,7 +437,7 @@ export function LoginClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-text-primary"
         >
-          About
+          {t('About')}
         </a>
         <span>·</span>
         <a
@@ -433,7 +446,7 @@ export function LoginClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-text-primary"
         >
-          Privacy
+          {t('Privacy')}
         </a>
         <span>·</span>
         <a
@@ -442,11 +455,11 @@ export function LoginClient() {
           rel="noopener noreferrer"
           className="transition-colors hover:text-text-primary"
         >
-          Help
+          {t('Help')}
         </a>
         <span>·</span>
         <Link href="/apps" className="transition-colors hover:text-text-primary">
-          Apps
+          {t('Apps')}
         </Link>
       </motion.div>
     </div>

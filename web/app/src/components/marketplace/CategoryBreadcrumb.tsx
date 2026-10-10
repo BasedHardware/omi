@@ -3,6 +3,7 @@
 import Link from '@tschk/moonshine-next/link';
 import { ChevronRight } from 'lucide-react';
 import { getCategoryIcon, getCategoryMetadata } from './category';
+import { t } from '@/lib/i18n';
 
 interface CategoryBreadcrumbProps {
   category: string;
@@ -18,7 +19,7 @@ export function CategoryBreadcrumb({ category }: CategoryBreadcrumbProps) {
         href="/apps"
         className="flex items-center text-[#6C8EEF] transition-colors hover:text-[#5A7DE8]"
       >
-        Apps
+        {t('Apps')}
       </Link>
       <ChevronRight className="h-4 w-4" />
       <div className="flex items-center">

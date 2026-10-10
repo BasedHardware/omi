@@ -5,6 +5,7 @@ import { Tag, HelpCircle, Play, Pencil, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TranscriptSegment } from '@/types/conversation';
 import type { Person } from '@/types/user';
+import { t } from '@/lib/i18n';
 
 interface TranscriptViewProps {
   segments: TranscriptSegment[];
@@ -181,7 +182,7 @@ function SegmentTextEditor({
     return (
       <p
         className="text-text-primary leading-relaxed opacity-60"
-        title="This segment can't be edited"
+        title={t('This segment can\'t be edited')}
       >
         {segment.text}
       </p>
@@ -202,7 +203,7 @@ function SegmentTextEditor({
           'outline-none focus:ring-2 focus:ring-white/20',
         )}
       />
-      <div className="text-xs text-text-quaternary">Enter to save · Esc to cancel</div>
+      <div className="text-xs text-text-quaternary">{t('Enter to save · Esc to cancel')}</div>
     </div>
   );
 }
@@ -254,7 +255,7 @@ export function TranscriptView({
 
   if (!segments || segments.length === 0) {
     return (
-      <div className="text-center py-8 text-text-tertiary">No transcript available</div>
+      <div className="text-center py-8 text-text-tertiary">{t('No transcript available')}</div>
     );
   }
 
@@ -347,7 +348,7 @@ export function TranscriptView({
                       'text-text-quaternary hover:text-text-primary transition-colors',
                       'group',
                     )}
-                    title="Click to play from here"
+                    title={t('Click to play from here')}
                   >
                     <Play className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <span>
@@ -366,7 +367,7 @@ export function TranscriptView({
                 {isSavingGroup && (
                   <span className="flex items-center gap-1 text-xs text-text-quaternary">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving…</span>
+                    <span>{t('Saving…')}</span>
                   </span>
                 )}
 
@@ -379,10 +380,10 @@ export function TranscriptView({
                         'flex items-center gap-1 text-xs font-medium',
                         'text-text-secondary hover:text-text-primary transition-colors',
                       )}
-                      title="Done editing"
+                      title={t('Done editing')}
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Done</span>
+                      <span>{t('Done')}</span>
                     </button>
                   ) : (
                     <button
@@ -392,8 +393,8 @@ export function TranscriptView({
                         'opacity-0 group-hover/segment:opacity-100 focus:opacity-100',
                         'hover:text-text-primary hover:bg-bg-quaternary/50 transition-all',
                       )}
-                      title="Edit transcript text"
-                      aria-label="Edit transcript text"
+                      title={t('Edit transcript text')}
+                      aria-label={t('Edit transcript text')}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>

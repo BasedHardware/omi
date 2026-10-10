@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { formatLocale, uses12HourClock } from '@/lib/i18n';
 
 /**
  * Merge Tailwind CSS classes with clsx
@@ -54,7 +55,7 @@ export function formatRelativeDate(date: Date): string {
   }
 
   // Format as "Mon, Jan 15"
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(formatLocale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -62,13 +63,13 @@ export function formatRelativeDate(date: Date): string {
 }
 
 /**
- * Format time to 12-hour format (e.g., "2:30 PM")
+ * Format a time of day: 12-hour in English (e.g., "2:30 PM"), the locale clock otherwise (e.g., "14:30").
  */
 export function formatTime(date: Date): string {
-  return date.toLocaleTimeString('en-US', {
+  return date.toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: uses12HourClock(),
   });
 }
 
@@ -82,10 +83,10 @@ export function formatNotificationTimestamp(date: Date): string {
   yesterday.setDate(yesterday.getDate() - 1);
 
   const inputDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const timeStr = date.toLocaleTimeString('en-US', {
+  const timeStr = date.toLocaleTimeString(formatLocale(), {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: uses12HourClock(),
   });
 
   if (inputDate.getTime() === today.getTime()) {
@@ -97,7 +98,7 @@ export function formatNotificationTimestamp(date: Date): string {
   }
 
   // Format as "Jan 15, 2:30 PM"
-  const dateStr = date.toLocaleDateString('en-US', {
+  const dateStr = date.toLocaleDateString(formatLocale(), {
     month: 'short',
     day: 'numeric',
   });

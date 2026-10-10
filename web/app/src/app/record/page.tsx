@@ -12,6 +12,7 @@ import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
+import { t, tn } from '@/lib/i18n';
 
 /**
  * Inner content component that uses recording context.
@@ -72,13 +73,13 @@ function RecordPageContent() {
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <h1 className="text-sm font-medium text-text-tertiary">Record</h1>
+            <h1 className="text-sm font-medium text-text-tertiary">{t('Record')}</h1>
           </div>
 
           {/* Audio mode indicator */}
           {isActive && (
             <div className="flex items-center gap-2 text-sm text-text-tertiary">
-              <span>{audioMode === 'mic-only' ? 'Mic Only' : 'Mic + System'}</span>
+              <span>{audioMode === 'mic-only' ? t('Mic Only') : t('Mic + System')}</span>
             </div>
           )}
         </header>
@@ -88,7 +89,7 @@ function RecordPageContent() {
             <button
               type="button"
               onClick={handleStartClick}
-              aria-label="Start recording"
+              aria-label={t('Start recording')}
               className={cn(
                 'group relative w-32 h-32 rounded-full flex items-center justify-center',
                 'transition-all duration-200 outline-none',
@@ -100,10 +101,9 @@ function RecordPageContent() {
             </button>
 
             <div className="max-w-sm space-y-2">
-              <p className="text-lg font-medium text-text-primary">Start recording</p>
+              <p className="text-lg font-medium text-text-primary">{t('Start recording')}</p>
               <p className="text-sm text-text-tertiary">
-                Live transcription with speaker identification, straight from your
-                browser.
+                {t('Live transcription with speaker identification, straight from your browser.')}
               </p>
             </div>
           </div>
@@ -136,7 +136,7 @@ function RecordPageContent() {
                       onClick={clearError}
                       className="text-xs text-error/60 hover:text-error transition-colors"
                     >
-                      Dismiss
+                      {t('Dismiss')}
                     </button>
                   </motion.div>
                 )}
@@ -146,9 +146,9 @@ function RecordPageContent() {
             {/* Transcript (takes remaining space) */}
             <div className="flex-1 flex flex-col overflow-hidden rounded-card bg-bg-secondary border border-stroke">
               <div className="flex-shrink-0 px-5 py-3 border-b border-stroke flex items-baseline gap-2">
-                <h2 className="text-sm font-medium text-text-primary">Live Transcript</h2>
+                <h2 className="text-sm font-medium text-text-primary">{t('Live Transcript')}</h2>
                 <p className="text-xs text-text-quaternary">
-                  {segments.length} segment{segments.length !== 1 ? 's' : ''}
+                  {tn(segments.length, '{count} segment', '{count} segments')}
                 </p>
               </div>
 
@@ -156,7 +156,7 @@ function RecordPageContent() {
                 <LiveTranscript
                   segments={segments}
                   maxHeight="100%"
-                  emptyMessage="Listening for speech..."
+                  emptyMessage={t('Listening for speech...')}
                 />
               </div>
             </div>

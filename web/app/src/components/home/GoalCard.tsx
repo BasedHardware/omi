@@ -10,6 +10,7 @@ import {
   progressPct,
 } from '@/lib/goalVisuals';
 import type { Goal } from '@/types/goals';
+import { t } from '@/lib/i18n';
 
 interface GoalCardProps {
   goal: Goal;
@@ -69,7 +70,7 @@ export function GoalCard({
           type="button"
           onClick={toggleComplete}
           disabled={target <= 0}
-          aria-label={done ? 'Reopen goal' : 'Mark as complete'}
+          aria-label={done ? t('Reopen goal') : t('Mark as complete')}
           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
             done
               ? 'border-white/30 bg-white/15 text-white'
@@ -94,7 +95,7 @@ export function GoalCard({
             <input
               autoFocus
               value={titleDraft}
-              aria-label={`${goal.title} title`}
+              aria-label={t('{title} title', { title: goal.title })}
               onChange={(event) => setTitleDraft(event.target.value)}
               onBlur={commitTitle}
               onKeyDown={(event) => {
@@ -107,7 +108,7 @@ export function GoalCard({
             <button
               type="button"
               onClick={() => setTitleDraft(goal.title)}
-              title="Click to edit"
+              title={t('Click to edit')}
               className={`block w-full text-left text-sm font-medium leading-relaxed ${
                 done ? 'text-white/40 line-through' : 'text-white/90'
               }`}
@@ -123,7 +124,7 @@ export function GoalCard({
                 aria-valuenow={pct}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`${goal.title} progress`}
+                aria-label={t('{title} progress', { title: goal.title })}
                 className="h-full rounded-full transition-all duration-500"
                 style={{ width: `${pct}%`, backgroundColor: progressColor(pct / 100) }}
               />
@@ -135,7 +136,7 @@ export function GoalCard({
                   autoFocus
                   min={0}
                   value={progressDraft}
-                  aria-label={`${goal.title} current value`}
+                  aria-label={t('{title} current value', { title: goal.title })}
                   onChange={(event) => setProgressDraft(event.target.value)}
                   onBlur={commitProgress}
                   onKeyDown={(event) => {
@@ -149,7 +150,7 @@ export function GoalCard({
                   type="button"
                   onClick={() => setProgressDraft(String(goal.current_value ?? 0))}
                   className="rounded-md px-1.5 py-0.5 transition-colors hover:bg-white/5 hover:text-white/70"
-                  title="Update progress"
+                  title={t('Update progress')}
                 >
                   {progressLabel(goal)}
                 </button>
@@ -167,8 +168,8 @@ export function GoalCard({
               type="button"
               onClick={() => onOpen(goal)}
               className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
-              title="Get goal insight"
-              aria-label={`Get goal insight for ${goal.title}`}
+              title={t('Get goal insight')}
+              aria-label={t('Get goal insight for {title}', { title: goal.title })}
             >
               <Lightbulb className="h-4 w-4" />
             </button>
@@ -177,8 +178,8 @@ export function GoalCard({
             type="button"
             onClick={() => void onRemove(goal.id)}
             className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-rose-300/80"
-            title="Delete goal"
-            aria-label={`Delete goal ${goal.title}`}
+            title={t('Delete goal')}
+            aria-label={t('Delete goal {title}', { title: goal.title })}
           >
             <Trash2 className="h-4 w-4" />
           </button>

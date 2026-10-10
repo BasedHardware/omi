@@ -6,6 +6,7 @@ import { X, Loader2, FolderPlus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FOLDER_EMOJIS, FOLDER_COLORS } from '@/types/folder';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
+import { t } from '@/lib/i18n';
 
 interface FolderDialogProps {
   isOpen: boolean;
@@ -78,7 +79,7 @@ export function FolderDialog({
             )}
           >
             <Dialog.Title className="sr-only">
-              {isEditing ? 'Edit Folder' : 'Create Folder'}
+              {isEditing ? t('Edit Folder') : t('Create Folder')}
             </Dialog.Title>
 
             {/* Close button */}
@@ -112,14 +113,14 @@ export function FolderDialog({
 
             {/* Visible Title */}
             <h2 className="text-lg font-semibold text-text-primary mb-4">
-              {isEditing ? 'Edit Folder' : 'Create Folder'}
+              {isEditing ? t('Edit Folder') : t('Create Folder')}
             </h2>
 
             <form onSubmit={handleSubmit}>
               {/* Folder name input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Folder name
+                  {t('Folder name')}
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{emoji}</span>
@@ -127,7 +128,7 @@ export function FolderDialog({
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter folder name..."
+                    placeholder={t('Enter folder name...')}
                     disabled={isLoading}
                     maxLength={100}
                     className={cn(
@@ -145,13 +146,13 @@ export function FolderDialog({
               {/* Description input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Description{' '}
-                  <span className="text-text-quaternary font-normal">(optional)</span>
+                  {t('Description')}{' '}
+                  <span className="text-text-quaternary font-normal">{t('(optional)')}</span>
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="E.g., Work meetings and project discussions"
+                  placeholder={t('E.g., Work meetings and project discussions')}
                   disabled={isLoading}
                   maxLength={500}
                   rows={2}
@@ -165,14 +166,14 @@ export function FolderDialog({
                   )}
                 />
                 <p className="mt-1 text-xs text-text-quaternary">
-                  Helps AI auto-categorize conversations into this folder
+                  {t('Helps AI auto-categorize conversations into this folder')}
                 </p>
               </div>
 
               {/* Emoji picker */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Icon
+                  {t('Icon')}
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {FOLDER_EMOJIS.map((e) => (
@@ -200,7 +201,7 @@ export function FolderDialog({
               {/* Color picker */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Color
+                  {t('Color')}
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {FOLDER_COLORS.map((c) => (
@@ -243,7 +244,7 @@ export function FolderDialog({
                     'disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
-                  Cancel
+                  {t('Cancel')}
                 </button>
                 <button
                   type="submit"
@@ -258,7 +259,7 @@ export function FolderDialog({
                   style={{ backgroundColor: isValid ? color : undefined }}
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  <span>{isEditing ? 'Save Changes' : 'Create Folder'}</span>
+                  <span>{isEditing ? t('Save Changes') : t('Create Folder')}</span>
                 </button>
               </div>
             </form>
@@ -304,7 +305,7 @@ export function DeleteFolderDialog({
               'outline-none focus:outline-none',
             )}
           >
-            <Dialog.Title className="sr-only">Delete Folder Confirmation</Dialog.Title>
+            <Dialog.Title className="sr-only">{t('Delete Folder Confirmation')}</Dialog.Title>
 
             {/* Icon */}
             <div
@@ -318,13 +319,12 @@ export function DeleteFolderDialog({
 
             {/* Title */}
             <h2 className="text-lg font-semibold text-text-primary mb-2">
-              Delete &quot;{folder.name}&quot;?
+              {t('Delete "{name}"?', { name: folder.name })}
             </h2>
 
             {/* Description */}
             <p className="text-sm text-text-secondary mb-6">
-              Conversations in this folder will be moved back to &quot;All&quot;. This
-              action cannot be undone.
+              {t('Conversations in this folder will be moved back to "All". This action cannot be undone.')}
             </p>
 
             {/* Actions */}
@@ -340,7 +340,7 @@ export function DeleteFolderDialog({
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button
                 onClick={onConfirm}
@@ -355,7 +355,7 @@ export function DeleteFolderDialog({
                 )}
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                <span>Delete Folder</span>
+                <span>{t('Delete Folder')}</span>
               </button>
             </div>
           </Dialog.Content>
