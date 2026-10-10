@@ -11,7 +11,7 @@ from google.cloud import firestore
 
 from ._client import get_firestore_client, run_transactional
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
-from .conversations import conversations_collection
+from .conversations import conversations_collection, is_soft_deleted
 
 _RECEIPTS_COLLECTION = 'mutation_receipts'
 
@@ -156,6 +156,8 @@ def apply_conversation_sync_mutation(
             raise ConversationMutationNotFoundError(conversation_id)
 
         current = conversation_snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            raise ConversationMutationNotFoundError(conversation_id)
         if current.get('is_locked', False):
             raise ConversationMutationLockedError(conversation_id)
         current_revision = _normalized_revision(getattr(conversation_snapshot, 'update_time', None))
