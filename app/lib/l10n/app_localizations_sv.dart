@@ -12810,4 +12810,359 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get speakerTagPromptExcerptSaved => 'Svaret har sparats för detta utdrag.';
+
+  @override
+  String get chatAppsAddToContacts => 'Lägg till Omi i Kontakter';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Chattar i $app';
+  }
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Dina $app-chattar stannar i $app. Omi vet fortfarande vad du pratat om i appen och i dina andra chattappar.';
+  }
+
+  @override
+  String get chatAppsChannelsTitle => 'Chattappar';
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Chatt i $app';
+  }
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Hämta en ny kod och skicka den från Meddelanden.';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Koden har gått ut';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Koden går ut om $time';
+  }
+
+  @override
+  String get chatAppsCodeNote => 'Koden fungerar en gång och går ut om 10 minuter.';
+
+  @override
+  String get chatAppsComingLater => 'Kommer senare';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Skicka ett meddelande till Omi från numret du vill använda. Koden i det kopplar numret till ditt konto.';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Skicka sms till Omi för att ansluta';
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi öppnar Telegram med en privat länk som bara är till för dig.';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Anslut Telegram';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Ansluten som $handle';
+  }
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Ansluten $date';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontakter';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Det gick inte att öppna $app. Kontrollera att appen är installerad och försök igen.';
+  }
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Koppla från $app';
+  }
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'När du kopplar från raderas historiken som Omi sparar för $app.';
+  }
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi slutar svara i $app och raderar chatthistoriken som sparats för den. Meddelanden som redan finns i $app ligger kvar där.';
+  }
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Koppla från $app?';
+  }
+
+  @override
+  String get chatAppsDoesAnswer => 'Svarar på frågor om dina konversationer och minnen';
+
+  @override
+  String get chatAppsDoesFiles => 'Skickar och tar emot filer, foton och röstmeddelanden';
+
+  @override
+  String get chatAppsDoesSave => 'Sparar minnen och hanterar dina uppgifter';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage och mer';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Prata med Omi i de appar du redan använder varje dag.';
+
+  @override
+  String get chatAppsEntryTitle => 'Chatta med Omi';
+
+  @override
+  String get chatAppsGetNewCode => 'Hämta ny kod';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Fråga om din dag, spara minnen och hantera uppgifter från Telegram eller iMessage. Dina chattar stannar i appen du använder, och Omi minns vad ni pratat om överallt.';
+
+  @override
+  String get chatAppsHeroTitle => 'Chatta med Omi där du redan chattar';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Hej Omi, länkkod $code';
+  }
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Skicka sms till Omi från ditt telefonnummer';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Till: Omi · $address';
+  }
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'I $app';
+  }
+
+  @override
+  String get chatAppsInTheMeantime => 'Under tiden';
+
+  @override
+  String get chatAppsIncludedWithPro => 'INGÅR I OMI PRO';
+
+  @override
+  String get chatAppsInsights => 'Insikter från Omi';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Låt Omi skicka en sammanfattning eller en insikt hit.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app är anslutet';
+  }
+
+  @override
+  String get chatAppsLink => 'Länk';
+
+  @override
+  String get chatAppsLinkExpired => 'Länken har gått ut. Tryck på Öppna Telegram för en ny.';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Det gick inte att läsa in chattappar';
+
+  @override
+  String get chatAppsLocked => 'Kräver Omi Pro';
+
+  @override
+  String get chatAppsMessage => 'Meddelande';
+
+  @override
+  String get chatAppsMessagesApp => 'Meddelanden';
+
+  @override
+  String get chatAppsMoreComing => 'Fler appar kommer.';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Skriver aldrig till andra åt dig';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Chattar du har med Omi i $app visas här.';
+  }
+
+  @override
+  String get chatAppsNoChatsTitle => 'Inga chattar ännu';
+
+  @override
+  String get chatAppsNoMessages => 'Inga meddelanden';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Inte tillgänglig ännu';
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Den här chattappen har kopplats från.';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Inte ansluten';
+
+  @override
+  String get chatAppsNotifyMe => 'Meddela mig';
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get chatAppsOnTheList => 'På listan';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Öppna $app';
+  }
+
+  @override
+  String get chatAppsOpenMessages => 'Öppna Meddelanden';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Öppna Meddelanden igen';
+
+  @override
+  String get chatAppsPartOfPro => 'Chattappar ingår i Pro';
+
+  @override
+  String get chatAppsPrefilled => 'Förifyllt';
+
+  @override
+  String get chatAppsPrivateMemories => 'Behåll privata minnen i appen';
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Hälsa, pengar och allt du markerat som privat hålls utanför chattapparna.';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi minns sammanhanget i alla appar';
+
+  @override
+  String get chatAppsProPerkSave => 'Spara minnen och hantera uppgifter direkt i chatten';
+
+  @override
+  String get chatAppsProPerkText => 'Skriv till Omi från Telegram och iMessage';
+
+  @override
+  String get chatAppsProblemFailed => 'Något gick fel. Försök igen.';
+
+  @override
+  String get chatAppsProblemOffline => 'Du är offline. Kontrollera anslutningen och försök igen.';
+
+  @override
+  String get chatAppsProblemRateLimited => 'För många försök. Vänta en minut och försök igen.';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Chattappar är inte tillgängliga för ditt konto ännu.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Skrivskyddad. Svara Omi i $app.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Chattarna är skrivskyddade här. Svara i $app.';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Det gick inte att uppdatera. Visar det vi senast såg.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi svarar bara dig. Omi skriver aldrig först.';
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Skriv till Omi i $app när du vill.';
+  }
+
+  @override
+  String get chatAppsShowInApp => 'Visa de här chattarna i Omi-appen';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Av: du ser dem bara i $app.';
+  }
+
+  @override
+  String get chatAppsShowInAppOn => 'På: de visas i Omi-appen som skrivskyddade chattar.';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Dina chattar med Omi lagras också av Telegram. Omi svarar bara dig, aldrig andra, och du kan koppla från när som helst.';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Tryck på Öppna Telegram nedan';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Kom tillbaka hit. Vi bekräftar att det fungerade.';
+
+  @override
+  String get chatAppsTelegramStepStart => 'Tryck på Starta i chatten med Omi';
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Konfigurera med två tryck';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Väntar på att du trycker på Starta i Telegram …';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Öppnades det inte? Skicka detta till $address';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Prova att fråga';
+
+  @override
+  String get chatAppsTryPromise => 'Vad lovade jag Sam igår?';
+
+  @override
+  String get chatAppsTryRemind => 'Påminn mig att ringa mamma på söndag';
+
+  @override
+  String get chatAppsTryWeek => 'Sammanfatta min vecka på tre rader';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Använd Telegram tills vidare';
+
+  @override
+  String get chatAppsViewChats => 'Visa chattar';
+
+  @override
+  String get chatAppsVoiceNotes => 'Röstmeddelanden';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Skicka ett röstmeddelande så svarar Omi.';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Skicka meddelandet i Meddelanden. Den här skärmen uppdateras så fort Omi får det.';
+
+  @override
+  String get chatAppsWaitingTitle => 'Väntar på ditt sms';
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Tack. WhatsApp dyker upp här när det är klart.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Vad Omi gör i chattappar';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram och iMessage fungerar redan nu, med samma minnen och uppgifter.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'Vi arbetar på att ta Omi till WhatsApp. Det dyker upp här när det är klart.';
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp kommer snart';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram på en annan enhet?';
 }

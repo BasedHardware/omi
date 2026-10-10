@@ -15352,5 +15352,545 @@
             }
         }
     },
-    "speakerTagPromptExcerptSaved": "Answer saved for this excerpt."
+    "speakerTagPromptExcerptSaved": "Answer saved for this excerpt.",
+    "chatAppsAddToContacts": "Add Omi to Contacts",
+    "@chatAppsAddToContacts": {
+        "description": "Button that opens the system new-contact form for Omi's number"
+    },
+    "chatAppsChannelChats": "{app} chats",
+    "@chatAppsChannelChats": {
+        "description": "Page title listing a chat app's chats",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsChannelFooter": "Your {app} chats stay in {app}. Omi still knows what you talked about in the app and your other chat apps.",
+    "@chatAppsChannelFooter": {
+        "description": "Footer under a chat app's settings",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsChannelsTitle": "Chat apps",
+    "@chatAppsChannelsTitle": {
+        "description": "Title of the Chat apps section and page, where people connect Telegram or iMessage to chat with Omi"
+    },
+    "chatAppsChatIn": "Chat in {app}",
+    "@chatAppsChatIn": {
+        "description": "Fallback title for an untitled chat",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsCodeExpiredMessage": "Get a new code and send it from Messages.",
+    "@chatAppsCodeExpiredMessage": {
+        "description": "Description when the code expired"
+    },
+    "chatAppsCodeExpiredTitle": "This code expired",
+    "@chatAppsCodeExpiredTitle": {
+        "description": "Heading when the one-time code expired"
+    },
+    "chatAppsCodeExpiresIn": "Code expires in {time}",
+    "@chatAppsCodeExpiresIn": {
+        "description": "Countdown; time is like 9:12",
+        "placeholders": {
+            "time": {
+                "type": "String",
+                "example": "9:12"
+            }
+        }
+    },
+    "chatAppsCodeNote": "The code works once and expires in 10 minutes.",
+    "@chatAppsCodeNote": {
+        "description": "Note about the one-time code"
+    },
+    "chatAppsComingLater": "Coming later",
+    "@chatAppsComingLater": {
+        "description": "Value shown on a setting that is not available yet"
+    },
+    "chatAppsConnectIMessageMessage": "Send Omi one message from the number you want to use. The code in it links that number to your account.",
+    "@chatAppsConnectIMessageMessage": {
+        "description": "Description on the iMessage connect sheet"
+    },
+    "chatAppsConnectIMessageTitle": "Text Omi to connect",
+    "@chatAppsConnectIMessageTitle": {
+        "description": "Heading of the iMessage connect sheet"
+    },
+    "chatAppsConnectTelegramMessage": "Omi will open Telegram with a private link that's only for you.",
+    "@chatAppsConnectTelegramMessage": {
+        "description": "Description on the Telegram connect sheet"
+    },
+    "chatAppsConnectTelegramTitle": "Connect Telegram",
+    "@chatAppsConnectTelegramTitle": {
+        "description": "Heading of the Telegram connect sheet"
+    },
+    "chatAppsConnectedAs": "Connected as {handle}",
+    "@chatAppsConnectedAs": {
+        "description": "Row subtitle for a connected chat app; handle is a Telegram username or phone number",
+        "placeholders": {
+            "handle": {
+                "type": "String",
+                "example": "@sam"
+            }
+        }
+    },
+    "chatAppsConnectedOn": "Connected {date}",
+    "@chatAppsConnectedOn": {
+        "description": "Header subtitle; date is like 'Oct 10, 2026'",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Oct 10, 2026"
+            }
+        }
+    },
+    "chatAppsContactsApp": "Contacts",
+    "@chatAppsContactsApp": {
+        "description": "Name of the system Contacts app"
+    },
+    "chatAppsCouldNotOpen": "Couldn't open {app}. Make sure it's installed and try again.",
+    "@chatAppsCouldNotOpen": {
+        "description": "Error when a chat app could not be opened",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsDisconnectChannel": "Disconnect {app}",
+    "@chatAppsDisconnectChannel": {
+        "description": "Destructive row title",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsDisconnectFooter": "Disconnecting deletes the history Omi keeps for {app}.",
+    "@chatAppsDisconnectFooter": {
+        "description": "Footer under the disconnect row",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsDisconnectMessage": "Omi will stop replying in {app} and delete the chat history it keeps for it. Messages already in {app} stay there.",
+    "@chatAppsDisconnectMessage": {
+        "description": "Confirmation dialog message",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsDisconnectTitle": "Disconnect {app}?",
+    "@chatAppsDisconnectTitle": {
+        "description": "Confirmation dialog title",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsDoesAnswer": "Answers questions about your conversations and memories",
+    "@chatAppsDoesAnswer": {
+        "description": "Capability bullet"
+    },
+    "chatAppsDoesFiles": "Sends and receives files, photos, and voice notes",
+    "@chatAppsDoesFiles": {
+        "description": "Capability bullet"
+    },
+    "chatAppsDoesSave": "Saves memories and manages your tasks",
+    "@chatAppsDoesSave": {
+        "description": "Capability bullet"
+    },
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage, and more",
+    "@chatAppsEntryRowSubtitle": {
+        "description": "Row subtitle listing chat apps (brand names stay as-is)"
+    },
+    "chatAppsEntrySubtitle": "Talk to Omi from the apps you already use every day.",
+    "@chatAppsEntrySubtitle": {
+        "description": "Subtitle under the Chat apps section header on Integrations"
+    },
+    "chatAppsEntryTitle": "Chat with Omi",
+    "@chatAppsEntryTitle": {
+        "description": "Row title on Integrations that opens the Chat apps page"
+    },
+    "chatAppsGetNewCode": "Get New Code",
+    "@chatAppsGetNewCode": {
+        "description": "Button to create a new one-time code"
+    },
+    "chatAppsHeroMessage": "Ask about your day, save memories, and manage tasks from Telegram or iMessage. Your chats stay in the app you use, and Omi remembers what you talked about everywhere.",
+    "@chatAppsHeroMessage": {
+        "description": "Description under the Chat apps heading"
+    },
+    "chatAppsHeroTitle": "Chat with Omi where you already chat",
+    "@chatAppsHeroTitle": {
+        "description": "Large heading on the Chat apps page"
+    },
+    "chatAppsIMessageBody": "Hi Omi, link code {code}",
+    "@chatAppsIMessageBody": {
+        "description": "The text message the person sends to Omi. Keep {code} exactly; it is a one-time code",
+        "placeholders": {
+            "code": {
+                "type": "String",
+                "example": "9F2C4A7B1D3E5F60"
+            }
+        }
+    },
+    "chatAppsIMessageSubtitle": "Text Omi from your phone number",
+    "@chatAppsIMessageSubtitle": {
+        "description": "iMessage row subtitle before connecting"
+    },
+    "chatAppsIMessageTo": "To: Omi · {address}",
+    "@chatAppsIMessageTo": {
+        "description": "Recipient line of the message preview; address is Omi's phone number",
+        "placeholders": {
+            "address": {
+                "type": "String",
+                "example": "+1 555 010 0100"
+            }
+        }
+    },
+    "chatAppsInChannel": "In {app}",
+    "@chatAppsInChannel": {
+        "description": "Settings section header; app is Telegram or iMessage",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsInTheMeantime": "In the meantime",
+    "@chatAppsInTheMeantime": {
+        "description": "Title of a tip"
+    },
+    "chatAppsIncludedWithPro": "INCLUDED WITH OMI PRO",
+    "@chatAppsIncludedWithPro": {
+        "description": "Small all-caps tag: chat apps come with the Omi Pro plan"
+    },
+    "chatAppsInsights": "Insights from Omi",
+    "@chatAppsInsights": {
+        "description": "Setting title"
+    },
+    "chatAppsInsightsSubtitle": "Let Omi send you a recap or an insight here.",
+    "@chatAppsInsightsSubtitle": {
+        "description": "Setting subtitle"
+    },
+    "chatAppsIsConnected": "{app} is connected",
+    "@chatAppsIsConnected": {
+        "description": "Success banner title after linking; app is Telegram or iMessage",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsLink": "Link",
+    "@chatAppsLink": {
+        "description": "Noun used in the copy confirmation, e.g. 'Link copied'"
+    },
+    "chatAppsLinkExpired": "That link expired. Tap Open Telegram for a new one.",
+    "@chatAppsLinkExpired": {
+        "description": "Shown when the one-time Telegram link expired"
+    },
+    "chatAppsLoadFailedTitle": "Couldn't load chat apps",
+    "@chatAppsLoadFailedTitle": {
+        "description": "Title of the error state on the Chat apps page"
+    },
+    "chatAppsLocked": "Requires Omi Pro",
+    "@chatAppsLocked": {
+        "description": "Accessibility label for the lock icon on a chat app row for free users"
+    },
+    "chatAppsMessage": "Message",
+    "@chatAppsMessage": {
+        "description": "Noun used in the copy confirmation, e.g. 'Message copied'"
+    },
+    "chatAppsMessagesApp": "Messages",
+    "@chatAppsMessagesApp": {
+        "description": "Name of Apple's Messages app, as shown on the device in this language"
+    },
+    "chatAppsMoreComing": "More apps are coming.",
+    "@chatAppsMoreComing": {
+        "description": "Footnote under the list of chat apps"
+    },
+    "chatAppsNeverMessagesOthers": "Never messages other people for you",
+    "@chatAppsNeverMessagesOthers": {
+        "description": "Capability bullet with a cross: something Omi never does"
+    },
+    "chatAppsNoChatsMessage": "Chats you have with Omi in {app} show up here.",
+    "@chatAppsNoChatsMessage": {
+        "description": "Empty state message",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsNoChatsTitle": "No chats yet",
+    "@chatAppsNoChatsTitle": {
+        "description": "Empty state title"
+    },
+    "chatAppsNoMessages": "No messages",
+    "@chatAppsNoMessages": {
+        "description": "Empty transcript"
+    },
+    "chatAppsNotAvailableYet": "Not available yet",
+    "@chatAppsNotAvailableYet": {
+        "description": "Row subtitle for a chat app that cannot be connected yet"
+    },
+    "chatAppsNotConnectedMessage": "This chat app was disconnected.",
+    "@chatAppsNotConnectedMessage": {
+        "description": "Empty state message"
+    },
+    "chatAppsNotConnectedTitle": "Not connected",
+    "@chatAppsNotConnectedTitle": {
+        "description": "Empty state when the link no longer exists"
+    },
+    "chatAppsNotifyMe": "Notify Me",
+    "@chatAppsNotifyMe": {
+        "description": "Button/chip: ask to be told when WhatsApp is available"
+    },
+    "chatAppsOmiPro": "OMI PRO",
+    "@chatAppsOmiPro": {
+        "description": "Small all-caps plan tag"
+    },
+    "chatAppsOnTheList": "On the List",
+    "@chatAppsOnTheList": {
+        "description": "Chip/button after the person asked to be notified about WhatsApp"
+    },
+    "chatAppsOpenApp": "Open {app}",
+    "@chatAppsOpenApp": {
+        "description": "Button that opens a chat app; app is a brand name",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsOpenMessages": "Open Messages",
+    "@chatAppsOpenMessages": {
+        "description": "Button that opens Apple's Messages app"
+    },
+    "chatAppsOpenMessagesAgain": "Open Messages Again",
+    "@chatAppsOpenMessagesAgain": {
+        "description": "Button that reopens Apple's Messages app"
+    },
+    "chatAppsPartOfPro": "Chat apps are part of Pro",
+    "@chatAppsPartOfPro": {
+        "description": "Heading of the upgrade card for free users"
+    },
+    "chatAppsPrefilled": "Prefilled",
+    "@chatAppsPrefilled": {
+        "description": "Label: the message text is already filled in"
+    },
+    "chatAppsPrivateMemories": "Keep private memories in the app",
+    "@chatAppsPrivateMemories": {
+        "description": "Setting title"
+    },
+    "chatAppsPrivateMemoriesSubtitle": "Health, money, and anything you marked private stay out of chat apps.",
+    "@chatAppsPrivateMemoriesSubtitle": {
+        "description": "Setting subtitle"
+    },
+    "chatAppsProPerkContext": "Omi remembers context across every app",
+    "@chatAppsProPerkContext": {
+        "description": "Pro benefit bullet"
+    },
+    "chatAppsProPerkSave": "Save memories and manage tasks right from the chat",
+    "@chatAppsProPerkSave": {
+        "description": "Pro benefit bullet"
+    },
+    "chatAppsProPerkText": "Text Omi from Telegram and iMessage",
+    "@chatAppsProPerkText": {
+        "description": "Pro benefit bullet"
+    },
+    "chatAppsProblemFailed": "Something went wrong. Try again.",
+    "@chatAppsProblemFailed": {
+        "description": "Generic retryable error"
+    },
+    "chatAppsProblemOffline": "You're offline. Check your connection and try again.",
+    "@chatAppsProblemOffline": {
+        "description": "Error shown when there is no internet connection"
+    },
+    "chatAppsProblemRateLimited": "Too many tries. Wait a minute and try again.",
+    "@chatAppsProblemRateLimited": {
+        "description": "Error when the person tried too often"
+    },
+    "chatAppsProblemUnavailable": "Chat apps aren't available for your account yet.",
+    "@chatAppsProblemUnavailable": {
+        "description": "Error when the server refuses to start linking"
+    },
+    "chatAppsReadOnlyBanner": "Read-only. Reply to Omi in {app}.",
+    "@chatAppsReadOnlyBanner": {
+        "description": "Banner above a chat app transcript",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsReadOnlyFooter": "These chats are read-only here. Reply in {app}.",
+    "@chatAppsReadOnlyFooter": {
+        "description": "Footer under the chat list",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsRefreshFailed": "Couldn't refresh. Showing what we last saw.",
+    "@chatAppsRefreshFailed": {
+        "description": "Notice when a refresh failed but earlier data is still shown"
+    },
+    "chatAppsRepliesOnlyNote": "Omi only replies to you. It never texts first.",
+    "@chatAppsRepliesOnlyNote": {
+        "description": "Note that Omi does not start conversations"
+    },
+    "chatAppsReplyThereAnytime": "Message Omi in {app} anytime.",
+    "@chatAppsReplyThereAnytime": {
+        "description": "Success banner subtitle; app is Telegram or Messages",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsShowInApp": "Show these chats in the Omi app",
+    "@chatAppsShowInApp": {
+        "description": "Switch title"
+    },
+    "chatAppsShowInAppOff": "Off: you only see them in {app}.",
+    "@chatAppsShowInAppOff": {
+        "description": "Switch subtitle when off",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "Telegram"
+            }
+        }
+    },
+    "chatAppsShowInAppOn": "On: they appear in the Omi app as read-only chats.",
+    "@chatAppsShowInAppOn": {
+        "description": "Switch subtitle when on"
+    },
+    "chatAppsTelegramPrivacyNote": "Your chats with Omi are also stored by Telegram. Omi only answers you, never other people, and you can disconnect anytime.",
+    "@chatAppsTelegramPrivacyNote": {
+        "description": "Privacy note on the Telegram connect sheet"
+    },
+    "chatAppsTelegramStepOpen": "Tap Open Telegram below",
+    "@chatAppsTelegramStepOpen": {
+        "description": "Step 1; 'Open Telegram' refers to the button label"
+    },
+    "chatAppsTelegramStepReturn": "Come back here. We'll confirm it worked.",
+    "@chatAppsTelegramStepReturn": {
+        "description": "Step 3"
+    },
+    "chatAppsTelegramStepStart": "Tap Start in your chat with Omi",
+    "@chatAppsTelegramStepStart": {
+        "description": "Step 2; 'Start' is Telegram's own button label"
+    },
+    "chatAppsTelegramSubtitle": "Set up in two taps",
+    "@chatAppsTelegramSubtitle": {
+        "description": "Telegram row subtitle before connecting"
+    },
+    "chatAppsTelegramWaiting": "Waiting for you to tap Start in Telegram…",
+    "@chatAppsTelegramWaiting": {
+        "description": "Status line while waiting for the link to complete"
+    },
+    "chatAppsTextThisTo": "Didn't open? Text this to {address}",
+    "@chatAppsTextThisTo": {
+        "description": "Label above the code; address is Omi's phone number",
+        "placeholders": {
+            "address": {
+                "type": "String",
+                "example": "+1 555 010 0100"
+            }
+        }
+    },
+    "chatAppsTryAsking": "Try asking",
+    "@chatAppsTryAsking": {
+        "description": "Section header above example questions to send Omi"
+    },
+    "chatAppsTryPromise": "What did I promise Sam yesterday?",
+    "@chatAppsTryPromise": {
+        "description": "Example question to send Omi; Sam is a person's name"
+    },
+    "chatAppsTryRemind": "Remind me to call Mom on Sunday",
+    "@chatAppsTryRemind": {
+        "description": "Example request to send Omi"
+    },
+    "chatAppsTryWeek": "Summarize my week in three lines",
+    "@chatAppsTryWeek": {
+        "description": "Example request to send Omi"
+    },
+    "chatAppsUseTelegramForNow": "Use Telegram for Now",
+    "@chatAppsUseTelegramForNow": {
+        "description": "Button that starts connecting Telegram instead"
+    },
+    "chatAppsViewChats": "View Chats",
+    "@chatAppsViewChats": {
+        "description": "Row that opens the list of this chat app's chats"
+    },
+    "chatAppsVoiceNotes": "Voice notes",
+    "@chatAppsVoiceNotes": {
+        "description": "Setting title"
+    },
+    "chatAppsVoiceNotesSubtitle": "Send a voice note and Omi will answer it.",
+    "@chatAppsVoiceNotesSubtitle": {
+        "description": "Setting subtitle"
+    },
+    "chatAppsWaitingMessage": "Send the message in Messages. This screen updates as soon as Omi gets it.",
+    "@chatAppsWaitingMessage": {
+        "description": "Description while waiting"
+    },
+    "chatAppsWaitingTitle": "Waiting for your text",
+    "@chatAppsWaitingTitle": {
+        "description": "Heading while waiting for the person's text to arrive"
+    },
+    "chatAppsWaitlistConfirmed": "Thanks. WhatsApp will show up here when it's ready.",
+    "@chatAppsWaitlistConfirmed": {
+        "description": "Confirmation after tapping Notify Me"
+    },
+    "chatAppsWhatOmiDoes": "What Omi does in chat apps",
+    "@chatAppsWhatOmiDoes": {
+        "description": "Heading of a card listing what Omi can do in chat apps"
+    },
+    "chatAppsWhatsAppMeantime": "Telegram and iMessage work today, with the same memories and tasks.",
+    "@chatAppsWhatsAppMeantime": {
+        "description": "Tip on the WhatsApp sheet"
+    },
+    "chatAppsWhatsAppMessage": "We're working on bringing Omi to WhatsApp. It will show up here when it's ready.",
+    "@chatAppsWhatsAppMessage": {
+        "description": "Description on the WhatsApp sheet"
+    },
+    "chatAppsWhatsAppTitle": "WhatsApp is coming",
+    "@chatAppsWhatsAppTitle": {
+        "description": "Heading of the WhatsApp sheet"
+    },
+    "chatAppsTelegramOtherDevice": "Telegram on another device?",
+    "@chatAppsTelegramOtherDevice": {
+        "description": "Shown before a Copy link button on the Telegram connect sheet"
+    }
 }

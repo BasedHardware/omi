@@ -12835,4 +12835,360 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get speakerTagPromptExcerptSaved => 'Odgovor shranjen za ta odlomek.';
+
+  @override
+  String get chatAppsAddToContacts => 'Dodaj Omi med stike';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Klepeti v aplikaciji $app';
+  }
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Vaši klepeti v aplikaciji $app ostanejo v aplikaciji $app. Omi še vedno ve, o čem ste se pogovarjali v aplikaciji in v drugih klepetalnih aplikacijah.';
+  }
+
+  @override
+  String get chatAppsChannelsTitle => 'Klepetalne aplikacije';
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Klepet v aplikaciji $app';
+  }
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Pridobite novo kodo in jo pošljite iz aplikacije Sporočila.';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Ta koda je potekla';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Koda poteče čez $time';
+  }
+
+  @override
+  String get chatAppsCodeNote => 'Koda deluje samo enkrat in poteče čez 10 minut.';
+
+  @override
+  String get chatAppsComingLater => 'Kmalu';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Pošljite Omi eno sporočilo s številke, ki jo želite uporabljati. Koda v njem poveže to številko z vašim računom.';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Pošljite sporočilo za povezavo';
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi bo odprl Telegram z zasebno povezavo, ki je samo za vas.';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Poveži Telegram';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Povezano kot $handle';
+  }
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Povezano $date';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Stiki';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Aplikacije $app ni bilo mogoče odpreti. Preverite, ali je nameščena, in poskusite znova.';
+  }
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Prekini povezavo z $app';
+  }
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Ko prekinete povezavo, se izbriše zgodovina, ki jo Omi hrani za $app.';
+  }
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi ne bo več odgovarjal v aplikaciji $app in bo izbrisal zgodovino klepetov, ki jo hrani zanjo. Sporočila, ki so že v aplikaciji $app, ostanejo tam.';
+  }
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Želite prekiniti povezavo z $app?';
+  }
+
+  @override
+  String get chatAppsDoesAnswer => 'Odgovarja na vprašanja o vaših pogovorih in spominih';
+
+  @override
+  String get chatAppsDoesFiles => 'Pošilja in prejema datoteke, fotografije in glasovna sporočila';
+
+  @override
+  String get chatAppsDoesSave => 'Shranjuje spomine in upravlja vaša opravila';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage in več';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Pogovarjajte se z Omi v aplikacijah, ki jih vsak dan že uporabljate.';
+
+  @override
+  String get chatAppsEntryTitle => 'Klepet z Omi';
+
+  @override
+  String get chatAppsGetNewCode => 'Pridobi novo kodo';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Vprašajte o svojem dnevu, shranjujte spomine in upravljajte opravila iz Telegrama ali iMessagea. Vaši klepeti ostanejo v aplikaciji, ki jo uporabljate, Omi pa si zapomni, o čem ste se pogovarjali, povsod.';
+
+  @override
+  String get chatAppsHeroTitle => 'Klepetajte z Omi tam, kjer že klepetate';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Živjo Omi, koda za povezavo $code';
+  }
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Pošljite Omi sporočilo s svoje telefonske številke';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Za: Omi · $address';
+  }
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'V aplikaciji $app';
+  }
+
+  @override
+  String get chatAppsInTheMeantime => 'Medtem';
+
+  @override
+  String get chatAppsIncludedWithPro => 'VKLJUČENO V OMI PRO';
+
+  @override
+  String get chatAppsInsights => 'Vpogledi od Omi';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Naj vam Omi tu pošlje povzetek ali vpogled.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app je povezan';
+  }
+
+  @override
+  String get chatAppsLink => 'Povezava';
+
+  @override
+  String get chatAppsLinkExpired => 'Povezava je potekla. Tapnite Odpri Telegram za novo.';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Klepetalnih aplikacij ni bilo mogoče naložiti';
+
+  @override
+  String get chatAppsLocked => 'Zahteva Omi Pro';
+
+  @override
+  String get chatAppsMessage => 'Sporočilo';
+
+  @override
+  String get chatAppsMessagesApp => 'Sporočila';
+
+  @override
+  String get chatAppsMoreComing => 'Prihajajo še druge aplikacije.';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Nikoli ne piše drugim namesto vas';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Klepeti z Omi v aplikaciji $app se prikažejo tukaj.';
+  }
+
+  @override
+  String get chatAppsNoChatsTitle => 'Še ni klepetov';
+
+  @override
+  String get chatAppsNoMessages => 'Ni sporočil';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Še ni na voljo';
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Povezava s to klepetalno aplikacijo je bila prekinjena.';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Ni povezano';
+
+  @override
+  String get chatAppsNotifyMe => 'Obvesti me';
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get chatAppsOnTheList => 'Na seznamu';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Odpri $app';
+  }
+
+  @override
+  String get chatAppsOpenMessages => 'Odpri Sporočila';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Ponovno odpri Sporočila';
+
+  @override
+  String get chatAppsPartOfPro => 'Klepetalne aplikacije so del paketa Pro';
+
+  @override
+  String get chatAppsPrefilled => 'Že izpolnjeno';
+
+  @override
+  String get chatAppsPrivateMemories => 'Zasebne spomine obdrži v aplikaciji';
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Zdravje, denar in vse, kar ste označili kot zasebno, ostane zunaj klepetalnih aplikacij.';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi si zapomni kontekst v vseh aplikacijah';
+
+  @override
+  String get chatAppsProPerkSave => 'Shranjujte spomine in upravljajte opravila kar iz klepeta';
+
+  @override
+  String get chatAppsProPerkText => 'Pišite Omi iz Telegrama in iMessagea';
+
+  @override
+  String get chatAppsProblemFailed => 'Nekaj je šlo narobe. Poskusite znova.';
+
+  @override
+  String get chatAppsProblemOffline => 'Ste brez povezave. Preverite povezavo in poskusite znova.';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Preveč poskusov. Počakajte minuto in poskusite znova.';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Klepetalne aplikacije za vaš račun še niso na voljo.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Samo za branje. Omiju odgovorite v aplikaciji $app.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Ti klepeti so tu samo za branje. Odgovorite v aplikaciji $app.';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Osvežitev ni uspela. Prikazujemo zadnje znane podatke.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi odgovarja samo vam. Nikoli ne piše prvi.';
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Kadar koli pišite Omi v aplikaciji $app.';
+  }
+
+  @override
+  String get chatAppsShowInApp => 'Prikaži te klepete v aplikaciji Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Izklopljeno: vidite jih samo v aplikaciji $app.';
+  }
+
+  @override
+  String get chatAppsShowInAppOn => 'Vklopljeno: v aplikaciji Omi se prikažejo kot klepeti samo za branje.';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Vaše klepete z Omi hrani tudi Telegram. Omi odgovarja samo vam, nikoli drugim, povezavo pa lahko kadar koli prekinete.';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Spodaj tapnite Odpri Telegram';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Vrnite se sem. Potrdili bomo, da je delovalo.';
+
+  @override
+  String get chatAppsTelegramStepStart => 'V klepetu z Omi tapnite Začni';
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Nastavitev z dvema dotikoma';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Čakamo, da v Telegramu tapnete Začni …';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Se ni odprlo? Pošljite to na $address';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Poskusite vprašati';
+
+  @override
+  String get chatAppsTryPromise => 'Kaj sem včeraj obljubil Samu?';
+
+  @override
+  String get chatAppsTryRemind => 'Opomni me, naj v nedeljo pokličem mamo';
+
+  @override
+  String get chatAppsTryWeek => 'Povzemi moj teden v treh vrsticah';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Za zdaj uporabi Telegram';
+
+  @override
+  String get chatAppsViewChats => 'Prikaži klepete';
+
+  @override
+  String get chatAppsVoiceNotes => 'Glasovna sporočila';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Pošljite glasovno sporočilo in Omi bo odgovoril.';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Pošljite sporočilo v aplikaciji Sporočila. Ta zaslon se posodobi, takoj ko ga Omi prejme.';
+
+  @override
+  String get chatAppsWaitingTitle => 'Čakamo na vaše sporočilo';
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Hvala. WhatsApp se bo pojavil tukaj, ko bo pripravljen.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Kaj Omi počne v klepetalnih aplikacijah';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram in iMessage že delujeta, z enakimi spomini in opravili.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Delamo na tem, da Omi pride v WhatsApp. Ko bo pripravljen, se bo pojavil tukaj.';
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp prihaja';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram na drugi napravi?';
 }

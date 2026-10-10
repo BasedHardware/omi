@@ -18,6 +18,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
@@ -114,6 +115,7 @@ final class JourneyHermeticBoot {
           ChangeNotifierProvider(create: (_) => createProductionConversationProvider()),
           ChangeNotifierProvider(create: (_) => HomeProvider()),
           ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+          ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
           ChangeNotifierProvider(create: (_) => FolderProvider()),
           ChangeNotifierProvider(create: (_) => UsageProvider()),
           ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),

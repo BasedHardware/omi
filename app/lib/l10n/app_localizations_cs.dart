@@ -12810,4 +12810,360 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get speakerTagPromptExcerptSaved => 'Odpověď uložena pro tento úryvek.';
+
+  @override
+  String get chatAppsAddToContacts => 'Přidat Omi do Kontaktů';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return 'Chaty v $app';
+  }
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return 'Tvoje chaty z $app zůstávají v $app. Omi přesto ví, o čem jste mluvili v aplikaci i v tvých dalších chatovacích aplikacích.';
+  }
+
+  @override
+  String get chatAppsChannelsTitle => 'Chatovací aplikace';
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Chat v $app';
+  }
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Získej nový kód a pošli ho ze Zpráv.';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Platnost kódu vypršela';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Kód vyprší za $time';
+  }
+
+  @override
+  String get chatAppsCodeNote => 'Kód funguje jednou a platnost mu vyprší za 10 minut.';
+
+  @override
+  String get chatAppsComingLater => 'Později';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Pošli Omi jednu zprávu z čísla, které chceš používat. Kód v ní propojí toto číslo s tvým účtem.';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Napiš Omi pro připojení';
+
+  @override
+  String get chatAppsConnectTelegramMessage => 'Omi otevře Telegram se soukromým odkazem, který je jen pro tebe.';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Připojit Telegram';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Připojeno jako $handle';
+  }
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Připojeno $date';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Kontakty';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Aplikaci $app se nepodařilo otevřít. Zkontroluj, že je nainstalovaná, a zkus to znovu.';
+  }
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Odpojit $app';
+  }
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Odpojením se smaže historie, kterou Omi uchovává pro $app.';
+  }
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi přestane odpovídat v $app a smaže historii chatu, kterou pro něj uchovává. Zprávy, které už v $app jsou, tam zůstanou.';
+  }
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Odpojit $app?';
+  }
+
+  @override
+  String get chatAppsDoesAnswer => 'Odpovídá na otázky o tvých konverzacích a vzpomínkách';
+
+  @override
+  String get chatAppsDoesFiles => 'Posílá a přijímá soubory, fotky a hlasové zprávy';
+
+  @override
+  String get chatAppsDoesSave => 'Ukládá vzpomínky a spravuje tvoje úkoly';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage a další';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Mluv s Omi v aplikacích, které používáš každý den.';
+
+  @override
+  String get chatAppsEntryTitle => 'Chatuj s Omi';
+
+  @override
+  String get chatAppsGetNewCode => 'Získat nový kód';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Ptej se na svůj den, ukládej vzpomínky a spravuj úkoly z Telegramu nebo iMessage. Tvoje chaty zůstávají v aplikaci, kterou používáš, a Omi si pamatuje, o čem jste mluvili, všude.';
+
+  @override
+  String get chatAppsHeroTitle => 'Chatuj s Omi tam, kde už chatuješ';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Ahoj Omi, kód propojení $code';
+  }
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Piš Omi ze svého telefonního čísla';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Komu: Omi · $address';
+  }
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'V $app';
+  }
+
+  @override
+  String get chatAppsInTheMeantime => 'Zatím';
+
+  @override
+  String get chatAppsIncludedWithPro => 'V CENĚ OMI PRO';
+
+  @override
+  String get chatAppsInsights => 'Postřehy od Omi';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Nech Omi, ať ti tady pošle shrnutí nebo postřeh.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app je připojeno';
+  }
+
+  @override
+  String get chatAppsLink => 'Odkaz';
+
+  @override
+  String get chatAppsLinkExpired => 'Platnost odkazu vypršela. Klepni na Otevřít Telegram pro nový.';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Chatovací aplikace se nepodařilo načíst';
+
+  @override
+  String get chatAppsLocked => 'Vyžaduje Omi Pro';
+
+  @override
+  String get chatAppsMessage => 'Zpráva';
+
+  @override
+  String get chatAppsMessagesApp => 'Zprávy';
+
+  @override
+  String get chatAppsMoreComing => 'Další aplikace přijdou.';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Nikdy za tebe nepíše jiným lidem';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Chaty, které s Omi vedeš v $app, se zobrazí tady.';
+  }
+
+  @override
+  String get chatAppsNoChatsTitle => 'Zatím žádné chaty';
+
+  @override
+  String get chatAppsNoMessages => 'Žádné zprávy';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Zatím není k dispozici';
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Tato chatovací aplikace byla odpojena.';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Nepřipojeno';
+
+  @override
+  String get chatAppsNotifyMe => 'Dej mi vědět';
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String get chatAppsOnTheList => 'Na seznamu';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Otevřít $app';
+  }
+
+  @override
+  String get chatAppsOpenMessages => 'Otevřít Zprávy';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Znovu otevřít Zprávy';
+
+  @override
+  String get chatAppsPartOfPro => 'Chatovací aplikace jsou součástí Pro';
+
+  @override
+  String get chatAppsPrefilled => 'Předvyplněno';
+
+  @override
+  String get chatAppsPrivateMemories => 'Nechat soukromé vzpomínky v aplikaci';
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Zdraví, peníze a vše, co jsi označil jako soukromé, zůstává mimo chatovací aplikace.';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi si pamatuje kontext napříč všemi aplikacemi';
+
+  @override
+  String get chatAppsProPerkSave => 'Ukládej vzpomínky a spravuj úkoly přímo z chatu';
+
+  @override
+  String get chatAppsProPerkText => 'Piš Omi z Telegramu a iMessage';
+
+  @override
+  String get chatAppsProblemFailed => 'Něco se pokazilo. Zkus to znovu.';
+
+  @override
+  String get chatAppsProblemOffline => 'Jsi offline. Zkontroluj připojení a zkus to znovu.';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Příliš mnoho pokusů. Počkej minutu a zkus to znovu.';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Chatovací aplikace zatím nejsou pro tvůj účet dostupné.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Jen pro čtení. Omi odpovídej v $app.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Tyto chaty jsou tady jen pro čtení. Odpovídej v $app.';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Obnovení se nezdařilo. Zobrazujeme poslední známá data.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi odpovídá jen tobě. Nikdy nepíše první.';
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Piš Omi v aplikaci $app kdykoli.';
+  }
+
+  @override
+  String get chatAppsShowInApp => 'Zobrazovat tyto chaty v aplikaci Omi';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Vypnuto: vidíš je jen v $app.';
+  }
+
+  @override
+  String get chatAppsShowInAppOn => 'Zapnuto: zobrazí se v aplikaci Omi jako chaty jen pro čtení.';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Tvoje chaty s Omi ukládá také Telegram. Omi odpovídá jen tobě, nikdy jiným lidem, a můžeš ho kdykoli odpojit.';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Klepni níže na Otevřít Telegram';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Vrať se sem. Potvrdíme, že to vyšlo.';
+
+  @override
+  String get chatAppsTelegramStepStart => 'V chatu s Omi klepni na Spustit';
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Nastavení na dvě klepnutí';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Čekáme, až v Telegramu klepneš na Spustit…';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Neotevřelo se to? Pošli tohle na $address';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Zkus se zeptat';
+
+  @override
+  String get chatAppsTryPromise => 'Co jsem včera slíbil Samovi?';
+
+  @override
+  String get chatAppsTryRemind => 'Připomeň mi, že mám v neděli zavolat mamce';
+
+  @override
+  String get chatAppsTryWeek => 'Shrň můj týden do tří řádků';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Zatím použít Telegram';
+
+  @override
+  String get chatAppsViewChats => 'Zobrazit chaty';
+
+  @override
+  String get chatAppsVoiceNotes => 'Hlasové zprávy';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Pošli hlasovou zprávu a Omi na ni odpoví.';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Pošli zprávu v aplikaci Zprávy. Tato obrazovka se aktualizuje, jakmile ji Omi dostane.';
+
+  @override
+  String get chatAppsWaitingTitle => 'Čekáme na tvoji zprávu';
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Díky. Až bude WhatsApp připraven, objeví se tady.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Co Omi dělá v chatovacích aplikacích';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram a iMessage fungují už dnes, se stejnými vzpomínkami a úkoly.';
+
+  @override
+  String get chatAppsWhatsAppMessage =>
+      'Pracujeme na tom, aby Omi fungoval i ve WhatsAppu. Až bude hotovo, objeví se tady.';
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp už brzy';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram na jiném zařízení?';
 }
