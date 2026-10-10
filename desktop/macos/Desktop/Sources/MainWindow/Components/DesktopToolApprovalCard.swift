@@ -12,7 +12,8 @@ struct DesktopToolApprovalCardPresentation: Equatable {
 
   let headline: String
   let question: String
-  /// "To" for a send, "Script" for AppleScript, nil for the list tools.
+  /// "To" for a send, "Script" for AppleScript, "App" for a window read, nil
+  /// for the list tools.
   let targetLabel: String?
   let target: String?
   let preview: [DesktopToolApprovalRequest.PreviewField]
@@ -27,12 +28,12 @@ struct DesktopToolApprovalCardPresentation: Equatable {
 
   static let allowOnceTitle = "Allow Once"
   static let allowForChatTitle = "Allow for This Chat (1 h)"
+  static let allowForChatName = "Allow for This Chat"
   static let denyTitle = "Deny"
 
   init(approval: DesktopToolApproval, now: Date = Date()) {
     let request = approval.request
     headline = request.title
-    question = request.decisionPrompt
     switch request.toolName {
     case "send_message":
       targetLabel = "To"
@@ -40,16 +41,35 @@ struct DesktopToolApprovalCardPresentation: Equatable {
       targetLabel = "Script"
     case "read_message_history":
       targetLabel = "Conversation"
+    case "ui_snapshot":
+      targetLabel = "App"
     default:
       targetLabel = nil
     }
     let targetValue = targetLabel == nil ? nil : request.displayResourceRef
-    target = targetValue
+    // A window read names the app as Omi resolved it, with its bundle id kept
+    // beside it so a look-alike name cannot hide which app is read.
+    if let app = request.targetApp {
+      question = "Let Omi read the window of \(app.name)?"
+      target = "\(app.name) · \(app.bundleID)"
+    } else {
+      question = request.decisionPrompt
+      target = targetValue
+    }
     // The target line already shows the resource; do not print the field that
     // carries it twice. A field with a different value stays: a thread read by
     // chat id still shows the handle it was given.
     preview = request.preview.filter { targetValue == nil || $0.value != targetValue }
-    sessionGrantNote = request.sessionGrantOption?.covers.map { "Also allows \($0) for the next hour" }
+    // The note sits under all three answers, so it names the answer it is
+    // about, in one pattern for every tool: "Allow for This Chat also allows
+    // <what the grant covers> for the next hour."
+    if let app = request.targetApp, request.offersSessionGrant {
+      sessionGrantNote = "\(Self.allowForChatName) also allows reading any window of \(app.name) for the next hour."
+    } else {
+      sessionGrantNote = request.sessionGrantOption?.covers.map {
+        "\(Self.allowForChatName) also allows \($0) for the next hour."
+      }
+    }
     isAnswering = approval.state.isAnswering
     let overdue = approval.state == .pending && request.expiresAt <= now
     isFinal = !approval.state.isPending || overdue
@@ -210,6 +230,8 @@ struct DesktopToolApprovalCard: View {
     case "file_path": return "Attachment"
     case "timeout_seconds": return "Timeout (seconds)"
     case "limit": return "Limit"
+    case "window_title": return "Window"
+    case "window_id": return "Window number"
     default: return key.replacingOccurrences(of: "_", with: " ").capitalized
     }
   }

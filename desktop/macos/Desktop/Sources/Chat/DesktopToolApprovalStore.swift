@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -67,6 +68,14 @@ struct DesktopToolApprovalOption: Equatable, Sendable {
   }
 }
 
+/// The app a window read names, as Omi's own LaunchServices lookup of the
+/// bundle id reports it. Never the model's words: a name like "TextEdit"
+/// could otherwise sit on top of any bundle id.
+struct DesktopToolApprovalTargetApp: Equatable, Sendable {
+  let name: String
+  let bundleID: String
+}
+
 /// One `approval_requested` frame, as the card shows it. Everything here is a
 /// display projection of the kernel's dispatch; the dispatch id is the only
 /// handle the answer sends back.
@@ -93,6 +102,9 @@ struct DesktopToolApprovalRequest: Equatable, Sendable {
   /// `resourceRef` as the card shows it, with invisible and direction-changing
   /// characters made visible.
   let displayResourceRef: String?
+  /// For `ui_snapshot`, the installed app behind `resourceRef`, resolved once
+  /// when the frame arrives so no lookup runs on every render.
+  let targetApp: DesktopToolApprovalTargetApp?
   let title: String
   let decisionPrompt: String
   let preview: [PreviewField]
@@ -109,9 +121,52 @@ struct DesktopToolApprovalRequest: Equatable, Sendable {
     "read_message_history": ["chat_id", "handle", "limit"],
     "list_message_chats": ["limit"],
     "list_mail_messages": ["limit"],
+    "ui_snapshot": ["window_title", "window_id"],
   ]
 
-  static func parse(_ payload: [String: Any]) -> DesktopToolApprovalRequest? {
+  /// Tools whose `resourceRef` is an app's bundle id.
+  private static let appTargetTools: Set<String> = ["ui_snapshot"]
+
+  /// The installed app for a bundle id, from LaunchServices.
+  static func installedApp(bundleID: String) -> DesktopToolApprovalTargetApp? {
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+    let bundle = Bundle(url: url)
+    let name =
+      (bundle?.localizedInfoDictionary?["CFBundleDisplayName"] as? String)
+      ?? (bundle?.infoDictionary?["CFBundleDisplayName"] as? String)
+      ?? (bundle?.infoDictionary?["CFBundleName"] as? String)
+      ?? FileManager.default.displayName(atPath: url.path)
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return DesktopToolApprovalTargetApp(name: trimmed, bundleID: bundle?.bundleIdentifier ?? bundleID)
+  }
+
+  /// An installed app names itself, so its name is bounded to one short
+  /// line of letters, digits, spaces and plain punctuation. Every other
+  /// scalar, including look-alike separators (`·`, `•`, `∙`, `⋅`, `‧`, `・`)
+  /// and invisible format characters, becomes a space, so the name cannot
+  /// fake the bundle id shown beside it. Bidirectional and invisible
+  /// characters are first shown as their code point, as everywhere on the card.
+  static func cardAppName(_ name: String) -> String {
+    let allowedPunctuation = Set("-_.&'()+,!:⟨⟩".unicodeScalars)
+    var scalars = String.UnicodeScalarView()
+    for scalar in displaySafe(name).unicodeScalars {
+      switch scalar.properties.generalCategory {
+      case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+        .nonspacingMark, .spacingMark, .enclosingMark, .decimalNumber, .letterNumber, .otherNumber:
+        scalars.append(scalar)
+      default:
+        scalars.append(allowedPunctuation.contains(scalar) ? scalar : " ")
+      }
+    }
+    let flat = String(scalars).split(separator: " ").joined(separator: " ")
+    return flat.count <= 40 ? flat : String(flat.prefix(39)) + "…"
+  }
+
+  static func parse(
+    _ payload: [String: Any],
+    resolveApp: (String) -> DesktopToolApprovalTargetApp? = installedApp(bundleID:)
+  ) -> DesktopToolApprovalRequest? {
     guard payload["type"] as? String == "approval_requested",
       let approvalId = nonEmpty(payload["approvalId"]),
       let ownerId = nonEmpty(payload["ownerId"]),
@@ -138,6 +193,13 @@ struct DesktopToolApprovalRequest: Equatable, Sendable {
       }
     }
     let options = (payload["options"] as? [[String: Any]] ?? []).compactMap(DesktopToolApprovalOption.init)
+    let resourceRef = nonEmpty(payload["resourceRef"])
+    let targetApp =
+      appTargetTools.contains(toolName)
+      ? resourceRef.flatMap(resolveApp).map {
+        DesktopToolApprovalTargetApp(name: cardAppName($0.name), bundleID: displaySafe($0.bundleID))
+      }
+      : nil
     return DesktopToolApprovalRequest(
       approvalId: approvalId,
       ownerId: ownerId,
@@ -150,8 +212,9 @@ struct DesktopToolApprovalRequest: Equatable, Sendable {
       toolName: toolName,
       capability: capability,
       operation: operation,
-      resourceRef: nonEmpty(payload["resourceRef"]),
-      displayResourceRef: nonEmpty(payload["resourceRef"]).map(displaySafe),
+      resourceRef: resourceRef,
+      displayResourceRef: resourceRef.map(displaySafe),
+      targetApp: targetApp,
       title: nonEmpty(payload["title"]).map(displaySafe) ?? "Needs approval",
       decisionPrompt: nonEmpty(payload["decisionPrompt"]).map(displaySafe) ?? "Allow this action?",
       preview: preview,
@@ -278,6 +341,7 @@ final class DesktopToolApprovalStore: ObservableObject {
   private var localExpiryTasks: [String: Task<Void, Never>] = [:]
   private let resolver: Resolver
   private let now: () -> Date
+  private let resolveApp: (String) -> DesktopToolApprovalTargetApp?
   private let retainedLimit = 50
   /// Resolutions that arrive before their request are kept only this long;
   /// a request that never follows is a card the daemon already closed.
@@ -287,10 +351,12 @@ final class DesktopToolApprovalStore: ObservableObject {
     resolver: @escaping Resolver = { approvalId, input in
       try await DesktopCoordinatorService.shared.resolveDispatchJSON(dispatchId: approvalId, input: input)
     },
-    now: @escaping () -> Date = Date.init
+    now: @escaping () -> Date = Date.init,
+    resolveApp: @escaping (String) -> DesktopToolApprovalTargetApp? = DesktopToolApprovalRequest.installedApp(bundleID:)
   ) {
     self.resolver = resolver
     self.now = now
+    self.resolveApp = resolveApp
   }
 
   /// Drop every card: a new daemon handshake, the process ending, or an owner
@@ -343,7 +409,7 @@ final class DesktopToolApprovalStore: ObservableObject {
   func ingest(message: AgentRuntimeProcess.RuntimeMessage) {
     switch message.kind {
     case .approvalRequested:
-      guard let request = DesktopToolApprovalRequest.parse(message.payload) else { return }
+      guard let request = DesktopToolApprovalRequest.parse(message.payload, resolveApp: resolveApp) else { return }
       ingest(request: request)
     case .approvalResolved:
       ingestResolution(message.payload)
