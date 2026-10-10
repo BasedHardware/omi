@@ -228,7 +228,10 @@ export function useRecorder(): UseRecorder {
       // Merge both lanes' raw segments by wall-clock and queue the row in the
       // sync outbox BEFORE the POST — an offline/failed post stays visible as
       // "sync pending" and retries later (see lib/sync/outbox.ts).
-      const segments = mergeLanes(micStoreRef.current?.list() ?? [], systemStoreRef.current?.list() ?? [])
+      const segments = mergeLanes(
+        micStoreRef.current?.list() ?? [],
+        systemStoreRef.current?.list() ?? []
+      )
       const conversation: LocalConversation = queueForSync(
         {
           id: session.conversationId,
