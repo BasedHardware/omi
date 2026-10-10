@@ -76,7 +76,7 @@ def test_stops_when_total_error_budget_exceeded():
 
 
 def test_cli_dry_run_does_not_load_writer_or_vector_provider(monkeypatch, capsys):
-    monkeypatch.setattr(script, 'metadata_rows', lambda uid, since: [row()])
+    monkeypatch.setattr(script, 'metadata_rows', lambda uid, since, scan_limit: [row()])
     writer = MagicMock(side_effect=AssertionError('dry run must not embed'))
     monkeypatch.setattr(script, 'write_summary', writer)
     assert script.main(['--uid', 'uid']) == 0
@@ -121,3 +121,34 @@ def test_naive_since_is_utc_and_bad_limit_rejected():
     with pytest.raises(SystemExit) as error:
         script.main(['--uid', 'uid', '--limit', '0'])
     assert error.value.code == 2
+
+
+def test_scan_cap_stops_even_when_all_rows_are_ineligible():
+    consumed = []
+
+    def rows():
+        for i in range(100):
+            consumed.append(i)
+            yield row(str(i), discarded=True)
+
+    summary = script.backfill_user('uid', rows(), limit=2)
+    assert summary.scanned == 20
+    assert summary.selected == 0
+    assert consumed == list(range(20))
+
+
+def test_metadata_query_bounds_pages_including_ineligible_documents():
+    client_module = ModuleType('database._client')
+    conversation_module = ModuleType('database.conversations')
+    conversation_module.conversations_collection = 'conversations'
+    query = MagicMock()
+    for method in ('collection', 'document', 'where', 'order_by', 'select', 'limit', 'start_after'):
+        getattr(query, method).return_value = query
+    snapshots = [SimpleNamespace(id=str(i), to_dict=lambda: row(discarded=True)) for i in range(400)]
+    query.stream.side_effect = [snapshots, snapshots[:10]]
+    client_module.get_firestore_client = lambda: query
+    with stub_modules({'database._client': client_module, 'database.conversations': conversation_module}):
+        selected = list(script.metadata_rows('uid', script.DEFAULT_SINCE, scan_limit=410))
+    assert len(selected) == 410
+    assert [call.args[0] for call in query.limit.call_args_list] == [400, 10]
+    assert query.stream.call_count == 2

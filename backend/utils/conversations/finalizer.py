@@ -38,6 +38,7 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.jit_rollout import JITDecisionStage
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
@@ -66,6 +67,32 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
         maybe_start_shadow(uid, conversation)
     except Exception as error:
         logger.warning('event=transcription_shadow outcome=admission_failed exception_type=%s', type(error).__name__)
+
+
+def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
+    """Provider errors are counted by the writer; never propagate to finalization."""
+    try:
+        if save_structured_vector(uid, conversation) is False:
+            # The writer counts a missing index as error. Keep that bounded outcome.
+            logger.warning('summary_vector outcome=error exception_type=IndexUnavailable')
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='none',
+                to_mode='none',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+    except Exception as error:
+        logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='none',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 class ConversationFinalizationError(RuntimeError):
@@ -303,12 +330,39 @@ async def finalize_persisted_conversation(
         # Completed-row replays have no coordinator bundle. Summary indexing is
         # independent of JIT folder/apps receipts and terminal intelligence
         # suppression, but must share the same winning fanout claim.
-        if (
-            not conversation_data.get('deleted', False)
-            and not getattr(conversation, 'discarded', False)
-            and getattr(conversation, 'structured', None)
-        ):
-            await run_blocking(postprocess_executor, save_structured_vector, uid, conversation)
+        # Await inside a fail-soft boundary rather than detach a provider pipeline:
+        # the worker can exit after completion, so awaiting preserves write observability.
+        # A summary-vector failure never fails finalization, including terminal rows.
+        try:
+            latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+            latest = deserialize_conversation(latest_data) if latest_data else None
+            if (
+                latest
+                and latest_data is not None
+                and not latest_data.get('deleted')
+                and not getattr(latest, 'discarded', False)
+                and getattr(latest, 'structured', None)
+            ):
+                # The claim does not return its document. Re-read after claim/merge;
+                # compare summary content as well as the durable merge revision so an
+                # older snapshot cannot overwrite a refresh that won during admission.
+                if latest.structured != conversation.structured or latest_data.get(
+                    'smart_merge'
+                ) != conversation_data.get('smart_merge'):
+                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
+                else:
+                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+        except Exception as error:
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+            logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='none',
+                to_mode='none',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
         if skip_derived_effects:
             logger.info(
                 'persisted conversation finalization terminal with suppressed intelligence uid=%s conversation=%s',

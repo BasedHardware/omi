@@ -2185,8 +2185,10 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
         ('completed', False, False, True, False),
     ],
 )
+@pytest.mark.parametrize('terminal', [False, True])
+@pytest.mark.parametrize('vector_case', ['success', 'embedding_error', 'stale', 'index_unavailable'])
 async def test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
-    monkeypatch, claim_status, deleted, discarded, structured, emits
+    monkeypatch, claim_status, deleted, discarded, structured, emits, vector_case, caplog, terminal
 ):
     conversation = SimpleNamespace(
         id='conversation-1',
@@ -2203,14 +2205,45 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'fixture'}
 
-    vector = MagicMock(side_effect=lambda *args: events.append('vector'))
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as counter
+    import utils.conversations.process_conversation as process
+
+    outcome = 'skipped_stale' if vector_case == 'stale' else 'error'
+    before = counter.labels(outcome=outcome)._value.get()
+    latest = SimpleNamespace(**vars(conversation))
+    if vector_case == 'stale' and structured:
+        latest.structured = SimpleNamespace(title='New summary revision')
+    reads = []
+
+    def deserialize(value):
+        reads.append(value)
+        return conversation if len(reads) == 1 else latest
+
+    def write(*args):
+        events.append('vector')
+        if vector_case == 'embedding_error':
+            return process.save_structured_vector(*args)
+        if vector_case == 'index_unavailable':
+            counter.labels(outcome='error').inc()
+            return False
+        return True
+
+    vector = MagicMock(side_effect=write)
+    if vector_case == 'embedding_error':
+        monkeypatch.setattr(process, 'generate_embedding', MagicMock(side_effect=ValueError('private provider detail')))
+
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args, **kwargs: {'id': conversation.id, 'status': 'completed', 'deleted': deleted},
+        lambda *args, **kwargs: {
+            'id': conversation.id,
+            'status': 'completed',
+            'deleted': deleted,
+            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal,
+        },
     )
-    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', deserialize)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(persisted_finalizer, 'smart_merge_step', AsyncMock(return_value=False))
     monkeypatch.setattr(persisted_finalizer, 'link_duplicate_captures', MagicMock())
@@ -2237,8 +2270,22 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         if claim_status == 'fenced'
         else ConversationFinalizationDisposition.completed
     )
-    if emits:
-        vector.assert_called_once_with('uid-1', conversation)
+    if emits and vector_case != 'stale':
+        vector.assert_called_once_with('uid-1', latest)
         assert events == ['claim', 'vector']
     else:
         vector.assert_not_called()
+
+    if emits and vector_case != 'success':
+        assert counter.labels(outcome=outcome)._value.get() == before + 1
+    assert 'processing_failed' not in caplog.text
+    assert 'private provider detail' not in caplog.text
+    if emits and vector_case in {'embedding_error', 'index_unavailable'}:
+        assert 'exception_type=' in caplog.text
+    if claim_status == 'claimed':
+        persisted_finalizer.lifecycle_service.complete_finalization_fanout.assert_called_once()
+        if not discarded and not terminal:
+            persisted_finalizer.extract_memories.assert_called_once()
+        else:
+            persisted_finalizer.extract_memories.assert_not_called()
+        persisted_finalizer.record_finalized_meeting_receipt.assert_called_once()

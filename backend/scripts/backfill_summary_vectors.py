@@ -5,6 +5,8 @@ Repairs the JIT/finalization gap: folder/apps obligations never owned summary
 vectors. Deterministic IDs make reruns overwrite safely with fresh embeddings.
 Dry-run (default) reads only conversation metadata/summary fields, never
 transcripts, embeddings or Pinecone. --apply costs one fresh embedding per row.
+Selection and Firestore reads are capped at 10 * --limit scanned documents,
+including ineligible rows.
 See backend/docs/runbooks/backfill-summary-vectors.md for operator sign-off.
 
 Usage:
@@ -18,6 +20,7 @@ import argparse
 import json
 import logging
 import math
+from itertools import islice
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -85,7 +88,7 @@ def backfill_user(
     """Consume newest-first metadata rows. Stop above 10% of the selected batch's error budget."""
     summary = Summary(apply=apply)
     selected: list[Mapping[str, Any]] = []
-    for row in rows:
+    for row in islice(rows, limit * 10):
         summary.scanned += 1
         if eligible(row, since):
             selected.append(row)
@@ -115,7 +118,7 @@ def backfill_user(
     return summary
 
 
-def metadata_rows(uid: str, since: datetime) -> Iterable[Mapping[str, Any]]:
+def metadata_rows(uid: str, since: datetime, scan_limit: int = 5000) -> Iterable[Mapping[str, Any]]:
     from database._client import get_firestore_client
     from database.conversations import conversations_collection
     from google.cloud.firestore_v1.base_query import FieldFilter
@@ -131,8 +134,10 @@ def metadata_rows(uid: str, since: datetime) -> Iterable[Mapping[str, Any]]:
         .select(['id', 'created_at', 'status', 'discarded', 'deleted', 'structured'])
     )
     cursor = None
-    while True:
-        page = query.limit(400)
+    remaining = scan_limit
+    while remaining > 0:
+        page_size = min(400, remaining)
+        page = query.limit(page_size)
         if cursor is not None:
             page = page.start_after(cursor)
         snapshots = list(page.stream())
@@ -140,7 +145,8 @@ def metadata_rows(uid: str, since: datetime) -> Iterable[Mapping[str, Any]]:
             row = snapshot.to_dict()
             row['id'] = snapshot.id
             yield row
-        if len(snapshots) < 400:
+        remaining -= len(snapshots)
+        if len(snapshots) < page_size:
             break
         cursor = snapshots[-1]
 
@@ -186,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     summary = backfill_user(
         args.uid,
-        metadata_rows(args.uid, args.since),
+        metadata_rows(args.uid, args.since, scan_limit=args.limit * 10),
         since=args.since,
         limit=args.limit,
         apply=args.apply,

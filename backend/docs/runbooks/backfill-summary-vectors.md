@@ -15,6 +15,9 @@ python scripts/backfill_summary_vectors.py --uid <uid> --since 2026-08-01T00:00:
 ```
 
 Default: dry-run, since August 1 2026 UTC, at most 500 eligible rows, newest-first.
+Selection stops after `10 * --limit` scanned documents (5,000 by default),
+including ineligible rows; Firestore page reads share this cap, so sparse histories
+may select fewer than `--limit` rows.
 Only completed, non-discarded, non-deleted rows with nonempty summary title or
 overview qualify. Dry-run reads metadata/summary fields only, with no transcripts,
 embedding calls or vector reads/writes. Output contains counts, never content or

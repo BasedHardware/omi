@@ -148,10 +148,10 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
     if index is None:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
         return False
-    data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
-    typed_metadata: Dict[str, Any] = data['metadata']
-    typed_metadata.update(metadata)
     try:
+        data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
+        typed_metadata: Dict[str, Any] = data['metadata']
+        typed_metadata.update(metadata)
         res = index.upsert(vectors=[data], namespace="ns1")
     except Exception:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
