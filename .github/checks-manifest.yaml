@@ -57,9 +57,9 @@ checks:
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
   - id: plugin-request-timeouts
     command: ["python3", "scripts/check_plugin_request_timeouts.py"]
-    triggers: ["plugins/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    triggers: ["plugins/**/*.py", "mcp/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "requests applies no default timeout, so an upstream that accepts the connection and stops answering pins the worker; 19 of these calls ran inside async handlers, where one wedged token exchange blocked the event loop and the app stopped serving every user"
+    reason: "requests applies no default timeout, so an upstream that accepts the connection and stops answering pins the worker; 19 of these calls ran inside async handlers, where one wedged token exchange blocked the event loop and the app stopped serving every user; the MCP server made all eight of its API calls the same way, from the tool handler on its event loop"
   - id: plugin-request-timeout-check-tests
     command: ["python3", "scripts/test_check_plugin_request_timeouts.py"]
     triggers: ["scripts/check_plugin_request_timeouts.py", "scripts/test_check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
