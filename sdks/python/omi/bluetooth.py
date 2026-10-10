@@ -1,16 +1,84 @@
+import argparse
 import asyncio
-from typing import Callable, Any
-from bleak import BleakScanner, BleakClient
+import json
+import math
+import sys
+from typing import Any, Callable, Optional
+
+from bleak import BleakClient, BleakScanner
 
 # Re-export for callers that want the default Omi audio stream UUID.
 from .constants import AUDIO_DATA_UUID  # noqa: F401
 
 
-def print_devices() -> None:
-    """Scan for and print all nearby Bluetooth devices."""
-    devices = asyncio.run(BleakScanner.discover())
+def _positive_timeout(value: str) -> float:
+    """Parse a finite, positive scan timeout for the command line."""
+    try:
+        timeout = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timeout must be a number") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be finite and greater than zero")
+    return timeout
+
+
+def _discover(timeout: Optional[float]) -> Any:
+    """Run a discovery, forwarding ``timeout`` only when one was requested.
+
+    ``None`` calls ``BleakScanner.discover()`` exactly as before, keeping the
+    library's own default scan window.
+    """
+    if timeout is None:
+        return asyncio.run(BleakScanner.discover())
+    return asyncio.run(BleakScanner.discover(timeout=timeout))
+
+
+def print_devices(json_output: bool = False, timeout: Optional[float] = None) -> None:
+    """Scan for nearby Bluetooth devices and print them in the requested format.
+
+    The human-readable listing is unchanged. ``json_output`` prints a single
+    JSON array of ``{"name", "id"}`` objects, where ``id`` is the device's
+    Bluetooth address.
+    """
+    devices = _discover(timeout)
+    if json_output:
+        print(json.dumps([{"name": d.name, "id": d.address} for d in devices]))
+        return
+
     for i, d in enumerate(devices):
         print(f"{i}. {d.name} [{d.address}]")
+
+
+def main() -> int:
+    """Run the ``omi-scan`` command-line interface.
+
+    Returns the process status: ``0`` on success, ``1`` when the scan fails,
+    ``2`` on invalid arguments (argparse). Diagnostics go to stderr so the
+    ``--json`` stdout stays parseable.
+    """
+    parser = argparse.ArgumentParser(
+        description="Scan for nearby Omi Bluetooth devices"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help='print a JSON array of {"name", "id"} objects',
+    )
+    parser.add_argument(
+        "--timeout",
+        type=_positive_timeout,
+        default=None,
+        help="scan duration in seconds (default: Bleak's own timeout)",
+    )
+    args = parser.parse_args()
+
+    try:
+        print_devices(json_output=args.json_output, timeout=args.timeout)
+    except Exception as exc:  # adapter missing, powered off, or permission denied
+        print(f"omi-scan: error: Bluetooth scan failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 async def listen_to_omi(
