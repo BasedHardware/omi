@@ -5,6 +5,7 @@ Provides chat tools for searching Wikipedia, reading concise article summaries,
 and finding a random article for exploration.
 """
 
+from contextlib import asynccontextmanager
 from html import unescape
 import re
 from typing import Any, Optional
@@ -22,10 +23,28 @@ DEFAULT_LANGUAGE = "en"
 USER_AGENT = "omi-wikipedia-app/1.0 (https://omi.me)"
 
 
+_pooled_client: Optional[httpx.AsyncClient] = None
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    global _pooled_client
+    _pooled_client = httpx.AsyncClient(
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+    )
+    try:
+        yield
+    finally:
+        await _pooled_client.aclose()
+        _pooled_client = None
+
+
 app = FastAPI(
     title="Omi Wikipedia Integration",
     description="Search and read Wikipedia from Omi chat tools",
     version="1.0.0",
+    lifespan=_lifespan,
 )
 
 
@@ -104,10 +123,21 @@ def _encode_title(title: str) -> str:
     return quote(title.replace(" ", "_"), safe="")
 
 
+def _safe_dict(value: Any) -> dict[str, Any]:
+    """Return ``value`` if it is a dict, else {} — the Wikipedia APIs return an
+    explicit JSON null for several of these fields rather than omitting them,
+    which made chained ``.get(..., {})`` calls raise AttributeError.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        response = await client.get(url, params=params)
+    if _pooled_client is not None:
+        response = await _pooled_client.get(url, params=params)
+    else:
+        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
+            response = await client.get(url, params=params)
     response.raise_for_status()
     return response.json()
 
@@ -130,7 +160,8 @@ def _format_summary(data: dict[str, Any], language: str) -> str:
     title = data.get("title") or "Untitled"
     extract = data.get("extract") or "No summary was returned for this article."
     description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+    desktop_urls = _safe_dict(_safe_dict(data.get("content_urls")).get("desktop"))
+    page_url = desktop_urls.get("page") or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -256,7 +287,8 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        raw_results = _safe_dict(data.get("query")).get("search") or []
+        results = [item for item in raw_results if isinstance(item, dict)][:limit]
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
@@ -320,7 +352,8 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
+        random_items = _safe_dict(data.get("query")).get("random") or []
+        random_items = [item for item in random_items if isinstance(item, dict)]
         if not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 

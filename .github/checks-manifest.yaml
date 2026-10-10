@@ -1595,6 +1595,11 @@ checks:
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Wikipedia plugin must prevent internal exception details from leaking into chat tool responses"
+  - id: wikipedia-null-payload-guard-tests
+    command: ["python3", "plugins/omi-wikipedia-app/test_null_payload_guards.py"]
+    triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#20994: content_urls/desktop and query/search/random came back as explicit JSON null (not missing keys), so chained .get(..., {}) raised AttributeError; non-dict search/random items crashed the same way"
   - id: crossref-doi-normalization-tests
     command: ["python3", "plugins/omi-crossref-app/test_doi_normalization.py"]
     triggers: ["plugins/omi-crossref-app/**", ".github/checks-manifest.yaml"]
