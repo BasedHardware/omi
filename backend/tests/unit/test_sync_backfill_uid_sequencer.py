@@ -287,6 +287,21 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     assert dispatched[-1]['job_id'] == 'next'
 
 
+def test_sweep_tolerates_due_owners_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(registry, 'due_owners', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    assert uid_sequencer.sweep() == {'due_owners_error': 1, 'pending_dispatched': 1}
+    assert dispatched[0]['job_id'] == 'job'
+
+
+def test_sweep_tolerates_due_pending_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    monkeypatch.setattr(registry, 'due_pending', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    assert uid_sequencer.sweep() == {'due_pending_error': 1}
+
+
 def test_flag_switch_does_not_change_persisted_owner_or_legacy_task(db, monkeypatch):
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
     assert registry.enabled()
