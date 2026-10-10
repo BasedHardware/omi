@@ -36,6 +36,7 @@ import config.speaker_match_scores as match_scores
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
+from utils.conversations.audio_placement import text_window_refusal
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.stt.speaker_match import (
     SPEAKER_MATCH_MARGIN as SPEAKER_MATCH_MARGIN,
@@ -634,7 +635,13 @@ def _coverage(
     manual_speakers: Mapping[int, Identity],
     abstained: Set[str],
 ) -> float:
-    embeddable = [s for s in eligible if _duration(s) >= MIN_EMBED_SECONDS]
+    # Malformed text has no usable duration. Unplaced but valid windows still
+    # count against coverage exactly as before.
+    embeddable = [
+        s
+        for s in eligible
+        if text_window_refusal(_seg(s, 'start'), _seg(s, 'end')) is None and _duration(s) >= MIN_EMBED_SECONDS
+    ]
     total = sum(_duration(s) for s in embeddable)
     if total <= 0:
         return 1.0
