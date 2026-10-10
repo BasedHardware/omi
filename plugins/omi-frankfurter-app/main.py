@@ -5,6 +5,9 @@ Provides chat tools for currency conversion, latest reference rates, and
 supported-currency lookup through the public Frankfurter API.
 """
 
+from __future__ import annotations
+
+import logging
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
@@ -14,6 +17,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger("omi_frankfurter_app")
 
 
 # The legacy .app host permanently redirects to the canonical v1 API.  Keep
@@ -115,17 +120,25 @@ def _coerce_currency_list(values: Any, *, allow_null: bool) -> list[str]:
     return normalized
 
 
+class UserFacingValidationError(ValueError):
+    """Explicit validated user-facing error message, safe to surface to chat tools."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
 def _parse_amount(value: str | float | int) -> Decimal:
     try:
         amount = Decimal(str(value))
     except InvalidOperation as exc:
-        raise ValueError("amount must be a number") from exc
+        raise UserFacingValidationError("amount must be a number") from exc
 
     if not amount.is_finite():
-        raise ValueError("amount must be a finite number")
+        raise UserFacingValidationError("amount must be a finite number")
 
     if amount <= 0:
-        raise ValueError("amount must be greater than 0")
+        raise UserFacingValidationError("amount must be greater than 0")
     return amount
 
 
@@ -166,7 +179,7 @@ async def _validate_identity_currency(code: str) -> None:
     if not isinstance(currencies, dict) or not currencies:
         raise ValueError("currency list request returned no currencies")
     if code not in currencies:
-        raise ValueError(f"unsupported currency: {code}")
+        raise UserFacingValidationError(f"unsupported currency: {code}")
 
 
 @app.exception_handler(RequestValidationError)
@@ -306,10 +319,21 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
         if len(lines) == 1:
             return ChatToolResponse(error="no rates returned for the requested currencies")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"currency conversion failed: {exc}")
+    except UserFacingValidationError as err:
+        logger.warning("Frankfurter currency conversion validation error: %s", err.message)
+        return ChatToolResponse(error=err.message)
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Frankfurter currency conversion HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"currency conversion failed with API error {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Frankfurter currency conversion network error: %s", exc)
+        return ChatToolResponse(error="currency conversion failed due to a network error")
+    except ValueError as exc:
+        logger.warning("Frankfurter currency conversion payload/value error: %s", exc)
+        return ChatToolResponse(error="currency conversion failed due to an invalid API response")
     except Exception as exc:
-        return ChatToolResponse(error=f"currency conversion failed: {exc}")
+        logger.error("Frankfurter currency conversion unexpected error: %s", exc, exc_info=True)
+        return ChatToolResponse(error="currency conversion failed due to an internal error")
 
 
 @app.post("/tools/get_latest_rates", response_model=ChatToolResponse)
@@ -359,10 +383,21 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
         if len(lines) == 1:
             return ChatToolResponse(error="no rates returned")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"latest rates request failed: {exc}")
+    except UserFacingValidationError as err:
+        logger.warning("Frankfurter latest rates validation error: %s", err.message)
+        return ChatToolResponse(error=err.message)
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Frankfurter latest rates HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"latest rates request failed with API error {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Frankfurter latest rates network error: %s", exc)
+        return ChatToolResponse(error="latest rates request failed due to a network error")
+    except ValueError as exc:
+        logger.warning("Frankfurter latest rates payload/value error: %s", exc)
+        return ChatToolResponse(error="latest rates request failed due to an invalid API response")
     except Exception as exc:
-        return ChatToolResponse(error=f"latest rates request failed: {exc}")
+        logger.error("Frankfurter latest rates unexpected error: %s", exc, exc_info=True)
+        return ChatToolResponse(error="latest rates request failed due to an internal error")
 
 
 @app.post("/tools/list_supported_currencies", response_model=ChatToolResponse)
@@ -375,7 +410,15 @@ async def list_supported_currencies() -> ChatToolResponse:
         for code, name in sorted(currencies.items()):
             lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
-        return ChatToolResponse(error=f"currency list request failed: {exc}")
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Frankfurter currency list HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"currency list request failed with API error {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("Frankfurter currency list network error: %s", exc)
+        return ChatToolResponse(error="currency list request failed due to a network error")
+    except ValueError as exc:
+        logger.warning("Frankfurter currency list invalid value: %s", exc)
+        return ChatToolResponse(error="currency list request failed due to an invalid API response")
     except Exception as exc:
-        return ChatToolResponse(error=f"currency list request failed: {exc}")
+        logger.error("Frankfurter currency list unexpected error: %s", exc, exc_info=True)
+        return ChatToolResponse(error="currency list request failed due to an internal error")
