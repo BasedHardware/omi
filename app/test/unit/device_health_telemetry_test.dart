@@ -215,7 +215,7 @@ void main() {
     expect(events.single['unresolved_outage_seconds'], 86400);
     expect(events.single['unresolved_outage_open'], isTrue);
     expect(events.single['schema_version'], 2);
-  }, tags: ['depends_on_21152'], skip: 'blocked on #21152 delivery fix');
+  }, tags: ['depends_on_21152']);
 
   test('first recovered packet splits durable outage at midnight after process death', () async {
     final start = DateTime(2026, 10, 9, 23, 59);
@@ -269,7 +269,7 @@ void main() {
     expect(events.last['day_app_build'], ['new+2']);
     expect(events.last['day_firmware'], isNull);
     expect(events.first['os_version'], isNull);
-  }, tags: ['depends_on_21152'], skip: 'blocked on #21152 delivery fix');
+  }, tags: ['depends_on_21152']);
 
   test('active packet counts use day observations across midnight', () {
     final day = DateTime(2026, 10, 10);
