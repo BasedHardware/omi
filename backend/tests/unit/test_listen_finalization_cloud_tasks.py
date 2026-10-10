@@ -2182,7 +2182,10 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
         ('claimed', False, True, True, False),
         ('claimed', False, False, False, False),
         ('fenced', False, False, True, False),
-        ('completed', False, False, True, False),
+        ('completed', False, False, True, True),
+        ('completed', True, False, True, False),
+        ('completed', False, True, True, False),
+        ('completed', False, False, False, False),
     ],
 )
 @pytest.mark.parametrize('terminal', [False, True])
@@ -2210,6 +2213,7 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
 
     outcome = 'skipped_stale' if vector_case == 'stale' else 'error'
     before = counter.labels(outcome=outcome)._value.get()
+    before_error = counter.labels(outcome='error')._value.get()
     latest = SimpleNamespace(**vars(conversation))
     if vector_case == 'stale' and structured:
         latest.structured = SimpleNamespace(title='New summary revision')
@@ -2270,13 +2274,24 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         if claim_status == 'fenced'
         else ConversationFinalizationDisposition.completed
     )
-    if emits and vector_case != 'stale':
+    if claim_status == 'completed':
+        # Re-finalization path: guards only (no stale compare). The fail-soft
+        # wrapper swallows embedding failures, so vector_case='stale' (unpatched
+        # real embedding under the hermetic stub) ends in outcome='error' with
+        # no vector call, and the disposition still completes.
+        if emits and vector_case != 'stale':
+            vector.assert_called_once_with('uid-1', latest)
+            if vector_case != 'success':
+                assert counter.labels(outcome='error')._value.get() == before_error + 1
+        else:
+            vector.assert_not_called()
+    elif emits and vector_case != 'stale':
         vector.assert_called_once_with('uid-1', latest)
         assert events == ['claim', 'vector']
     else:
         vector.assert_not_called()
 
-    if emits and vector_case != 'success':
+    if emits and vector_case != 'success' and not (claim_status == 'completed' and vector_case == 'stale'):
         assert counter.labels(outcome=outcome)._value.get() == before + 1
     assert 'processing_failed' not in caplog.text
     assert 'private provider detail' not in caplog.text
