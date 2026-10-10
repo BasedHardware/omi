@@ -13,6 +13,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include "diagnostics.h"
 #include "rtc.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
@@ -323,6 +324,7 @@ static int persist_ring_metadata(void)
 
     int ret = disk_access_write(DISK_DRIVE_NAME, sector_buffer, meta_next_slot, 1);
     if (ret != 0) {
+        omi_diagnostics_inc_storage_error();
         LOG_ERR("metadata write failed at slot %u: %d", meta_next_slot, ret);
         meta_generation--;
         return -EIO;
@@ -341,6 +343,7 @@ static int load_ring_metadata(void)
     for (uint32_t slot = 0; slot < RAW_META_SECTORS; slot++) {
         int ret = disk_access_read(DISK_DRIVE_NAME, sector_buffer, slot, 1);
         if (ret != 0) {
+            omi_diagnostics_inc_storage_error();
             LOG_WRN("metadata read failed at slot %u: %d", slot, ret);
             continue;
         }
@@ -393,6 +396,7 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
     uint32_t sector = batch_sector_for_base_seq(base_seq);
     int ret = disk_access_read(DISK_DRIVE_NAME, buffer, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
+        omi_diagnostics_inc_storage_error();
         LOG_ERR("batch read failed at sector %u: %d", sector, ret);
         return -EIO;
     }
@@ -502,6 +506,7 @@ static int flush_current_batch(bool sync_requested)
     uint32_t sector = batch_sector_for_base_seq(current_batch_base_seq);
     int ret = disk_access_write(DISK_DRIVE_NAME, current_batch, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
+        omi_diagnostics_inc_storage_error();
         writing_error_counter++;
         LOG_ERR("batch write failed at sector %u: %d", sector, ret);
         if (writing_error_counter > ERROR_THRESHOLD) {
