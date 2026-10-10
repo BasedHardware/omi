@@ -3,6 +3,7 @@ package com.friend.ios
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.Context
+import android.os.Build
 import android.os.BatteryManager
 import android.os.PowerManager
 import com.friend.ios.ble.BleHostApiImpl
@@ -53,7 +54,24 @@ class MainActivity: FlutterActivity() {
                     result.error("battery_unavailable", "Phone battery unavailable", null)
                 } else {
                     val power = getSystemService(Context.POWER_SERVICE) as PowerManager
+                    // Snapshot only. Older Android and failed/unknown reads
+                    // have no thermal coverage; never synthesize a normal state.
+                    val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        try {
+                            when (power.currentThermalStatus) {
+                                PowerManager.THERMAL_STATUS_NONE -> "none"
+                                PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                                PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                                PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                                PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                                PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                                PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                                else -> null
+                            }
+                        } catch (_: Exception) { null }
+                    } else { null }
                     result.success(mapOf(
+                        "thermal_state" to thermal,
                         "battery_level" to ((level.toDouble() / scale) * 100).toInt(),
                         "battery_charging" to (plugged != 0),
                         "os_battery_saver" to power.isPowerSaveMode

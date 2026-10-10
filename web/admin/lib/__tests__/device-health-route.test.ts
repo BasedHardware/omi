@@ -154,6 +154,8 @@ describe("device health stats route", () => {
           app_version: "1.0.558",
           label: "iOS 1.0.558 (1347)",
           n_pairs: 4,
+          n_v1_pairs: 0,
+          n_v2_intervals: 0,
           users: 2,
           p50_drain_per_hour: 3.5,
           p90_drain_per_hour: 8.1,
@@ -175,15 +177,23 @@ describe("device health stats route", () => {
     const phone = sent.find((query) => query.includes("FROM pairs"));
     expect(pendant).toBeTruthy();
     expect(phone).toBeTruthy();
-    expect(pendant!.match(/quantileIf\(0\.5\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g)).toHaveLength(1);
-    expect(pendant!.match(/quantileIf\(0\.9\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g)).toHaveLength(1);
+    expect(
+      pendant!.match(
+        /quantileIf\(0\.5\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g
+      )
+    ).toHaveLength(1);
+    expect(
+      pendant!.match(
+        /quantileIf\(0\.9\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g
+      )
+    ).toHaveLength(1);
     expect(pendant).toContain("BETWEEN 0.1 AND 100");
     expect(pendant).toContain("timestamp >= now() - INTERVAL 14 DAY");
     expect(phone).toContain("Phone Battery Sample");
     expect(phone).toContain("timestamp >= now() - INTERVAL 14 DAY");
     expect(phone).toContain("FROM pairs");
     expect(phone).toContain("lagInFrame");
-    expect(phone).not.toContain("quantileIf");
+    expect(phone).toContain("quantileIf");
     expect(pendant).toContain(
       "coalesce(nullIf(properties.$os_name,''), properties.platform) AS os"
     );
@@ -212,6 +222,46 @@ describe("device health stats route", () => {
     expect(phone).toContain("AS n_pairs");
   });
 
+  it("prefers self-contained v2 intervals per build and reports both transition counts", async () => {
+    configure();
+    posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
+      if (query.includes("Mobile Device Health Daily")) return [];
+      return [
+        ["iOS", "1348", "1.0.559", 5, 3, 0, 4, 9, 5],
+        ["Android", "1347", "1.0.558", 7, 4, 2, 6, 7, 0],
+      ];
+    });
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series[0]).toMatchObject({
+      n_pairs: 5,
+      n_v1_pairs: 9,
+      n_v2_intervals: 5,
+      p50_drain_per_hour: 0,
+    });
+    expect(body.phone_health.series[1]).toMatchObject({
+      n_pairs: 7,
+      n_v1_pairs: 7,
+      n_v2_intervals: 0,
+    });
+    const phone = queries().find((query) => query.includes("FROM pairs"))!;
+    expect(phone).toContain("countIf(schema_version = 2) > 0 AS has_v2");
+    expect(phone).toContain(
+      "if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)"
+    );
+    expect(phone).toContain("properties.battery_observation_build");
+    expect(phone).toContain("properties.battery_interval_seconds");
+    expect(phone).toContain("validity = 'same_build'");
+    expect(phone).toContain("interval_s BETWEEN 900 AND 7200");
+    expect(phone).toContain("charging = false AND previous_charging = false");
+    expect(phone).toContain("previous_level - level >= 0");
+    expect(phone).toContain(
+      "(charging_observed = false OR isNull(charging_observed))"
+    );
+    // Presence is derived from all samples, not only accepted intervals.
+    expect(phone).toContain("FROM samples\n      GROUP BY os, build");
+    expect(phone).toContain("WHERE schema_version = 1");
+  });
+
   it("labels a phone build without a version as OS (build)", async () => {
     configure();
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
@@ -235,6 +285,8 @@ describe("device health stats route", () => {
           app_version: "",
           label: "Android (900)",
           n_pairs: 3,
+          n_v1_pairs: 0,
+          n_v2_intervals: 0,
           users: 21,
           p50_drain_per_hour: 2.2,
           p90_drain_per_hour: 4.4,
