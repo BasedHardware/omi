@@ -365,3 +365,73 @@ def test_exchange_firebase_token_raises_when_key_field_missing(monkeypatch) -> N
     with pytest.raises(AuthError) as info:
         oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
     assert "missing the api key" in str(info.value).lower()
+
+
+def test_exchange_firebase_token_preserves_old_keys_when_mint_fails(monkeypatch) -> None:
+    deleted_urls: list[str] = []
+    name = oauth._cli_key_name()
+
+    def fake_get(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json=[{"id": "prior-key", "name": name}])
+
+    def fake_delete(self, url, **kwargs):  # noqa: ANN001
+        deleted_urls.append(url)
+        return httpx.Response(204)
+
+    def fake_post_503(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(503, json={"detail": "temporary mint failure"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(httpx.Client, "delete", fake_delete)
+    monkeypatch.setattr(httpx.Client, "post", fake_post_503)
+
+    with pytest.raises(AuthError):
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+
+    # Old keys must not be deleted if minting failed
+    assert deleted_urls == []
+
+
+def test_exchange_firebase_token_preserves_old_keys_when_mint_missing_key(monkeypatch) -> None:
+    deleted_urls: list[str] = []
+    name = oauth._cli_key_name()
+
+    def fake_get(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json=[{"id": "prior-key", "name": name}])
+
+    def fake_delete(self, url, **kwargs):  # noqa: ANN001
+        deleted_urls.append(url)
+        return httpx.Response(204)
+
+    def fake_post_missing_key(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json={"id": "new-key-without-token"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(httpx.Client, "delete", fake_delete)
+    monkeypatch.setattr(httpx.Client, "post", fake_post_missing_key)
+
+    with pytest.raises(AuthError):
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+
+    assert deleted_urls == []
+
+
+def test_exchange_firebase_token_succeeds_even_if_old_key_delete_fails(monkeypatch) -> None:
+    name = oauth._cli_key_name()
+
+    def fake_get(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json=[{"id": "prior-key", "name": name}])
+
+    def fake_delete(self, url, **kwargs):  # noqa: ANN001
+        raise httpx.ConnectError("delete failed")
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json={"id": "new-key", "key": "minted_key_val"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(httpx.Client, "delete", fake_delete)
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    key = oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert key == "minted_key_val"
+

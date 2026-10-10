@@ -283,24 +283,25 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
 
     The Firebase session authenticates ``/v1/dev/keys`` (backend
     ``get_current_user_id``); the returned dev key is what every other
-    ``/v1/dev/*`` endpoint requires. Re-login first deletes the CLI's own
-    prior keys — matched by our exact :func:`_cli_key_name` only, so a user's
-    other keys are never touched — then mints a fresh one.
+    ``/v1/dev/*`` endpoint requires. Re-login mints a fresh key first, and only
+    cleans up prior CLI keys — matched by our exact :func:`_cli_key_name` only,
+    so a user's other keys are never touched — once the replacement is
+    successfully obtained. If minting fails, prior keys are preserved.
     """
     base = api_base.rstrip("/")
     headers = {"Authorization": f"Bearer {id_token}"}
     key_name = _cli_key_name()
+    old_key_ids: list[str] = []
 
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
-        # Best-effort cleanup of our own stale keys. Non-critical: if listing
-        # or deleting fails, still try to create — a duplicate is recoverable,
-        # a failed login is not.
+        # Discover existing CLI keys so we can prune them after minting.
+        # If listing fails, proceed anyway — creating the new key takes priority.
         try:
             listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
             if listing.status_code == 200:
                 for key in listing.json():
                     if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
-                        client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
+                        old_key_ids.append(str(key["id"]))
         except httpx.HTTPError:
             pass
 
@@ -310,21 +311,32 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
             json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
         )
 
-    if resp.status_code not in (200, 201):
-        raise AuthError(
-            message=f"Could not create an API key for the CLI ({resp.status_code})",
-            detail=(
-                "OAuth sign-in succeeded, but minting a developer API key failed. "
-                "Try again, or use `omi auth login --api-key`."
-            ),
-        )
+        if resp.status_code not in (200, 201):
+            raise AuthError(
+                message=f"Could not create an API key for the CLI ({resp.status_code})",
+                detail=(
+                    "OAuth sign-in succeeded, but minting a developer API key failed. "
+                    "Try again, or use `omi auth login --api-key`."
+                ),
+            )
 
-    raw_key = resp.json().get("key")
-    if not raw_key:
-        raise AuthError(
-            message="Key-mint response was missing the API key",
-            detail="The /v1/dev/keys response did not include a `key` field.",
-        )
+        resp_json = resp.json()
+        raw_key = resp_json.get("key")
+        if not raw_key:
+            raise AuthError(
+                message="Key-mint response was missing the API key",
+                detail="The /v1/dev/keys response did not include a `key` field.",
+            )
+
+        # Only clean up previous keys after the new key is minted and verified.
+        new_key_id = resp_json.get("id")
+        for key_id in old_key_ids:
+            if key_id != new_key_id:
+                try:
+                    client.delete(f"{base}{_DEV_KEYS_PATH}/{key_id}", headers=headers)
+                except httpx.HTTPError:
+                    pass
+
     return str(raw_key)
 
 
