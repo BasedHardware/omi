@@ -28,6 +28,7 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from routers import messaging
 from routers import (
     dream_cohort,
     dream_report,
@@ -216,6 +217,7 @@ app.add_middleware(
     ],
 )
 
+app.include_router(messaging.router)
 app.include_router(proactivity.router)
 app.include_router(dream_cohort.router)
 app.include_router(dream_report.router)
@@ -365,6 +367,9 @@ app.add_middleware(FirestoreTierMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    from utils.messaging.adapters.runtime import start_adapters
+
+    app.state.messaging_runtime = start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
@@ -518,6 +523,15 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    runtime = getattr(app.state, 'messaging_runtime', None)
+    if runtime:
+        stop, task = runtime
+        stop.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()

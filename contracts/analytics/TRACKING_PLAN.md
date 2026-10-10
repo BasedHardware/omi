@@ -151,6 +151,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | siriAskOmiPerformed | Siri Ask Omi Performed | platform, outcome, latency_ms, invoked_via | active | siri-intents |
 | siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
 | conversationUntitledRendered | Conversation Untitled Rendered | surface, age_bucket, summary_retryable | active | conversation-untitled-rendered |
+| chatAppConnectStarted | Chat App Connect Started | channel | active | chat-apps-funnel |
+| chatAppConnected | Chat App Connected | channel | active | chat-apps-funnel |
+| chatAppDisconnected | Chat App Disconnected | channel | active | chat-apps-funnel |
+| chatAppWaitlistJoined | Chat App Waitlist Joined | none | active | chat-apps-funnel |
 
 ## App Review Opportunity decisions
 

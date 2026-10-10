@@ -12615,4 +12615,360 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get pinPersonDescription =>
       'Kiinnitetyt ihmiset pysyvät Ihmiset-listasi yläosassa, eikä Siivous poista niitä.';
+
+  @override
+  String get chatAppsProblemFailed => 'Jokin meni pieleen. Yritä uudelleen.';
+
+  @override
+  String chatAppsIsConnected(String app) {
+    return '$app on yhdistetty';
+  }
+
+  @override
+  String get chatAppsRefreshFailed => 'Päivitys epäonnistui. Näytetään viimeksi nähty tilanne.';
+
+  @override
+  String chatAppsReadOnlyBanner(String app) {
+    return 'Vain luku. Vastaa Omille sovelluksessa $app.';
+  }
+
+  @override
+  String get chatAppsWaitlistConfirmed => 'Kiitos. WhatsApp ilmestyy tänne, kun se on valmis.';
+
+  @override
+  String get chatAppsUseTelegramForNow => 'Käytä toistaiseksi Telegramia';
+
+  @override
+  String chatAppsCouldNotOpen(String app) {
+    return 'Sovellusta $app ei voitu avata. Varmista, että se on asennettu, ja yritä uudelleen.';
+  }
+
+  @override
+  String get chatAppsTryPromise => 'Mitä lupasin Samille eilen?';
+
+  @override
+  String get chatAppsDoesSave => 'Tallentaa muistoja ja hallitsee tehtäviäsi';
+
+  @override
+  String get chatAppsOnTheList => 'Listalla';
+
+  @override
+  String get chatAppsNoChatsTitle => 'Ei vielä keskusteluja';
+
+  @override
+  String chatAppsInChannel(String app) {
+    return 'Sovelluksessa $app';
+  }
+
+  @override
+  String get chatAppsConnectTelegramMessage =>
+      'Omi avaa Telegramin yksityisellä linkillä, joka on tarkoitettu vain sinulle.';
+
+  @override
+  String get chatAppsOpenMessages => 'Avaa Viestit';
+
+  @override
+  String chatAppsDisconnectTitle(String app) {
+    return 'Katkaistaanko yhteys: $app?';
+  }
+
+  @override
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'Terveys, raha ja kaikki yksityiseksi merkitsemäsi pysyvät poissa chat-sovelluksista.';
+
+  @override
+  String get chatAppsConnectIMessageMessage =>
+      'Lähetä Omille yksi viesti numerosta, jota haluat käyttää. Viestin koodi liittää numeron tiliisi.';
+
+  @override
+  String get chatAppsWhatsAppMessage => 'Työstämme Omin tuomista WhatsAppiin. Se ilmestyy tänne, kun se on valmis.';
+
+  @override
+  String chatAppsNoChatsMessage(String app) {
+    return 'Omin kanssa sovelluksessa $app käymäsi keskustelut näkyvät täällä.';
+  }
+
+  @override
+  String get chatAppsViewChats => 'Näytä keskustelut';
+
+  @override
+  String chatAppsDisconnectMessage(String app) {
+    return 'Omi lakkaa vastaamasta sovelluksessa $app ja poistaa sille tallennetun keskusteluhistorian. Sovelluksessa $app jo olevat viestit säilyvät siellä.';
+  }
+
+  @override
+  String chatAppsReadOnlyFooter(String app) {
+    return 'Nämä keskustelut ovat täällä vain luettavissa. Vastaa sovelluksessa $app.';
+  }
+
+  @override
+  String get chatAppsAddToContacts => 'Lisää Omi yhteystietoihin';
+
+  @override
+  String get chatAppsProPerkContext => 'Omi muistaa asiayhteyden kaikissa sovelluksissa';
+
+  @override
+  String get chatAppsWhatsAppMeantime => 'Telegram ja iMessage toimivat jo nyt samoilla muistoilla ja tehtävillä.';
+
+  @override
+  String get chatAppsComingLater => 'Tulossa myöhemmin';
+
+  @override
+  String get chatAppsProblemRateLimited => 'Liian monta yritystä. Odota minuutti ja yritä uudelleen.';
+
+  @override
+  String get chatAppsMessage => 'Viesti';
+
+  @override
+  String chatAppsOpenApp(String app) {
+    return 'Avaa $app';
+  }
+
+  @override
+  String get chatAppsTelegramSubtitle => 'Valmis kahdella napautuksella';
+
+  @override
+  String get chatAppsLoadFailedTitle => 'Chat-sovellusten lataus epäonnistui';
+
+  @override
+  String get chatAppsInsights => 'Omin oivallukset';
+
+  @override
+  String chatAppsShowInAppOff(String app) {
+    return 'Pois: näet ne vain sovelluksessa $app.';
+  }
+
+  @override
+  String get chatAppsProPerkText => 'Lähetä Omille viestejä Telegramista ja iMessagesta';
+
+  @override
+  String get chatAppsVoiceNotesSubtitle => 'Lähetä ääniviesti, niin Omi vastaa siihen.';
+
+  @override
+  String get chatAppsPartOfPro => 'Chat-sovellukset kuuluvat Pro-tilaukseen';
+
+  @override
+  String get chatAppsMessagesApp => 'Viestit';
+
+  @override
+  String get chatAppsTelegramOtherDevice => 'Telegram toisella laitteella?';
+
+  @override
+  String get chatAppsHeroMessage =>
+      'Kysy päivästäsi, tallenna muistoja ja hallitse tehtäviä Telegramista tai iMessagesta. Keskustelusi pysyvät käyttämässäsi sovelluksessa, ja Omi muistaa kaiken, mistä olette puhuneet, kaikkialla.';
+
+  @override
+  String get chatAppsTryRemind => 'Muistuta minua soittamaan äidille sunnuntaina';
+
+  @override
+  String get chatAppsChannelsTitle => 'Chat-sovellukset';
+
+  @override
+  String get chatAppsDoesAnswer => 'Vastaa kysymyksiin keskusteluistasi ja muistoistasi';
+
+  @override
+  String chatAppsChannelChats(String app) {
+    return '$app-keskustelut';
+  }
+
+  @override
+  String get chatAppsIncludedWithPro => 'SISÄLTYY OMI PRO -TILAUKSEEN';
+
+  @override
+  String get chatAppsLink => 'Linkki';
+
+  @override
+  String get chatAppsNeverMessagesOthers => 'Ei koskaan viestitä muille puolestasi';
+
+  @override
+  String get chatAppsNotConnectedTitle => 'Ei yhdistetty';
+
+  @override
+  String get chatAppsTelegramPrivacyNote =>
+      'Omin kanssa käymäsi keskustelut tallentaa myös Telegram. Omi vastaa vain sinulle, ei koskaan muille, ja voit katkaista yhteyden milloin tahansa.';
+
+  @override
+  String get chatAppsProblemOffline => 'Olet offline-tilassa. Tarkista yhteytesi ja yritä uudelleen.';
+
+  @override
+  String get chatAppsIMessageSubtitle => 'Lähetä Omille viesti puhelinnumerostasi';
+
+  @override
+  String get chatAppsPrivateMemories => 'Pidä yksityiset muistot sovelluksessa';
+
+  @override
+  String get chatAppsConnectTelegramTitle => 'Yhdistä Telegram';
+
+  @override
+  String get chatAppsInsightsSubtitle => 'Anna Omin lähettää sinulle yhteenveto tai oivallus tänne.';
+
+  @override
+  String get chatAppsTelegramWaiting => 'Odotetaan, että napautat Aloita Telegramissa…';
+
+  @override
+  String get chatAppsEntrySubtitle => 'Keskustele Omin kanssa sovelluksissa, joita käytät joka päivä.';
+
+  @override
+  String chatAppsConnectedAs(String handle) {
+    return 'Yhdistetty: $handle';
+  }
+
+  @override
+  String get chatAppsProPerkSave => 'Tallenna muistoja ja hallitse tehtäviä suoraan chatista';
+
+  @override
+  String get chatAppsConnectIMessageTitle => 'Yhdistä lähettämällä Omille viesti';
+
+  @override
+  String get chatAppsWaitingMessage =>
+      'Lähetä viesti Viestit-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.';
+
+  @override
+  String get chatAppsShowInApp => 'Näytä nämä keskustelut Omi-sovelluksessa';
+
+  @override
+  String get chatAppsCodeExpiredMessage => 'Hae uusi koodi ja lähetä se Viestit-sovelluksesta.';
+
+  @override
+  String get chatAppsNoMessages => 'Ei viestejä';
+
+  @override
+  String get chatAppsHeroTitle => 'Keskustele Omin kanssa siellä, missä muutenkin keskustelet';
+
+  @override
+  String get chatAppsEntryRowSubtitle => 'Telegram, iMessage ja muut';
+
+  @override
+  String chatAppsCodeExpiresIn(String time) {
+    return 'Koodi vanhenee: $time';
+  }
+
+  @override
+  String get chatAppsNotConnectedMessage => 'Tämän chat-sovelluksen yhteys katkaistiin.';
+
+  @override
+  String get chatAppsRepliesOnlyNote => 'Omi vastaa vain sinulle. Se ei koskaan lähetä viestiä ensin.';
+
+  @override
+  String chatAppsDisconnectFooter(String app) {
+    return 'Yhteyden katkaisu poistaa historian, jonka Omi säilyttää sovellukselle $app.';
+  }
+
+  @override
+  String chatAppsReplyThereAnytime(String app) {
+    return 'Voit lähettää Omille viestin sovelluksessa $app milloin tahansa.';
+  }
+
+  @override
+  String get chatAppsTryAsking => 'Kokeile kysyä';
+
+  @override
+  String get chatAppsTelegramStepReturn => 'Palaa tänne. Vahvistamme, että se onnistui.';
+
+  @override
+  String get chatAppsDoesFiles => 'Lähettää ja vastaanottaa tiedostoja, kuvia ja ääniviestejä';
+
+  @override
+  String get chatAppsTryWeek => 'Tiivistä viikkoni kolmeen riviin';
+
+  @override
+  String chatAppsChannelFooter(String app) {
+    return '$app-keskustelusi pysyvät sovelluksessa $app. Omi tietää silti, mistä olette puhuneet sovelluksessa ja muissa chat-sovelluksissasi.';
+  }
+
+  @override
+  String get chatAppsWhatsAppTitle => 'WhatsApp on tulossa';
+
+  @override
+  String get chatAppsCodeExpiredTitle => 'Tämä koodi vanheni';
+
+  @override
+  String get chatAppsProblemUnavailable => 'Chat-sovellukset eivät ole vielä käytettävissä tililläsi.';
+
+  @override
+  String get chatAppsWhatOmiDoes => 'Mitä Omi tekee chat-sovelluksissa';
+
+  @override
+  String get chatAppsVoiceNotes => 'Ääniviestit';
+
+  @override
+  String get chatAppsNotAvailableYet => 'Ei vielä saatavilla';
+
+  @override
+  String get chatAppsOpenMessagesAgain => 'Avaa Viestit uudelleen';
+
+  @override
+  String chatAppsConnectedOn(String date) {
+    return 'Yhdistetty $date';
+  }
+
+  @override
+  String get chatAppsWaitingTitle => 'Odotetaan viestiäsi';
+
+  @override
+  String get chatAppsEntryTitle => 'Keskustele Omin kanssa';
+
+  @override
+  String get chatAppsTelegramStepOpen => 'Napauta alla Avaa Telegram';
+
+  @override
+  String get chatAppsShowInAppOn => 'Päällä: ne näkyvät Omi-sovelluksessa vain luku -keskusteluina.';
+
+  @override
+  String chatAppsDisconnectChannel(String app) {
+    return 'Katkaise yhteys: $app';
+  }
+
+  @override
+  String get chatAppsTelegramStepStart => 'Napauta Aloita keskustelussasi Omin kanssa';
+
+  @override
+  String get chatAppsLocked => 'Vaatii Omi Pron';
+
+  @override
+  String chatAppsIMessageBody(String code) {
+    return 'Hei Omi, linkityskoodi $code';
+  }
+
+  @override
+  String chatAppsChatIn(String app) {
+    return 'Keskustelu sovelluksessa $app';
+  }
+
+  @override
+  String get chatAppsContactsApp => 'Yhteystiedot';
+
+  @override
+  String get chatAppsCodeNote => 'Koodi toimii vain kerran ja vanhenee 10 minuutissa.';
+
+  @override
+  String get chatAppsMoreComing => 'Lisää sovelluksia on tulossa.';
+
+  @override
+  String get chatAppsInTheMeantime => 'Sillä välin';
+
+  @override
+  String get chatAppsGetNewCode => 'Hae uusi koodi';
+
+  @override
+  String get chatAppsNotifyMe => 'Ilmoita minulle';
+
+  @override
+  String get chatAppsPrefilled => 'Esitäytetty';
+
+  @override
+  String chatAppsTextThisTo(String address) {
+    return 'Ei avautunut? Lähetä tämä numeroon $address';
+  }
+
+  @override
+  String get chatAppsLinkExpired => 'Linkki vanheni. Napauta Avaa Telegram saadaksesi uuden.';
+
+  @override
+  String chatAppsIMessageTo(String address) {
+    return 'Vastaanottaja: Omi · $address';
+  }
+
+  @override
+  String get chatAppsOmiPro => 'OMI PRO';
 }

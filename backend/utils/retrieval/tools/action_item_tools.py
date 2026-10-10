@@ -9,6 +9,7 @@ import contextvars
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
+from utils.messaging.undo import record_write
 import database.action_items as action_items_db
 import database.notifications as notification_db
 from utils.notifications import (
@@ -478,6 +479,7 @@ def create_action_item_tool(
         # Build concise confirmation message
         task_desc = created_item.get('description', 'Task')
         result = f"✅ Added: {task_desc}"
+        result += record_write(uid, 'task', action_item_id, None, created_item)
 
         if created_item.get('due_at'):
             due = created_item['due_at']
@@ -643,6 +645,7 @@ def update_action_item_tool(
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
         result = f"Successfully updated action item: {updated_item.get('description', 'Unknown')}\n"
         result += f"Changes: {', '.join(changes)}"
+        result += record_write(uid, 'task', action_item_id, existing_item, updated_item)
 
         # Send notification if item was marked as completed
         if completed is True:
