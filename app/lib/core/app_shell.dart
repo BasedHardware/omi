@@ -371,7 +371,9 @@ class _AppShellState extends State<AppShell> {
       homeProvider.setupHasSpeakerProfile();
       // Not awaited: the picker must not open on the bundled list while the
       // served one is in flight, but the rest of startup should not wait.
-      homeProvider.loadLanguagesThenSetupPrimary();
+      if (SharedPreferencesUtil().onboardingCompleted) {
+        homeProvider.loadLanguagesThenSetupPrimary();
+      }
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
       try {
