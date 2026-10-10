@@ -207,6 +207,9 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
         } }
         callback(Result.success(JSONObject()
+            .put("observed_at", System.currentTimeMillis())
+            .put("audio_outage_started_at", prefs?.getLong("audio_outage_$addr", 0L)?.takeIf { it > 0L } ?: JSONObject.NULL)
+            .put("audio_packet_days", array("packet_days_$addr"))
             .put("disconnect_history_v2", array("disconnect_history_$addr"))
             .put("battery_history_v2", batteryHistory)
             .put("rssi_samples", samples)

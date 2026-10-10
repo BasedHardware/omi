@@ -166,6 +166,7 @@ class OmiBleForegroundService : Service() {
     private var isBluetoothEnabled = true
     private val syncLock = Any()
     private val audioCounters = ConcurrentHashMap<String, BleAudioPacketCounter>()
+    private val packetDays = ConcurrentHashMap<String, JSONArray>()
     private val pendingAudioRecovery = ConcurrentHashMap<String, Long>()
     private val bleManager get() = OmiBleManager.instance
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
@@ -259,6 +260,8 @@ class OmiBleForegroundService : Service() {
                 result.getOrNull()?.let { value ->
                     FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
                         if (!parsed.isNull("charging")) bleManager.recordChargingState(address, parsed.getBoolean("charging"))
+                        parsed.put("app_build", getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.device_health_app_build", null) ?: JSONObject.NULL)
+                        parsed.put("firmware", getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null) ?: JSONObject.NULL)
                         appendJsonRing("firmware_$address", parsed, FIRMWARE_DIAGNOSTICS_LIMIT, FIRMWARE_DIAGNOSTICS_RETENTION_MS)
                         logBle(address, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
                     }
@@ -560,6 +563,15 @@ class OmiBleForegroundService : Service() {
                 managed.retryCount = 0
             }
 
+            // Persist the outage and session counters before local GATT teardown.
+            val userDisconnected = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(PREFS_USER_DISCONNECTED, false)
+            if (!userDisconnected) {
+                val eventType = if (managed.currentAttemptEstablished) "disconnect" else "fail_to_connect"
+                persistDisconnectEvent(addr, status, isManual = false, eventType = eventType)
+                if (eventType == "fail_to_connect") incrementFailToConnectCount(addr)
+            }
+
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
             managed.currentGattHash = null
@@ -582,16 +594,6 @@ class OmiBleForegroundService : Service() {
             Log.w(TAG, "Device $addr disconnected before ever connecting (status=$status)")
         }
 
-        val userDisconnected = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(PREFS_USER_DISCONNECTED, false)
-        if (!userDisconnected) {
-            val attemptEstablished = managed?.currentAttemptEstablished ?: false
-            val eventType = if (attemptEstablished) "disconnect" else "fail_to_connect"
-            persistDisconnectEvent(addr, status, isManual = false, eventType = eventType)
-            if (eventType == "fail_to_connect") {
-                incrementFailToConnectCount(addr)
-            }
-        }
 
         bleManager.mainHandler.post {
             if (cccdTimeout) reportCccdRecovery(addr, gattHash.toString(), exhausted = !retrying)
@@ -931,18 +933,41 @@ class OmiBleForegroundService : Service() {
 
     private fun recordAudioPacket(address: String, value: ByteArray) {
         val addr = address.uppercase()
-        if (audioCounters[addr]?.record(value) != true) return
-        val marker = pendingAudioRecovery.remove(addr) ?: return
+        val counter = audioCounters[addr] ?: return
+        val before = counter.snapshot()
+        if (!counter.record(value)) return
+        val now = System.currentTimeMillis()
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val days = packetDays.getOrPut(addr) { try { JSONArray(prefs.getString("packet_days_$addr", "[]")) } catch (_: Exception) { JSONArray() } }
+        val calendar = java.util.Calendar.getInstance().apply { timeInMillis = now; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
+        val day = calendar.timeInMillis
+        var row = (0 until days.length()).mapNotNull { days.optJSONObject(it) }.firstOrNull { it.optLong("ts") == day }
+        if (row == null) { row = JSONObject().put("ts", day).put("received", 0L).put("expected", 0L)
+            .put("app_build", getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.device_health_app_build", null) ?: JSONObject.NULL)
+            .put("firmware", prefs.getString("observed_firmware_$addr", null) ?: JSONObject.NULL); days.put(row) }
+        val after = counter.snapshot()
+        row.put("received", row.optLong("received") + after.first - before.first)
+        row.put("expected", row.optLong("expected") + after.second - before.second)
+        while (days.length() > 8) days.remove(0)
+        val marker = pendingAudioRecovery.remove(addr) ?: prefs.getLong("audio_outage_$addr", 0L).takeIf { it > 0L } ?: return
         val key = historyKey(addr)
         val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }
         for (i in history.length() - 1 downTo 0) {
             val item = history.optJSONObject(i) ?: continue
             if (item.optLong("timestamp", 0L) == marker) {
-                item.put("lostAudioSeconds", (System.currentTimeMillis() - marker).coerceAtLeast(0L) / 1000.0)
-                prefs.edit().putString(key, history.toString()).apply()
+                item.put("lostAudioSeconds", (now - marker).coerceAtLeast(0L) / 1000.0)
+                item.put("lostAudioResolvedAt", now)
+                prefs.edit().putString(key, history.toString()).remove("audio_outage_$addr")
+                    .putString("packet_days_$addr", days.toString()).commit()
                 break
             }
+        }
+        if (prefs.getLong("audio_outage_$addr", 0L) > 0L) {
+            history.put(JSONObject().put("timestamp", marker).put("lostAudioResolvedAt", now)
+                .put("reason", "unknown").put("reasonCode", 0).put("isManual", false)
+                .put("eventType", "audio_recovered").put("connectionDurationMs", 0)
+                .put("appState", "unknown").put("timeToReconnectMs", 0))
+            prefs.edit().putString(key, history.toString()).remove("audio_outage_$addr").commit()
         }
     }
 
@@ -977,6 +1002,8 @@ class OmiBleForegroundService : Service() {
         val counter = audioCounters[addr]?.snapshot()
 
         val event = JSONObject().apply {
+            put("app_build", getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.device_health_app_build", null) ?: JSONObject.NULL)
+            put("firmware", prefs.getString("observed_firmware_$addr", null) ?: JSONObject.NULL)
             put("timestamp", now)
             put("reason", if (isManual) "manual" else BleDisconnectReason.fromStatus(status))
             put("reasonCode", status)
@@ -998,12 +1025,16 @@ class OmiBleForegroundService : Service() {
             (0 until history.length()).mapNotNull { history.optJSONObject(it) },
             now, DISCONNECT_RETENTION_MS, MAX_DISCONNECT_HISTORY,
         ) { it.optLong("timestamp", 0L) }
-        prefs.edit().putString(key, JSONArray(retained).toString()).apply()
+        val editor = prefs.edit().putString(key, JSONArray(retained).toString())
+        packetDays[addr]?.let { editor.putString("packet_days_$addr", it.toString()) }
+        if (!isManual && eventType == "disconnect") {
+            val start = prefs.getLong("audio_outage_$addr", now)
+            pendingAudioRecovery[addr] = start
+            editor.putLong("audio_outage_$addr", start)
+        }
+        editor.commit()
         logBle(addr, eventType, event.optString("reason"))
 
-        if (!isManual && managed != null) {
-            if (eventType == "disconnect") pendingAudioRecovery[addr] = now
-        }
     }
 
     fun getExtendedDeviceDiagnostics(address: String): String {
@@ -1016,6 +1047,9 @@ class OmiBleForegroundService : Service() {
         } }
         val counter = audioCounters[addr]?.snapshot()
         return JSONObject()
+            .put("observed_at", System.currentTimeMillis())
+            .put("audio_outage_started_at", prefs.getLong("audio_outage_$addr", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
+            .put("audio_packet_days", packetDays[addr] ?: array("packet_days_$addr"))
             .put("disconnect_history_v2", array(historyKey(addr)))
             .put("battery_history_v2", try {
                 JSONArray(getSharedPreferences("battery_history", MODE_PRIVATE).getString("battery_history_$addr", "[]"))
@@ -1036,9 +1070,11 @@ class OmiBleForegroundService : Service() {
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
         val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
+        val outage = prefs.getLong("audio_outage_${address.uppercase()}", 0L)
+        if (outage > 0L) managed.reconnectDiagnostics.record(outage, "disconnect", false)
         val updated = managed.reconnectDiagnostics.backfilledHistory(
             (0 until history.length()).mapNotNull { history.optJSONObject(it) },
-            System.currentTimeMillis(), managed.hasEverConnected,
+            System.currentTimeMillis(), managed.hasEverConnected || outage > 0L,
             timestampOf = { it.optLong("timestamp", 0L) },
             withDuration = { event, duration -> event.put("timeToReconnectMs", duration) },
         ) ?: return

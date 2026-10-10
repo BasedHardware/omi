@@ -32,7 +32,7 @@ internal class BatteryHistoryRecorder(
     }
 
     @Synchronized
-    fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null) {
+    fun record(key: String, level: Int, nowMs: Long, charging: Boolean? = null, appBuild: String? = null, firmware: String? = null) {
         var history: JSONArray? = null
         if (!baselines.containsKey(key)) {
             val loaded = history(key)
@@ -53,7 +53,8 @@ internal class BatteryHistoryRecorder(
             val sample = point(entry) ?: continue
             if (sample.timestamp >= cutoff) pruned.put(entry)
         }
-        pruned.put(JSONObject().put("ts", nowMs).put("level", level).put("charging", charging ?: JSONObject.NULL))
+        pruned.put(JSONObject().put("ts", nowMs).put("level", level).put("charging", charging ?: JSONObject.NULL)
+            .put("app_build", appBuild ?: JSONObject.NULL).put("firmware", firmware ?: JSONObject.NULL))
         while (pruned.length() > MAX_POINTS) pruned.remove(0)
         write(key, pruned.toString())
         // Advance only after the persistence call succeeds; retries keep the last submitted baseline.

@@ -716,7 +716,9 @@ class OmiBleManager private constructor(private val application: Application) {
 
     @Synchronized
     private fun persistBatteryReading(address: String, level: Int) {
-        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()])
+        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()],
+            application.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.device_health_app_build", null),
+            application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null))
     }
 
     @Synchronized
@@ -873,6 +875,10 @@ class OmiBleManager private constructor(private val application: Application) {
             // A diagnostics callback arriving after its timeout no longer owns the queue.
             if (charUuid == DIAGNOSTICS_CHAR && completion == null) return@dispatchGattCallback
             if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (charUuid == "00002a26-0000-1000-8000-00805f9b34fb") {
+                    application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).edit()
+                        .putString("observed_firmware_$address", value.toString(Charsets.UTF_8)).apply()
+                }
                 completion?.invoke(Result.success(value))
             } else {
                 completion?.invoke(Result.failure(Exception("Read failed with status $status")))

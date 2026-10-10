@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
+import 'package:omi/services/devices/models.dart';
 
 /// Callback signature for characteristic value updates.
 typedef CharacteristicValueCallback = void Function(String serviceUuid, String characteristicUuid, Uint8List value);
@@ -32,6 +35,7 @@ class BleBridge implements BleFlutterApi {
   final Map<String, CaptureIngressHealth> _ingressHealth = {};
   final Set<String> _nativeIngressOwners = {};
   final Set<String> _recoveryDisconnects = {};
+  final Map<String, int> _connectionRevisions = {};
 
   bool nativeOwnsIngress(String deviceId) => _nativeIngressOwners.contains(deviceId.toUpperCase());
   bool preservesCaptureIntent(String deviceId) => _recoveryDisconnects.contains(deviceId.toUpperCase());
@@ -124,6 +128,7 @@ class BleBridge implements BleFlutterApi {
 
   void unregisterPeripheral(String peripheralUuid) {
     final key = peripheralUuid.toUpperCase();
+    _connectionRevisions[key] = (_connectionRevisions[key] ?? 0) + 1;
     _characteristicCallbacks.remove(key);
     _disconnectCallbacks.remove(key);
     _deviceReadyCallbacks.remove(key);
@@ -147,13 +152,14 @@ class BleBridge implements BleFlutterApi {
   @override
   void onDeviceReady(String peripheralUuid, List<BleService> services) {
     final key = peripheralUuid.toUpperCase();
+    _connectionRevisions[key] = (_connectionRevisions[key] ?? 0) + 1;
     _recoveryDisconnects.remove(key);
     if (_ingressHealth[key]?.reason != CaptureIngressHealth.cccdRecoveryReason) _invalidateIngress(key);
     _deviceReadyCallbacks[key]?.call(services);
   }
 
   @override
-  void onPeripheralDisconnected(String peripheralUuid, String? error) {
+  Future<void> onPeripheralDisconnected(String peripheralUuid, String? error) async {
     final key = peripheralUuid.toUpperCase();
     final cccdRecovery = error == 'cccd_timeout' || error == 'cccd_timeout_exhausted';
     if (error == 'capture_recovery' || cccdRecovery) {
@@ -161,6 +167,20 @@ class BleBridge implements BleFlutterApi {
     } else {
       _recoveryDisconnects.remove(key);
     }
+    final revision = (_connectionRevisions[key] ?? 0) + 1;
+    _connectionRevisions[key] = revision;
+    try {
+      final raw = await BleHostApi().getExtendedDeviceDiagnostics(peripheralUuid);
+      if (_connectionRevisions[key] != revision) return;
+      final start = (jsonDecode(raw) as Map)['audio_outage_started_at'] as num?;
+      if (start != null && start > 0) {
+        await DeviceHealthTelemetry.recordOutage(peripheralUuid,
+            at: DateTime.fromMillisecondsSinceEpoch(start.toInt()));
+      }
+    } catch (_) {
+      // Native has already durably recorded the start; import it on emission.
+    }
+    if (_connectionRevisions[key] != revision) return;
     if (!cccdRecovery) _invalidateIngress(key);
     _disconnectCallbacks[key]?.call(false, error);
     if (error == 'pairing_lost') pairingLostCallback?.call();
@@ -174,6 +194,9 @@ class BleBridge implements BleFlutterApi {
     Uint8List value,
   ) {
     final key = peripheralUuid.toUpperCase();
+    if (characteristicUuid.toLowerCase() == audioDataStreamCharacteristicUuid && value.length >= 3) {
+      unawaited(DeviceHealthTelemetry.recordRecovery(peripheralUuid));
+    }
     _characteristicCallbacks[key]?.call(serviceUuid, characteristicUuid, value);
   }
 

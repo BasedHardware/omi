@@ -1,3 +1,4 @@
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
@@ -295,6 +296,16 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  try {
+    final healthPackage = await PackageInfo.fromPlatform();
+    await (await SharedPreferences.getInstance()).setString(
+      'device_health_app_build',
+      '${healthPackage.version}+${healthPackage.buildNumber}',
+    );
+  } catch (_) {
+    // Do not retain a previous installation's build if metadata is unavailable.
+    await (await SharedPreferences.getInstance()).remove('device_health_app_build');
+  }
   // Persisted override must be live before auth resolution and product traffic.
   BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
   // ConnectivityService snapshots its health-check URLs when ServiceManager

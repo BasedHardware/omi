@@ -1,7 +1,15 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   test('daily rollup clips connected duration and counts only that day', () {
     final day = DateTime(2026, 9, 27);
     final start = day.millisecondsSinceEpoch;
@@ -36,7 +44,7 @@ void main() {
     expect(result['reconnect_latency_buckets'], {'<30': 1});
     expect(result['rssi_at_disconnect_buckets'], {'<-75': 1});
     expect(result['lost_audio_seconds'], 5.5);
-    expect(result['audio_packet_loss_ratio'], 0.2);
+    expect(result['audio_packet_loss_ratio'], isNull); // Cross-midnight legacy totals are unknown.
     expect(result['drain_percent_per_hour'], 2);
     expect(result['charge_events'], 1);
     expect(result['device_resets_by_reason'], {'RESET_WATCHDOG': 1});
@@ -166,5 +174,126 @@ void main() {
     expect(result['soc_frozen_samples'], 2);
     expect(result['last_off_charger_mv_min'], 3700);
     expect(result['last_off_charger_mv_max'], 4000);
+  });
+  test('never recovered outage emits loss after restart, capped per device day', () async {
+    final day = DateTime(2026, 10, 9);
+    final start = day.millisecondsSinceEpoch;
+    const id = 'unresolved-restart';
+    // Seed only the durable record: no in-memory disconnect/recovery state.
+    SharedPreferences.setMockInitialValues({
+      DeviceHealthTelemetry.outageKey(id): jsonEncode({'open_since': start - 86400000}),
+      'device_health_day_$id': '2026-10-08',
+    });
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 10),
+        loadDiagnostics: (_) async => '{}',
+        emissionContext: {'app_build': 'new+2'},
+        emit: (_, properties) => events.add(properties));
+    expect(events, hasLength(1));
+    expect(events.single['lost_audio_seconds'], 86400);
+    expect(events.single['unresolved_outage_seconds'], 86400);
+    expect(events.single['unresolved_outage_open'], isTrue);
+    expect(events.single['schema_version'], 2);
+  });
+
+  test('first recovered packet resolves durable outage after process death as today', () async {
+    final start = DateTime(2026, 10, 9, 23, 59);
+    const id = 'recovered-restart';
+    SharedPreferences.setMockInitialValues({
+      DeviceHealthTelemetry.outageKey(id): jsonEncode({'open_since': start.millisecondsSinceEpoch}),
+    });
+    await DeviceHealthTelemetry.recordRecovery(id, at: DateTime(2026, 10, 10, 0, 1));
+    final prefs = await SharedPreferences.getInstance();
+    final record = jsonDecode(prefs.getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record.containsKey('open_since'), isFalse);
+    final result =
+        DeviceHealthTelemetry.rollup({'outage_resolved_days': record['resolved_days']}, DateTime(2026, 10, 10));
+    expect(result['lost_audio_seconds'], 120);
+    expect(result['unresolved_outage_open'], isFalse);
+    expect(result['unresolved_outage_seconds'], isNull);
+  });
+
+  test('backfilled emission uses observation build and firmware, skips missing days', () async {
+    const id = 'provenance';
+    final oldDay = DateTime(2026, 10, 8);
+    final newDay = DateTime(2026, 10, 10);
+    SharedPreferences.setMockInitialValues({'device_health_day_$id': '2026-10-07'});
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id, firmwareRevision: 'current'),
+        now: DateTime(2026, 10, 11),
+        emissionContext: {'app_build': 'current+3'},
+        loadDiagnostics: (_) async => jsonEncode({
+              'battery_history_v2': [
+                {'ts': oldDay.millisecondsSinceEpoch, 'level': 80, 'app_build': 'old+1', 'firmware': 'fw1'},
+                {'ts': newDay.millisecondsSinceEpoch, 'level': 70, 'app_build': 'new+2', 'firmware': null},
+              ]
+            }),
+        emit: (_, properties) => events.add(properties));
+    expect(events.map((e) => e['day']), ['2026-10-08', '2026-10-10']);
+    expect(events.first['day_app_build'], ['old+1']);
+    expect(events.first['day_firmware'], ['fw1']);
+    expect(events.first['firmware'], 'fw1');
+    expect(events.last['day_app_build'], ['new+2']);
+    expect(events.last['day_firmware'], isNull);
+    expect(events.first['os_version'], isNull);
+  });
+
+  test('active packet counts use day observations across midnight', () {
+    final day = DateTime(2026, 10, 10);
+    final start = day.millisecondsSinceEpoch;
+    final result = DeviceHealthTelemetry.rollup({
+      'connected_at': start - 3600000,
+      'observed_at': start + 3600000,
+      'audio_packets_received': 1000,
+      'audio_packets_expected': 2000,
+      'audio_packet_days': [
+        {'ts': start - 86400000, 'received': 90, 'expected': 100},
+        {'ts': start, 'received': 8, 'expected': 10},
+        {'ts': start + 86400000, 'received': 0, 'expected': 100},
+      ],
+    }, day);
+    expect(result['audio_packet_loss_ratio'], 0.2);
+    expect(result['connected_time_fraction'], closeTo(1 / 24, 0.00001));
+  });
+
+  test('duplicate starts preserve earliest outage and catch-up stays within seven days', () async {
+    const id = 'bounded';
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime(2026, 9, 1));
+    await DeviceHealthTelemetry.recordOutage(id, at: DateTime(2026, 10, 10));
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-09-01');
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 11),
+        emissionContext: {},
+        loadDiagnostics: (_) async => '{}',
+        emit: (_, props) => events.add(props));
+    expect(events, hasLength(7));
+    expect(events.first['day'], '2026-10-04');
+    expect(events.every((e) => e['lost_audio_seconds'] == 86400), isTrue);
+  });
+  test('native recoveries are imported once while a newer outage stays open', () async {
+    const id = 'native-catch-up';
+    final start = DateTime(2026, 10, 9, 12).millisecondsSinceEpoch;
+    final nextStart = start + 3600000;
+    final diagnostics = jsonEncode({
+      'audio_outage_started_at': nextStart,
+      'disconnect_history_v2': [
+        {'timestamp': start, 'lostAudioResolvedAt': start + 60000}
+      ],
+    });
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('device_health_day_$id');
+      final events = <Map<String, dynamic>>[];
+      await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+          now: DateTime(2026, 10, 10),
+          emissionContext: {},
+          loadDiagnostics: (_) async => diagnostics,
+          emit: (_, props) => events.add(props));
+      expect(events.single['lost_audio_seconds'], 11 * 3600 + 60);
+      expect(events.single['unresolved_outage_seconds'], 11 * 3600);
+    }
   });
 }

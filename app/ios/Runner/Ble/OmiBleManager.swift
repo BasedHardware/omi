@@ -95,6 +95,7 @@ final class OmiBleManager: NSObject {
     private var lastPacketIndex: [String: Int] = [:]
     private var audioReceived: [String: Int64] = [:]
     private var audioExpected: [String: Int64] = [:]
+    private var packetDays: [String: [[String: Any]]] = [:]
     private var pendingAudioRecovery: [String: Int64] = [:]
     private var chargingState: [String: Bool] = [:]
     private var lastDiagnosticsReadUptime: [String: TimeInterval] = [:]
@@ -850,14 +851,33 @@ final class OmiBleManager: NSObject {
         audioReceived[uuid, default: 0] += 1
         audioExpected[uuid, default: 0] += Int64(delta > 4096 ? 1 : delta) // Stream restart becomes a new baseline.
         lastPacketIndex[uuid] = index
-        if let marker = pendingAudioRecovery.removeValue(forKey: uuid) {
+        let defaults = UserDefaults.standard
+        let now = CheckedIntegerConversion.epochMs()
+        guard let day = CheckedIntegerConversion.int64(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000) else { return }
+        var days = packetDays[uuid] ?? (defaults.array(forKey: "ble_packet_days_\(uuid)") as? [[String: Any]] ?? [])
+        if days.last?["ts"] as? Int64 != day {
+            var point: [String: Any] = ["ts": day, "received": Int64(0), "expected": Int64(0)]
+            point["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+            point["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
+            days.append(point)
+        }
+        let i = days.count - 1
+        days[i]["received"] = (days[i]["received"] as? Int64 ?? 0) + 1
+        days[i]["expected"] = (days[i]["expected"] as? Int64 ?? 0) + Int64(delta > 4096 ? 1 : delta)
+        packetDays[uuid] = Array(days.suffix(8))
+        if let marker = pendingAudioRecovery.removeValue(forKey: uuid) ?? (defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64) {
             let key = Self.historyKey(uuid)
             let defaults = UserDefaults.standard
             var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
             if let i = history.lastIndex(where: { ($0["timestamp"] as? Int64) == marker }) {
-                history[i]["lostAudioSeconds"] = Double(max(0, (CheckedIntegerConversion.epochMs()) - marker)) / 1000
-                persistPropertyListRecords(history, forKey: key, in: defaults)
+                history[i]["lostAudioSeconds"] = Double(max(0, now - marker)) / 1000
+                history[i]["lostAudioResolvedAt"] = now
+            } else {
+                history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now]]).suffix(Self.maxDisconnectHistory))
             }
+            guard persistPropertyListRecords(history, forKey: key, in: defaults) else { return }
+            defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+            persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
         }
     }
 
@@ -888,7 +908,10 @@ final class OmiBleManager: NSObject {
         }
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
-        reads.append(value)
+        var stamped = value
+        stamped["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        stamped["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
+        reads.append(stamped)
         // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
         // maybeEmit can roll up yesterday - 6, whose start is nearly eight days old
         // when the app runs late in the current day, so the ring must cover the
@@ -899,7 +922,9 @@ final class OmiBleManager: NSObject {
 
     func getExtendedDeviceDiagnostics(uuid: String) -> String {
         let defaults = UserDefaults.standard
-        let data: [String: Any] = [
+        var data: [String: Any] = [
+            "observed_at": CheckedIntegerConversion.epochMs(),
+            "audio_packet_days": packetDays[uuid] ?? (defaults.array(forKey: "ble_packet_days_\(uuid)") ?? []),
             "disconnect_history_v2": defaults.array(forKey: Self.historyKey(uuid)) ?? [],
             "battery_history_v2": defaults.array(forKey: Self.batteryHistoryKey(uuid)) ?? [],
             "rssi_samples": (rssiHistory[uuid] ?? []).map { ["ts": $0.ts, "rssi": $0.rssi] },
@@ -913,6 +938,7 @@ final class OmiBleManager: NSObject {
             "capture_health_history": defaults.array(forKey: "ble_capture_health_\(uuid)") ?? [],
             "counters_since": defaults.object(forKey: "ble_diagnostics_counters_since_\(uuid)") ?? NSNull(),
         ]
+        data["audio_outage_started_at"] = defaults.object(forKey: "ble_audio_outage_\(uuid)")
         guard let encoded = try? SafeJSON.data(withJSONObject: data),
               let result = String(data: encoded, encoding: .utf8) else { return "{}" }
         return result
@@ -978,7 +1004,7 @@ final class OmiBleManager: NSObject {
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
         let trend = OmiBleRssiDiagnostics.trend(samples: rssiHistory[uuid] ?? [], nowMs: now)
-        let event: [String: Any] = [
+        var event: [String: Any] = [
             "timestamp": now,
             "reason": isManual ? "manual" : (reason ?? "unknown"),
             "reasonCode": reasonCode,
@@ -993,6 +1019,8 @@ final class OmiBleManager: NSObject {
             "timeToReconnectMs": 0,
             "rssiTrend": trend,
         ]
+        event["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        event["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
         history.append(event)
         var recovery = reconnectDiagnostics[uuid, default: OmiBleReconnectDiagnostics()]
         recovery.recordEvent(timestampMs: now, eventType: eventType, isManual: isManual)
@@ -1003,22 +1031,30 @@ final class OmiBleManager: NSObject {
         )
 
         persistPropertyListRecords(history, forKey: key, in: defaults)
+        persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
         logBle(uuid: uuid, event: eventType, detail: event["reason"] as? String ?? "unknown")
 
         if !isManual {
-            if eventType == "disconnect" { pendingAudioRecovery[uuid] = now }
+            if eventType == "disconnect" {
+                let start = defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64 ?? now
+                pendingAudioRecovery[uuid] = start
+                try? SafeDefaults.store(.int64(start), forKey: "ble_audio_outage_\(uuid)", in: defaults)
+            }
         }
     }
 
     /// On successful didConnect, attribute the recovery interval to the event
     /// that started it, even when later connection attempts failed.
     private func backfillTimeToReconnect(uuid: String) {
-        guard var pending = reconnectDiagnostics.removeValue(forKey: uuid) else { return }
         let defaults = UserDefaults.standard
+        var pending = reconnectDiagnostics.removeValue(forKey: uuid) ?? OmiBleReconnectDiagnostics()
+        if let start = defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64 {
+            pending.recordEvent(timestampMs: start, eventType: "disconnect", isManual: false)
+        }
         let key = OmiBleManager.historyKey(uuid)
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
-            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid),
+            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
             timestampOf: { $0["timestamp"] as? Int64 ?? 0 },
             withDuration: { event, duration in
                 var updated = event
@@ -1113,7 +1149,10 @@ final class OmiBleManager: NSObject {
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
-        history.append(OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: now, level: level, charging: charging))
+        var point = OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: now, level: level, charging: charging)
+        point["app_build"] = defaults.string(forKey: "flutter.device_health_app_build")
+        point["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
+        history.append(point)
 
         if history.count > OmiBleManager.maxBatteryHistoryEntries {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
@@ -1123,6 +1162,8 @@ final class OmiBleManager: NSObject {
             guard let timestamp = entry["ts"] as? Int64,
                   let batteryLevel = entry["level"] as? Int else { return nil }
             var record: [String: PlistValue] = ["ts": .int64(timestamp), "level": .int(batteryLevel)]
+            if let build = entry["app_build"] as? String { record["app_build"] = .string(build) }
+            if let firmware = entry["firmware"] as? String { record["firmware"] = .string(firmware) }
             if let charging = entry["charging"] as? Bool { record["charging"] = .bool(charging) }
             return record
         }
@@ -1494,6 +1535,9 @@ extension OmiBleManager: CBPeripheralDelegate {
                 completion(.failure(error))
             } else {
                 let data = characteristic.value ?? Data()
+                if charUuid == "00002a26-0000-1000-8000-00805f9b34fb", let firmware = String(data: data, encoding: .utf8) {
+                    try? SafeDefaults.store(.string(firmware), forKey: "ble_observed_firmware_\(uuid)")
+                }
                 completion(.success(FlutterStandardTypedData(bytes: data)))
             }
             return

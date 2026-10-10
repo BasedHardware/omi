@@ -15,6 +15,80 @@ class DeviceHealthTelemetry {
   static const eventName = 'Mobile Device Health Daily';
   static final Set<String> _inFlightDevices = {};
 
+  static final Map<String, Future<void>> _writes = {};
+  static final Set<String> _packetSeen = {};
+  static String outageKey(String id) => 'device_health_outage_${id.toUpperCase()}';
+
+  /// One bounded record per device. Recovery credits the day of recovery;
+  /// open exposure is clipped independently to each reported calendar day.
+  static Future<void> recordOutage(String id, {DateTime? at}) => _writeOutage(id, (record, now) {
+        if ((record['last_resolved_start'] as num? ?? -1) >= now) return;
+        record['open_since'] ??= now;
+        _packetSeen.remove(id.toUpperCase());
+      }, at);
+
+  static Future<void> recordRecovery(String id, {DateTime? at}) {
+    final key = id.toUpperCase();
+    if (!_packetSeen.add(key)) return Future.value();
+    return _resolveOutage(id, at: at);
+  }
+
+  static Future<void> _resolveOutage(String id, {DateTime? at, num? nativeStart}) => _writeOutage(id, (record, now) {
+        final start = nativeStart ?? record['open_since'] as num?;
+        if (start == null || (record['last_resolved_start'] as num? ?? -1) >= start) return;
+        if (record['open_since'] == start) record.remove('open_since');
+        final day = DateTime.fromMillisecondsSinceEpoch(now);
+        final dayKey = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch.toString();
+        final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+        days[dayKey] = ((days[dayKey] as num? ?? 0) + (now - start).clamp(0, 86400000) / 1000).clamp(0, 86400);
+        record['resolved_days'] = days;
+        record['last_resolved_start'] = start;
+      }, at);
+
+  static Future<void> _writeOutage(
+    String id,
+    void Function(Map<String, dynamic>, int) change,
+    DateTime? at,
+  ) {
+    final key = outageKey(id);
+    final next = (_writes[key] ?? Future.value()).catchError((Object _) {}).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final record = jsonDecode(prefs.getString(key) ?? '{}') as Map<String, dynamic>;
+      final before = jsonEncode(record);
+      final now = (at ?? DateTime.now()).millisecondsSinceEpoch;
+      change(record, now);
+      final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+      days.removeWhere((day, _) => int.parse(day) < now - 8 * 86400000);
+      final retainedDays = days.keys.toList()..sort();
+      for (final day in retainedDays.take((retainedDays.length - 8).clamp(0, retainedDays.length))) {
+        days.remove(day);
+      }
+      record['resolved_days'] = days;
+      final encoded = jsonEncode(record);
+      if (encoded != before && !await prefs.setString(key, encoded)) {
+        _packetSeen.remove(id.toUpperCase());
+        throw StateError("Outage persistence failed");
+      }
+    });
+    _writes[key] = next;
+    return next;
+  }
+
+  static bool hasObservation(Map<String, dynamic> diagnostics, DateTime day) {
+    final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+    final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
+    final open = diagnostics['outage_open_since'] as num?;
+    if (open != null && open < end) return true;
+    if ((diagnostics['outage_resolved_days'] as Map?)?.containsKey(start.toString()) == true) return true;
+    for (final key in ['battery_history_v2', 'firmware_diagnostics', 'disconnect_history_v2', 'audio_packet_days']) {
+      for (final point in (diagnostics[key] as List? ?? []).whereType<Map>()) {
+        final ts = point['ts'] ?? point['timestamp'];
+        if (ts is num && ts >= start && ts < end) return true;
+      }
+    }
+    return false;
+  }
+
   static String bucket(num value, List<int> limits) {
     for (final limit in limits) {
       if (value < limit) return '<$limit';
@@ -24,7 +98,9 @@ class DeviceHealthTelemetry {
 
   static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
-    final end = start + const Duration(days: 1).inMilliseconds;
+    final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
+    final observedAt = (diagnostics['observed_at'] as num?)?.toInt() ?? end;
+    final exposureEnd = observedAt.clamp(start, end);
     final events = (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final battery = (diagnostics['battery_history_v2'] as List? ?? []).whereType<Map>().toList();
     final firmware = (diagnostics['firmware_diagnostics'] as List? ?? []).whereType<Map>().toList();
@@ -33,7 +109,26 @@ class DeviceHealthTelemetry {
     final rssiBuckets = <String, int>{};
     final resets = <String, int>{};
     var connectedMs = 0;
-    var lostAudioSeconds = 0.0;
+    double? lostAudioSeconds;
+    final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
+    if (resolved != null) lostAudioSeconds = resolved.toDouble();
+    final openSince = diagnostics['outage_open_since'] as num?;
+    final unresolved =
+        openSince == null ? null : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
+    if (unresolved != null) lostAudioSeconds = (lostAudioSeconds ?? 0) + unresolved;
+    final builds = <String>{};
+    final firmwares = <String>{};
+    for (final point in [
+      ...battery,
+      ...firmware,
+      ...events,
+      ...(diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()
+    ]) {
+      final ts = point['ts'] ?? point['timestamp'];
+      if (ts is! num || ts < start || ts >= end) continue;
+      if (point['app_build'] is String) builds.add(point['app_build'] as String);
+      if (point['firmware'] is String) firmwares.add(point['firmware'] as String);
+    }
     var received = 0;
     var expected = 0;
     for (final event in events) {
@@ -54,15 +149,28 @@ class DeviceHealthTelemetry {
         final key = bucket(rssi, [-90, -75, -60]);
         rssiBuckets[key] = (rssiBuckets[key] ?? 0) + 1;
       }
-      lostAudioSeconds += (event['lostAudioSeconds'] as num?)?.toDouble() ?? 0;
-      received += (event['audioPacketsReceived'] as num?)?.toInt() ?? 0;
-      expected += (event['audioPacketsExpected'] as num?)?.toInt() ?? 0;
+      if (event['lostAudioResolvedAt'] == null && event['lostAudioSeconds'] is num) {
+        lostAudioSeconds = (lostAudioSeconds ?? 0) + (event['lostAudioSeconds'] as num).toDouble();
+      }
+      // Legacy whole-session totals are usable only when wholly inside the day.
+      if (!diagnostics.containsKey('audio_packet_days') && ts - duration >= start) {
+        received += (event['audioPacketsReceived'] as num?)?.toInt() ?? 0;
+        expected += (event['audioPacketsExpected'] as num?)?.toInt() ?? 0;
+      }
     }
     final activeSince = (diagnostics['connected_at'] as num?)?.toInt() ?? 0;
-    if (activeSince > 0 && activeSince < end) {
-      connectedMs += end - activeSince.clamp(start, end);
-      received += (diagnostics['audio_packets_received'] as num?)?.toInt() ?? 0;
-      expected += (diagnostics['audio_packets_expected'] as num?)?.toInt() ?? 0;
+    if (activeSince > 0 && activeSince < exposureEnd) {
+      connectedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+      if (!diagnostics.containsKey('audio_packet_days') && activeSince >= start) {
+        received += (diagnostics['audio_packets_received'] as num?)?.toInt() ?? 0;
+        expected += (diagnostics['audio_packets_expected'] as num?)?.toInt() ?? 0;
+      }
+    }
+    for (final point in (diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()) {
+      final ts = point['ts'] as num?;
+      if (ts == null || ts < start || ts >= end) continue;
+      received += (point['received'] as num?)?.toInt() ?? 0;
+      expected += (point['expected'] as num?)?.toInt() ?? 0;
     }
     var drainLevels = 0;
     var drainHours = 0.0;
@@ -137,8 +245,13 @@ class DeviceHealthTelemetry {
       'disconnects_by_reason': reasons,
       'reconnect_latency_buckets': reconnectBuckets,
       'rssi_at_disconnect_buckets': rssiBuckets,
-      'lost_audio_seconds': lostAudioSeconds,
-      'audio_packet_loss_ratio': expected == 0 ? 0 : (expected - received).clamp(0, expected) / expected,
+      'schema_version': 2,
+      'day_app_build': builds.isEmpty ? null : (builds.toList()..sort()),
+      'day_firmware': firmwares.isEmpty ? null : (firmwares.toList()..sort()),
+      'lost_audio_seconds': lostAudioSeconds?.clamp(0, 86400),
+      'unresolved_outage_seconds': unresolved,
+      'unresolved_outage_open': openSince != null && openSince < end,
+      'audio_packet_loss_ratio': expected == 0 ? null : (expected - received).clamp(0, expected) / expected,
       'drain_percent_per_hour': drainHours == 0 ? 0 : drainLevels / drainHours,
       'charge_events': chargeEvents,
       'cliff_count': cliffCount,
@@ -152,37 +265,78 @@ class DeviceHealthTelemetry {
     };
   }
 
-  static Future<void> maybeEmit(BtDevice device) async {
+  static Future<void> maybeEmit(
+    BtDevice device, {
+    DateTime? now,
+    Future<String> Function(String)? loadDiagnostics,
+    void Function(String, Map<String, dynamic>)? emit,
+    Map<String, dynamic>? emissionContext,
+  }) async {
     if (!AnalyticsManager.trackingEnabled || !_inFlightDevices.add(device.id)) return;
     try {
-      final now = DateTime.now();
-      final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+      now ??= DateTime.now();
+      final identityEpoch = AnalyticsManager.identityEpoch;
+      final yesterday = DateTime(now.year, now.month, now.day - 1);
       final key = 'device_health_day_${device.id}';
       final prefs = await SharedPreferences.getInstance();
       final last = DateTime.tryParse(prefs.getString(key) ?? '');
       if (last != null && !last.isBefore(yesterday)) return;
-      final raw = await BleHostApi().getExtendedDeviceDiagnostics(device.id);
+      final raw = await (loadDiagnostics ?? BleHostApi().getExtendedDeviceDiagnostics)(device.id);
       final diagnostics = jsonDecode(raw) as Map<String, dynamic>;
-      final package = await PackageInfo.fromPlatform();
-      final phone = Platform.isIOS
-          ? (await DeviceInfoPlugin().iosInfo).utsname.machine
-          : (await DeviceInfoPlugin().androidInfo).model;
-      var day = last == null ? yesterday : last.add(const Duration(days: 1));
-      final oldest = yesterday.subtract(const Duration(days: 6));
+      // Import native starts/recoveries missed while Dart was suspended. Native
+      // retains the first start, even across failed reconnects and process death.
+      final nativeStart = diagnostics['audio_outage_started_at'] as num?;
+      if (nativeStart != null && nativeStart > 0) {
+        await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart.toInt()));
+      }
+      final recoveries = (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList()
+        ..sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
+      for (final event in recoveries) {
+        final recovered = event['lostAudioResolvedAt'] as num?;
+        final start = event['timestamp'] as num?;
+        if (recovered == null || start == null) continue;
+        await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered.toInt()));
+      }
+      await (_writes[outageKey(device.id)] ?? Future.value());
+      final outage = jsonDecode(prefs.getString(outageKey(device.id)) ?? '{}') as Map;
+      diagnostics['outage_open_since'] = outage['open_since'];
+      diagnostics['outage_resolved_days'] = outage['resolved_days'];
+      final package = emissionContext == null ? await PackageInfo.fromPlatform() : null;
+      final phone = emissionContext != null
+          ? null
+          : Platform.isIOS
+              ? (await DeviceInfoPlugin().iosInfo).utsname.machine
+              : (await DeviceInfoPlugin().androidInfo).model;
+      var day = last == null ? yesterday : DateTime(last.year, last.month, last.day + 1);
+      final oldest = DateTime(yesterday.year, yesterday.month, yesterday.day - 6);
       if (day.isBefore(oldest)) day = oldest;
-      while (!day.isAfter(yesterday) && AnalyticsManager.trackingEnabled) {
+      while (!day.isAfter(yesterday) &&
+          AnalyticsManager.trackingEnabled &&
+          identityEpoch == AnalyticsManager.identityEpoch) {
+        if (!hasObservation(diagnostics, day)) {
+          day = DateTime(day.year, day.month, day.day + 1);
+          continue;
+        }
+        final daily = rollup(diagnostics, day);
+        final dayFirmware = daily['day_firmware'] as List?;
+        final dayBuild = daily['day_app_build'] as List?;
         final properties = {
-          ...rollup(diagnostics, day),
-          'firmware': device.firmwareRevision,
+          ...daily,
+          'firmware': dayFirmware?.length == 1 ? dayFirmware!.single : null,
           'hardware_revision': device.hardwareRevision,
-          'app_version': '${package.version}+${package.buildNumber}',
-          'os_version': Platform.operatingSystemVersion,
+          'app_version': dayBuild?.length == 1 ? dayBuild!.single : null,
+          'emission_app_build': emissionContext?['app_build'] ?? '${package?.version}+${package?.buildNumber}',
+          'os_version': null,
           'phone_model': phone,
           'device_model': device.modelNumber,
         };
-        PlatformManager.instance.analytics.track(eventName, properties: properties);
+        if (emit != null) {
+          emit(eventName, properties);
+        } else {
+          PlatformManager.instance.analytics.track(eventName, properties: properties);
+        }
         await prefs.setString(key, properties['day'] as String);
-        day = day.add(const Duration(days: 1));
+        day = DateTime(day.year, day.month, day.day + 1);
       }
     } catch (_) {
       // Diagnostics never blocks the connection.

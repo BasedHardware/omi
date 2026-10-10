@@ -178,6 +178,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// account publication from the retired generation must not land.
   void clearUserData() {
     _sessionGeneration++;
+    _deviceHealthTimer?.cancel();
+    _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
     _bleBatteryLevelListener?.cancel();
     _bleBatteryLevelListener = null;
@@ -618,6 +620,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    if (pairedDeviceId.isNotEmpty) {
+      unawaited(DeviceHealthTelemetry.maybeEmit(SharedPreferencesUtil().btDevice));
+    }
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
       Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
@@ -736,6 +741,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _isDisposed = true;
     _sessionGeneration++;
+    _deviceHealthTimer?.cancel();
+    _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
@@ -945,9 +952,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Auto-sync: check if device has offline files
     unawaited(_checkAndStartAutoSync(device, generation));
     if (pairedDevice != null) unawaited(DeviceHealthTelemetry.maybeEmit(pairedDevice!));
+    final healthDevice = pairedDevice;
     _deviceHealthTimer ??= Timer.periodic(const Duration(hours: 1), (_) {
-      final current = pairedDevice;
-      if (current != null && isConnected) unawaited(DeviceHealthTelemetry.maybeEmit(current));
+      if (!_isCurrent(generation)) return;
+      final current = pairedDevice ?? healthDevice;
+      if (current != null) unawaited(DeviceHealthTelemetry.maybeEmit(current));
     });
 
     notifyListeners();
