@@ -44,6 +44,7 @@ class SurfaceRuntime:
     session_id: str | None = None
     guard: Any = None
     persist: Any = None
+    withhold_private_memories: bool = False
 
 
 surface_runtime: ContextVar[SurfaceRuntime | None] = ContextVar('messaging_surface', default=None)

@@ -98,4 +98,7 @@ class MemoryStore:
         return document
 
     def proof_owner(self, proof):
-        return self.proofs[proof]['uid']
+        row = self.proofs.get(proof)
+        if not row:
+            raise PermissionError('Invalid proof')
+        return row['uid']

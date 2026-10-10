@@ -56,9 +56,16 @@ class Gateway:
         message = ChannelMessage(**payload)
         link = await run_blocking(db_executor, self.store.lookup, message)
         if message.link_proof:
-            owner = await run_blocking(db_executor, self.store.proof_owner, message.link_proof)
-            await run_blocking(db_executor, self.admission, owner)
-            link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
+            try:
+                owner = await run_blocking(db_executor, self.store.proof_owner, message.link_proof)
+                await run_blocking(db_executor, self.admission, owner)
+                link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
+            except PermissionError:
+                # Same fixed reply as an unknown sender. Do not distinguish a bad,
+                # expired, or unauthorized proof.
+                await ChannelReplySink(self.adapter, message).finish('Link your account in Omi to chat here.')
+                await run_blocking(db_executor, self.store.complete, path)
+                return True
         if not link or not link.get('active'):
             sink = ChannelReplySink(self.adapter, message)
             await sink.finish('Link your account in Omi to chat here.')
@@ -148,6 +155,7 @@ class Gateway:
             session['id'],
             guard,
             self.store.persist_message,
+            link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)
         try:

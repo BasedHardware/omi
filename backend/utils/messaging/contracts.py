@@ -30,6 +30,7 @@ class ChannelMessage:
     reply_to: str | None = None
     link_proof: str | None = None
     unlink: bool = False
+    display_name: str | None = None
 
     def __post_init__(self):
         if not all(

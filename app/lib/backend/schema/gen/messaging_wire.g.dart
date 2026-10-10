@@ -31,11 +31,15 @@ class GeneratedChannelLinkRequest {
 }
 
 class GeneratedChannelLinkProof {
+  final String? address;
+  final String? deepLink;
   final DateTime expiresAt;
   final String kind;
   final String proof;
 
   const GeneratedChannelLinkProof({
+    this.address,
+    this.deepLink,
     required this.expiresAt,
     required this.kind,
     required this.proof,
@@ -43,6 +47,8 @@ class GeneratedChannelLinkProof {
 
   factory GeneratedChannelLinkProof.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinkProof(
+      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString, requiredField: false, nullable: true),
+      deepLink: _readFieldValue<String>(_readField(json, const ["deep_link"]), "deep_link", _readString, requiredField: false, nullable: true),
       expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       proof: _required(_readFieldValue<String>(_readField(json, const ["proof"]), "proof", _readString, requiredField: true, nullable: false), "proof"),
@@ -51,6 +57,8 @@ class GeneratedChannelLinkProof {
 
   Map<String, dynamic> toJson() {
     return {
+      'address': address,
+      'deep_link': deepLink,
       'expires_at': expiresAt.toUtc().toIso8601String(),
       'kind': kind,
       'proof': proof,
@@ -60,40 +68,56 @@ class GeneratedChannelLinkProof {
 
 class GeneratedChannelLink {
   final String channel;
+  final String? displayHandle;
   final String externalId;
   final String id;
+  final bool insights;
+  final bool keepPrivateMemoriesInApp;
   final DateTime linkedAt;
   final String provider;
   final bool visibleInApp;
+  final bool voiceNotes;
 
   const GeneratedChannelLink({
     required this.channel,
+    this.displayHandle,
     required this.externalId,
     required this.id,
+    this.insights = false,
+    this.keepPrivateMemoriesInApp = true,
     required this.linkedAt,
     required this.provider,
     this.visibleInApp = false,
+    this.voiceNotes = true,
   });
 
   factory GeneratedChannelLink.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLink(
       channel: _required(_readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString, requiredField: true, nullable: false), "channel"),
+      displayHandle: _readFieldValue<String>(_readField(json, const ["display_handle"]), "display_handle", _readString, requiredField: false, nullable: true),
       externalId: _required(_readFieldValue<String>(_readField(json, const ["external_id"]), "external_id", _readString, requiredField: true, nullable: false), "external_id"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      insights: _required(_readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool, requiredField: false, nullable: false, defaultValue: false), "insights"),
+      keepPrivateMemoriesInApp: _required(_readFieldValue<bool>(_readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool, requiredField: false, nullable: false, defaultValue: true), "keep_private_memories_in_app"),
       linkedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["linked_at"]), "linked_at", _readDateTime, requiredField: true, nullable: false), "linked_at"),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: true, nullable: false), "provider"),
       visibleInApp: _required(_readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool, requiredField: false, nullable: false, defaultValue: false), "visible_in_app"),
+      voiceNotes: _required(_readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool, requiredField: false, nullable: false, defaultValue: true), "voice_notes"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'channel': channel,
+      'display_handle': displayHandle,
       'external_id': externalId,
       'id': id,
+      'insights': insights,
+      'keep_private_memories_in_app': keepPrivateMemoriesInApp,
       'linked_at': linkedAt.toUtc().toIso8601String(),
       'provider': provider,
       'visible_in_app': visibleInApp,
+      'voice_notes': voiceNotes,
     };
   }
 }
@@ -119,21 +143,33 @@ class GeneratedChannelLinksResponse {
 }
 
 class GeneratedChannelVisibilityRequest {
-  final bool visibleInApp;
+  final bool? insights;
+  final bool? keepPrivateMemoriesInApp;
+  final bool? visibleInApp;
+  final bool? voiceNotes;
 
   const GeneratedChannelVisibilityRequest({
-    required this.visibleInApp,
+    this.insights,
+    this.keepPrivateMemoriesInApp,
+    this.visibleInApp,
+    this.voiceNotes,
   });
 
   factory GeneratedChannelVisibilityRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelVisibilityRequest(
-      visibleInApp: _required(_readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool, requiredField: true, nullable: false), "visible_in_app"),
+      insights: _readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool, requiredField: false, nullable: true),
+      keepPrivateMemoriesInApp: _readFieldValue<bool>(_readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool, requiredField: false, nullable: true),
+      visibleInApp: _readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool, requiredField: false, nullable: true),
+      voiceNotes: _readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'insights': insights,
+      'keep_private_memories_in_app': keepPrivateMemoriesInApp,
       'visible_in_app': visibleInApp,
+      'voice_notes': voiceNotes,
     };
   }
 }

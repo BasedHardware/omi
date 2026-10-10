@@ -19,6 +19,14 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from utils import encryption
 from utils.messaging.identity import key
 
+_LINK_SETTINGS = ('visible_in_app', 'voice_notes', 'keep_private_memories_in_app', 'insights')
+_SETTING_DEFAULTS = {
+    'visible_in_app': False,
+    'voice_notes': True,
+    'keep_private_memories_in_app': True,
+    'insights': False,
+}
+
 
 class MessagingStore:
     def __init__(self, *, firestore_client=None):
@@ -77,10 +85,13 @@ class MessagingStore:
                 provider=message.provider,
                 external_id=message.external_user_id,
                 generation=existing.get('generation') if existing.get('active') else str(uuid4()),
-                visible_in_app=existing.get('visible_in_app', False),
                 linked_at=now,
                 active=True,
+                display_handle=_display_handle(getattr(message, 'display_name', None))
+                or existing.get('display_handle'),
             )
+            for name, default in _SETTING_DEFAULTS.items():
+                link[name] = existing.get(name, default)
             tx.set(identity, link)
             tx.set(self.user(uid).collection('channel_links').document(identity.id), link)
             tx.delete(proof_ref)
@@ -96,12 +107,18 @@ class MessagingStore:
         return [dict(doc.to_dict(), id=doc.id) for doc in self.user(uid).collection('channel_links').stream()]
 
     def set_visibility(self, uid, link_id, visible):
+        self.set_settings(uid, link_id, {'visible_in_app': visible})
+
+    def set_settings(self, uid, link_id, updates):
+        patch = {name: updates[name] for name in _LINK_SETTINGS if name in updates and updates[name] is not None}
+        if not patch or any(not isinstance(value, bool) for value in patch.values()):
+            raise ValueError('No settings')
         ref = self.user(uid).collection('channel_links').document(link_id)
         if not ref.get().exists:
             raise PermissionError('Link not found')
         batch = self.db.batch()
-        batch.update(ref, {'visible_in_app': visible})
-        batch.update(self.db.collection('channel_identities').document(link_id), {'visible_in_app': visible})
+        batch.update(ref, patch)
+        batch.update(self.db.collection('channel_identities').document(link_id), patch)
         batch.commit()
 
     def unlink(self, uid, link_id):
@@ -306,6 +323,15 @@ class MessagingStore:
                     if len(paths) >= limit:
                         return paths
         return paths
+
+
+def _display_handle(value):
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lstrip('@')
+    if not value or len(value) > 64 or any(character.isspace() for character in value):
+        return None
+    return value
 
 
 def _deletion_blocks(snapshot):
