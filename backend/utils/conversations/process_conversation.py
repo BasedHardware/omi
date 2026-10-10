@@ -2172,36 +2172,56 @@ def _save_action_items(
     )
 
 
-def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
-    vector = generate_embedding(str(conversation.structured)) if not update_only else None
-    tz = notification_db.get_user_time_zone(uid) or ''
+def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as outcomes
 
-    metadata: Dict[str, Any] = {}
+    if conversation.discarded:
+        outcomes.labels(outcome='skipped_discarded').inc()
+        return False
+    if not conversation.structured:
+        outcomes.labels(outcome='skipped_no_structured').inc()
+        return False
+    try:
+        vector = generate_embedding(str(conversation.structured)) if not update_only else None
+        tz = notification_db.get_user_time_zone(uid) or ''
 
-    # Extract metadata based on conversation source
-    if conversation.source == ConversationSource.external_integration:
-        ext_data: Dict[str, Any] = conversation.external_data or {}
-        text_source = ext_data.get('text_source')
-        text_content = ext_data.get('text')
-        if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
-            text_source_spec = ext_data.get('text_source_spec') or ''
-            if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = retrieve_metadata_from_message(
-                    uid, conversation.created_at, text_content, tz, text_source_spec
-                )
-            elif text_source == ExternalIntegrationConversationSource.other.value:
-                metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
-    else:
-        metadata = retrieve_metadata_fields_from_structured(uid, conversation.created_at, conversation.structured, tz)
+        metadata: Dict[str, Any] = {}
 
-    metadata['created_at'] = int(conversation.created_at.timestamp())
+        # Extract metadata based on conversation source
+        if conversation.source == ConversationSource.external_integration:
+            ext_data: Dict[str, Any] = conversation.external_data or {}
+            text_source = ext_data.get('text_source')
+            text_content = ext_data.get('text')
+            if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
+                text_source_spec = ext_data.get('text_source_spec') or ''
+                if text_source == ExternalIntegrationConversationSource.message.value:
+                    metadata = retrieve_metadata_from_message(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+                elif text_source == ExternalIntegrationConversationSource.other.value:
+                    metadata = retrieve_metadata_from_text(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+        else:
+            metadata = retrieve_metadata_fields_from_structured(
+                uid, conversation.created_at, conversation.structured, tz
+            )
+
+        metadata['created_at'] = int(conversation.created_at.timestamp())
+    except Exception:
+        if not update_only:
+            outcomes.labels(outcome='error').inc()
+        raise
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata)
+        if not upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata):
+            return False
+        outcomes.labels(outcome='success').inc()
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
+    return True
 
 
 def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # referenced in tests
@@ -3040,8 +3060,13 @@ def process_conversation(
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted, completed=conversation)
     if not persisted:
+        # Summary vectors are idempotent and are not owned by the durable folder/apps obligation.
+        if not discarded and conversation.structured:
+            submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
         logger.info(
-            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+            'processing result fenced before folder/apps completion side effects uid=%s conversation=%s',
+            uid,
+            conversation.id,
         )
         return conversation
 

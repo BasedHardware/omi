@@ -142,14 +142,22 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 @_account_external_data_write
-def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
+
     if index is None:
-        return
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        return False
     data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
     typed_metadata: Dict[str, Any] = data['metadata']
     typed_metadata.update(metadata)
-    res = index.upsert(vectors=[data], namespace="ns1")
+    try:
+        res = index.upsert(vectors=[data], namespace="ns1")
+    except Exception:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        raise
     logger.info(f'upsert_vector {res}')
+    return True
 
 
 @_account_external_data_write
