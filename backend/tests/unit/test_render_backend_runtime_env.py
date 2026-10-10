@@ -858,7 +858,7 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
 
 
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
-    # Base mounts plus 2026-10-09's prod-only dream salt on report/sweep hosts.
+    # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
     common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
     baseline = {
@@ -872,6 +872,10 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'MCP_OAUTH_CLIENTS_JSON',
             'SCREEN_FRAME_SIGNING_SECRET',
             'DREAM_AGENT_FEEDBACK_SALT',
+            'TELEGRAM_BOT_TOKEN',
+            'TELEGRAM_WEBHOOK_SECRET',
+            'LINQ_API_KEY',
+            'LINQ_WEBHOOK_SECRET',
         },
         'backend-sync': common | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT'},
         'backend-sync-backfill': common,

@@ -3067,7 +3067,8 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
-      self = GoalType(rawValue: raw) ?? ._unknown
+      let normalized = raw.split(separator: ".").last.map(String.init) ?? raw
+      self = GoalType(rawValue: normalized) ?? ._unknown
     }
   }
 

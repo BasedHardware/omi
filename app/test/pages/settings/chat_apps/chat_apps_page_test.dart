@@ -58,6 +58,15 @@ void main() {
       expect(find.text('Never messages other people for you'), findsOneWidget);
     });
 
+    for (final plan in PlanType.values.where((plan) => plan.isPaid)) {
+      testWidgets('${plan.name} is eligible to connect both channels', (tester) async {
+        await pumpPage(tester, plan: plan);
+        expect(find.text('Connect'), findsNWidgets(2));
+        expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
+        expect(find.byKey(const ValueKey('chat_apps_pro_card')), findsNothing);
+      });
+    }
+
     testWidgets('a connected link shows its handle and Try asking', (tester) async {
       final backend = FakeMessagingBackend()..links = [linkJson(id: linkIdTelegram, channel: 'telegram')];
       await pumpPage(tester, backend: backend);

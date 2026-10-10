@@ -1,6 +1,7 @@
 """Behavioral coalescing, budget, acknowledgement and admission regression contracts."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
@@ -12,7 +13,7 @@ from database import dream_store
 from models.dream_agent import Triage, Cluster
 from tests.support.dream_firestore import DreamFirestore
 from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError, InvalidFirestoreValueError
-from utils import dream_agent, dream_reads, dream_transport
+from utils import dream_agent, dream_reads, dream_transport, dream_prompt
 from utils.dream_prompt import fits_triage
 from utils.llm.shaped_agent import Turn
 
@@ -33,7 +34,9 @@ def queue(monkeypatch):
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda uid, ref: {'content': 'Synthetic record ' * 100})
+    monkeypatch.setattr(
+        dream_reads, 'read_record', lambda uid, ref: {'structured': {'title': 'Synthetic record ' * 100}}
+    )
     return db
 
 
@@ -79,7 +82,7 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     assert list(records) == [f'conversations/{i}' for i in range(79, 79 - len(consumed), -1)]
     assert fits_triage(records, caps)
     assert not fits_triage(
-        {**records, f'conversations/{79 - len(consumed)}': {'content': 'Synthetic record ' * 100}}, caps
+        {**records, f'conversations/{79 - len(consumed)}': {'structured': {'title': 'Synthetic record ' * 100}}}, caps
     )
     dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
     assert dream_store.dirty_count(UID) == 80 - len(consumed)
@@ -91,6 +94,67 @@ def test_budget_reads_newest_first_and_watermark_never_skips_unread(queue):
     next_records, _ = dream_reads.read_changes(UID, next_lease, caps)
     assert set(next_records).isdisjoint(records)
     assert list(next_records)[0] == f'conversations/{79 - len(consumed)}'
+
+
+@pytest.mark.parametrize(
+    'words',
+    [
+        'Synthetic robot discussion about gears. ',
+        'Cuộc thảo luận tổng hợp về rô bốt và những bánh răng. ',
+    ],
+)
+def test_twenty_large_conversations_keep_depth_and_defer_unread(queue, monkeypatch, words):
+    seed(queue, 20)
+    row = {
+        'structured': {'title': 'Synthetic robot', 'overview': 'Invented engineering discussion'},
+        'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + words * 2000 + ' TAIL'}],
+    }
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    caps = Caps(tokens=16000)
+    lease = dream_store.acquire(UID, caps, now=NOW)
+    records, consumed = dream_reads.read_changes(UID, lease, caps)
+    assert 1 < len(records) < 20
+    assert len(consumed) == len(records)
+    budget = 8000
+    messages = dream_prompt.evidence_message(records, Triage, budget)
+    projected = json.loads(messages[0]['content'])['records']
+    assert all(len(value) >= 600 for value in projected.values())
+    assert all('HEAD' in value and value.endswith('TAIL') for value in projected.values())
+    assert (
+        dream_transport.input_ceiling(
+            dream_prompt.mount(Triage, budget, dream_prompt.TRIAGE_INSTRUCTIONS).messages(messages),
+            Triage.model_json_schema(),
+        )
+        + 768
+        <= budget
+    )
+    assert not fits_triage({**records, 'conversations/next': row}, caps)
+    dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
+    remaining = {
+        f"{snapshot.to_dict()['collection']}/{snapshot.to_dict()['id']}" for snapshot in dream_store.dirty_refs(UID)
+    }
+    assert remaining == {f'conversations/{i}' for i in range(20)} - set(records)
+    assert dream_store.dirty_count(UID) == 20 - len(consumed)
+    next_lease = dream_store.acquire(UID, caps, now=NOW)
+    next_records, _ = dream_reads.read_changes(UID, next_lease, caps)
+    assert next_records and set(next_records).issubset(remaining)
+
+
+def test_single_huge_conversation_is_admitted_and_acknowledged(queue, monkeypatch):
+    seed(queue, 1)
+    row = {'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + 'Synthetic words ' * 100000 + ' TAIL'}]}
+    monkeypatch.setattr(dream_reads, 'read_record', lambda *a: row)
+    caps = Caps(tokens=16000)
+    lease = dream_store.acquire(UID, caps, now=NOW)
+    records, consumed = dream_reads.read_changes(UID, lease, caps)
+    assert list(records) == ['conversations/0'] and len(consumed) == 1
+    messages = dream_prompt.evidence_message(records, Triage, 8000)
+    value = json.loads(messages[0]['content'])['records']['conversations/0']
+    assert len(value) >= 600
+    assert value.startswith('SPEAKER_00: HEAD') and value.endswith('TAIL')
+    assert 'chars omitted' in value
+    dream_store.finish(UID, lease, {'tokens': 1}, success=True, consumed=consumed)
+    assert dream_store.dirty_count(UID) == 0
 
 
 def test_failed_pass_keeps_every_version_queued(queue):

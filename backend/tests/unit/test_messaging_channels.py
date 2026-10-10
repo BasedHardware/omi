@@ -16,6 +16,7 @@ from utils.messaging.contracts import Principal, ReentryEvent
 from utils.messaging.projection import ToolProjection
 from utils.messaging.gateway import Gateway
 from utils.messaging import history
+from config.plan_catalog import PAID_PLAN_TYPES
 
 
 @pytest.fixture
@@ -300,6 +301,86 @@ def test_access_uses_existing_subscription_authority_and_defaults_off(monkeypatc
     monkeypatch.setattr(access, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan=PlanType.basic))
     with pytest.raises(PermissionError):
         access.require_access('u')
+
+
+@pytest.mark.parametrize('plan', sorted(PAID_PLAN_TYPES, key=lambda plan: plan.value))
+def test_access_admits_every_valid_paid_plan(monkeypatch, plan):
+    from database import users
+    from models.users import Subscription, SubscriptionStatus
+    from utils.messaging import access
+
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS', 'on')
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS_UIDS', 'u')
+    monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
+    subscription = Subscription(
+        plan=plan,
+        status=SubscriptionStatus.active,
+        current_period_end=int((datetime.now(timezone.utc) + timedelta(days=1)).timestamp()),
+    )
+    monkeypatch.setattr(users, 'get_existing_user_subscription', lambda uid, **kwargs: subscription)
+    access.require_access('u')
+
+
+@pytest.mark.parametrize('plan', ['basic', 'free', 'expired', 'missing'])
+def test_access_rejects_free_and_expired_subscriptions(monkeypatch, plan):
+    from database import users
+    from models.users import PlanType, Subscription, SubscriptionStatus
+    from utils.messaging import access
+
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS', 'on')
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS_UIDS', 'u')
+    monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
+    # Free uses the catalog's basic wire identity. Expired paid plans must be
+    # downgraded by the real subscription authority, never trusted as paid.
+    subscription = (
+        None
+        if plan == 'missing'
+        else Subscription(
+            plan=PlanType.architect if plan == 'expired' else PlanType.basic,
+            status=SubscriptionStatus.inactive if plan == 'free' else SubscriptionStatus.active,
+            current_period_end=int((datetime.now(timezone.utc) - timedelta(days=1)).timestamp()),
+        )
+    )
+    monkeypatch.setattr(users, 'get_existing_user_subscription', lambda uid, **kwargs: subscription)
+    with pytest.raises(PermissionError, match='Paid plan required'):
+        access.require_access('u')
+
+
+@pytest.mark.parametrize('case', ['paid', 'basic', 'expired', 'outside-cohort', 'switch-off'])
+def test_link_proof_http_admission(monkeypatch, case):
+    from database import users
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from models.users import PlanType, Subscription, SubscriptionStatus
+    from routers import messaging
+    from utils.messaging import access
+
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS', 'off' if case == 'switch-off' else 'on')
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS_UIDS', 'other' if case == 'outside-cohort' else 'u')
+    monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
+    subscription = Subscription(
+        plan=PlanType.basic if case == 'basic' else PlanType.plus,
+        status=SubscriptionStatus.active,
+        current_period_end=int(
+            (datetime.now(timezone.utc) + timedelta(days=-1 if case == 'expired' else 1)).timestamp()
+        ),
+    )
+    monkeypatch.setattr(users, 'get_existing_user_subscription', lambda uid, **kwargs: subscription)
+    store = MemoryStore()
+    monkeypatch.setattr(messaging, 'MessagingStore', lambda: store)
+    app = FastAPI()
+    app.include_router(messaging.router)
+    route = next(route for route in app.routes if route.path == '/v1/messaging/link-proofs')
+    app.dependency_overrides[route.dependant.dependencies[0].call] = lambda: 'u'
+    with TestClient(app) as client:
+        response = client.post(
+            '/v1/messaging/link-proofs', json={'channel': 'telegram', 'provider': 'telegram', 'kind': 'token'}
+        )
+    assert response.status_code == (200 if case == 'paid' else 403)
+    if case == 'paid':
+        assert response.json()['proof']
+    else:
+        assert response.json()['detail'] == 'Messaging channels unavailable'
 
 
 def test_public_link_fields_come_from_config_without_a_channel_branch(monkeypatch):

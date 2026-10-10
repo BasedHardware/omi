@@ -175,10 +175,10 @@ cannot use re-entry to bypass expiry, link revocation or channel reply windows.
 
 `OMI_MESSAGING_CHANNELS=off` by default, an empty exact uid allowlist, and the existing
 `get_user_valid_subscription(..., provision=False)` authority fail closed. Admission uses
-`is_paid_plan` plus `PlanType.architect` (wire id `pro`), rather than copying billing or
-expiry logic. The source catalog calls this tier Architect; whether the product brief
-intended all paid tiers is an open product naming question. No environment or deployment
-configuration enables it in this PR.
+`is_paid_plan(subscription.plan)` for every paid catalog plan, rather than copying billing
+or expiry logic. Basic/free and expired subscriptions are rejected by the existing
+subscription authority. Production config enables only David's exact uid on Cloud Run
+`backend`; other services and environments retain their default-off behavior.
 
 The knowledge-base README's “no implementation authorized” and undecided defaults are
 superseded by this brief. Its early calendar-off policy is also superseded: channels
