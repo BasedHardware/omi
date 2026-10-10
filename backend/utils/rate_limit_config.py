@@ -78,7 +78,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,"
+    "webhook_signing:secret"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -280,6 +281,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # quota gate, unlike its sibling generate_prompts. Same bound as that
     # sibling until a quota-gate policy decision is made (see #12781).
     "apps:twitter_initial_message": (30, 3600),
+    # Webhook signing secrets (issue/rotate/delete, developer and app routes share the
+    # bucket per uid). A credential endpoint: each call invalidates a secret a receiver
+    # may still be using, so the cap is an abuse ceiling and stays out of the boost.
+    "webhook_signing:secret": (10, 3600),
     # TTS read-aloud proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
