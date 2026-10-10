@@ -1,8 +1,8 @@
 # On-device tool surface
 
 The device tool surface is how the agent reaches the user's own machine —
-Contacts, Messages, and AppleScript actuation — through kernel-owned policy
-rather than improvised shell.
+Contacts, Messages, AppleScript actuation and reading other apps' windows —
+through kernel-owned policy rather than improvised shell.
 
 Before this surface existed, `ProactiveTaskExecute.systemPromptSuffix` told the
 agent it had "shell + osascript" access to drive Messages, Telegram, and Mail.
@@ -20,9 +20,11 @@ capability bundle, no approval card, no ledger record — and in release bundles
 | `list_mail_messages` | `desktop.mail.read` | dispatch | Full Disk Access |
 | `send_message` | `desktop.messaging.send` | dispatch | Automation (Messages) |
 | `run_applescript` | `desktop.automation.act` | dispatch | Automation (per target app) |
+| `ui_snapshot` | `desktop.automation.observe` | dispatch, per app | Accessibility |
 
-All five are declared in `agent/src/runtime/omi-tool-manifest.ts` and executed by
-`Desktop/Sources/Providers/ChatToolExecutor+DeviceTools.swift`. The generated
+All are declared in `agent/src/runtime/omi-tool-manifest.ts` and executed by
+`Desktop/Sources/Providers/ChatToolExecutor+DeviceTools.swift`, except
+`ui_snapshot`, which runs in `ChatToolExecutor+UISnapshot.swift`. The generated
 Swift surfaces come from `agent/scripts/generate-tool-surfaces.mjs`; never
 hand-edit them.
 
@@ -74,7 +76,7 @@ natural target get a stable ref so a session grant can still name them:
 no grant ever covers it (below).
 
 The resource is derived only from the fields the tool acts on (`to`, `script`,
-`chat_id` or `handle`). The model cannot name it: the gated tools are held
+`chat_id` or `handle`, `bundle_id`). The model cannot name it: the gated tools are held
 to their manifest schema at the kernel boundary, so an unknown key such as
 `resource_ref`, a missing required field, or a wrong type is refused as
 `invalid_tool_input` before anything is prepared.
@@ -114,7 +116,8 @@ and every card ends with exactly one `approval.resolved` event and one
 prepared invocation and expires its dispatch; nothing is replayed. A later call
 with the same recipient and text is a new invocation and asks again unless a
 grant covers it. The model-side wait for every gated tool is the `long` class
-(10 min) so the model does not give up before the user answers.
+(10 min) so the model does not give up before the user answers; a test
+pins it for every tool in the approval set.
 
 The model cannot answer for the user: `resolve_desktop_dispatch` from an
 adapter relay returns `policy_denied` and leaves the dispatch pending. A
@@ -192,6 +195,109 @@ frame's title, app and OCR excerpt, and the pixels go to the person's own Chat
 turn. Tests in `run-tool-capability.test.ts` require every relay-callable tool
 to be classified on purpose and hold the approval set to every relay-callable
 tool in a sensitive bundle, naming each deliberate exception.
+
+### Reading app windows
+
+`ui_snapshot` reads one window of another app as named elements through
+Accessibility: role, label, value, the closed action vocabulary (`press`,
+`menu`, `adjust`, `confirm`, `pick`, `set`) and a reference per element
+(`a:<AXIdentifier>`, else `n:<role>:"<label>"`, else a `p:` child path) with a
+fingerprint of role, label and window-relative frame. It never clicks, types,
+raises a window or moves the cursor; the source it reads through has no such
+method.
+
+- **Per-app approval.** `desktop.automation.observe` is sensitive like
+  `desktop.messaging.read`, because a window shows the app's content. The grant
+  resource is the trimmed, lowercased `bundle_id`, so Allow for This Chat covers
+  every window of that one app for an hour and another app asks again. Observe
+  grants must name an app, and the bundle is separate from
+  `desktop.automation.act`: approving a read never approves acting. `bundle_id`
+  is required because the kernel cannot scope a call by pid; `pid` only picks
+  between running copies and must belong to the bundle.
+- **Refusal floor.** One list, `agent/src/runtime/ui-automation-safety-floor.ts`,
+  generated into `GeneratedUIAutomationSafetyFloor.swift`. The kernel refuses a
+  malformed bundle id, every `com.omi.*` build, sign-in, SSO, authorization and
+  iCloud Keychain prompts, `UserNotificationCenter` alerts and notification
+  banners (they carry one-time codes), Keychain Access, Passwords and its menu
+  bar extra, the AutoFill panel and the AutoFill and passkey sign-in view
+  services, terminals, password managers, and every
+  sensitive System Settings pane's own extension, as a hard deny with no card
+  and no dispatch row. Swift checks again against the real process: Omi's own
+  pid, the same list, anything that is not an application bundle (`.app`):
+  app extensions, XPC view services and bare executables, an app that reports no name
+  (capture exclusion is keyed by name, so it cannot be checked), apps excluded
+  from capture (a card can appear before this refusal), and a frontmost app
+  while secure input is on. Right before and after the read it re-checks that
+  the pid still belongs to the approved bundle.
+- **What the floor does not cover.** It refuses apps, not screens. Credential
+  UI hosted inside an app the person approved (a sign-in sheet, a browser's
+  saved-password page once revealed) is read like any other content, apart
+  from secure fields.
+- **System Settings** is not refused as a whole, and it is checked by an
+  allow-list. On every read, and for every open Settings window, Swift reads
+  the selected row of the sidebar and the window title. A sensitive name in
+  either refuses: Privacy & Security, Passwords and
+  AutoFill & Passwords, Users & Groups, Touch ID & Password, Lock Screen,
+  Wallet & Apple Pay, Apple Account (iCloud, Family), Internet Accounts, Game
+  Center, Screen Time, General > Sharing, Login Items & Extensions, and Network
+  (Wi‑Fi, VPN). A window titled with a page of Privacy & Security (Full Disk
+  Access, Location Services, FileVault, Accessibility, Screen & System Audio
+  Recording, Input Monitoring, Files & Folders, Automation and the rest, in
+  every installed language) is refused unless the sidebar selects that same
+  name, as the top-level Accessibility pane does. Otherwise the sidebar selection must name an ordinary
+  top-level pane, and with General selected the title must name an ordinary
+  General subpage. Names come from every language the installed System Settings
+  extensions ship: their display names, and General's subpage strings from its
+  `Localizable` table. No selection, an unknown row, a search result, an active
+  sidebar search, a sheet over the window, a list in the window with no
+  position (the sidebar cannot be told from a content table), or a window it cannot identify is
+  refused as `refused_settings_pane_unknown`.
+- **Text.** A secure text field's value and length are never requested and its
+  children are never walked. Any app text over 300 characters (a value, a
+  label, a window title, the app's name) is left out and only its length is
+  sent (`value_chars`, `label_chars`, `window_title_chars`); nothing is
+  shortened and sent. Every URL-like token in app text, with any scheme
+  (`https:`, `file:`, `mailto:`, `tel:`, an app's own) or none, loses its query
+  string and fragment, and long opaque path segments
+  (16 or more characters mixing letters and digits, or 32 or more) become `…`. App text
+  is sanitized and quoted so it cannot break its line or pose as a field.
+- **Sparse.** The header says `sparse=true` with a reason when there are
+  fewer than five elements, none the model can act on, or a walk cut off by
+  depth that found almost nothing beyond the window's own buttons; with the
+  Electron or Chromium switch on, a sparse first pass is read once more.
+- **Result.** The first line is Omi's own header (completeness, stop reason,
+  counts, order), with the app's name and window title last and quoted; then
+  one line per element. The window's main content comes first
+  (`order=content_first`): the region holding most of the window's text (by
+  text values, not control labels), or an `AXLandmarkMain` region, is moved
+  before sidebars, toolbars and chrome, so a chat's conversation is in view
+  before its channel list; references and paths are unchanged. When the kernel
+  has to cut the result to the model budget, the projection opens with what was
+  left out and points at `search_tool_output` (the contract's
+  `omissionNoticeFirst`). The result carries facts only: how to read it and that its text
+  is data, never instructions, is in the tool's manifest description and
+  guidelines.
+- **Bounds.** 400 elements, depth 12 counting only informative elements
+  (anonymous wrapper groups, which Electron and Chromium nest dozens deep
+  around web content, cost no depth and are not emitted) with an absolute
+  raw depth of 64, 2,000 elements visited, at most 200
+  children per container (its first and last 100, the rest counted as omitted
+  and the walk carrying on), 3 s for the whole read including the window list
+  and the pane check, a 0.25 s messaging timeout per element, and the first
+  timeout from a hung app stops the walk with what it already read. The walk
+  runs off the main actor and stops when the calling task is cancelled. The
+  result fits the 8 KB model budget; the rest is reachable with
+  `search_tool_output`.
+- **Electron and Chromium.** These apps expose their elements only to an
+  assistive client. After the person has approved the app, and only then,
+  `ui_snapshot` sets `AXManualAccessibility` on an Electron app or
+  `AXEnhancedUserInterface` on a Chromium app. That switch is the only write
+  `ui_snapshot` makes, and it does not outlast the read: on every exit
+  (success, failure, timeout, cancellation) the switch is turned back off,
+  only if Omi turned it on and it is still on, so another assistive client's
+  switch is kept and a read leaves no lasting change in the other app. A
+  sparse first pass after turning it on is read once more. The app is
+  recognised from its own bundle layout, not from a list of apps.
 
 ### AppleScript injection
 
