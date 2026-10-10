@@ -84,6 +84,7 @@ MAX_OWNER_AUDIO_REPAIRS = 3
 # - already_mapped: a decision exists for this diarized speaker (a race drop,
 #   not a loss).
 # - rejected: the manual receipt named this voice as nobody, so it emits nothing.
+# - authority_unavailable: embedding was spent, but final authority vetoed publication.
 SPEAKER_ID_EXIT_REASONS = frozenset(
     {
         'window_outside_buffer',
@@ -97,6 +98,7 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         'manual_decision',
         'voice_capacity',
         'embedding_budget',
+        'authority_unavailable',
     }
 )
 
@@ -1106,6 +1108,7 @@ class SpeakerMatcher:
                 self._record_exit(drop_reason, speaker_id)
                 return
             if not self._allow_authority_publication(final_authority, speaker_id=speaker_id, segment_id=segment['id']):
+                self._record_exit('authority_unavailable', speaker_id)
                 return
             if speaker_id in rejected:
                 self._record_match_score(

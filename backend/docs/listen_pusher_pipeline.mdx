@@ -3044,7 +3044,10 @@ emergency lever, not a toggle.
 
 Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
-`window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
+`window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
+authority is unavailable records exactly one `authority_unavailable` exit, after applying known
+receiving rejections/retractions. It does not fabricate an acoustic decision; short probes also retain
+their separate reconnect-rejection accounting. A finished transcript records one `owner_recognition_outcome` log and
 `omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
 every successful persist, including the free-tier terminal stores. Sync intake's completed status is
 not a prior observation: the first enrichment counts, and a later pass counts only when that row had

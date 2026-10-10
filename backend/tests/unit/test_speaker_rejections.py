@@ -9,6 +9,7 @@ import asyncio
 from collections import deque
 from copy import deepcopy
 from datetime import datetime, timezone
+import logging
 import os
 import time
 from types import SimpleNamespace
@@ -38,6 +39,8 @@ from utils import speaker_assignment_teaching as teaching
 from utils.speaker_tag_prompts import service
 from utils.speaker_tag_prompts.selection import _manually_decided
 from utils.stt.speaker_match import SpeakerMatchDecision
+from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
+from utils.observability.owner_recognition import LIVE_SPEAKER_DECISIONS, OWNER_RECONNECT
 from models.speaker_tag_prompts import (
     SpeakerTagPromptAnswer,
     SpeakerTagPromptAnswerRequest,
@@ -1216,5 +1219,87 @@ def test_unavailable_authority_cannot_renew_an_existing_owner(world, monkeypatch
         assert new.continuity.observed == observed, 'failed authority must not renew the owner speech gap'
         assert new.continuity._revision == revision, 'failed authority must not write a refreshed capsule'
         assert not emitted
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('seconds', [2, 5])
+@pytest.mark.parametrize('known_rejection', [False, True])
+def test_authority_veto_accounts_for_one_spent_embedding(world, monkeypatch, caplog, seconds, known_rejection):
+    """The round-6 five-second probe must exit measurably without an acoustic decision."""
+
+    async def run():
+        await _seed_closed_owner_donor(world, monkeypatch)
+        noisy = np.array([[-1.0, 0.0]], dtype=np.float32)
+        new, host, emitted = await connect(monkeypatch, [noisy, OWNER], uid=UID)
+
+        async def read(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        host.persistence.call = read
+        # Short peer evidence forces final authority even for the ordinary 5s query.
+        await speak(new, 1, 2)
+        if known_rejection:
+            world.store.rows[('users', UID, 'conversations', 'conversation')]['transcript_segments'] = [
+                _segment('manual', 0, 5, speaker_id=2, scope='new-socket')
+            ]
+            db.assign_conversation_speaker(
+                UID, 'conversation', speaker_id=2, is_user=True, use_for_speech_training=False
+            )
+            new.speaker_to_person[2] = ('user', 'Owner')
+            new._mapping_origin[2] = 'manual'
+            new._voice_segments[2] = 'manual'
+            response = world.client.post('/v1/conversations/conversation/speakers/2/reject', json={'kind': 'not_me'})
+            assert response.status_code == 200
+
+        reference_type = type(world.store.collection('users').document(UID))
+        original_read = reference_type.get
+        failures = []
+
+        def fail_final_read(ref, *args, **kwargs):
+            if kwargs.get('transaction') is not None:
+                failures.append(ref)
+                raise ConnectionError('injected final authority read failure')
+            return original_read(ref, *args, **kwargs)
+
+        monkeypatch.setattr(reference_type, 'get', fail_final_read)
+        renewals = []
+
+        async def capture_update(*args, **kwargs):
+            renewals.append(args)
+
+        monkeypatch.setattr(new.continuity, 'update', capture_update)
+
+        def total(counter):
+            return sum(
+                sample.value
+                for metric in counter.collect()
+                for sample in metric.samples
+                if sample.name.endswith('_total')
+            )
+
+        before = (total(LIVE_SPEAKER_DECISIONS), total(OMI_SPEAKER_ID_MATCH_EXITS_TOTAL))
+        exit_before = OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason='authority_unavailable')._value.get()
+        reconnect = OWNER_RECONNECT.labels(outcome='rejected', reason='arbitration')
+        reconnect_before = reconnect._value.get()
+        emitted.clear()
+        with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+            await speak(new, 0, seconds, start=3)
+        after = (total(LIVE_SPEAKER_DECISIONS), total(OMI_SPEAKER_ID_MATCH_EXITS_TOTAL))
+        assert failures and new._embedding_attempts[0] == 1
+        assert after == (
+            before[0],
+            before[1] + 1,
+        ), 'each spent attempt needs exactly one live exit, not a fabricated decision'
+        assert OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason='authority_unavailable')._value.get() == exit_before + 1
+        assert (
+            sum('speaker_id_exit reason=authority_unavailable speaker=0 ' in row.message for row in caplog.records) == 1
+        )
+        assert reconnect._value.get() == reconnect_before + (seconds == 2)
+        assert not visible_owner(new, 0) and not renewals
+        assert not any(args[1] == 'user' for args in emitted)
+        if known_rejection:
+            assert not visible_owner(new, 2) and 2 not in new._mapping_origin
+            assert any(args[0] == 2 and args[1] == '' for args in emitted)
 
     asyncio.run(run())
