@@ -40,12 +40,8 @@ Future<void> _addContact(String name, String number) async {
   );
 }
 
-const _messagesBlue = Color(
-  0xFF0A84FF, // omi-ux-allow: color-literal -- the Messages bubble, a brand colour
-);
-const _onMessagesBlue = Color(
-  0xFFFFFFFF, // omi-ux-allow: color-literal -- text on the Messages bubble
-);
+const _messagesBlue = Color(0xFF0A84FF); // omi-ux-allow: color-literal -- the Messages bubble, a brand colour
+const _onMessagesBlue = Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- text on the Messages bubble
 
 class IMessageConnectSheet extends StatefulWidget {
   const IMessageConnectSheet({super.key});
