@@ -435,19 +435,29 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+    # The developer webhook supplies this context: a null or wrong-typed value must not crash the
+    # reader (the dispatch boundary swallows the exception and drops the notification).
+    user_context = user_context if isinstance(user_context, Mapping) else {}
+    question = user_context.get('question')
+    vector = generate_embedding(question) if isinstance(question, str) and question else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
-    filters = user_context.get('filters', {})
+    filters = user_context.get('filters')
+    filters = filters if isinstance(filters, Mapping) else {}
+
+    def filter_list(key: str) -> list:
+        value = filters.get(key)
+        return value if isinstance(value, list) else []
+
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
         dates_filter=[date_filters.get("start"), date_filters.get("end")],
-        people=filters.get("people", []),
-        topics=filters.get("topics", []),
-        entities=filters.get("entities", []),
-        dates=filters.get("dates", []),
+        people=filter_list('people'),
+        topics=filter_list('topics'),
+        entities=filter_list('entities'),
+        dates=filter_list('dates'),
     )
     convos = conversations_db.get_conversations_by_id(uid, memories_id)
     return [c for c in convos if not c.get('is_locked')]
@@ -799,7 +809,11 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
+    prompt = data.get('prompt')
+    if not isinstance(prompt, str):
+        # An explicit null (or any non-string) prompt is a present-but-invalid payload: treat it as
+        # absent so the len()/replace() below cannot raise into the dispatch boundary's `except: pass`.
+        prompt = ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -810,13 +824,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    params = data.get('params')
+    params = [param for param in params if isinstance(param, str)] if isinstance(params, list) else []
+    filter_scopes = app.filter_proactive_notification_scopes(params)
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context') or {})
         if len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 
