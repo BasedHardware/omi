@@ -1239,17 +1239,12 @@ def get_public_shared_conversation_bounded(
     user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     snapshot = conversation_ref.get(
-        field_paths=[
-            'visibility',
-            'is_locked',
-            'transcript_segments_compressed',
-            'transcript_segments',
-        ]
+        field_paths=['visibility', 'is_locked', 'deleted', 'transcript_segments_compressed', 'transcript_segments']
     )
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict()
-    if not isinstance(raw, dict):
+    if not isinstance(raw, dict) or is_soft_deleted(raw):
         return None
 
     visibility = raw.get('visibility')
