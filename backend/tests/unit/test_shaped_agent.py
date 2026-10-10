@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import google.auth.credentials  # noqa: F401
 import httpx
 import pytest
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
@@ -492,6 +493,58 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
     assert loops[0] is not loops[1]
     assert len(transports) == 2 and all(transport.is_closed for transport in transports)
     assert cached.root_async_client is original_client and not original_client.is_closed()
+
+
+def test_anthropic_notes_transport_is_owned_per_worker_loop(monkeypatch):
+    transports, loops = [], []
+    real_client = httpx.AsyncClient
+    content = json.dumps(
+        {
+            'title': 'BYOK note',
+            'overview': 'Grounded note',
+            'emoji': '🧠',
+            'category': 'work',
+            'sections': [],
+            'action_items': [],
+            'events': [],
+        }
+    )
+
+    async def respond(request):
+        loops.append(asyncio.get_running_loop())
+        assert request.headers['x-api-key'] == 'fake-anthropic-key'
+        return httpx.Response(
+            200,
+            json={
+                'id': 'message',
+                'type': 'message',
+                'role': 'assistant',
+                'model': 'claude-test',
+                'content': [{'type': 'text', 'text': content}],
+                'stop_reason': 'end_turn',
+                'usage': {'input_tokens': 1, 'output_tokens': 1},
+            },
+        )
+
+    def transport_factory():
+        transport = real_client(transport=httpx.MockTransport(respond))
+        transports.append(transport)
+        return transport
+
+    cached = ChatAnthropic(model='claude-sonnet-4-6', api_key='fake-anthropic-key', max_retries=0)
+    original_client = cached._async_client
+    monkeypatch.setattr(shaped_notes_transport, 'httpx', SimpleNamespace(AsyncClient=transport_factory))
+
+    async def call():
+        async with shaped_notes_transport.isolated_notes_model(cached) as model:
+            assert model is not cached
+            assert isinstance(model, ChatAnthropic)
+            return (await model.ainvoke('hello')).content
+
+    assert asyncio.run(call()) == asyncio.run(call()) == content
+    assert loops[0] is not loops[1]
+    assert len(transports) == 2 and all(transport.is_closed for transport in transports)
+    assert cached._async_client is original_client and not original_client.is_closed()
 
 
 @pytest.mark.parametrize('round_trip', [False, True])
