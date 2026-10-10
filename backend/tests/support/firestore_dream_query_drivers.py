@@ -73,7 +73,7 @@ def entries():
                 },
                 'report': {'status': 'complete'},
             },
-            domains={'success': [True, False], 'refund': [True, False]},
+            domains={'success': [True, False], 'refund': [True, False], 'count_failure': [True, False]},
             neutrals={
                 'consumed': ([], 'post-query acknowledgement versions'),
                 'release': (True, 'post-query lease policy'),

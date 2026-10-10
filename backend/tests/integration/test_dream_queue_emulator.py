@@ -102,3 +102,43 @@ def test_manual_admission_race_uses_shared_lease(monkeypatch):
     assert sum(row is not None for row in results) == 1
     state = dream_store.own_state(uid, firestore_client=database)
     assert state['passes'] + state['manual_runs'] == 1
+
+
+def test_poison_settlement_is_atomic_and_preserves_refreshed_version(monkeypatch):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uid = 'synthetic-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    database.collection('users').document(uid).set({})
+    caps = Caps(passes=10)
+    dream_store.mark_dirty(uid, [('conversations', 'poison')], firestore_client=database)
+    for attempt in range(2):
+        lease = dream_store.acquire(uid, caps, firestore_client=database)
+        consumed = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
+        report = {'tokens': 10}
+        dream_store.finish(
+            uid, lease, report, success=False, consumed=consumed, count_failure=True, firestore_client=database
+        )
+        assert report['poisoned'] == 0
+        assert dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()['failed_passes'] == attempt + 1
+    lease = dream_store.acquire(uid, caps, firestore_client=database)
+    consumed = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
+    dream_store.mark_dirty(uid, [('conversations', 'poison')], firestore_client=database)
+    dream_store.finish(
+        uid, lease, report, success=False, consumed=consumed, count_failure=True, firestore_client=database
+    )
+    assert report['poisoned'] == 0
+    assert dream_store.dirty_refs(uid, firestore_client=database)[0].to_dict()['failed_passes'] == 0
+    for attempt in range(3):
+        lease = dream_store.acquire(uid, caps, firestore_client=database)
+        consumed = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
+        dream_store.finish(
+            uid, lease, report, success=False, consumed=consumed, count_failure=True, firestore_client=database
+        )
+    assert report['poisoned'] == 1 and report['records_queued_after'] == 0
+    assert dream_store.dirty_count(uid, firestore_client=database) == 0
+    state = dream_store.own_state(uid, firestore_client=database)
+    assert state['poisoned'] == 1 and state['score'] == 0 and state['lease'] is None
