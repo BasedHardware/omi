@@ -24,8 +24,8 @@ def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
     return transactional(func)
 
 
-def _clean_id(val: Any, field_name: str) -> str:
-    """Validate and normalize document and user identifiers."""
+def _clean_path_id(val: Any, field_name: str) -> str:
+    """Validate and normalize document path segments (uid, meeting_id)."""
     if not isinstance(val, str):
         raise ValueError(f"{field_name} must be a string, got {type(val).__name__}")
     cleaned = val.strip()
@@ -36,9 +36,27 @@ def _clean_id(val: Any, field_name: str) -> str:
     return cleaned
 
 
+def _clean_identifier(val: Any, field_name: str) -> str:
+    """Validate and normalize external identifiers (calendar_event_id, calendar_source).
+    
+    Does not restrict slashes, as external provider event IDs (e.g. Outlook / Microsoft Graph)
+    are frequently base64-derived and legitimately contain slashes.
+    """
+    if not isinstance(val, str):
+        raise ValueError(f"{field_name} must be a string, got {type(val).__name__}")
+    cleaned = val.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty or whitespace-only")
+    return cleaned
+
+
+# Backward-compatible alias for path segment cleaning
+_clean_id = _clean_path_id
+
+
 def _get_meetings_collection(uid: str, client: Any | None = None) -> Any:
     """Get user's meetings collection reference"""
-    clean_uid = _clean_id(uid, "uid")
+    clean_uid = _clean_path_id(uid, "uid")
     firestore_client = client or db
     return firestore_client.collection('users').document(clean_uid).collection('meetings')
 
@@ -67,14 +85,14 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any], db_client: Any | None
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    clean_uid = _clean_id(uid, "uid")
+    clean_uid = _clean_path_id(uid, "uid")
     if not isinstance(meeting_data, dict):
         raise ValueError("meeting_data must be a dictionary")
 
     source = meeting_data.get('calendar_source')
     event_id = meeting_data.get('calendar_event_id')
-    clean_source = _clean_id(source, "calendar_source")
-    clean_event_id = _clean_id(event_id, "calendar_event_id")
+    clean_source = _clean_identifier(source, "calendar_source")
+    clean_event_id = _clean_identifier(event_id, "calendar_event_id")
 
     meeting_id = calendar_meeting_doc_id(clean_uid, clean_source, clean_event_id)
     doc_ref = _resolve_meetings_col(clean_uid, client=db_client).document(meeting_id)
@@ -92,8 +110,8 @@ def update_meeting(
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    clean_uid = _clean_id(uid, "uid")
-    clean_meeting_id = _clean_id(meeting_id, "meeting_id")
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_meeting_id = _clean_path_id(meeting_id, "meeting_id")
     if not isinstance(meeting_data, dict):
         raise ValueError("meeting_data must be a dictionary")
 
@@ -115,8 +133,8 @@ def update_meeting(
 
 def get_meeting(uid: str, meeting_id: str, db_client: Any | None = None) -> Optional[Dict[str, Any]]:
     """Get a calendar meeting by its Firestore document ID"""
-    clean_uid = _clean_id(uid, "uid")
-    clean_meeting_id = _clean_id(meeting_id, "meeting_id")
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_meeting_id = _clean_path_id(meeting_id, "meeting_id")
     doc = _resolve_meetings_col(clean_uid, client=db_client).document(clean_meeting_id).get()
 
     if not getattr(doc, "exists", False):
@@ -135,9 +153,9 @@ def get_meeting_id_by_calendar_event(
     Find a meeting by its external calendar event ID and source.
     Returns the Firestore document ID if found, None otherwise.
     """
-    clean_uid = _clean_id(uid, "uid")
-    clean_event_id = _clean_id(calendar_event_id, "calendar_event_id")
-    clean_source = _clean_id(calendar_source, "calendar_source")
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_event_id = _clean_identifier(calendar_event_id, "calendar_event_id")
+    clean_source = _clean_identifier(calendar_source, "calendar_source")
 
     query = (
         _resolve_meetings_col(clean_uid, client=db_client)

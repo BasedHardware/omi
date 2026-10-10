@@ -125,23 +125,58 @@ def test_store_meeting_request_strips_leading_and_trailing_whitespace():
     assert req.title == 'Standup Discussion'
 
 
-def test_clean_id_rejects_empty_whitespace_and_path_traversal():
+def test_clean_path_id_rejects_empty_whitespace_and_path_traversal():
     with pytest.raises(ValueError, match="cannot be empty or whitespace-only"):
-        calendar_db._clean_id("", "uid")
+        calendar_db._clean_path_id("", "uid")
 
     with pytest.raises(ValueError, match="cannot be empty or whitespace-only"):
-        calendar_db._clean_id("   ", "uid")
+        calendar_db._clean_path_id("   ", "uid")
 
     with pytest.raises(ValueError, match="cannot contain path separator"):
-        calendar_db._clean_id("user/admin", "uid")
+        calendar_db._clean_path_id("user/admin", "uid")
 
     with pytest.raises(ValueError, match="cannot contain path separator"):
-        calendar_db._clean_id("..\\nested", "meeting_id")
+        calendar_db._clean_path_id("..\\nested", "meeting_id")
 
     with pytest.raises(ValueError, match="must be a string"):
-        calendar_db._clean_id(12345, "uid")  # type: ignore
+        calendar_db._clean_path_id(12345, "uid")  # type: ignore
 
-    assert calendar_db._clean_id("  valid-id-123  ", "uid") == "valid-id-123"
+    assert calendar_db._clean_path_id("  valid-id-123  ", "uid") == "valid-id-123"
+
+
+def test_outlook_and_graph_event_ids_with_slashes_allowed():
+    """External provider IDs (like Outlook / Microsoft Graph) can contain slashes."""
+    outlook_event_id = "AAMkAGI2/AA=Tk0AAA="
+    outlook_source = "outlook/exchange"
+
+    # StoreMeetingRequest must accept slashes
+    req = calendar_router.StoreMeetingRequest(
+        calendar_event_id=outlook_event_id,
+        calendar_source=outlook_source,
+        title="Quarterly Review",
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 12, 30, 0, tzinfo=timezone.utc),
+    )
+    assert req.calendar_event_id == outlook_event_id
+    assert req.calendar_source == outlook_source
+
+    # _clean_identifier must accept slashes
+    assert calendar_db._clean_identifier(outlook_event_id, "calendar_event_id") == outlook_event_id
+    assert calendar_db._clean_identifier(outlook_source, "calendar_source") == outlook_source
+
+    # create_meeting with mock must accept slashes and hash deterministic doc id
+    fake_client = MagicMock()
+    doc_ref = MagicMock()
+    fake_client.collection.return_value.document.return_value.collection.return_value.document.return_value = doc_ref
+    fake_client.transaction.return_value = MagicMock()
+
+    meeting_data = {
+        'calendar_source': outlook_source,
+        'calendar_event_id': outlook_event_id,
+        'title': 'Quarterly Review',
+    }
+    doc_id = calendar_db.create_meeting('uid-1', meeting_data, db_client=fake_client)
+    assert isinstance(doc_id, str) and len(doc_id) > 0
 
 
 def test_to_utc_strictly_raises_on_non_datetime_type():
