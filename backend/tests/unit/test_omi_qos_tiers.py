@@ -864,7 +864,7 @@ class TestExpandedCallsiteCoverage:
             assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
         # The shaped writer replaces the legacy writer's duplicate feature callsite.
         assert calls.count('conv_structure') == 1
-        assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
+        assert calls.count('conv_app_select') == 1, "conv_app_select should appear exactly once"
 
     def test_memories_all_keys(self):
         import re
