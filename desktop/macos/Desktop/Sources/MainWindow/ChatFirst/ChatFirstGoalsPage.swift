@@ -70,7 +70,7 @@ struct ChatFirstGoalsPage: View {
       BackChip((navigation.goalsOrigin ?? .chat).title, accessibilityIdentifier: "chat-first-goals-back") {
         navigation.closeGoals()
       }
-      GlassPageHeader(title: "Goals", subtitle: "Keep the work that matters in view") {
+      GlassPageHeader(title: "Goals") {
         refreshButton
       }
     }
@@ -138,7 +138,7 @@ struct ChatFirstGoalsPage: View {
     GlassEmptyState(
       systemImage: "target",
       title: "No Active Goals",
-      message: "Omi can help you turn what matters into a clear goal."
+      message: "Tell Omi what you're working toward and it'll help turn it into a goal."
     ) {
       Button("Talk to Omi About a Goal") {
         navigation.discuss(.goals, using: chatProvider)

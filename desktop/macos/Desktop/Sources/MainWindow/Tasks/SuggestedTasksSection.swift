@@ -513,7 +513,7 @@ struct AutoAcceptedTaskWhyButton: View {
 
   private var provenanceDescription: String {
     let source = task.source ?? ""
-    if source.contains("screen") { return "It matched context on this Mac." }
+    if source.contains("screen") { return "Omi spotted it on your screen." }
     if source.contains("transcription") || source.contains("conversation") {
       return "It came from a conversation you captured."
     }

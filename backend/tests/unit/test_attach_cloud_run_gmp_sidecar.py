@@ -779,10 +779,8 @@ def test_dropping_a_pin_that_is_absent_is_not_an_error():
     assert module._drop_pinned_revision_name({}) is None
 
 
-@pytest.mark.parametrize('existing_startup_probe', [False, True])
-def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_probes(existing_startup_probe):
-    module = _load_module()
-    job = {
+def _job():
+    return {
         'apiVersion': 'run.googleapis.com/v1',
         'kind': 'Job',
         'metadata': {'name': 'notifications-job'},
@@ -808,6 +806,12 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_p
             }
         },
     }
+
+
+@pytest.mark.parametrize('existing_startup_probe', [False, True])
+def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_probes(existing_startup_probe):
+    module = _load_module()
+    job = _job()
     if existing_startup_probe:
         job['spec']['template']['spec']['template']['spec']['containers'][0]['startupProbe'] = {
             'tcpSocket': {'port': 9090},
@@ -829,10 +833,9 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_p
     assert not collector.get('env'), 'do not deploy reserved service environment variables on a job'
     assert 'export K_SERVICE="${CLOUD_RUN_JOB:?' in collector['args'][0]
     assert 'sleep 35; kill -TERM' in collector['args'][0]
-    assert (
-        patched['spec']['template']['metadata']['annotations']['run.googleapis.com/container-dependencies']
-        == '{"collector":["notifications-job"]}'
-    )
+    # depends_on requires a startup probe on the depended-upon container, and
+    # jobs cannot carry a reachable one — the dependency annotation must go.
+    assert 'run.googleapis.com/container-dependencies' not in patched['spec']['template']['metadata']['annotations']
     assert job['spec']['template']['spec']['template']['spec']['containers'][0].get('name') is None
     assert 'metadata' not in task, 'job task templates must not acquire service annotations'
     annotations = patched['spec']['template']['metadata']['annotations']
@@ -840,3 +843,101 @@ def test_job_sidecar_preserves_task_settings_and_is_idempotent_without_startup_p
     assert annotations['run.googleapis.com/secrets'] == (
         'cloud-run-gmp-config:projects/123/secrets/cloud-run-gmp-config,existing:projects/123/secrets/existing'
     )
+
+
+def test_detach_job_preserves_runtime_and_repeated_attach_deploy_cycles():
+    module = _load_module()
+    job = _job()
+    task = job['spec']['template']['spec']['template']['spec']
+    task['volumes'] = [{'name': 'runtime-secret', 'secret': {'secretName': 'existing'}}]
+    task['containers'][0]['volumeMounts'] = [{'name': 'runtime-secret', 'mountPath': '/runtime'}]
+    task['containers'][0]['env'].append(
+        {'name': 'TOKEN', 'valueFrom': {'secretKeyRef': {'name': 'existing', 'key': '1'}}}
+    )
+    kwargs = dict(project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7')
+    assert module.detach_job(job) == job
+    for sha in ('first', 'second', 'third'):
+        attached = module.patch_job(job, **kwargs)
+        detached = module.detach_job(attached)
+        assert len(attached['spec']['template']['spec']['template']['spec']['containers']) == 2
+        assert module.detach_job(detached) == detached
+        singleton = detached['spec']['template']['spec']['template']['spec']
+        assert len(singleton['containers']) == 1
+        assert singleton['containers'][0]['env'] == task['containers'][0]['env']
+        assert singleton['containers'][0]['volumeMounts'] == task['containers'][0]['volumeMounts']
+        assert singleton['volumes'] == task['volumes']
+        assert singleton['timeoutSeconds'] == '600'
+        assert singleton['maxRetries'] == 0
+        assert singleton['serviceAccountName'] == 'runtime'
+        assert detached['spec']['template']['spec']['taskCount'] == 1
+        annotations = detached['spec']['template']['metadata']['annotations']
+        assert annotations['run.googleapis.com/vpc-access-connector'] == 'keep'
+        assert 'run.googleapis.com/container-dependencies' not in annotations
+        # Model the action updating only the sole app image before reattaching.
+        singleton['containers'][0]['image'] = f'app:{sha}'
+        job = detached
+
+
+@pytest.mark.parametrize('kind, extra', [('Service', False), ('Job', True)])
+def test_detach_job_refuses_unexpected_layout(kind, extra):
+    module = _load_module()
+    job = _job()
+    job['kind'] = kind
+    if extra:
+        job['spec']['template']['spec']['template']['spec']['containers'].append({'name': 'unknown', 'image': 'other'})
+    with pytest.raises(ValueError):
+        module.detach_job(job)
+
+
+@pytest.mark.parametrize('initial', ['missing', 'singleton', 'attached'])
+def test_detach_cli_skips_missing_and_singleton_and_replaces_attached(monkeypatch, initial):
+    module = _load_module()
+    state = None if initial == 'missing' else _job()
+    if initial == 'attached':
+        state = module.patch_job(
+            state, project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7'
+        )
+    calls = []
+
+    def fake_run(argv, *, capture_output=False):
+        nonlocal state
+        calls.append(argv)
+        assert capture_output
+        if argv[3] == 'list':
+            assert '--filter=metadata.name=notifications-job' in argv
+            output = 'notifications-job\n' if state else ''
+        elif argv[3] == 'describe':
+            output = yaml.safe_dump(state)
+        elif argv[3] == 'replace':
+            path = Path(argv[4])
+            assert path.stat().st_mode & 0o777 == 0o600
+            state = yaml.safe_load(path.read_text())
+            output = ''
+        else:
+            raise AssertionError(argv)
+        return SimpleNamespace(returncode=0, stdout=output, stderr='')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    args = SimpleNamespace(service='notifications-job', project='test-project', region='us-central1')
+    module.detach_job_sidecar(args)
+    module.detach_job_sidecar(args)
+    assert sum(argv[3] == 'replace' for argv in calls) == (1 if initial == 'attached' else 0)
+    assert all(argv[3] in ('list', 'describe', 'replace') for argv in calls)
+
+
+@pytest.mark.parametrize('phase', ['list', 'describe', 'replace'])
+def test_detach_cli_propagates_gcloud_failures(monkeypatch, phase):
+    module = _load_module()
+    attached = module.patch_job(
+        _job(), project_number='123', config_secret='cloud-run-gmp-config', config_secret_version='7'
+    )
+
+    def fake_run(argv, *, capture_output=False):
+        if argv[3] == phase:
+            return SimpleNamespace(returncode=1, stdout='', stderr='PERMISSION_DENIED')
+        output = 'notifications-job\n' if argv[3] == 'list' else yaml.safe_dump(attached)
+        return SimpleNamespace(returncode=0, stdout=output, stderr='')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    with pytest.raises(RuntimeError, match='PERMISSION_DENIED'):
+        module.detach_job_sidecar(SimpleNamespace(service='notifications-job', project='test', region='us-central1'))

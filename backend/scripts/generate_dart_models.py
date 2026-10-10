@@ -317,6 +317,7 @@ SCHEMA_GROUPS = {
             'SpeakerTagPromptsShownResponse',
             'SpeakerTagPromptAnswerRequest',
             'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptSegmentIdentity',
             'SpeakerTagPromptClip',
             'IgnoredVoice',
             'IgnoredVoicesResponse',

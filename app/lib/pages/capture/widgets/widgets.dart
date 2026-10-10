@@ -216,6 +216,8 @@ getTranscriptWidget(
   int playbackFollowRequest = 0,
   VoidCallback? onUserScroll,
   ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
+  Set<String>? selectedSegmentIds,
+  ValueChanged<TranscriptSegment>? onToggleSegmentSelection,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -265,6 +267,8 @@ getTranscriptWidget(
       playbackFollowRequest: playbackFollowRequest,
       onUserScroll: onUserScroll,
       onTopVisibleSegmentChanged: onTopVisibleSegmentChanged,
+      selectedSegmentIds: selectedSegmentIds,
+      onToggleSegmentSelection: onToggleSegmentSelection,
     );
   }
 
