@@ -53,6 +53,7 @@ from database.redis_db import (
 from models.app import App, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 from models.conversation_enums import ConversationSource
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
@@ -1010,7 +1011,7 @@ async def _async_trigger_realtime_integrations(
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    json={"session_id": uid, "segments": segments},
+                    json={"session_id": uid, "segments": [transcript_segment_for_client(s) for s in segments]},
                     headers=pin_kwargs['headers'],
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,

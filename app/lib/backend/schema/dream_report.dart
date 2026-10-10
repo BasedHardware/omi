@@ -2,12 +2,7 @@
 /// surface: the backend answers 404 unless the account is in the dream cohort.
 library;
 
-String _str(Object? value) => value is String ? value : '';
-int _int(Object? value) => value is num ? value.toInt() : 0;
-double _double(Object? value) => value is num ? value.toDouble() : 0;
-List<Map<String, dynamic>> _maps(Object? value) =>
-    value is List ? value.whereType<Map<String, dynamic>>().toList(growable: false) : const [];
-List<String> _strings(Object? value) => value is List ? value.whereType<String>().toList(growable: false) : const [];
+import 'gen/dream_wire.g.dart' as wire;
 
 enum DreamRunStatus { complete, failed, deadline, idle, other }
 
@@ -41,42 +36,66 @@ class DreamEdit {
 
   bool get applied => outcome == 'applied';
 
-  static DreamEdit fromJson(Map<String, dynamic> json) => DreamEdit(
-        kind: _str(json['kind']),
-        targetLabel: _str(json['target_label']),
-        before: _str(json['before']),
-        after: _str(json['after']),
-        reason: _str(json['reason']),
-        evidenceCount: _int(json['evidence_count']),
-        outcome: _str(json['outcome']),
+  static DreamEdit fromJson(Map<String, dynamic> json) =>
+      DreamEdit.fromGenerated(wire.GeneratedDreamReportEdit.fromJson(json));
+
+  factory DreamEdit.fromGenerated(wire.GeneratedDreamReportEdit value) => DreamEdit(
+        kind: value.kind,
+        targetLabel: value.targetLabel,
+        before: value.before,
+        after: value.after,
+        reason: value.reason,
+        evidenceCount: value.evidenceCount,
+        outcome: value.outcome,
       );
 }
 
 class DreamTerm {
-  const DreamTerm({required this.kind, required this.spelling, required this.aliases});
+  const DreamTerm({
+    required this.kind,
+    required this.spelling,
+    required this.aliases,
+  });
 
   final String kind;
   final String spelling;
   final List<String> aliases;
 
   static DreamTerm fromJson(Map<String, dynamic> json) =>
-      DreamTerm(kind: _str(json['kind']), spelling: _str(json['spelling']), aliases: _strings(json['aliases']));
+      DreamTerm.fromGenerated(wire.GeneratedDreamReportTerm.fromJson(json));
+
+  factory DreamTerm.fromGenerated(wire.GeneratedDreamReportTerm value) => DreamTerm(
+        kind: value.kind,
+        spelling: value.spelling,
+        aliases: value.aliases,
+      );
 }
 
 class DreamFeedback {
-  const DreamFeedback(
-      {required this.component, required this.failureClass, required this.severity, required this.count});
+  const DreamFeedback({
+    required this.component,
+    required this.failureClass,
+    required this.severity,
+    required this.count,
+  });
 
   final String component;
   final String failureClass;
   final String severity;
   final int count;
 
-  static DreamFeedback fromJson(Map<String, dynamic> json) => DreamFeedback(
-        component: _str(json['component']),
-        failureClass: _str(json['failure_class']),
-        severity: _str(json['severity']),
-        count: _int(json['count']),
+  static DreamFeedback fromJson(Map<String, dynamic> json) => DreamFeedback.fromGenerated(
+        wire.GeneratedDreamReportFeedback.fromJson(json),
+      );
+
+  factory DreamFeedback.fromGenerated(
+    wire.GeneratedDreamReportFeedback value,
+  ) =>
+      DreamFeedback(
+        component: value.component,
+        failureClass: value.failureClass,
+        severity: value.severity,
+        count: value.count,
       );
 }
 
@@ -119,29 +138,34 @@ class DreamRun {
 
   bool get isEmpty => edits.isEmpty && questions.isEmpty && slowTasks.isEmpty && vocabulary.isEmpty && feedback.isEmpty;
 
-  /// Returns null for a row without an id or timestamp so one malformed run never hides the rest.
+  /// Isolate malformed history rows without bypassing the backend-owned wire decoder.
   static DreamRun? fromJson(Map<String, dynamic> json) {
-    final id = _str(json['run_id']);
-    final created = DateTime.tryParse(_str(json['created_at']));
-    if (id.isEmpty || created == null) return null;
-    final error = _str(json['error_type']);
+    try {
+      return DreamRun.fromGenerated(wire.GeneratedDreamRun.fromJson(json));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static DreamRun? fromGenerated(wire.GeneratedDreamRun value) {
+    if (value.runId.isEmpty) return null;
     return DreamRun(
-      runId: id,
-      createdAt: created.toLocal(),
-      manual: json['trigger'] == 'manual',
-      status: _status(_str(json['status'])),
-      errorType: error.isEmpty ? null : error,
-      recordsRead: _int(json['records_read']),
-      recordsQueuedAfter: _int(json['records_queued_after']),
-      dirtyDropped: _int(json['dirty_dropped']),
-      tokens: _int(json['tokens']),
-      costUsd: _double(json['cost_usd']),
-      edits: _maps(json['edits']).map(DreamEdit.fromJson).toList(growable: false),
-      questions: _maps(json['questions']).map((q) => _str(q['text'])).where((t) => t.isNotEmpty).toList(),
-      slowTasks: _maps(json['slow_tasks']).map((t) => _str(t['description'])).where((t) => t.isNotEmpty).toList(),
-      vocabulary: _maps(json['vocabulary']).map(DreamTerm.fromJson).where((t) => t.spelling.isNotEmpty).toList(),
-      feedback: _maps(json['feedback']).map(DreamFeedback.fromJson).toList(growable: false),
-      privacyRejected: _int(json['privacy_rejected']),
+      runId: value.runId,
+      createdAt: value.createdAt.toLocal(),
+      manual: value.trigger == 'manual',
+      status: _status(value.status),
+      errorType: value.errorType?.isEmpty == true ? null : value.errorType,
+      recordsRead: value.recordsRead,
+      recordsQueuedAfter: value.recordsQueuedAfter,
+      dirtyDropped: value.dirtyDropped,
+      tokens: value.tokens,
+      costUsd: value.costUsd,
+      edits: (value.edits ?? []).map(DreamEdit.fromGenerated).toList(growable: false),
+      questions: (value.questions ?? []).map((q) => q.text).where((t) => t.isNotEmpty).toList(),
+      slowTasks: (value.slowTasks ?? []).map((t) => t.description).where((t) => t.isNotEmpty).toList(),
+      vocabulary: (value.vocabulary ?? []).map(DreamTerm.fromGenerated).where((t) => t.spelling.isNotEmpty).toList(),
+      feedback: (value.feedback ?? []).map(DreamFeedback.fromGenerated).toList(growable: false),
+      privacyRejected: value.privacyRejected,
     );
   }
 }
@@ -168,14 +192,37 @@ class DreamReport {
 
   int get manualRunsLeft => (manualRunsLimit - manualRunsToday).clamp(0, manualRunsLimit);
 
-  static DreamReport fromJson(Map<String, dynamic> json) => DreamReport(
-        live: json['mode'] == 'on',
-        passesToday: _int(json['passes_today']),
-        passesLimit: _int(json['passes_limit']),
-        manualRunsToday: _int(json['manual_runs_today']),
-        manualRunsLimit: _int(json['manual_runs_limit']),
-        queuedChanges: _int(json['queued_changes']),
-        runs: _maps(json['runs']).map(DreamRun.fromJson).whereType<DreamRun>().toList(growable: false),
+  static DreamReport fromJson(Map<String, dynamic> json) {
+    // The history endpoint tolerates an invalid row, while allowance fields still
+    // use the generated contract. Decode each run before decoding the envelope.
+    final rawRuns = json['runs'];
+    final validRuns = <wire.GeneratedDreamRun>[];
+    if (rawRuns is List) {
+      for (final row in rawRuns.whereType<Map<String, dynamic>>()) {
+        try {
+          final run = wire.GeneratedDreamRun.fromJson(row);
+          if (run.runId.isNotEmpty) validRuns.add(run);
+        } on FormatException {
+          continue;
+        }
+      }
+    }
+    return DreamReport.fromGenerated(
+      wire.GeneratedDreamRunsResponse.fromJson({
+        ...json,
+        'runs': validRuns.map((run) => run.toJson()).toList(growable: false),
+      }),
+    );
+  }
+
+  factory DreamReport.fromGenerated(wire.GeneratedDreamRunsResponse value) => DreamReport(
+        live: value.mode == 'on',
+        passesToday: value.passesToday,
+        passesLimit: value.passesLimit,
+        manualRunsToday: value.manualRunsToday,
+        manualRunsLimit: value.manualRunsLimit,
+        queuedChanges: value.queuedChanges,
+        runs: value.runs.map(DreamRun.fromGenerated).whereType<DreamRun>().toList(growable: false),
       );
 }
 

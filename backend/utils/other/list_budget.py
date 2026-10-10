@@ -318,7 +318,14 @@ def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListRead
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc
-    budget.charge(len(snapshots))
+    try:
+        budget.charge(len(snapshots))
+    except ListReadBudgetExhausted as exc:
+        # The documents already crossed the wire. Historical hydration reads
+        # them back off the exception so a charge that lands on the last
+        # document still ships that prefix instead of dropping the fetch.
+        setattr(exc, 'partial_snapshots', snapshots)
+        raise
     return snapshots
 
 

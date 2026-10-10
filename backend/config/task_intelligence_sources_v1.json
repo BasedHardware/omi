@@ -74,6 +74,11 @@
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {
+          "path": "desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift",
+          "symbol": "client.createActionItem",
+          "discover": true
+        },
+        {
           "path": "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
           "symbol": "client.createActionItem",
           "discover": true
