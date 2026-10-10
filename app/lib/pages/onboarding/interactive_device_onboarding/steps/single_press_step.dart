@@ -11,6 +11,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 String _stripMarkdown(String text) {
@@ -232,6 +233,19 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     }
 
     // Waiting — Omi with bounce click animation
+    if (provider.questionNotHeard) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            context.l10n.voiceQuestionNoSpeech,
+            style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
     return _buildOmiWithBounce();
   }
 

@@ -1725,6 +1725,7 @@ class CaptureController extends ChangeNotifier
     }
     if (data.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
+      deviceOnboardingProvider?.onQuestionNotHeard();
       return;
     }
 
@@ -1757,7 +1758,10 @@ class CaptureController extends ChangeNotifier
       // Device-button voice → speak the reply aloud (BG/lock-screen safe).
       // Gated by _preferences.voiceResponseEnabled inside the service.
       playResponseAudio: true,
-      onNoSpeech: () => _playVoiceQuestionFailureHaptic(deviceId),
+      onNoSpeech: () {
+        deviceOnboardingProvider?.onQuestionNotHeard();
+        return _playVoiceQuestionFailureHaptic(deviceId);
+      },
     );
   }
 
