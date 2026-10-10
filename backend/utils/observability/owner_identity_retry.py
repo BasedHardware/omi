@@ -47,6 +47,8 @@ FUNNEL_REASONS = {
         }
     ),
     'cas_committed': frozenset({'done'}),
+    # This stage counts segments per invocation, not candidate attempts.
+    'segment_abstained': frozenset({'zero_text_window', 'invalid_text_window'}),
     'resolver_exit': frozenset(
         {
             'resolved',

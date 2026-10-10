@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "Bumuo at ibahagi ang iyong custom app",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "Maghanap ng mga app",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "Sumali sa komunidad!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ miyembro at patuloy na dumarami.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "Tanggalin ang Account",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Sa Omi, kami ay nakatuon sa pagprotekta ng iyong privacy. Ang pahina na ito ay nagbibigay-daan sa iyo na kontrolin kung paano ginagamit at iniimbak ang iyong data.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "Matutunan ang higit pa…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "Antas ng Proteksyon ng Data",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "Ang iyong data ay protektado ng default gamit ang mataas na encryption. Suriin ang iyong mga setting at hinaharap na privacy options sa ibaba.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "Pag-access ng App",
     "@appAccess": {
@@ -845,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "I-configure ang STT provider",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "Conversation Timeout",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "Itakda kung kailan auto-end ang mga pag-uusap",
+    "conversationTimeoutConfig": "Gaano katagal maghihintay ang Omi sa katahimikan bago tapusin ang conversation",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "I-import ang Data",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "I-import ang data mula sa ibang pinagkukunan",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "Debug & Diagnostics",
     "@debugDiagnostics": {
@@ -929,10 +905,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "Mga salitang nauunawaan mula sa iyong mga pag-uusap.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "Nagbibigay",
     "@providing": {
         "description": "Providing stat title"
@@ -944,10 +916,6 @@
     "remembering": "Naaalala",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "Mga katotohanan at detalye na naaalala para sa iyo.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "Unlimited Plan",
     "@unlimitedPlan": {
@@ -1065,7 +1033,6 @@
     },
     "debugLogs": "Debug Logs",
     "debugLogsAutoDelete": "Awtomatikong buburahin pagkatapos ng 3 araw.",
-    "debugLogsDesc": "Tumutulong sa pag-diagnose ng mga isyu",
     "noLogFilesFound": "Walang log files na nahanap.",
     "omiDebugLog": "Omi debug log",
     "logShared": "Log ay na-share",
@@ -1078,7 +1045,6 @@
     "exportedConversations": "Mga Exported Conversations mula sa Omi",
     "exportShared": "Export ay na-share",
     "deleteKnowledgeGraphTitle": "Tanggalin ang Knowledge Graph?",
-    "deleteKnowledgeGraphMessage": "Ito ay tatanggal ang lahat ng derived knowledge graph data (nodes at connections). Ang iyong orihinal na mga alaala ay manatiling ligtas. Ang graph ay muling bubuo sa paglipas ng panahon o sa susunod na request.",
     "knowledgeGraphDeleted": "Knowledge Graph ay natanggal",
     "deleteGraphFailed": "Nabigo ang pagtanggal ng graph: {error}",
     "@deleteGraphFailed": {
@@ -1090,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "Tanggalin ang Knowledge Graph",
-    "deleteKnowledgeGraphDesc": "Burahin ang lahat ng nodes at connections",
     "mcp": "MCP",
     "mcpServer": "MCP Server",
     "mcpServerDesc": "Ikonekta ang AI assistants sa iyong data",
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "Tukuyin ang Mga Profil para sa Mga Kaibigan at Pamilya",
     "trainFamilyProfilesDesc": "Ang iyong mga recording ay tumutulong sa amin na kilalanin at lumikha ng mga profil para sa iyong mga kaibigan at pamilya.",
     "enhanceTranscriptAccuracy": "Pahusayin ang Accuracy ng Transcript",
-    "enhanceTranscriptAccuracyDesc": "Habang umuunlad ang aming modelo, maaari kaming magbigay ng mas mahusay na resulta ng transkeribsyon para sa iyong mga recording.",
     "legalNotice": "Legal Notice: Ang legality ng pag-record at pag-store ng voice data ay maaaring magkakaiba depende sa iyong lokasyon at paano mo ginagamit ang feature na ito. Ang iyong responsibilidad na matiyak ang compliance sa local laws at regulations.",
     "alreadyAuthorized": "Naauthorize Na",
     "authorize": "I-authorize",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "Sabihin sa amin ang iyong pangunahing wika",
-    "languageForTranscription": "Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan.",
+    "languageForTranscription": "Ginagamit ng Omi ang wikang ito para sa transcription, buod, at alaala.",
     "singleLanguageModeInfo": "Ang Single Language Mode ay pinagana na. Ang pagsasalin ay hindi pinagana para sa mas mataas na accuracy.",
     "searchLanguageHint": "Maghanap ng wika ayon sa pangalan o code",
     "noLanguagesFound": "Walang mga wikang nahanap",
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "Ang integration sa {appName} ay paparating na! Nagsusumikap kami na magdala ng mas maraming opsyon sa pamamahala ng gawain.",
+    "integrationComingSoon": "Hindi pa suportado ang {appName}.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "I-import ang Configuration",
     "exportConfiguration": "I-export ang configuration",
     "bringYourOwn": "Dalhin ang iyong sarili",
-    "payYourSttProvider": "Gamitin ang Omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
+    "payYourSttProvider": "Libre sa Omi. Direkta mong binabayaran ang iyong transcription provider.",
     "freeMinutesMonth": "300 libreng minuto/buwan kasama. Unlimited sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Ang Host ay kinakailangan",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "Ilagay ang iyong live STT WebSocket endpoint",
     "apiKey": "API key",
     "enterApiKey": "Ilagay ang iyong API key",
-    "storedLocallyNeverShared": "Nakatipid sa lokal, hindi kailanman ibinabahagi",
+    "storedLocallyNeverShared": "Naka-save sa telepono na ito. Ipinapadala lang sa iyong transcription provider.",
     "host": "Host",
     "port": "Port",
     "advanced": "Advanced",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "I-reset ang request config sa default",
     "logs": "Mga Log",
     "logsCopied": "Ang mga log ay nakopya",
-    "noLogsYet": "Walang mga log pa. Magsimula ng recording para makita ang custom STT activity.",
-    "deviceUsesCodec": "Ang {device} ay gumagamit ng {reason}. Ang Omi ay gagamitin.",
+    "noLogsYet": "Wala pang log. Mag-record ng isang bagay para makita ang mga request sa iyong transcription provider.",
+    "deviceUsesCodec": "Ang {device} ay nagre-record sa format na hindi mabasa ng provider na ito ({reason}), kaya gagamitin ang transcription ng Omi.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,13 +1509,9 @@
         }
     },
     "omiTranscription": "Omi Transcription",
-    "bestInClassTranscription": "Best in class transcription na walang setup",
     "instantSpeakerLabels": "Instant speaker labels",
     "languageTranslation": "100+ language translation",
-    "optimizedForConversation": "Naka-optimize para sa pag-usap",
     "autoLanguageDetection": "Auto language detection",
-    "highAccuracy": "High accuracy",
-    "privacyFirst": "Privacy first",
     "saveChanges": "I-save ang Mga Pagbabago",
     "resetToDefault": "I-reset sa default",
     "viewTemplate": "Tingnan ang Template",
@@ -1705,10 +1665,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "Patuloy, ang iyong ginagawa ay napakaganda",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "I-skip ang tanong na ito",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1812,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "Kunan ang bawat sandali. Makakuha ng AI-powered\nsummaries. Hindi na kailangan mag-notes.",
+    "captureEveryMoment": "Nire-record ng Omi ang iyong mga conversation at isinusulat\nang buod at to-do para sa iyo.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1881,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan",
+    "languageBenefits": "Ginagamit ng Omi ang wikang ito para sa transcription, buod, at alaala.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1898,10 +1854,6 @@
     "selectYourLanguage": "Pumili ng iyong wika",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "Mga Gawain",
     "@actionItemsTitle": {
@@ -2553,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "I-configure ang STT provider",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "Itakda kung kailan ang mga conversation ay awtomatikong magtatapos",
+    "setWhenConversationsAutoEnd": "Gaano katagal maghihintay ang Omi sa katahimikan bago tapusin ang conversation",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2606,9 +2554,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "Knowledge Graph ay matagumpay na nabura",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2624,10 +2569,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "Burahin ang lahat ng nodes at connections",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2822,10 +2763,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Maligayang pagdating sa Omi! Ang iyong AI companion ay handa nang tulungan ka sa mga conversation, gawain, at marami pa.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Magsimulang Gumamit ng Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2939,14 +2876,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "Ang mga conversation ay awtomatikong napoproseso",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Makakuha ng mga insight at summary kaagad",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "Ipakita ang Lahat",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2958,10 +2887,6 @@
     "dailyScore": "PANG-ARAW-ARAW NA PUNTUASYON",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "Isang puntuasyon upang tulungan kang mas mahusay\ntumuon sa pagpapatupad.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "Mga resulta ng paghahanap",
     "@searchResults": {
@@ -3476,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "Magsimula ng isang conversation at hayaan ang magic na magsimula",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "Pakisuri ang iyong koneksyon sa internet",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3738,10 +3659,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "Wearable AI companion",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "Kumakarga ng mga memories…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3813,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "Mag-organize at kontrol ang iyong mga memories",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "Total",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3825,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "Itakda ang lahat ng memories sa private visibility",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "Gawing Public ang Lahat ng Memories",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "Itakda ang lahat ng memories sa public visibility",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Permanenteng alisin ang lahat ng memories mula sa Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3920,7 +3825,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "Piliin ang iyong pangunahing wika",
     "chooseYourLanguage": "Piliin ang iyong wika",
-    "selectPreferredLanguageForBestExperience": "Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience",
     "searchLanguages": "Maghanap ng mga wika",
     "selectALanguage": "Pumili ng isang wika",
     "tryDifferentSearchTerm": "Subukan ang ibang search term",
@@ -3935,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "Paganahin ang mga features para sa pinakamahusay na Omi experience sa iyong device.",
     "microphoneAccess": "Microphone Access",
     "recordAudioConversations": "I-record ang audio conversations",
     "microphoneAccessDescription": "Kailangan ng Omi ang microphone access upang i-record ang iyong mga conversation at magbigay ng mga transcription.",
@@ -4301,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "Kailan makakatanggap ng iyong daily summary",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "Subscription",
     "@subscription": {
         "description": "Subscription section title"
@@ -4330,14 +4229,10 @@
     "checkingNext7Days": "Sinusuri ang susunod na 7 araw",
     "shortcuts": "Mga Shortcut",
     "shortcutChangeInstruction": "I-click sa isang shortcut upang baguhin ito. Pindutin ang Escape upang kanselahin.",
-    "configureSTTProvider": "I-configure ang STT provider",
-    "setConversationEndDescription": "Itakda kung kailan mag-auto-end ang mga conversation",
     "importDataDescription": "Mag-import ng data mula sa ibang mga source",
     "exportConversationsDescription": "I-export ang mga conversation sa JSON",
     "exportingConversations": "Nag-export ng mga conversation…",
-    "clearNodesDescription": "I-clear ang lahat ng nodes at connections",
     "deleteKnowledgeGraphQuestion": "Burahin ang Knowledge Graph?",
-    "deleteKnowledgeGraphWarning": "Ito ay buburahin ang lahat ng derived knowledge graph data. Ang iyong original na mga memory ay manatiling ligtas.",
     "connectOmiWithAI": "Ikonekta ang Omi sa AI assistants",
     "noAPIKeys": "Walang API keys. Lumikha ng isa upang magsimula.",
     "autoCreateWhenDetected": "Auto-create kapag na-detect ang pangalan",
@@ -4750,10 +4645,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "Lumikha at ibahagi ang iyong app",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "App",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4900,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "Ang end-to-end encryption ay ang gold standard para sa privacy. Kapag na-enable ito, ang iyong data ay naka-encrypt sa iyong device bago ipadala sa aming mga server. Ito ay nangangahulugang walang isa, hindi pa naman ang Omi, ay makaka-access sa iyong content.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "Mga Mahalagang Trade-offs:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4956,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "Ang iyong data ay naka-encrypt gamit ang isang key na natatangi sa iyo sa aming mga server, hosted sa Google Cloud. Ito ay nangangahulugang ang iyong raw na content ay hindi accessible sa sinuman, kabilang ang Omi staff o Google, direkta mula sa database.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "End-to-End Encryption",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "Paganahin para sa maximum security kung saan lamang ikaw ay maka-access sa iyong data. Itap upang matuto pa.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "Anuman ang level, ang iyong data ay laging encrypted sa rest at in transit.",
     "@dataAlwaysEncrypted": {
@@ -5065,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• Ang iyong data ay tumutulong na mapabuti ang AI models\n• Lamang ang non-sensitive data ang ibabahagi\n• Fully transparent na proseso",
+    "trainingDataBullets": "• Nakakatulong ang iyong data na mapabuti ang mga AI model\n• Tanging ang mga hindi sensitibong data lang ang ibinabahagi",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5174,10 +5053,6 @@
     "youAreOnUnlimitedPlan": "Ikaw ay nasa Unlimited Plan.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "Ang iyong Omi, na walang hanggan. Maging unlimited para sa walang hanggang posibilidad.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "Ang iyong plano ay nagtapos noong {date}.\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.",
     "@planEndedOn": {
@@ -5295,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Sa Omi, seryoso kami ang kinuha ang iyong privacy. Nais naming maging transparent tungkol sa data na aming kinukuha at kung paano namin ito ginagamit upang mapabuti ang aming produkto para sa iyo. Narito kung ano ang kailangan mong malaman:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "Ano ang Aming Sinusubaybayan",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5314,14 +5185,6 @@
     "ourCommitment": "Ang Aming Pangako",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "Kami ay nakatuon sa paggamit ng data na aming kinukuha lamang upang gawing mas mahusay na produkto ang Omi para sa iyo. Ang iyong privacy at tiwala ay pangunahin para sa amin.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Salamat sa pagiging valued user ng Omi. Kung mayroon kang anumang mga katanungan o alalahanin, huwag mag-atubiling makipag-ugnayan sa amin sa team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "Password",
     "@password": {
@@ -5384,10 +5247,6 @@
     "exportStartedMayTakeFewSeconds": "Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "Ito ay magbabura ng lahat ng derived knowledge graph data (nodes at connections). Ang iyong mga orihinal na memories ay magiging ligtas. Ang graph ay muling mabubuo sa paglipas ng panahon o sa susunod na request.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "I-configure ang iyong pang-araw-araw na digest ng mga gawain",
     "@configureDailySummaryDigest": {
@@ -5577,10 +5436,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "Kapag lumikha ng isang tao, maaari kang pumunta sa isang conversation transcript, at italaan sa kanila ang kanilang corresponding segments, sa ganitong paraan ang Omi ay makakapag-recognize ng kanilang speech din!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "I-tap upang burahin",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5659,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "I-store ang iyong real-time recordings sa private cloud storage habang nagsasalita ka. Ang audio ay kina-capture at ina-save nang secure sa real-time.",
+    "storeAudioCloudDescription": "Ina-upload ang mga recording mo habang nagsasalita ka para mapakinggan mo ulit mamaya.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6772,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "Bumuo at ibahagi ang iyong custom na app",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "Maghanap ng 1500+ Apps",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6812,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "Kritikal lamang na mga reminder",
+    "frequencyDescMinimal": "Mga urgent lang, mga 1–3 sa isang araw",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "Mahalagang update lamang",
+    "frequencyDescLow": "Mga mahalaga lang, mga 3–5 sa isang araw",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "Regular na nakakatulong na empuye",
+    "frequencyDescBalanced": "Mga kapaki-pakinabang na suhestiyon, mga 5–8 sa isang araw",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "Madalas na check-in",
+    "frequencyDescHigh": "Mas maraming suhestiyon, mga 6–9 sa isang araw",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "Manatiling patuloy na engaged",
+    "frequencyDescMaximum": "Bawat kapaki-pakinabang na koneksyon, hanggang 9 sa isang araw",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8076,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "Pribado at secure sa iyong device",
+    "privateAndSecureOnDevice": "Naka-save sa telepono na ito",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8736,14 +8587,6 @@
     "onboardingTellUsAboutYourself": "Sabihin sa amin tungkol sa iyo",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "Piliin ang iyong kagustuhan",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Bigyan ng kinakailangang access",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "Handa ka na",
     "@onboardingYoureAllSet": {
@@ -9680,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "Pumili kung aling backend ang kukonektahan",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "Production",
     "@production": {
         "description": "Label for production API environment"
@@ -9855,10 +9694,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "Ang iyong mga call ay nananatiling private at secure",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "I-upgrade sa Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9960,7 +9795,7 @@
     "fairUse3Day": "3-Day Rolling",
     "fairUseWeekly": "Weekly Rolling",
     "fairUseAboutTitle": "Tungkol sa Fair Use",
-    "fairUseAboutBody": "Ang Omi ay dinisenyo para sa personal conversations, meetings, at live interactions. Ang usage ay sinusukat ng real speech time detected, hindi ang connection time. Kung ang usage ay significantly lumalampas sa normal patterns para sa non-personal content, ang mga adjustments ay maaaring mag-apply.",
+    "fairUseAboutBody": "Dinisenyo ang Omi para sa personal na conversation, meeting, at live na interaksyon. Sinusukat ang paggamit base sa oras ng pagsasalita, hindi sa oras ng koneksyon. Kung lampas na lampas ang paggamit mo sa normal na personal na gamit, makakatanggap ka muna ng babala. Ang tuloy-tuloy na mabigat na paggamit ay maaaring magpabagal o maglimita sa transcription.",
     "fairUseCaseRefCopied": "{caseRef} copied",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10065,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "Kapag ang iyong Omi ay hindi konektado sa iyong phone, ito ay nag-store ng audio locally sa built-in memory nito. Hindi mo kailanman mawawalan ng recording.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Kapag muling kumokonekta ang Omi, ang mga recording ay automatic na inilipat sa iyong phone bilang isang temporary holding area bago i-upload.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10105,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "Ang mga permissions na ito ay core sa kung paano gumagana ang Omi. Pinapahintulutan nila ang mga key features tulad ng notifications, location-based experiences, at audio capture.",
+    "permissionsPageDescription": "Ginagamit ito ng Omi para kumonekta sa iyong device, mag-record ng audio, manatiling gumagana sa background, magpadala ng reminder, at itala kung saan nangyari ang mga conversation.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10116,10 +9947,6 @@
     "permissionsSetupTitle": "Makakuha ng pinakamahusay na experience",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "I-enable ang ilang permissions upang ang Omi ay gumawa ng mahika.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "Maaari mong baguhin ang mga ito anumang oras sa Settings > Permissions",
     "@permissionsChangeAnytime": {
@@ -10452,7 +10279,6 @@
     "currentPlan": "Kasalukuyan",
     "neoSubtitle": "{count} tanong bawat buwan",
     "operatorSubtitle": "{count} tanong bawat buwan",
-    "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation",
     "chatUsageCost": "Chat: ${used} / ${limit} nagamit ngayong buwan",
     "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
     "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
@@ -10479,7 +10305,7 @@
     "record": "Mag-record",
     "stop": "Itigil",
     "recordWithPhoneMic": "Mag-record gamit ang mikropono ng telepono",
-    "recordWithPhoneMicSubtitle": "Kunan ang audio sa paligid mo",
+    "recordWithPhoneMicSubtitle": "Mag-record at mag-transcribe gamit ang mikropono ng telepono na ito",
     "phoneCall": "Tawag sa telepono",
     "phoneCallSubtitle": "Mag-record ng tawag na may live na transkripsyon",
     "bulkExportInProgress": "Nag-e-export…",
@@ -10550,7 +10376,6 @@
     "invalidPromotionCode": "Hindi valid na promo code.",
     "backgroundModeTitle": "Background Mode",
     "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
-    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
     "regenerateRecap": "Buuin muli ang buod",
     "recapRegeneratedSnackbar": "Nabuo muli ang buod",
     "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
@@ -10606,7 +10431,7 @@
     "deviceOnboardingContinue": "Magpatuloy",
     "deviceOnboardingFinish": "Tapusin",
     "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
-    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroSubtitle": "Subukan ang live transcription, magtanong, at ang double-tap shortcut.",
     "deviceOnboardingIntroDuration": "Mga 1 minuto",
     "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
     "latest": "Pinakabago",
@@ -10726,7 +10551,6 @@
     "pinAsBaseline": "I-pin bilang baseline",
     "unpinAsBaseline": "Alisin sa baseline",
     "baselineMemory": "Baseline na memorya",
-    "alwaysInContext": "Palaging nasa konteksto",
     "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
     "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
@@ -10781,7 +10605,7 @@
     "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
-    "failedToUpdateBaselineStatus": "Hindi na-update ang status ng baseline.",
+    "failedToUpdateBaselineStatus": "Hindi ma-update ang alaalang ito. Subukan ulit.",
     "memoryAllowUse": "Payagan ang paggamit",
     "memoryDontUse": "Huwag gamitin",
     "unstarConversation": "Alisin ang bituin sa pag-uusap",
@@ -10837,8 +10661,8 @@
     "memoryReviewRight": "Tama",
     "memoryReviewWrong": "Mali",
     "memoryReviewFix": "Ayusin",
-    "memoryReviewConfirmed": "Nakumpirma. Isasaalang-alang ko ito.",
-    "memoryReviewDropped": "Tinanggal. Iiwasan ko ang ganitong mga detalye.",
+    "memoryReviewConfirmed": "Nakumpirma.",
+    "memoryReviewDropped": "Tinanggal sa iyong mga alaala.",
     "memoryReviewUpdated": "Na-update.",
     "memoryReviewSaveFailed": "Hindi ma-save, subukan ulit",
     "indentTask": "I-indent",
@@ -10913,7 +10737,7 @@
     "homeScreen": "Home Screen",
     "phoneCalls": "Mga Tawag sa Telepono",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text",
+    "vadGateDescription": "Nilalaktawan ang tahimik na audio bago ang transcription para mabawasan ang gastos.",
     "flashCustomFirmware": "I-flash ang Custom na Firmware",
     "flashCustomFirmwareDescription": "Mag-flash ng custom na firmware build",
     "selectFirmwareZip": "Piliin ang ZIP file ng firmware",
@@ -10932,7 +10756,7 @@
     "permissionBlockedHint": "Naka-off sa Settings. Payagan ito doon para magamit ito.",
     "useDifferentAccount": "Gumamit ng Ibang Account",
     "onboardingStepOf": "Hakbang {current} sa {total}",
-    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.",
+    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi nang ilang araw. Magsisimulang mapuno ang iyong mga conversation, alaala, at to-do.",
     "cantFindDeviceHint": "Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.",
     "scanAgain": "Mag-scan Ulit",
     "howToPair": "Paano Mag-pair",
@@ -11053,7 +10877,6 @@
     "notificationsAndDisplay": "Mga Notipikasyon at Display",
     "helpAndAbout": "Tulong at Tungkol",
     "speakerTagPromptTitle": "Tulungan ang Omi na makilala ang mga boses",
-    "speakerTagPromptSubtitle": "Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw",
     "speakerTagPromptIsThisYou": "Ikaw ba ito?",
     "speakerTagPromptIsThisPerson": "Si {name} ba ito?",
     "speakerTagPromptWhoIsThis": "Sino ito?",
@@ -11229,24 +11052,24 @@
     "confidenceMeterLabel": "Kumpiyansa: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{Nilagyan mo ng label nang isang beses} other{Nilagyan mo ng label nang {count} beses}}",
     "confidenceReasonPicked": "{count, plural, =1{Pinili sa 1 mungkahi} other{Pinili sa {count} mungkahi}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{Kinumpirma mo ang 1 tugma} other{Kinumpirma mo ang {count} tugma}}",
-    "confidenceReasonAutoOnly": "Awtomatikong itinugma lang, hindi pa nakumpirma",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Kinumpirma mo ang 1 awtomatikong label} other{Kinumpirma mo ang {count} awtomatikong label}}",
+    "confidenceReasonAutoOnly": "Awtomatikong nilagyan ng label, hindi pa nakukumpirma",
     "confidenceReasonNeverConfirmed": "Hindi pa nakumpirma",
     "confidenceReasonCorrected": "Itinama mo ang tugma nito",
-    "confidenceReasonVoiceReady": "handa na ang boses",
-    "confidenceReasonNeedsVoice": "kailangan ng boses",
+    "confidenceReasonVoiceReady": "naka-save ang boses",
+    "confidenceReasonNeedsVoice": "wala pang voice sample",
     "confidenceReasonNotHeard": "hindi pa naririnig",
     "confidenceSheetTitle": "Kumpiyansa",
     "confidenceSummaryConfirmed": "Nakikilala ni Omi ang boses ni {name}, at kinumpirma mo ito.",
     "confidenceSummaryLikely": "Karaniwang nakikilala ni Omi ang boses ni {name}, pero ilang beses mo pa lang itong nakumpirma.",
-    "confidenceSummaryUnverified": "Wala ka pang ginawang nagpapatunay kay {name}.",
+    "confidenceSummaryUnverified": "Hindi mo pa na-label o nakukumpirma si {name}, kaya hindi sigurado si Omi kung kilala nito ang kanyang boses.",
     "confidenceEvidenceHeader": "Ebidensya",
     "evidenceManualLabels": "{count, plural, =1{Nilagyan mo ng label sa 1 usapan} other{Nilagyan mo ng label sa {count} usapan}}",
     "evidenceCardConfirms": "{count, plural, =1{Oo sa 1 mungkahi} other{Oo sa {count} mungkahi}}",
     "evidenceCardPicks": "{count, plural, =1{Pinili sa 1 mungkahi} other{Pinili sa {count} mungkahi}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{Nakumpirma ang 1 awtomatikong tugma} other{Nakumpirma ang {count} awtomatikong tugma}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 tugma ang inilipat sa iba} other{{count} tugma ang inilipat sa iba}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 awtomatikong tugma na walang nagkumpirma} other{{count} awtomatikong tugma na walang nagkumpirma}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Kinumpirma mo ang 1 awtomatikong label} other{Kinumpirma mo ang {count} awtomatikong label}}",
+    "evidenceAutoCorrected": "{count, plural, =1{Inilipat mo sa iba ang 1 awtomatikong label} other{Inilipat mo sa iba ang {count} awtomatikong label}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 awtomatikong label na hindi pa nakukumpirma} other{{count} awtomatikong label na hindi pa nakukumpirma}}",
     "evidenceVoiceReady": "Handa na ang sample ng boses",
     "evidenceNoVoice": "Wala pang sample ng boses",
     "evidenceNotHeard": "Hindi pa naririnig sa usapan",
@@ -11259,12 +11082,10 @@
     "effectNeeded": "Kailangan para maging Kumpirmado",
     "confidenceToReachConfirmed": "Para Maging Kumpirmado",
     "confidenceNextVoice": "Kailangan din ni Omi ng sample ng boses ni {name}. Lagyan sila ng label habang naka-on ang Tandaan ang mga boses.",
-    "confidenceIsConfirmed": "Kumpirmado na si {name}. Patuloy na natututo si Omi sa bawat label.",
-    "confidenceFootnote": "Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos hindi nakakatulong ang mga awtomatikong tugma nang mag-isa.",
+    "confidenceIsConfirmed": "Kumpirmado na si {name}. Wala ka nang kailangang gawin.",
+    "confidenceFootnote": "Pinakamahalaga ang mga label at kumpirmasyon mula sa iyo. Kaunti lang ang bigat ng mga awtomatikong label hangga't hindi mo ito kinukumpirma.",
     "personWhyConfidence": "Bakit?",
     "pinPersonTitle": "I-pin si {name}",
-    "pinPersonSubtitle": "Panatilihin si {name} at asahan sila sa mga usapan mo",
-    "pinPersonHonestLine": "Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.",
     "pinAction": "I-pin",
     "unpinAction": "I-unpin",
     "personPinnedToast": "Na-pin si {name}",
@@ -11302,9 +11123,8 @@
     "voiceMatchPossible": "Posibleng tugma",
     "voiceMatchWeak": "Mahinang tugma",
     "voiceMatchMeterLabel": "Tugma ng boses: {level}",
-    "speakerTagPromptHintIdentify": "Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.",
-    "speakerTagPromptHintConfirm": "Ang Oo ay nagpapataas ng kumpiyansa kay {name}.",
-    "speakerTagPromptHintOwner": "Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.",
+    "speakerTagPromptHintIdentify": "Ang sagot mo ay tumutulong kay Omi na makilala ang boses na ito sa susunod.",
+    "speakerTagPromptHintOwner": "Ang sagot mo ay para lang sa pinatugtog na bahagi.",
     "speakerTagPromptSavedAs": "Na-save bilang {name}",
     "speakerTagPromptSavedAsYou": "Na-save bilang ikaw",
     "speakerTagPromptIgnoredNote": "Hindi na magtatanong si Omi tungkol sa boses na ito",
@@ -11380,7 +11200,7 @@
     "conversationProcessingFailedMessage": "Hindi maproseso ang pag-uusap na ito.",
     "waitForReprocessing": "Hintaying matapos ang muling pagproseso.",
     "unnamedSpeakerLabel": "Speaker",
-    "unresolvedSpeakersNotice": "Hindi pinaghihiwalay ang mga speaker sa iba't ibang recording.",
+    "unresolvedSpeakersNotice": "Maaaring hindi magtugma ang mga label ng speaker sa mga recording sa conversation na ito.",
     "unresolvedSpeakersTitle": "Tungkol sa mga Label ng Speaker",
     "unresolvedSpeakersMessage": "Hindi maipagkaiba ng Omi ang ibang mga boses sa mga recording. I-tap ang label ng speaker para pangalanan kung sino ang nagsasalita.",
     "nameSpeakerTitle": "Pangalanan ang Speaker",
@@ -11504,6 +11324,188 @@
     "dreamReportFound": "{fixes, plural, =1{1 ayos} other{{fixes} ayos}} · {asks, plural, =1{1 mungkahi} other{{asks} mungkahi}}",
     "dreamReportDropped": "{count, plural, =1{1 lumang pagbabago ang nilaktawan} other{{count} lumang pagbabago ang nilaktawan}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 ulat ang pinigil para sa privacy} other{{count} ulat ang pinigil para sa privacy}}",
+    "speakerTagPromptExcerptSaved": "Na-save ang sagot para sa bahaging ito.",
+    "pinPersonDescription": "Nananatili sa itaas ng listahan mo ng Mga Tao ang mga naka-pin na tao, at hindi sila tinatanggal ng Linisin.",
+    "buildAndShareApp": "Bumuo at ibahagi ang iyong custom app",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ miyembro at patuloy na dumarami.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "Sa Omi, kami ay nakatuon sa pagprotekta ng iyong privacy. Ang pahina na ito ay nagbibigay-daan sa iyo na kontrolin kung paano ginagamit at iniimbak ang iyong data.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Ang iyong data ay protektado ng default gamit ang mataas na encryption. Suriin ang iyong mga setting at hinaharap na privacy options sa ibaba.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "I-configure ang STT provider",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "I-import ang data mula sa ibang pinagkukunan",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Mga salitang nauunawaan mula sa iyong mga pag-uusap.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Mga katotohanan at detalye na naaalala para sa iyo.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Tumutulong sa pag-diagnose ng mga isyu",
+    "deleteKnowledgeGraphMessage": "Ito ay tatanggal ang lahat ng derived knowledge graph data (nodes at connections). Ang iyong orihinal na mga alaala ay manatiling ligtas. Ang graph ay muling bubuo sa paglipas ng panahon o sa susunod na request.",
+    "deleteKnowledgeGraphDesc": "Burahin ang lahat ng nodes at connections",
+    "enhanceTranscriptAccuracyDesc": "Habang umuunlad ang aming modelo, maaari kaming magbigay ng mas mahusay na resulta ng transkeribsyon para sa iyong mga recording.",
+    "bestInClassTranscription": "Best in class transcription na walang setup",
+    "optimizedForConversation": "Naka-optimize para sa pag-usap",
+    "highAccuracy": "High accuracy",
+    "privacyFirst": "Privacy first",
+    "keepGoing": "Patuloy, ang iyong ginagawa ay napakaganda",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "configureSttProvider": "I-configure ang STT provider",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Burahin ang lahat ng nodes at connections",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Maligayang pagdating sa Omi! Ang iyong AI companion ay handa nang tulungan ka sa mga conversation, gawain, at marami pa.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Ang mga conversation ay awtomatikong napoproseso",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Makakuha ng mga insight at summary kaagad",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "Isang puntuasyon upang tulungan kang mas mahusay\ntumuon sa pagpapatupad.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Magsimula ng isang conversation at hayaan ang magic na magsimula",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Wearable AI companion",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Mag-organize at kontrol ang iyong mga memories",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Itakda ang lahat ng memories sa private visibility",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Itakda ang lahat ng memories sa public visibility",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience",
+    "enableFeaturesForBestExperience": "Paganahin ang mga features para sa pinakamahusay na Omi experience sa iyong device.",
+    "deliveryTimeDescription": "Kailan makakatanggap ng iyong daily summary",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "I-configure ang STT provider",
+    "setConversationEndDescription": "Itakda kung kailan mag-auto-end ang mga conversation",
+    "clearNodesDescription": "I-clear ang lahat ng nodes at connections",
+    "deleteKnowledgeGraphWarning": "Ito ay buburahin ang lahat ng derived knowledge graph data. Ang iyong original na mga memory ay manatiling ligtas.",
+    "createAndShareYourApp": "Lumikha at ibahagi ang iyong app",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "Ang end-to-end encryption ay ang gold standard para sa privacy. Kapag na-enable ito, ang iyong data ay naka-encrypt sa iyong device bago ipadala sa aming mga server. Ito ay nangangahulugang walang isa, hindi pa naman ang Omi, ay makaka-access sa iyong content.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Ang iyong data ay naka-encrypt gamit ang isang key na natatangi sa iyo sa aming mga server, hosted sa Google Cloud. Ito ay nangangahulugang ang iyong raw na content ay hindi accessible sa sinuman, kabilang ang Omi staff o Google, direkta mula sa database.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Paganahin para sa maximum security kung saan lamang ikaw ay maka-access sa iyong data. Itap upang matuto pa.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Ang iyong Omi, na walang hanggan. Maging unlimited para sa walang hanggang posibilidad.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "Sa Omi, seryoso kami ang kinuha ang iyong privacy. Nais naming maging transparent tungkol sa data na aming kinukuha at kung paano namin ito ginagamit upang mapabuti ang aming produkto para sa iyo. Narito kung ano ang kailangan mong malaman:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "Kami ay nakatuon sa paggamit ng data na aming kinukuha lamang upang gawing mas mahusay na produkto ang Omi para sa iyo. Ang iyong privacy at tiwala ay pangunahin para sa amin.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Salamat sa pagiging valued user ng Omi. Kung mayroon kang anumang mga katanungan o alalahanin, huwag mag-atubiling makipag-ugnayan sa amin sa team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "Ito ay magbabura ng lahat ng derived knowledge graph data (nodes at connections). Ang iyong mga orihinal na memories ay magiging ligtas. Ang graph ay muling mabubuo sa paglipas ng panahon o sa susunod na request.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Kapag lumikha ng isang tao, maaari kang pumunta sa isang conversation transcript, at italaan sa kanila ang kanilang corresponding segments, sa ganitong paraan ang Omi ay makakapag-recognize ng kanilang speech din!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Bumuo at ibahagi ang iyong custom na app",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "Piliin ang iyong kagustuhan",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Bigyan ng kinakailangang access",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Pumili kung aling backend ang kukonektahan",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Ang iyong mga call ay nananatiling private at secure",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "Kapag ang iyong Omi ay hindi konektado sa iyong phone, ito ay nag-store ng audio locally sa built-in memory nito. Hindi mo kailanman mawawalan ng recording.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "I-enable ang ilang permissions upang ang Omi ay gumawa ng mahika.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation",
+    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
+    "alwaysInContext": "Palaging nasa konteksto",
+    "speakerTagPromptSubtitle": "Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw",
+    "pinPersonSubtitle": "Panatilihin si {name} at asahan sila sa mga usapan mo",
+    "pinPersonHonestLine": "Nagtatanong muna ang Omi bago itugma ang magkakahawig na boses.",
+    "speakerTagPromptHintConfirm": "Ang Oo ay nagpapataas ng kumpiyansa kay {name}.",
     "onboardingRatingPromptBody": "Malaking tulong sa amin ang 5 stars ❤️",
     "singlePress": "Isang pindot",
     "singlePressAction": "Aksyon sa isang pindot",

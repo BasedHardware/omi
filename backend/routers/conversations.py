@@ -15,7 +15,7 @@ from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1294,6 +1294,8 @@ def delete_conversation(
 
     # Commit intent before retraction or cleanup; failures must never undo this guard.
     conversation_tombstones.record_deletion(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
 
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.

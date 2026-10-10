@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "اپلیکیشن سفارشی خود را بسازید و اشتراک‌گذاری کنید",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "جستجوی اپلیکیشن‌ها",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "به جامعه بپیوندید!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ اعضا و افزایش.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "حذف حساب",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "در Omi، ما متعهد به حفاظت از حریم خصوصی شما هستیم. این صفحه به شما اجازه می‌دهد که کنترل کنید داده‌های شما چگونه ذخیره و استفاده می‌شوند.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "اطلاعات بیشتر…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "سطح حفاظت داده‌ها",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی ایمن هستند. تنظیمات و گزینه‌های حریم خصوصی آینده خود را مرور کنید.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "دسترسی اپلیکیشن",
     "@appAccess": {
@@ -845,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "پیکربندی ارائه‌دهنده STT",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "مهلت گفتگو",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "تنظیم زمان خودکار پایان گفتگو",
+    "conversationTimeoutConfig": "Omi چقدر در سکوت صبر کند پیش از پایان دادن به گفتگو",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "وارد کردن داده‌ها",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "وارد کردن داده‌ها از منابع دیگر",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "اشکال‌زدایی و تشخیص",
     "@debugDiagnostics": {
@@ -929,10 +905,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "کلمات درک‌شده از گفتگوهای شما.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "ارائه",
     "@providing": {
         "description": "Providing stat title"
@@ -944,10 +916,6 @@
     "remembering": "یادآوری",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "واقعیات و جزئیات یادآوری‌شده برای شما.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "طرح نامحدود",
     "@unlimitedPlan": {
@@ -1065,7 +1033,6 @@
     },
     "debugLogs": "گزارش‌های اشکال‌زدایی",
     "debugLogsAutoDelete": "بعد از 3 روز خودکار حذف می‌شود.",
-    "debugLogsDesc": "کمک به تشخیص مشکلات",
     "noLogFilesFound": "هیچ فایل گزارشی یافت نشد.",
     "omiDebugLog": "گزارش اشکال‌زدایی Omi",
     "logShared": "گزارش اشتراک‌گذاری شد",
@@ -1078,7 +1045,6 @@
     "exportedConversations": "گفتگوهای صادر‌شده از Omi",
     "exportShared": "صادرات اشتراک‌گذاری شد",
     "deleteKnowledgeGraphTitle": "حذف گراف دانش؟",
-    "deleteKnowledgeGraphMessage": "این کار تمام داده‌های گراف دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادداشت‌های اصلی شما امن باقی خواهند ماند. گراف در طول زمان یا در درخواست بعدی بازسازی خواهد شد.",
     "knowledgeGraphDeleted": "گراف دانش حذف شد",
     "deleteGraphFailed": "ناتوان در حذف گراف: {error}",
     "@deleteGraphFailed": {
@@ -1090,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "حذف گراف دانش",
-    "deleteKnowledgeGraphDesc": "تمام گره‌ها و اتصالات را پاک کنید",
     "mcp": "MCP",
     "mcpServer": "سرور MCP",
     "mcpServerDesc": "دستیارهای هوشمند را به داده‌های خود وصل کنید",
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "آموزش پروفایل‌ها برای دوستان و خانواده",
     "trainFamilyProfilesDesc": "ضبط‌های شما کمک می‌کند ما دوستان و خانواده شما را شناسایی و پروفایل ایجاد کنیم.",
     "enhanceTranscriptAccuracy": "بهبود دقت رونویسی",
-    "enhanceTranscriptAccuracyDesc": "هنگامی که مدل ما بهبود می‌یابد، می‌توانیم نتایج رونویسی بهتری برای ضبط‌های شما ارائه دهیم.",
     "legalNotice": "اخطار قانونی: قانونی بودن ضبط و ذخیره داده‌های صوتی ممکن است بسته به موقعیت مکانی شما و نحوه استفاده از این ویژگی متفاوت باشد. شما مسئول اطمینان از انطباق با قوانین و مقررات محلی هستید.",
     "alreadyAuthorized": "قبلاً مجاز",
     "authorize": "مجاز کردن",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "زبان اصلی خود را به ما بگویید",
-    "languageForTranscription": "زبان خود را برای رونویسی‌های تیزتر و تجربه شخصی‌سازی‌شده تنظیم کنید.",
+    "languageForTranscription": "Omi از این زبان برای رونویسی، خلاصه‌ها و یادداشت‌ها استفاده می‌کند.",
     "singleLanguageModeInfo": "حالت زبان تکی فعال شده است. ترجمه برای دقت بالاتر غیرفعال است.",
     "searchLanguageHint": "زبان را بر اساس نام یا کد جستجو کنید",
     "noLanguagesFound": "هیچ زبانی یافت نشد",
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "یکپارچگی با {appName} به‌زودی! ما سخت برای ارائه گزینه‌های مدیریت وظیفه بیشتر کار می‌کنیم.",
+    "integrationComingSoon": "{appName} هنوز پشتیبانی نمی‌شود.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "وارد کردن پیکربندی",
     "exportConfiguration": "صادر کردن پیکربندی",
     "bringYourOwn": "خود را بیاورید",
-    "payYourSttProvider": "آزادانه از Omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.",
+    "payYourSttProvider": "در Omi رایگان است. هزینه را مستقیماً به ارائه‌دهنده رونویسی می‌پردازید.",
     "freeMinutesMonth": "300 دقیقه رایگان/ماه شامل است. نامحدود با ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان ضروری است",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "نقطه پایانی WebSocket STT زنده خود را وارد کنید",
     "apiKey": "کلید API",
     "enterApiKey": "کلید API خود را وارد کنید",
-    "storedLocallyNeverShared": "به‌طور محلی ذخیره شده است، هرگز به‌اشتراک گذاشته نشده است",
+    "storedLocallyNeverShared": "روی این گوشی ذخیره می‌شود. فقط به ارائه‌دهنده رونویسی ارسال می‌شود.",
     "host": "میزبان",
     "port": "درگاه",
     "advanced": "پیشرفته",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "تنظیم مجدد پیکربندی درخواست به پیش‌فرض",
     "logs": "گزارش‌ها",
     "logsCopied": "گزارش‌ها کپی شدند",
-    "noLogsYet": "هیچ گزارشی هنوز نیست. برای دیدن فعالیت STT سفارشی، ضبط را شروع کنید.",
-    "deviceUsesCodec": "{device} از {reason} استفاده می‌کند. Omi استفاده خواهد شد.",
+    "noLogsYet": "هنوز گزارشی نیست. چیزی ضبط کنید تا درخواست‌ها به ارائه‌دهنده رونویسی را ببینید.",
+    "deviceUsesCodec": "{device} در قالبی ضبط می‌کند که این ارائه‌دهنده نمی‌تواند بخواند ({reason})، بنابراین به‌جای آن از رونویسی Omi استفاده می‌شود.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,13 +1509,9 @@
         }
     },
     "omiTranscription": "رونویسی Omi",
-    "bestInClassTranscription": "بهترین کلاس رونویسی بدون راه‌اندازی",
     "instantSpeakerLabels": "برچسب‌های فوری سخنران",
     "languageTranslation": "ترجمه 100+ زبان",
-    "optimizedForConversation": "برای گفتگو بهینه‌سازی شده",
     "autoLanguageDetection": "تشخیص خودکار زبان",
-    "highAccuracy": "دقت بالا",
-    "privacyFirst": "حریم خصوصی اول",
     "saveChanges": "ذخیره تغییرات",
     "resetToDefault": "بازنشانی به پیش‌فرض",
     "viewTemplate": "مشاهده الگو",
@@ -1705,10 +1665,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "ادامه دهید، خیلی خوب انجام می‌دهید",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "این سؤال را رد کنید",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1812,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "هر لحظه را ثبت کنید. خلاصه‌های هوش مصنوعی دریافت کنید.\nدیگر یادداشت نگیرید.",
+    "captureEveryMoment": "Omi گفتگوهای شما را ضبط می‌کند و\nخلاصه و کارهایشان را برای شما می‌نویسد.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1881,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "زبان خود را برای رونویسی‌های تیزتر و تجربه شخصی‌سازی‌شده تنظیم کنید",
+    "languageBenefits": "Omi از این زبان برای رونویسی، خلاصه‌ها و یادداشت‌ها استفاده می‌کند.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1898,10 +1854,6 @@
     "selectYourLanguage": "زبان خود را انتخاب کنید",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "وظایف",
     "@actionItemsTitle": {
@@ -2553,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "تنظیم زمان خاتمه خودکار گفتگوها",
+    "setWhenConversationsAutoEnd": "Omi چقدر در سکوت صبر کند پیش از پایان دادن به گفتگو",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2606,9 +2554,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "نمودار دانش با موفقیت حذف شد",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2624,10 +2569,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "پاک کردن تمام گره‌ها و اتصالات",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2822,10 +2763,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "خوش‌آمدید به Omi! دستیار هوش مصنوعی شما آماده‌است تا در گفتگوها، وظایف و بسیاری مورد دیگر به شما کمک کند.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "شروع استفاده از Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2939,14 +2876,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "گفتگوها به‌طور خودکار پردازش می‌شوند",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "بلافاصله بینش‌ها و خلاصه‌ها را دریافت کنید",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "نمایش همه",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2958,10 +2887,6 @@
     "dailyScore": "امتیاز روزانه",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "امتیازی برای کمک به شما\nدر تمرکز بر اجرا.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "نتایج جستجو",
     "@searchResults": {
@@ -3476,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "یک گفتگو شروع کنید و بگذارید جادو شروع شود",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "لطفا اتصال اینترنت خود را بررسی کنید",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3738,10 +3659,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "دستیار هوش مصنوعی قابل پوشیدن",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "در حال بارگذاری یادآوری‌ها…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3813,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "تنظیم و کنترل یادآوری‌های خود",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "کل",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3825,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "تنظیم تمام یادآوری‌ها به حالت خصوصی",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "تمام یادآوری‌ها را عمومی کنید",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "تنظیم تمام یادآوری‌ها به حالت عمومی",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "حذف دائمی تمام یادآوری‌ها از Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3920,7 +3825,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "لطفاً زبان اصلی خود را انتخاب کنید",
     "chooseYourLanguage": "زبان خود را انتخاب کنید",
-    "selectPreferredLanguageForBestExperience": "زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید",
     "searchLanguages": "جستجو زبان‌ها",
     "selectALanguage": "یک زبان را انتخاب کنید",
     "tryDifferentSearchTerm": "یک واژه جستجویی متفاوت را امتحان کنید",
@@ -3935,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "ویژگی‌ها را برای بهترین تجربه Omi بر روی دستگاه خود فعال کنید.",
     "microphoneAccess": "دسترسی میکروفن",
     "recordAudioConversations": "ضبط گفتگوهای صوتی",
     "microphoneAccessDescription": "Omi برای ضبط گفتگوهای شما و ارائه رونوشت‌ها به دسترسی میکروفن نیاز دارد.",
@@ -4301,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "زمان دریافت خلاصه روزانه خود",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "اشتراک",
     "@subscription": {
         "description": "Subscription section title"
@@ -4330,14 +4229,10 @@
     "checkingNext7Days": "بررسی ۷ روز بعد",
     "shortcuts": "میانبرها",
     "shortcutChangeInstruction": "برای تغییر میانبر، روی آن کلیک کنید. برای انصراف، Escape را فشار دهید.",
-    "configureSTTProvider": "پیکربندی ارائه‌دهنده STT",
-    "setConversationEndDescription": "تنظیم زمان خودکار پایان گفتگوها",
     "importDataDescription": "داده‌ها را از منابع دیگر وارد کنید",
     "exportConversationsDescription": "گفتگوها را به JSON صادر کنید",
     "exportingConversations": "در حال صادر کردن گفتگوها…",
-    "clearNodesDescription": "تمام گره‌ها و اتصالات را پاک کنید",
     "deleteKnowledgeGraphQuestion": "نمودار دانش را حذف کنید؟",
-    "deleteKnowledgeGraphWarning": "این تمام داده‌های نمودار دانش مشتق‌شده را حذف می‌کند. خاطرات اصلی شما ایمن می‌مانند.",
     "connectOmiWithAI": "Omi را با دستیاران هوش مصنوعی متصل کنید",
     "noAPIKeys": "کلید API نیست. یکی ایجاد کنید تا شروع کنید.",
     "autoCreateWhenDetected": "ایجاد خودکار زمانی که نام تشخیص داده شود",
@@ -4750,10 +4645,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "برنامه خود را ایجاد و اشتراک کنید",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "برنامه",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4900,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "رمزگذاری از سر به سر استاندارد طلایی برای حریم‌خصوصی است. هنگامی که فعال باشد، داده‌های شما قبل از ارسال به سرورهای ما در دستگاه شما رمزگذاری می‌شوند. این بدان معناست که هیچ کس، حتی Omi، نمی‌تواند محتوای شما را دسترسی کند.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "معامله‌های مهم:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4956,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "داده‌های شما با کلیدی منحصر به فرد برای شما در سرورهای ما، میزبان‌شده در Google Cloud، رمزگذاری می‌شوند. این بدان معناست که محتوای خام شما برای هیچ کس، از جمله کارکنان Omi یا Google، مستقیماً از پایگاه داده قابل دسترسی نیست.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "رمزگذاری از سر به سر",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "برای حداکثر امنیت فعال کنید جایی که فقط شما می‌توانید داده‌های خود را دسترسی کنید. برای اطلاعات بیشتر لمس کنید.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "صرف‌نظر از سطح، داده‌های شما همیشه در حالت سکون و در حین انتقال رمزگذاری شده است.",
     "@dataAlwaysEncrypted": {
@@ -5065,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• داده‌های شما به بهبود مدل‌های هوش مصنوعی کمک می‌کند\n• فقط داده‌های غیر‌حساس اشتراک‌گذاری می‌شوند\n• فرآیند کاملاً شفاف",
+    "trainingDataBullets": "• داده‌های شما به بهبود مدل‌های هوش مصنوعی کمک می‌کند\n• فقط داده‌های غیرحساس به اشتراک گذاشته می‌شوند",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5174,10 +5053,6 @@
     "youAreOnUnlimitedPlan": "شما در طرح نامحدود هستید.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "Omi شما، آزاد شده. بی‌محدود بروید برای امکانات بی‌پایان.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "طرح شما در تاریخ {date} پایان یافت.\nهمین الآن مجددا مشترک شوید - برای یک دوره صورت‌حساب جدید بلافاصله شارژ خواهید شد.",
     "@planEndedOn": {
@@ -5295,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "در Omi، ما حریم خصوصی شما را بسیار جدی می‌گیریم. ما می‌خواهیم در مورد داده‌هایی که جمع‌آوری می‌کنیم و نحوه استفاده از آن برای بهبود محصول خود برای شما شفاف باشیم. در اینجا آنچه باید بدانید:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "آنچه ما ردیابی می‌کنیم",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5314,14 +5185,6 @@
     "ourCommitment": "تعهد ما",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "ما متعهد هستیم داده‌هایی که جمع‌آوری می‌کنیم را تنها برای بهتر کردن Omi برای شما استفاده کنیم. حریم خصوصی و اعتماد شما برای ما بسیار اهمیت دارند.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "رمز عبور",
     "@password": {
@@ -5384,10 +5247,6 @@
     "exportStartedMayTakeFewSeconds": "صادرات شروع شد. این ممکن است چند ثانیه طول بکشد…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "این تمام داده‌های نمودار دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادآوری‌های اصلی شما ایمن خواهند ماند. نمودار در طول زمان یا بعد از درخواست بعدی بازسازی خواهد شد.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "تنظیم خلاصه روزانه وظایف خود",
     "@configureDailySummaryDigest": {
@@ -5577,10 +5436,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "بعد از اینکه یک فرد ایجاد شود، می‌توانید به رونویس مکالمه بروید و بخش‌های مرتبط با آن‌ها را تعیین کنید، به این ترتیب Omi می‌تواند صوت آن‌ها را نیز تشخیص دهد!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "برای حذف ضربه بزنید",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5659,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "ضبط‌های بلادرنگ خود را در ذخیره‌سازی ابری خصوصی ذخیره کنید. صوت به‌طور بلادرنگ ضبط و به‌طور ایمن ذخیره می‌شود.",
+    "storeAudioCloudDescription": "ضبط‌هایتان را هنگام صحبت آپلود می‌کند تا بعداً بتوانید دوباره پخشش کنید.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6772,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "برنامه سفارشی خود را بسازید و به اشتراک بگذارید",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "جستجو 1500+ برنامه",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6812,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "فقط یادآوری های حیاتی",
+    "frequencyDescMinimal": "فقط موارد فوری، حدود 1–3 در روز",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "فقط به روزرسانی های مهم",
+    "frequencyDescLow": "فقط موارد مهم، حدود 3–5 در روز",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "تشویق های کمکی منظم",
+    "frequencyDescBalanced": "پیشنهادهای مفید، حدود 5–8 در روز",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "بررسی های مکرر",
+    "frequencyDescHigh": "پیشنهادهای بیشتر، حدود 6–9 در روز",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "همیشه درگیر بمانید",
+    "frequencyDescMaximum": "هر ارتباط مفید، تا 9 در روز",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8076,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "خصوصی و امن روی دستگاه شما",
+    "privateAndSecureOnDevice": "روی این گوشی ذخیره شده است",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8736,14 +8587,6 @@
     "onboardingTellUsAboutYourself": "درباره خود به ما بگویید",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "ترجیح خود را انتخاب کنید",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "دسترسی مورد نیاز را اعطا کنید",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "همه چیز آماده است",
     "@onboardingYoureAllSet": {
@@ -9680,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "انتخاب کنید کدام سرویس‌گیر را مورد اتصال قرار دهید",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "تولید",
     "@production": {
         "description": "Label for production API environment"
@@ -9855,10 +9694,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "تماس‌های شما خصوصی و ایمن هستند",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "ارتقا به Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9960,7 +9795,7 @@
     "fairUse3Day": "غلتش 3 روزه",
     "fairUseWeekly": "غلتش هفتگی",
     "fairUseAboutTitle": "درباره استفاده منصفانه",
-    "fairUseAboutBody": "Omi برای گفتگوهای شخصی، جلسات و تعاملات زنده طراحی شده‌است. استفاده بر اساس زمان گفتار واقعی تشخیص‌داده‌شده، نه زمان اتصال اندازه‌گیری می‌شود. اگر استفاده به‌طور قابل‌توجهی از الگوهای معمول برای محتوای غیرشخصی تجاوز کند، تعدیل‌هایی اعمال قد می‌شود.",
+    "fairUseAboutBody": "Omi برای گفتگوهای شخصی، جلسات و تعاملات زنده طراحی شده است. میزان استفاده بر اساس مدت زمان صحبت سنجیده می‌شود، نه مدت زمان اتصال. اگر استفاده شما خیلی بیشتر از استفاده شخصی معمول باشد، ابتدا هشدار دریافت می‌کنید. استفاده سنگین مداوم ممکن است رونویسی را کند یا محدود کند.",
     "fairUseCaseRefCopied": "{caseRef} کپی شد",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10065,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "هنگامی که Omi به تلفن شما متصل نیست، صوت را به‌طور محلی روی حافظه داخلی‌اش ذخیره می‌کند. شما هرگز ضبط را از دست نمی‌دهید.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "هنگامی که Omi دوباره متصل شود، ضبط‌ها به‌طور خودکار به تلفن شما به‌عنوان یک ناحیه نگهداری موقت قبل از بارگذاری منتقل می‌شوند.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10105,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "این مجوزها برای کار کردن Omi بسیار مهم‌اند. آن‌ها ویژگی‌های کلیدی مانند اطلاعات، تجربیات مبتنی بر مکان و ضبط صوت را فعال می‌کنند.",
+    "permissionsPageDescription": "Omi از این‌ها استفاده می‌کند تا به دستگاهتان متصل شود، صدا ضبط کند، در پس‌زمینه کار کند، یادآوری بفرستد و محل گفتگوها را ثبت کند.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10116,10 +9947,6 @@
     "permissionsSetupTitle": "بهترین تجربه را بدست آورید",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "چند مجوز را فعال کنید تا Omi بتواند جادو کند.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "می‌توانید این مجوزها را هر زمان در تنظیمات > مجوزها تغییر دهید",
     "@permissionsChangeAnytime": {
@@ -10452,7 +10279,6 @@
     "currentPlan": "فعلی",
     "neoSubtitle": "{count} پرسش در ماه",
     "operatorSubtitle": "{count} پرسش در ماه",
-    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی",
     "chatUsageCost": "چت: ${used} / ${limit} مصرف‌شده این ماه",
     "chatUsageCostNoLimit": "چت: ${used} مصرف‌شده این ماه",
     "chatUsageMessages": "چت: {used} / {limit} پیام این ماه",
@@ -10479,7 +10305,7 @@
     "record": "ضبط",
     "stop": "توقف",
     "recordWithPhoneMic": "ضبط با میکروفون تلفن",
-    "recordWithPhoneMicSubtitle": "صدای اطراف خود را ضبط کنید",
+    "recordWithPhoneMicSubtitle": "با میکروفون این گوشی ضبط و رونویسی کنید",
     "phoneCall": "تماس تلفنی",
     "phoneCallSubtitle": "یک تماس را با رونویسی زنده ضبط کنید",
     "bulkExportInProgress": "در حال صادرات…",
@@ -10550,7 +10376,6 @@
     "invalidPromotionCode": "کد تخفیف نامعتبر.",
     "backgroundModeTitle": "حالت پس‌زمینه",
     "backgroundModeDescription": "حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.",
-    "backgroundModeNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.",
     "regenerateRecap": "بازسازی خلاصه",
     "recapRegeneratedSnackbar": "خلاصه دوباره ساخته شد",
     "recapRegenerateFailed": "بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
@@ -10606,7 +10431,7 @@
     "deviceOnboardingContinue": "ادامه",
     "deviceOnboardingFinish": "پایان",
     "deviceOnboardingIntroTitle": "با Omi خود آشنا شوید",
-    "deviceOnboardingIntroSubtitle": "یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.",
+    "deviceOnboardingIntroSubtitle": "رونویسی زنده، پرسیدن یک سؤال و میان‌بر دوبار ضربه را امتحان کنید.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
     "jumpToLatestMessage": "پرش به آخرین پیام",
     "latest": "آخرین",
@@ -10726,7 +10551,6 @@
     "pinAsBaseline": "سنجاق به‌عنوان مبنا",
     "unpinAsBaseline": "برداشتن سنجاق از مبنا",
     "baselineMemory": "حافظه مبنا",
-    "alwaysInContext": "همیشه در زمینه",
     "accountCutoverUpdateRequiredTitle": "التحديث مطلوب",
     "accountCutoverUpdateRequiredMessage": "ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.",
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
@@ -10781,7 +10605,7 @@
     "processingTakingLonger": "هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.",
     "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
     "home": "خانه",
-    "failedToUpdateBaselineStatus": "به‌روزرسانی وضعیت پایه ناموفق بود.",
+    "failedToUpdateBaselineStatus": "این یادداشت به‌روز نشد. دوباره امتحان کنید.",
     "memoryAllowUse": "اجازه استفاده",
     "memoryDontUse": "استفاده نکن",
     "unstarConversation": "برداشتن ستاره از گفتگو",
@@ -10837,8 +10661,8 @@
     "memoryReviewRight": "درست",
     "memoryReviewWrong": "نادرست",
     "memoryReviewFix": "اصلاح",
-    "memoryReviewConfirmed": "تأیید شد. بر اساس آن عمل می‌کنم.",
-    "memoryReviewDropped": "کنار گذاشته شد. از چنین اطلاعاتی پرهیز می‌کنم.",
+    "memoryReviewConfirmed": "تأیید شد.",
+    "memoryReviewDropped": "از یادداشت‌های شما حذف شد.",
     "memoryReviewUpdated": "به‌روز شد.",
     "memoryReviewSaveFailed": "ذخیره نشد، دوباره تلاش کنید",
     "indentTask": "تورفتگی",
@@ -10913,7 +10737,7 @@
     "homeScreen": "صفحه اصلی",
     "phoneCalls": "تماس‌های تلفنی",
     "vadGate": "دروازه VAD",
-    "vadGateDescription": "فیلتر صدا در سرور برای کاهش هزینه تبدیل گفتار به متن",
+    "vadGateDescription": "قبل از رونویسی بخش‌های بی‌صدا را حذف می‌کند تا هزینه کم شود.",
     "flashCustomFirmware": "نصب فریم‌ور سفارشی",
     "flashCustomFirmwareDescription": "نسخه‌های سفارشی فریم‌ور را نصب کنید",
     "selectFirmwareZip": "فایل ZIP فریم‌ور را انتخاب کنید",
@@ -10932,7 +10756,7 @@
     "permissionBlockedHint": "در تنظیمات خاموش است. برای استفاده، آن را آنجا مجاز کنید.",
     "useDifferentAccount": "استفاده از حساب دیگر",
     "onboardingStepOf": "مرحله {current} از {total}",
-    "onboardingCompleteMessage": "Omi را ۲ روز در پس‌زمینه روشن نگه دارید تا شروع به ارائه بازخورد مفید کند.",
+    "onboardingCompleteMessage": "Omi را چند روز در حال اجرا نگه دارید. گفتگوها، یادداشت‌ها و کارهای شما کم‌کم پر می‌شوند.",
     "cantFindDeviceHint": "دستگاهتان را پیدا نمی‌کنید؟ مطمئن شوید روشن و نزدیک تلفن است، سپس دوباره جستجو کنید.",
     "scanAgain": "جستجوی دوباره",
     "howToPair": "نحوه جفت‌سازی",
@@ -11053,8 +10877,7 @@
     "notificationsAndDisplay": "اطلاع‌رسانی‌ها و نمایش",
     "helpAndAbout": "راهنما و درباره",
     "speakerTagPromptTitle": "به Omi در شناختن صداها کمک کنید",
-    "speakerTagPromptSubtitle": "بررسی سریع صداهای دو روز گذشته",
-    "speakerTagPromptIsThisYou": "این شما هستید؟",
+    "speakerTagPromptIsThisYou": "این صدای شما بود؟",
     "speakerTagPromptIsThisPerson": "این {name} است؟",
     "speakerTagPromptWhoIsThis": "این کیست؟",
     "speakerTagPromptThatsMe": "این من هستم",
@@ -11229,24 +11052,24 @@
     "confidenceMeterLabel": "اطمینان: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{یک بار برچسب زدید} other{{count} بار برچسب زدید}}",
     "confidenceReasonPicked": "{count, plural, =1{در 1 پیشنهاد انتخاب شد} other{در {count} پیشنهاد انتخاب شد}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{یک تطبیق را تأیید کردید} other{{count} تطبیق را تأیید کردید}}",
-    "confidenceReasonAutoOnly": "فقط تطبیق خودکار، هرگز تأیید نشده",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{شما 1 برچسب خودکار را تأیید کردید} other{شما {count} برچسب خودکار را تأیید کردید}}",
+    "confidenceReasonAutoOnly": "به‌طور خودکار برچسب خورده، هنوز تأیید نشده",
     "confidenceReasonNeverConfirmed": "هرگز تأیید نشده",
     "confidenceReasonCorrected": "تطبیق آن را اصلاح کردید",
-    "confidenceReasonVoiceReady": "صدا آماده است",
-    "confidenceReasonNeedsVoice": "نیاز به صدا",
+    "confidenceReasonVoiceReady": "صدا ذخیره شد",
+    "confidenceReasonNeedsVoice": "هنوز نمونه صدایی ذخیره نشده",
     "confidenceReasonNotHeard": "هنوز شنیده نشده",
     "confidenceSheetTitle": "اطمینان",
     "confidenceSummaryConfirmed": "Omi صدای {name} را تشخیص می‌دهد و شما آن را تأیید کرده‌اید.",
     "confidenceSummaryLikely": "Omi معمولاً صدای {name} را تشخیص می‌دهد، اما شما فقط چند بار آن را تأیید کرده‌اید.",
-    "confidenceSummaryUnverified": "هنوز کاری از شما برای تأیید {name} انجام نشده است.",
+    "confidenceSummaryUnverified": "هنوز {name} را برچسب‌گذاری یا تأیید نکرده‌اید، پس Omi مطمئن نیست صدای او را می‌شناسد.",
     "confidenceEvidenceHeader": "شواهد",
     "evidenceManualLabels": "{count, plural, =1{در 1 گفتگو توسط شما برچسب خورده} other{در {count} گفتگو توسط شما برچسب خورده}}",
     "evidenceCardConfirms": "{count, plural, =1{بله در 1 پیشنهاد} other{بله در {count} پیشنهاد}}",
     "evidenceCardPicks": "{count, plural, =1{در 1 پیشنهاد انتخاب شد} other{در {count} پیشنهاد انتخاب شد}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{1 تطبیق خودکار تأیید شد} other{{count} تطبیق خودکار تأیید شد}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 تطبیق به شخص دیگری منتقل شد} other{{count} تطبیق به شخص دیگری منتقل شد}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 تطبیق خودکار که کسی تأیید نکرد} other{{count} تطبیق خودکار که کسی تأیید نکرد}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{شما 1 برچسب خودکار را تأیید کردید} other{شما {count} برچسب خودکار را تأیید کردید}}",
+    "evidenceAutoCorrected": "{count, plural, =1{شما ۱ برچسب خودکار را به شخص دیگری تغییر دادید} other{شما {count} برچسب خودکار را به شخص دیگری تغییر دادید}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 برچسب خودکار هنوز تأیید نشده} other{{count} برچسب خودکار هنوز تأیید نشده}}",
     "evidenceVoiceReady": "نمونه صدا آماده است",
     "evidenceNoVoice": "هنوز نمونه صدا وجود ندارد",
     "evidenceNotHeard": "هنوز در هیچ گفتگویی شنیده نشده",
@@ -11259,12 +11082,10 @@
     "effectNeeded": "برای «تأییدشده» لازم است",
     "confidenceToReachConfirmed": "برای رسیدن به «تأییدشده»",
     "confidenceNextVoice": "Omi به یک نمونه صدای {name} هم نیاز دارد. با روشن بودن «به خاطر سپردن صداها» او را برچسب بزنید.",
-    "confidenceIsConfirmed": "{name} تأییدشده است. Omi از هر برچسب یاد می‌گیرد.",
-    "confidenceFootnote": "فقط پاسخ‌های شما اطمینان را به‌طور محسوسی تغییر می‌دهد. تطبیق‌های خودکار به‌تنهایی تقریباً کمکی نمی‌کنند.",
+    "confidenceIsConfirmed": "{name} تأییدشده است. کار دیگری لازم نیست انجام دهید.",
+    "confidenceFootnote": "برچسب‌ها و تأییدهای شما بیشترین وزن را دارند. برچسب‌های خودکار تا زمانی که تأیید نکنید، ارزش کمی دارند.",
     "personWhyConfidence": "چرا؟",
     "pinPersonTitle": "سنجاق کردن {name}",
-    "pinPersonSubtitle": "{name} را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید",
-    "pinPersonHonestLine": "Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.",
     "pinAction": "سنجاق",
     "unpinAction": "برداشتن سنجاق",
     "personPinnedToast": "{name} سنجاق شد",
@@ -11302,9 +11123,8 @@
     "voiceMatchPossible": "تطبیق احتمالی",
     "voiceMatchWeak": "تطبیق ضعیف",
     "voiceMatchMeterLabel": "تطبیق صدا: {level}",
-    "speakerTagPromptHintIdentify": "هر پاسخ یک صدا را به Omi یاد می‌دهد و اطمینان درباره آن فرد را بالا می‌برد.",
-    "speakerTagPromptHintConfirm": "پاسخ «بله» اطمینان درباره {name} را بالا می‌برد.",
-    "speakerTagPromptHintOwner": "پروفایل صدای خودتان را دقیق نگه می‌دارد تا Omi هرگز شما را با نام کس دیگری صدا نزند.",
+    "speakerTagPromptHintIdentify": "پاسخ شما به Omi کمک می‌کند این صدا را دفعه بعد تشخیص دهد.",
+    "speakerTagPromptHintOwner": "پاسخ شما فقط بخش پخش‌شده را برچسب‌گذاری می‌کند.",
     "speakerTagPromptSavedAs": "به‌عنوان {name} ذخیره شد",
     "speakerTagPromptSavedAsYou": "به‌عنوان شما ذخیره شد",
     "speakerTagPromptIgnoredNote": "Omi دیگر درباره این صدا نمی‌پرسد",
@@ -11380,7 +11200,7 @@
     "conversationProcessingFailedMessage": "پردازش این گفتگو ممکن نشد.",
     "waitForReprocessing": "صبر کنید تا پردازش دوباره تمام شود.",
     "unnamedSpeakerLabel": "سخنران",
-    "unresolvedSpeakersNotice": "گویندگان در سراسر ضبط‌ها از یکدیگر جدا نشده‌اند.",
+    "unresolvedSpeakersNotice": "برچسب‌های گوینده ممکن است در ضبط‌های این گفتگو با هم مطابقت نداشته باشند.",
     "unresolvedSpeakersTitle": "درباره برچسب‌های گوینده",
     "unresolvedSpeakersMessage": "Omi نتوانست صداهای دیگر را در سراسر ضبط‌ها از هم تشخیص دهد. برای نام‌گذاری گوینده، روی برچسب گوینده بزنید.",
     "nameSpeakerTitle": "نام‌گذاری گوینده",
@@ -11504,6 +11324,188 @@
     "dreamReportFound": "{fixes, plural, =1{۱ اصلاح} other{{fixes} اصلاح}} · {asks, plural, =1{۱ پیشنهاد} other{{asks} پیشنهاد}}",
     "dreamReportDropped": "{count, plural, =1{۱ تغییر قدیمی‌تر نادیده گرفته شد} other{{count} تغییر قدیمی‌تر نادیده گرفته شد}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{۱ گزارش به دلیل حریم خصوصی نگه داشته شد} other{{count} گزارش به دلیل حریم خصوصی نگه داشته شد}}",
+    "speakerTagPromptExcerptSaved": "پاسخ برای این بخش ذخیره شد.",
+    "pinPersonDescription": "افرادِ سنجاق‌شده بالای فهرست افراد شما می‌مانند و با پاک‌سازی حذف نمی‌شوند.",
+    "buildAndShareApp": "اپلیکیشن سفارشی خود را بسازید و اشتراک‌گذاری کنید",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ اعضا و افزایش.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "در Omi، ما متعهد به حفاظت از حریم خصوصی شما هستیم. این صفحه به شما اجازه می‌دهد که کنترل کنید داده‌های شما چگونه ذخیره و استفاده می‌شوند.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی ایمن هستند. تنظیمات و گزینه‌های حریم خصوصی آینده خود را مرور کنید.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "پیکربندی ارائه‌دهنده STT",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "وارد کردن داده‌ها از منابع دیگر",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "کلمات درک‌شده از گفتگوهای شما.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "واقعیات و جزئیات یادآوری‌شده برای شما.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "کمک به تشخیص مشکلات",
+    "deleteKnowledgeGraphMessage": "این کار تمام داده‌های گراف دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادداشت‌های اصلی شما امن باقی خواهند ماند. گراف در طول زمان یا در درخواست بعدی بازسازی خواهد شد.",
+    "deleteKnowledgeGraphDesc": "تمام گره‌ها و اتصالات را پاک کنید",
+    "enhanceTranscriptAccuracyDesc": "هنگامی که مدل ما بهبود می‌یابد، می‌توانیم نتایج رونویسی بهتری برای ضبط‌های شما ارائه دهیم.",
+    "bestInClassTranscription": "بهترین کلاس رونویسی بدون راه‌اندازی",
+    "optimizedForConversation": "برای گفتگو بهینه‌سازی شده",
+    "highAccuracy": "دقت بالا",
+    "privacyFirst": "حریم خصوصی اول",
+    "keepGoing": "ادامه دهید، خیلی خوب انجام می‌دهید",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "configureSttProvider": "ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "پاک کردن تمام گره‌ها و اتصالات",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "خوش‌آمدید به Omi! دستیار هوش مصنوعی شما آماده‌است تا در گفتگوها، وظایف و بسیاری مورد دیگر به شما کمک کند.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "گفتگوها به‌طور خودکار پردازش می‌شوند",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "بلافاصله بینش‌ها و خلاصه‌ها را دریافت کنید",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "امتیازی برای کمک به شما\nدر تمرکز بر اجرا.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "یک گفتگو شروع کنید و بگذارید جادو شروع شود",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "دستیار هوش مصنوعی قابل پوشیدن",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "تنظیم و کنترل یادآوری‌های خود",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "تنظیم تمام یادآوری‌ها به حالت خصوصی",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "تنظیم تمام یادآوری‌ها به حالت عمومی",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید",
+    "enableFeaturesForBestExperience": "ویژگی‌ها را برای بهترین تجربه Omi بر روی دستگاه خود فعال کنید.",
+    "deliveryTimeDescription": "زمان دریافت خلاصه روزانه خود",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "پیکربندی ارائه‌دهنده STT",
+    "setConversationEndDescription": "تنظیم زمان خودکار پایان گفتگوها",
+    "clearNodesDescription": "تمام گره‌ها و اتصالات را پاک کنید",
+    "deleteKnowledgeGraphWarning": "این تمام داده‌های نمودار دانش مشتق‌شده را حذف می‌کند. خاطرات اصلی شما ایمن می‌مانند.",
+    "createAndShareYourApp": "برنامه خود را ایجاد و اشتراک کنید",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "رمزگذاری از سر به سر استاندارد طلایی برای حریم‌خصوصی است. هنگامی که فعال باشد، داده‌های شما قبل از ارسال به سرورهای ما در دستگاه شما رمزگذاری می‌شوند. این بدان معناست که هیچ کس، حتی Omi، نمی‌تواند محتوای شما را دسترسی کند.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "داده‌های شما با کلیدی منحصر به فرد برای شما در سرورهای ما، میزبان‌شده در Google Cloud، رمزگذاری می‌شوند. این بدان معناست که محتوای خام شما برای هیچ کس، از جمله کارکنان Omi یا Google، مستقیماً از پایگاه داده قابل دسترسی نیست.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "برای حداکثر امنیت فعال کنید جایی که فقط شما می‌توانید داده‌های خود را دسترسی کنید. برای اطلاعات بیشتر لمس کنید.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Omi شما، آزاد شده. بی‌محدود بروید برای امکانات بی‌پایان.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "در Omi، ما حریم خصوصی شما را بسیار جدی می‌گیریم. ما می‌خواهیم در مورد داده‌هایی که جمع‌آوری می‌کنیم و نحوه استفاده از آن برای بهبود محصول خود برای شما شفاف باشیم. در اینجا آنچه باید بدانید:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "ما متعهد هستیم داده‌هایی که جمع‌آوری می‌کنیم را تنها برای بهتر کردن Omi برای شما استفاده کنیم. حریم خصوصی و اعتماد شما برای ما بسیار اهمیت دارند.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "این تمام داده‌های نمودار دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادآوری‌های اصلی شما ایمن خواهند ماند. نمودار در طول زمان یا بعد از درخواست بعدی بازسازی خواهد شد.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "بعد از اینکه یک فرد ایجاد شود، می‌توانید به رونویس مکالمه بروید و بخش‌های مرتبط با آن‌ها را تعیین کنید، به این ترتیب Omi می‌تواند صوت آن‌ها را نیز تشخیص دهد!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "برنامه سفارشی خود را بسازید و به اشتراک بگذارید",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "ترجیح خود را انتخاب کنید",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "دسترسی مورد نیاز را اعطا کنید",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "انتخاب کنید کدام سرویس‌گیر را مورد اتصال قرار دهید",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "تماس‌های شما خصوصی و ایمن هستند",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "هنگامی که Omi به تلفن شما متصل نیست، صوت را به‌طور محلی روی حافظه داخلی‌اش ذخیره می‌کند. شما هرگز ضبط را از دست نمی‌دهید.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "چند مجوز را فعال کنید تا Omi بتواند جادو کند.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی",
+    "backgroundModeNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.",
+    "alwaysInContext": "همیشه در زمینه",
+    "speakerTagPromptSubtitle": "بررسی سریع صداهای دو روز گذشته",
+    "pinPersonSubtitle": "{name} را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید",
+    "pinPersonHonestLine": "Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.",
+    "speakerTagPromptHintConfirm": "پاسخ «بله» اطمینان درباره {name} را بالا می‌برد.",
     "onboardingRatingPromptBody": "امتیاز ۵ ستاره واقعاً به ما کمک می‌کند ❤️",
     "singlePress": "یک بار فشار دادن",
     "singlePressAction": "اقدام یک بار فشار دادن",

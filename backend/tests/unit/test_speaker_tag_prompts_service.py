@@ -86,39 +86,19 @@ def _request(kind, origin, answer, **extra):
     return SpeakerTagPromptAnswerRequest(**payload)
 
 
-def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
+def test_legacy_owner_card_without_excerpt_evidence_cannot_label_or_learn(monkeypatch):
     world = World(monkeypatch, paid=False)
-    response = service.apply_answer('u', _request(K.owner_check, O.unnamed, A.me), world.schedule, NOW)
-    assert world.assignments == [
-        {
-            'person_id': None,
-            'is_user': True,
-            'speaker_id': 1,
-            'use_for_speech_training': False,
-            'evidence_source': 'card',
-            'owner_segment_ids': ['s1'],
-        }
-    ]
-    assert world.scheduled[0] == (
-        service.run_authorized_owner_learning,
-        {'uid': 'u', 'conversation_id': 'c1', 'segment_ids': ['s1'], 'card_generation': 0},
-    )
-    assert response.voice_sample_queued and response.quality_outcome == Q.owner_missed
-    assert world.answered == ['pid']
-    name, properties = world.events[-1]
-    assert name == 'Speaker Tag Prompt Answered'
-    assert set(properties) == {'kind', 'origin', 'answer', 'quality_outcome', 'first_time', 'voice_sample_queued'}
+    with pytest.raises(service.StaleOwnerConfirmation):
+        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.me), world.schedule, NOW)
+    assert not world.assignments and not world.scheduled
 
 
 def test_free_user_names_a_person_on_a_served_card(monkeypatch):
-    # Automatic suggestions are paid; naming by hand is not. A card served before a
-    # downgrade, or an owner check answered with who it really is, must still apply.
     world = World(monkeypatch, paid=False)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
-    service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
-    assert world.assignments[0]['person_id'] == 'p1' and world.created[0]['name'] == 'Ana'
-    assert len(world.assignments) == 2
-    assert all(a['is_user'] is False and a['use_for_speech_training'] is True for a in world.assignments)
+    with pytest.raises(service.TagPromptInvalid):
+        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+    assert world.assignments[0]['person_id'] == 'p1' and not world.created
 
 
 def test_naming_a_person_teaches_voice_when_allowed(monkeypatch):
@@ -172,20 +152,11 @@ def test_declined_durable_admission_still_queues_immediate_teaching(monkeypatch)
     assert any(labels.get('outcome') == 'queued' for labels in recorded)
 
 
-def test_rejecting_an_automatic_label_clears_it(monkeypatch):
+def test_rejecting_owner_without_played_evidence_fails_closed(monkeypatch):
     world = World(monkeypatch)
-    response = service.apply_answer('u', _request(K.owner_check, O.auto_user, A.not_me), world.schedule, NOW)
-    assert world.assignments == [
-        {
-            'person_id': None,
-            'is_user': False,
-            'speaker_id': 1,
-            'use_for_speech_training': False,
-            'evidence_source': 'card',
-            'rejection': {'kind': 'not_me', 'person_id': None},
-        }
-    ]
-    assert response.quality_outcome == Q.owner_auto_rejected
+    with pytest.raises(service.StaleOwnerConfirmation):
+        service.apply_answer('u', _request(K.owner_check, O.auto_user, A.not_me), world.schedule, NOW)
+    assert not world.assignments
 
 
 def test_unknown_voice_writes_an_anonymous_decision_and_skip_writes_nothing(monkeypatch):
@@ -737,38 +708,20 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     assert clipped == [(5.0, 15.0)]
 
 
-def test_owner_sample_gets_only_prompt_segments_still_assigned(monkeypatch):
+def test_stale_owner_card_never_schedules_partial_learning(monkeypatch):
     world = World(monkeypatch, paid=False)
-
-    def assign(uid, conversation_id, **kwargs):
-        raw = {'transcript_segments': [{'id': 's1', 'start': 0, 'end': 9}], '_speaker_learning_queued': True}
-        return raw, ['s1', 's9'], [], []
-
-    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
-    response = service.apply_answer(
-        'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1', 'stale']), world.schedule, NOW
-    )
-    fn, kwargs = world.scheduled[0]
-    assert fn is service.run_authorized_owner_learning and kwargs == {
-        'uid': 'u',
-        'conversation_id': 'c1',
-        'segment_ids': ['s1'],
-        'card_generation': 0,
-    }
-    assert response.voice_sample_queued
+    with pytest.raises(service.StaleOwnerConfirmation):
+        service.apply_answer(
+            'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1', 'stale']), world.schedule, NOW
+        )
+    assert not world.scheduled
 
 
 def test_owner_sample_not_queued_when_prompt_segments_are_gone(monkeypatch):
     world = World(monkeypatch, paid=False)
-
-    def assign(uid, conversation_id, **kwargs):
-        return {'transcript_segments': [{'id': 's9', 'start': 0, 'end': 9}]}, ['s9'], [], []
-
-    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
-    response = service.apply_answer(
-        'u', _request(K.owner_check, O.unnamed, A.me, segment_ids=['s1']), world.schedule, NOW
-    )
-    assert world.scheduled == [] and not response.voice_sample_queued
+    with pytest.raises(service.StaleOwnerConfirmation):
+        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.me), world.schedule, NOW)
+    assert not world.scheduled
 
 
 def test_owner_sample_is_verified_then_pooled(monkeypatch):
@@ -896,11 +849,11 @@ def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
     assert len(world.assignments) == 2 and len(ignored) == 2
 
 
-def test_not_a_person_on_owner_check_is_free(monkeypatch):
+def test_owner_question_is_binary_or_skip_on_every_plan(monkeypatch):
     world = World(monkeypatch, paid=False)
-    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: None)
-    response = service.apply_answer('u', _request(K.owner_check, O.unnamed, A.not_a_person), world.schedule, NOW)
-    assert response.quality_outcome == Q.unknown_voice
+    with pytest.raises(service.TagPromptInvalid):
+        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.not_a_person), world.schedule, NOW)
+    assert not world.assignments
 
 
 def test_not_a_person_rejects_a_conversation_outside_the_authenticated_account(monkeypatch):

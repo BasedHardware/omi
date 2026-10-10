@@ -457,7 +457,7 @@ private struct InterfaceSoundsRow: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("Sounds for important arrivals and completions.")
+        Text("Play a short sound when a chat answer finishes, a permission is granted, or a new card appears.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
