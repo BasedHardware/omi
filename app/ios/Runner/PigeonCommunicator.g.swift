@@ -1484,7 +1484,10 @@ protocol RayBanMetaHostAPI {
   func getBluetoothHfpInputs() throws -> [BluetoothHfpInput]
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).
-  func startCamera() throws
+  /// Completes once the native start has actually run (Android may first wait
+  /// for an in-flight HFP audio route, per Meta's audio-before-camera rule) and
+  /// fails with its error, so callers see the real outcome.
+  func startCamera(completion: @escaping (Result<Void, Error>) -> Void)
   func stopCamera() throws
   /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
   func capturePhoto() throws
@@ -1716,14 +1719,19 @@ class RayBanMetaHostAPISetup {
     }
     /// Starts the DAT camera stream session so photo capture is ready. While
     /// active the glasses' capture LED is on (hardware-enforced by Meta).
+    /// Completes once the native start has actually run (Android may first wait
+    /// for an in-flight HFP audio route, per Meta's audio-before-camera rule) and
+    /// fails with its error, so callers see the real outcome.
     let startCameraChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startCamera\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       startCameraChannel.setMessageHandler { _, reply in
-        do {
-          try api.startCamera()
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
+        api.startCamera { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
         }
       }
     } else {

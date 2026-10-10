@@ -9819,7 +9819,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Nu s-au găsit microfoane Bluetooth. Conectează ochelarii în Configurările iPhone și încearcă din nou.';
+      'Nu s-au găsit microfoane Bluetooth. Conectează ochelarii în setările Bluetooth ale telefonului și încearcă din nou.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9827,7 +9827,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone.';
+      'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în setările Bluetooth ale telefonului.';
 
   @override
   String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';

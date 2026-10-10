@@ -2,16 +2,23 @@
 
 ## "Ray-Ban Meta" doesn't appear in the device list
 
-- **Android**: not supported yet — iOS only.
+- **Android**: the default dev/prod builds are audio-only; camera/photos need
+  the `raybanDat` flavor (`app/docs/rayban-meta-dat-setup.md` → Android).
 - **Audio-only build** (default repo build): the entry appears only when the
   glasses are connected to the phone as a Bluetooth audio device whose name
-  matches a Meta product ("Ray-Ban…", "Oakley Meta…", "Meta Glasses"). Check
-  iOS Settings → Bluetooth shows the glasses connected, then rescan.
-- **Full build**: `getAvailabilityMode()` must be `full`. If the setup entry
-  is missing, the SPM package is not linked into the Runner target or the
-  Developer Mode-safe `MWDAT` Info.plist dictionary is missing
-  (`AppLinkURLScheme` / `DAMEnabled`). Developer Mode should not include
-  `MetaAppID` / `ClientToken`.
+  matches a Meta product ("Ray-Ban…", "Oakley Meta…", "Meta Glasses", or the
+  `EL AI …` codename). Check the phone's Bluetooth settings (iOS Settings →
+  Bluetooth, or Android Settings → Connected devices) show the glasses
+  connected, then rescan.
+- **Full build**: `getAvailabilityMode()` must be `full`.
+  - iOS: if the setup entry is missing, the SPM package is not linked into the
+    Runner target or the Developer Mode-safe `MWDAT` Info.plist dictionary is
+    missing (`AppLinkURLScheme` / `DAMEnabled`). Developer Mode should not
+    include `MetaAppID` / `ClientToken`.
+  - Android: you must be running the `raybanDat` flavor (the app is labeled
+    "Omi Ray-Ban"); `dev`/`prod` never link the toolkit. A connect error
+    `unknown_device` means the selected glasses are no longer registered with
+    Meta AI on this phone: re-register from the device list.
 
 ## Registration never completes (stuck on "Finish connecting in Meta AI")
 

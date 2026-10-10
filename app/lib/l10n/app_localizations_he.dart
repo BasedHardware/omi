@@ -9698,14 +9698,16 @@ class AppLocalizationsHe extends AppLocalizations {
       'בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.';
 
   @override
-  String get rayBanMetaMicPickerEmpty => 'לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.';
+  String get rayBanMetaMicPickerEmpty =>
+      'לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-Bluetooth של הטלפון ונסו שוב.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
       'לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.';
 
   @override
-  String get rayBanMetaMicPickerConnectError => 'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
+  String get rayBanMetaMicPickerConnectError =>
+      'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-Bluetooth של הטלפון.';
 
   @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';

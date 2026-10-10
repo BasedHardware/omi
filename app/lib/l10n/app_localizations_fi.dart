@@ -9775,7 +9775,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth-mikrofoneja ei löytynyt. Yhdistä lasit iPhonen asetuksissa ja yritä uudelleen.';
+      'Bluetooth-mikrofoneja ei löytynyt. Yhdistä lasit puhelimen Bluetooth-asetuksissa ja yritä uudelleen.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9783,7 +9783,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty iPhonen asetuksissa.';
+      'Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty puhelimen Bluetooth-asetuksissa.';
 
   @override
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';

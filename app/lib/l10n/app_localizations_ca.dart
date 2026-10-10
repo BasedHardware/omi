@@ -9830,7 +9830,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'No s\'ha trobat cap micròfon Bluetooth. Connecta les ulleres a la configuració de l\'iPhone i torna-ho a provar.';
+      'No s\'ha trobat cap micròfon Bluetooth. Connecta les ulleres a la configuració de Bluetooth del telèfon i torna-ho a provar.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9838,7 +9838,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'No s\'ha pogut connectar a aquest micròfon. Assegura\'t que estigui connectat a la configuració de l\'iPhone.';
+      'No s\'ha pogut connectar a aquest micròfon. Assegura\'t que estigui connectat a la configuració de Bluetooth del telèfon.';
 
   @override
   String get syncStatusTooOld => 'Massa antic per sincronitzar — Omi no el pot acceptar';

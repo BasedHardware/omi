@@ -9796,7 +9796,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth mikrofoni nav atrasti. Pievienojiet brilles iPhone iestatījumos un mēģiniet vēlreiz.';
+      'Bluetooth mikrofoni nav atrasti. Pievienojiet brilles tālruņa Bluetooth iestatījumos un mēģiniet vēlreiz.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9804,7 +9804,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
+      'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots tālruņa Bluetooth iestatījumos.';
 
   @override
   String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';

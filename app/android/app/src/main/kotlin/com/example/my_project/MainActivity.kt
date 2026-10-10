@@ -14,6 +14,7 @@ import com.friend.ios.batch.CaptureAdmissionPolicy
 import com.friend.ios.batch.OmiBackgroundAudioStreamer
 import com.friend.ios.batch.CaptureAdmissionLatch
 import com.friend.ios.phonemic.*
+import com.friend.ios.raybanmeta.RayBanMetaHostApiImpl
 import com.friend.ios.sync.SyncTransferForegroundService
 import com.friend.ios.sync.SyncTransferPlugin
 import android.os.Bundle
@@ -31,6 +32,7 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
     private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
+    private var rayBanMetaHostApiImpl: RayBanMetaHostApiImpl? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -84,6 +86,15 @@ class MainActivity: FlutterActivity() {
         PhoneMicController.initialize(application)
         PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
+
+        // Register Ray-Ban Meta Pigeon API (DAT camera in the raybanDat flavor, HFP audio in all)
+        val rayBanMetaHostApi = RayBanMetaHostApiImpl(
+            this,
+            RayBanMetaFlutterAPI(flutterEngine.dartExecutor.binaryMessenger),
+        ) { this }
+        rayBanMetaHostApiImpl = rayBanMetaHostApi
+        RayBanMetaHostAPI.setUp(flutterEngine.dartExecutor.binaryMessenger, rayBanMetaHostApi)
+        rayBanMetaHostApi.handleIntent(this, intent)
         SyncTransferPlugin.register(flutterEngine, this)
         TtsMp3DecoderPlugin.register(flutterEngine)
         TtsPcmPlayerPlugin.register(flutterEngine)
@@ -156,8 +167,16 @@ class MainActivity: FlutterActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        rayBanMetaHostApiImpl?.handleIntent(this, intent)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
+        // Meta AI camera-permission result for Ray-Ban Meta glasses
+        if (rayBanMetaHostApiImpl?.onActivityResult(requestCode, resultCode, data) == true) return
 
         // Handle CompanionDeviceManager chooser result
         val address = bleHostApiImpl?.onActivityResult(requestCode, resultCode, data)
@@ -184,6 +203,8 @@ class MainActivity: FlutterActivity() {
         // leaves native deferring audio to an engine that is gone (issue #10847).
         // configureFlutterEngine re-arms both on the next attach.
         OmiBleManager.isFlutterAlive = false
+        rayBanMetaHostApiImpl?.dispose()
+        rayBanMetaHostApiImpl = null
         // Dart owns transfer lifetime; once the engine is gone the FGS cannot
         // finish a sync and must not keep the notification/wake lock.
         SyncTransferForegroundService.stop(this)

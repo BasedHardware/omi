@@ -9777,7 +9777,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Nebyly nalezeny žádné Bluetooth mikrofony. Připojte brýle v Nastavení iPhonu a zkuste to znovu.';
+      'Nebyly nalezeny žádné Bluetooth mikrofony. Připojte brýle v nastavení Bluetooth v telefonu a zkuste to znovu.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9785,7 +9785,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'K tomuto mikrofonu se nepodařilo připojit. Ověřte, že je připojený v Nastavení iPhonu.';
+      'K tomuto mikrofonu se nepodařilo připojit. Ověřte, že je připojený v nastavení Bluetooth v telefonu.';
 
   @override
   String get syncStatusTooOld => 'Příliš staré na synchronizaci — Omi ho nemůže přijmout';

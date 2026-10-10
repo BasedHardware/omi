@@ -14,19 +14,21 @@ OmiGlass image pipeline.
 
 ## Connect the glasses in Omi
 
-1. Pair the glasses in **iPhone Settings → Bluetooth** and leave them connected.
+1. Pair the glasses in the phone's Bluetooth settings (**iPhone Settings →
+   Bluetooth** or **Android Settings → Connected devices**) and leave them connected.
 2. In Omi, open **Connect → Connection Guide → Ray-Ban Meta**.
 3. Pick the Bluetooth microphone that belongs to the glasses. Its name may be
    `Ray-Ban Meta`, `EL AI 000F`, or a custom name set in the Meta AI app.
 
-Omi saves the iOS audio-port UID behind that selection, not the displayed
-Bluetooth name. Renaming the glasses therefore does not break reconnection.
+Omi saves the audio-port UID behind that selection (iOS `AVAudioSessionPortDescription.uid`,
+Android the SCO input's Bluetooth address), not the displayed Bluetooth name. Renaming the glasses therefore does not break reconnection.
 Selecting the glasses microphone switches Bluetooth to HFP voice mode, so music
 on the phone pauses while Omi is capturing audio.
 
 ```
 Meta Wearables DAT (camera/photos)──┐
                                     ├── RayBanMetaHostApiImpl.swift (iOS)
+                                    │   RayBanMetaHostApiImpl.kt (Android)
 Bluetooth HFP route (microphone) ───┘        │  Pigeon: RayBanMetaHostAPI /
                                              │          RayBanMetaFlutterAPI
                                              ▼
@@ -46,11 +48,12 @@ Bluetooth HFP route (microphone) ───┘        │  Pigeon: RayBanMetaHost
 |---|---|---|
 | Device type | `app/lib/backend/schema/bt_device/bt_device.dart` | `DeviceType.raybanMeta`; serialized by name; legacy index 9 |
 | Locator | `app/lib/services/devices/discovery/device_locator.dart` | `TransportKind.metaDat` |
-| Discoverer | `app/lib/services/devices/discovery/rayban_meta_discoverer.dart` | Self-gating (iOS + native availability); uses the persisted HFP port UID in audio-only mode and emits a setup placeholder before Meta AI registration |
+| Discoverer | `app/lib/services/devices/discovery/rayban_meta_discoverer.dart` | Self-gating (iOS/Android + native availability); uses the persisted HFP port UID in audio-only mode and emits a setup placeholder before Meta AI registration |
 | Transport | `app/lib/services/devices/transports/rayban_meta_transport.dart` | Maps native events to `rayban-meta-audio-*` / `rayban-meta-camera-*` streams |
 | Connection | `app/lib/services/devices/connectors/rayban_meta_connection.dart` | `pcm16` codec; image listener emits `OrientedImage`; 30 s auto photo capture while active |
 | Pigeon contract | `app/lib/pigeon_interfaces.dart` | `RayBanMetaHostAPI` / `RayBanMetaFlutterAPI` |
 | iOS bridge | `app/ios/Runner/RayBanMeta/` | `RayBanMetaHostApiImpl.swift` (DAT under `#if canImport(MWDATCore)`), `RayBanMetaAudioCapture.swift` (HFP mic → PCM16/16 kHz) |
+| Android bridge | `app/android/app/src/main/kotlin/com/friend/ios/raybanmeta/` | `RayBanMetaHostApiImpl.kt`, `RayBanMetaAudioCapture.kt` (HFP/SCO mic → PCM16/16 kHz), `RayBanMetaForegroundService.kt` (microphone FGS); DAT behind `RayBanMetaDatBackend`, implemented only in the `raybanDat` flavor (`src/raybanDat/.../MwdatBackend.kt`, mwdat 1.0) — dev/prod compile `src/noDat` |
 | Backend | `backend/models/conversation_enums.py`, `backend/routers/transcribe.py` | `ConversationSource.rayban_meta`; photo-source flip preserves `rayban_meta` |
 
 ### Audio path
@@ -107,16 +110,17 @@ for everything else.
 The repo has no runtime flag system; gating follows the discoverer-self-gating
 idiom. `RayBanMetaHostAPI.getAvailabilityMode()` reports:
 
-- **`full`** — the `meta-wearables-dat-ios` SPM package is linked
-  (`#if canImport(MWDATCore)`). Audio + photos. Developer Mode deliberately
+- **`full`** — iOS: the `meta-wearables-dat-ios` SPM package is linked
+  (`#if canImport(MWDATCore)`). Android: the `raybanDat` product flavor, the
+  only variant that links `com.meta.wearable:mwdat-*`. Audio + photos. Developer Mode deliberately
   runs without `MetaAppID` / `ClientToken`; those credentials are only for
   future beta/distribution builds.
 - **`audio_only`** — no DAT in this build. The Connection Guide asks the user
   to choose the glasses' Bluetooth microphone, then reconnects by its persisted
   HFP port UID. Product-name matching remains only a first-selection
   convenience. All camera APIs honestly report unavailable; nothing is faked.
-- **`none`** — non-iOS platforms (Android integration is future work; the
-  discoverer yields nothing there).
+- **`none`** — platforms other than iOS and Android (the discoverer yields
+  nothing there).
 
 The default repo build is `audio_only` and compiles everywhere with no Meta
 credentials. See `app/docs/rayban-meta-dat-setup.md` for the `full` build.
@@ -134,7 +138,8 @@ credentials. See `app/docs/rayban-meta-dat-setup.md` for the `full` build.
 
 ## Limitations (current, honest)
 
-- **iOS only.** Android DAT exists but is not integrated yet.
+- **Android audio-only copy**: the Bluetooth-microphone picker's empty/error
+  strings still say "iPhone Settings" (l10n follow-up).
 - **No battery level** — DAT 0.8 does not expose it; the UI hides battery.
 - **HFP voice quality** (≈8 kHz) is below Omi pendant audio; fine for
   transcription, noticeable on playback.

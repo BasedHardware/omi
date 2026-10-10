@@ -9766,7 +9766,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.';
+      'No Bluetooth microphones found. Connect your glasses in your phone\'s Bluetooth settings, then try again.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9774,7 +9774,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Could not connect to that microphone. Make sure it is connected in iPhone Settings.';
+      'Could not connect to that microphone. Make sure it is connected in your phone\'s Bluetooth settings.';
 
   @override
   String get syncStatusTooOld => 'Too old to sync — Omi can\'t accept it';

@@ -9784,7 +9784,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth mikrofonu bulunamadı. Gözlüğünüzü iPhone Ayarları\'ndan bağlayıp tekrar deneyin.';
+      'Bluetooth mikrofonu bulunamadı. Gözlüğünüzü telefonunuzun Bluetooth ayarlarından bağlayıp tekrar deneyin.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9792,7 +9792,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Bu mikrofona bağlanılamadı. iPhone Ayarları\'nda bağlı olduğundan emin olun.';
+      'Bu mikrofona bağlanılamadı. Telefonunuzun Bluetooth ayarlarında bağlı olduğundan emin olun.';
 
   @override
   String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';

@@ -9860,7 +9860,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.';
+      'Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa mga setting ng Bluetooth ng iyong telepono, pagkatapos ay subukan muli.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9868,7 +9868,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.';
+      'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa mga setting ng Bluetooth ng iyong telepono.';
 
   @override
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';

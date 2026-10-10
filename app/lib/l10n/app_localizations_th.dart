@@ -9718,14 +9718,15 @@ class AppLocalizationsTh extends AppLocalizations {
       'เลือกไมโครโฟน Bluetooth ของแว่นตา เพลงจะหยุดชั่วคราวขณะที่ Omi ใช้งานไมโครโฟน';
 
   @override
-  String get rayBanMetaMicPickerEmpty => 'ไม่พบไมโครโฟน Bluetooth เชื่อมต่อแว่นตาในการตั้งค่า iPhone แล้วลองอีกครั้ง';
+  String get rayBanMetaMicPickerEmpty =>
+      'ไม่พบไมโครโฟน Bluetooth เชื่อมต่อแว่นตาในการตั้งค่า Bluetooth ของโทรศัพท์ แล้วลองอีกครั้ง';
 
   @override
   String get rayBanMetaMicPickerLoadError => 'โหลดไมโครโฟน Bluetooth ไม่ได้ ตรวจสอบว่าเปิด Bluetooth แล้วลองอีกครั้ง';
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'เชื่อมต่อกับไมโครโฟนนั้นไม่ได้ ตรวจสอบว่าเชื่อมต่ออยู่ในการตั้งค่า iPhone';
+      'เชื่อมต่อกับไมโครโฟนนั้นไม่ได้ ตรวจสอบว่าเชื่อมต่ออยู่ในการตั้งค่า Bluetooth ของโทรศัพท์';
 
   @override
   String get syncStatusTooOld => 'เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้';

@@ -9769,7 +9769,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Không tìm thấy micrô Bluetooth. Hãy kết nối kính trong Cài đặt iPhone rồi thử lại.';
+      'Không tìm thấy micrô Bluetooth. Hãy kết nối kính trong cài đặt Bluetooth của điện thoại rồi thử lại.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9777,7 +9777,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong Cài đặt iPhone.';
+      'Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong cài đặt Bluetooth của điện thoại.';
 
   @override
   String get syncStatusTooOld => 'Quá cũ để đồng bộ — Omi không thể chấp nhận';

@@ -9820,7 +9820,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth మైక్రోఫోన్‌లు ఏవీ కనుగొనబడలేదు. iPhone సెట్టింగ్‌లలో కళ్లద్దాలను కనెక్ట్ చేసి మళ్లీ ప్రయత్నించండి.';
+      'Bluetooth మైక్రోఫోన్‌లు ఏవీ కనుగొనబడలేదు. ఫోన్ Bluetooth సెట్టింగ్‌లలో కళ్లద్దాలను కనెక్ట్ చేసి మళ్లీ ప్రయత్నించండి.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9828,7 +9828,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'ఆ మైక్రోఫోన్‌కు కనెక్ట్ కాలేకపోయాము. అది iPhone సెట్టింగ్‌లలో కనెక్ట్ అయిందని నిర్ధారించుకోండి.';
+      'ఆ మైక్రోఫోన్‌కు కనెక్ట్ కాలేకపోయాము. అది ఫోన్ Bluetooth సెట్టింగ్‌లలో కనెక్ట్ అయిందని నిర్ధారించుకోండి.';
 
   @override
   String get syncStatusTooOld => 'సింక్ చేయడానికి చాలా పాతది — Omi దీన్ని అంగీకరించలేదు';
