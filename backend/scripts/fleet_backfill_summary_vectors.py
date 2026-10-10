@@ -61,6 +61,7 @@ def enumerate_user_uids(since: datetime) -> list[str]:
     jobs = client.collection('conversation_finalization_jobs')
     uids: set[str] = set()
     cursor = since
+    last_snapshot = None
     while True:
         query = (
             jobs.where(filter=FieldFilter('created_at', '>=', cursor))
@@ -68,6 +69,11 @@ def enumerate_user_uids(since: datetime) -> list[str]:
             .select(['created_at', 'uid'])
             .limit(9999)
         )
+        if last_snapshot is not None:
+            # start_after on the snapshot gives a (created_at, __name__)
+            # tiebreak, so same-timestamp jobs beyond a full page are not
+            # skipped and the cursor never needs a hand-rolled epsilon.
+            query = query.start_after(last_snapshot)
         docs = list(query.stream())
         if not docs:
             break
@@ -75,11 +81,9 @@ def enumerate_user_uids(since: datetime) -> list[str]:
             uid = (doc.get('uid') or '').strip()
             if uid:
                 uids.add(uid)
+        last_snapshot = docs[-1]
         if len(docs) < 9999:
             break
-        cursor = docs[-1].get('created_at') or cursor
-        # guard against a pathological single-timestamp page
-        cursor = cursor + timedelta(milliseconds=1)
     return sorted(uids)
 
 
@@ -101,45 +105,58 @@ def save_state(path: Path, state: dict) -> None:
     tmp.rename(path)
 
 
-def load_state_durable(path: Path) -> dict:
+MIRROR_COLLECTION = '_meta_summary_vector_backfill'
+
+
+def _mirror_doc_id(uid: str) -> str:
+    # Shard by uid prefix: keeps each Firestore doc far below the 1 MiB cap
+    # for a 27k-uid fleet (~256 shards x ~100-1k uids x ~170B).
+    return f'shard-{uid[:2]}'
+
+
+def load_state_durable(path: Path, uids: list[str]) -> dict:
     """Local state, mirrored to Firestore for cross-execution resume.
 
-    A Cloud Run execution's /tmp dies with the task; the Firestore mirror at
-    `_meta/summary_vector_backfill_state` lets a rerun resume where the last
-    one stopped. Local file stays the working copy (fast, atomic).
+    A Cloud Run execution's /tmp dies with the task; the Firestore mirror
+    (one shard doc per uid prefix) lets a rerun resume where the last one
+    stopped. Only shards covering this run's uid list are read/written.
+    Local file stays the working copy (fast, atomic).
     """
     state = load_state(path)
     try:
         from database._client import get_firestore_client
 
-        doc = get_firestore_client().collection('_meta').document('summary_vector_backfill_state').get()
-        if doc.exists:
+        col = get_firestore_client().collection(MIRROR_COLLECTION)
+        for shard_id in sorted({_mirror_doc_id(uid) for uid in uids}):
+            doc = col.document(shard_id).get()
+            if not doc.exists:
+                continue
             remote = doc.to_dict() or {}
-            remote_done = remote.get('done') or {}
-            if len(remote_done) > len(state.get('done', {})):
-                state['done'] = remote_done
-            remote_failed = remote.get('failed') or {}
-            if len(remote_failed) > len(state.get('failed', {})):
-                state['failed'] = remote_failed
+            for uid, record in (remote.get('done') or {}).items():
+                state['done'].setdefault(uid, record)
+            for uid, reason in (remote.get('failed') or {}).items():
+                state['failed'].setdefault(uid, reason)
     except Exception as error:
         print(f'state mirror read failed (continuing local): {type(error).__name__}', file=sys.stderr)
     return state
 
 
-def save_state_durable(path: Path, state: dict) -> None:
+def save_state_durable(path: Path, state: dict, uids: list[str]) -> None:
     save_state(path, state)
     try:
         from database._client import get_firestore_client
 
-        get_firestore_client().collection('_meta').document('summary_vector_backfill_state').set(
-            {
-                'done': state.get('done', {}),
-                'failed': state.get('failed', {}),
-                'started_at': state.get('started_at'),
-                'updated_at': state.get('updated_at'),
-            },
-            merge=True,
-        )
+        col = get_firestore_client().collection(MIRROR_COLLECTION)
+        shards: dict[str, dict] = {}
+        for uid in uids:
+            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})
+        for uid, record in state.get('done', {}).items():
+            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})['done'][uid] = record
+        for uid, reason in state.get('failed', {}).items():
+            shards.setdefault(_mirror_doc_id(uid), {'done': {}, 'failed': {}})['failed'][uid] = reason
+        for shard_id, payload in shards.items():
+            payload['updated_at'] = state.get('updated_at')
+            col.document(shard_id).set(payload, merge=True)
     except Exception as error:
         print(f'state mirror write failed (local only): {type(error).__name__}', file=sys.stderr)
 
@@ -183,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
             print('Refusing --apply: no vector index configured.', file=sys.stderr)
             return 2
 
-    state = load_state_durable(state_path)
+    state = load_state_durable(state_path, uids)
     if state.get('started_at') is None:
         state['started_at'] = datetime.now(timezone.utc).isoformat()
 
@@ -213,23 +230,31 @@ def main(argv: list[str] | None = None) -> int:
                 write=_writer() if args.apply else None,
             )
         except Exception as error:
-            state['failed'][uid] = type(error).__name__
-            save_state_durable(state_path, state)
+            if args.apply:
+                state['failed'][uid] = type(error).__name__
+                save_state_durable(state_path, state, uids)
             print(json.dumps({'uid': uid, 'outcome': 'select_failed', 'error': type(error).__name__}))
             exit_code = 1
             time.sleep(args.sleep)
             continue
         record = _asdict(summary)
+        if not args.apply:
+            # A cost preview must never poison the resume state: a later
+            # --apply has to revisit every previewed uid.
+            print(json.dumps({'uid': uid, 'outcome': 'preview', **record}))
+            time.sleep(args.sleep)
+            continue
         if summary.stopped_error_budget or summary.error:
             state['failed'][uid] = f'error_budget:{summary.error}'
             exit_code = 1
         else:
             state['done'][uid] = record
             state['failed'].pop(uid, None)
-        save_state_durable(state_path, state)
-        print(json.dumps({'uid': uid, 'outcome': 'applied' if args.apply else 'preview', **record}))
+        save_state_durable(state_path, state, uids)
+        print(json.dumps({'uid': uid, 'outcome': 'applied', **record}))
         time.sleep(args.sleep)
-    save_state_durable(state_path, state)
+    if args.apply:
+        save_state_durable(state_path, state, uids)
     print(
         json.dumps(
             {'mode': mode_str, 'finished': True, 'done_total': len(state['done']), 'failed_total': len(state['failed'])}
