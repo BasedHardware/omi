@@ -99,6 +99,7 @@ def load_state(path: Path) -> dict:
 
 
 def save_state(path: Path, state: dict) -> None:
+    state.pop('_mirror_read_ok', None)
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=1))
@@ -123,6 +124,7 @@ def load_state_durable(path: Path, uids: list[str]) -> dict:
     Local file stays the working copy (fast, atomic).
     """
     state = load_state(path)
+    state['_mirror_read_ok'] = True
     try:
         from database._client import get_firestore_client
 
@@ -137,7 +139,10 @@ def load_state_durable(path: Path, uids: list[str]) -> dict:
             for uid, reason in (remote.get('failed') or {}).items():
                 state['failed'].setdefault(uid, reason)
     except Exception as error:
-        print(f'state mirror read failed (continuing local): {type(error).__name__}', file=sys.stderr)
+        # A failed read leaves local state partial; mirror writes are skipped
+        # for the whole run so partial state cannot erase remote entries.
+        state['_mirror_read_ok'] = False
+        print(f'state mirror read failed (mirror writes disabled this run): {type(error).__name__}', file=sys.stderr)
     return state
 
 
@@ -150,8 +155,12 @@ def save_state_durable(path: Path, state: dict, dirty_uids: list[str]) -> None:
     rewriting untouched shards would multiply fleet write cost by the shard
     count.
     """
+    mirror_ok = state.get('_mirror_read_ok', True)
     save_state(path, state)
     if not dirty_uids:
+        return
+    if not mirror_ok:
+        print('mirror writes skipped: initial mirror read failed this run', file=sys.stderr)
         return
     try:
         from database._client import get_firestore_client
@@ -163,10 +172,15 @@ def save_state_durable(path: Path, state: dict, dirty_uids: list[str]) -> None:
             failed = {u: why for u, why in state.get('failed', {}).items() if _mirror_doc_id(u) == shard_id}
             if not done and not failed:
                 continue
-            col.document(shard_id).set(
-                {'done': done, 'failed': failed, 'updated_at': state.get('updated_at')},
-                merge=True,
-            )
+            # Omit empty maps from the payload: with merge=True the installed
+            # client turns an empty dict into a parent-field replace, which
+            # would erase the other map's entries recorded by another run.
+            payload: dict = {'updated_at': state.get('updated_at')}
+            if done:
+                payload['done'] = done
+            if failed:
+                payload['failed'] = failed
+            col.document(shard_id).set(payload, merge=True)
     except Exception as error:
         print(f'state mirror write failed (local only): {type(error).__name__}', file=sys.stderr)
 
