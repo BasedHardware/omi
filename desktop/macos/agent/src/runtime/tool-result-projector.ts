@@ -39,6 +39,7 @@ export function projectToolResultPayload(input: {
   const contract = toolManifestEntry(input.toolName)?.resultContract;
   const sectionPriority = new Map((contract?.sections ?? []).map((name, index) => [name, index]));
   const maxItems = contract?.maxItemsPerSection ?? Number.MAX_SAFE_INTEGER;
+  const noticeFirst = contract?.omissionNoticeFirst === true;
   const sections = extractSections(input.result, input.toolName)
     .sort((a, b) => (sectionPriority.get(a.name) ?? Number.MAX_SAFE_INTEGER)
       - (sectionPriority.get(b.name) ?? Number.MAX_SAFE_INTEGER))
@@ -65,7 +66,7 @@ export function projectToolResultPayload(input: {
     }
   }
 
-  let payload = renderProjection(sections, rendered, shown);
+  let payload = renderProjection(sections, rendered, shown, noticeFirst);
   while (!fits(payload, input.maxBytes) && fairItemBytes > 0) {
     const longest = sections
       .filter((section) => (rendered.get(section.name)?.length ?? 0) > 0)
@@ -78,7 +79,7 @@ export function projectToolResultPayload(input: {
     const next = renderItemExcerpt(longest.items[0], nextLimit);
     rendered.get(longest.name)![0] = next.text;
     renderedCompletely.get(longest.name)![0] = next.complete;
-    payload = renderProjection(sections, rendered, shown);
+    payload = renderProjection(sections, rendered, shown, noticeFirst);
   }
 
   if (!fits(payload, input.maxBytes)) {
@@ -98,7 +99,7 @@ export function projectToolResultPayload(input: {
       current.push(next.text);
       renderedCompletely.get(section.name)!.push(next.complete);
       shown.set(section.name, current.length);
-      const candidate = renderProjection(sections, rendered, shown);
+      const candidate = renderProjection(sections, rendered, shown, noticeFirst);
       if (!fits(candidate, input.maxBytes)) {
         current.pop();
         renderedCompletely.get(section.name)!.pop();
@@ -113,23 +114,41 @@ export function projectToolResultPayload(input: {
   return payload;
 }
 
+/**
+ * For a contract with `omissionNoticeFirst`, a truncated projection opens with
+ * what was left out and how to reach it, so the model meets that before the
+ * content rather than after it.
+ */
+function omissionNotice(sections: TypedSection[], omitted: Record<string, number>): string[] {
+  const parts = sections
+    .filter((section) => (omitted[section.name] ?? 0) > 0)
+    .map((section) => `${section.name} ${omitted[section.name]} of ${section.total}`);
+  if (parts.length === 0) return [];
+  return [
+    `Not shown here: ${parts.join(", ")}. The full result is stored (toolResultEnvelope.fullOutputRef): `
+      + "search it with search_tool_output before saying something is not there.",
+  ];
+}
+
 function renderProjection(
   sections: TypedSection[],
   rendered: Map<string, string[]>,
   shown: Map<string, number>,
+  noticeFirst = false,
 ): ProjectedToolPayload {
   const omitted = Object.fromEntries(sections.map((section) => [
     section.name,
     Math.max(0, section.total - (shown.get(section.name) ?? 0)),
   ]));
-  const text = sections.flatMap((section) => {
+  const notice = noticeFirst ? omissionNotice(sections, omitted) : [];
+  const text = [...notice, ...sections.flatMap((section) => {
     const count = shown.get(section.name) ?? 0;
     return [
       `${section.name} (${section.total} total)`,
       ...(rendered.get(section.name) ?? []).map((item) => `- ${item}`),
       `[${section.name}: ${count} shown, ${omitted[section.name]} omitted]`,
     ];
-  }).join("\n");
+  })].join("\n");
   return { text, omitted };
 }
 

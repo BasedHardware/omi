@@ -10,6 +10,7 @@ import {
 } from "./omi-tool-manifest.js";
 import { executionRoleAllowsTool, type AgentExecutionRole } from "./execution-policy.js";
 import { validateRuntimeContractSchema, type RuntimeContractSchema } from "./contract-schema.js";
+import { normalizedUIAutomationBundleId } from "./ui-automation-safety-floor.js";
 import {
   buildDesktopToolApprovalRequest,
   desktopToolPolicyInternals,
@@ -311,7 +312,17 @@ export const DESKTOP_APPROVAL_TOOLS: ReadonlySet<string> = new Set([
   "send_message",
   "run_applescript",
   "capture_screen",
+  "ui_snapshot",
 ]);
+
+/** Bundles whose `grants` rows the broker reads; any other capability is ignored. */
+const DESKTOP_GRANT_BUNDLES: readonly DesktopCoordinatorBundle[] = [
+  "desktop.messaging.read",
+  "desktop.mail.read",
+  "desktop.messaging.send",
+  "desktop.automation.act",
+  "desktop.automation.observe",
+];
 
 /**
  * The resource a scoped grant is matched against, derived only from the
@@ -340,6 +351,8 @@ function toolResourceRef(toolName: string, input: Record<string, unknown>): stri
   if (toolName === "list_message_chats") return "messages:chats";
   if (toolName === "list_mail_messages") return "mail:inbox";
   if (toolName === "capture_screen") return "screen";
+  // One grant per app, whatever case the model spelled the bundle id in.
+  if (toolName === "ui_snapshot") return normalizedUIAutomationBundleId(input.bundle_id);
   return undefined;
 }
 
@@ -823,12 +836,7 @@ export class RunToolCapabilityBroker {
     ).flatMap((row) => {
       const capability = typeof row.capability === "string" ? row.capability : "";
       const bundle = capability as DesktopCoordinatorBundle;
-      if (![
-        "desktop.messaging.read",
-        "desktop.mail.read",
-        "desktop.messaging.send",
-        "desktop.automation.act",
-      ].includes(bundle)) return [];
+      if (!DESKTOP_GRANT_BUNDLES.includes(bundle)) return [];
       return [{
         bundle,
         operation: typeof row.operation === "string" ? row.operation : undefined,

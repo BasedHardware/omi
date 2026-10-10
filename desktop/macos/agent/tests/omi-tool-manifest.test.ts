@@ -124,6 +124,7 @@ describe("omi tool manifest", () => {
       "list_mail_messages",
       "send_message",
       "run_applescript",
+      "ui_snapshot",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
