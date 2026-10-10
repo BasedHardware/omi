@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/components/omi_button.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// A frosted card preview with one readable action above its obscured content.
@@ -48,7 +49,8 @@ class OmiLockedPreview extends StatelessWidget {
               ignoring: interactive,
               child: ColoredBox(
                 key: const Key('locked_preview_tint'),
-                color: OmiColors.surface1.withValues(alpha: 0.65),
+                // On the canvas the row is flat, so the veil is the page colour and no card shows.
+                color: (OmiCanvas.isOn(context) ? OmiColors.canvas : OmiColors.surface1).withValues(alpha: 0.65),
               ),
             ),
           ),
