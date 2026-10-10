@@ -40,7 +40,7 @@ def conversation():
 
 def test_late_transcript_defect_visible_without_storage_metadata():
     records = {'conversations/synthetic': conversation()}
-    messages = dream_prompt.evidence_message(records, Triage, min(6000, 16000 // 3))
+    messages = dream_prompt.evidence_message(records, Triage, 8000)
     projected = json.loads(messages[0]['content'])['records']
     assert list(projected) == list(records)
     value = projected['conversations/synthetic']
@@ -113,18 +113,20 @@ def test_long_transcript_keeps_head_tail_exact_count_and_summary_fields():
     assert len(original) == len(body) - len(match[0]) + int(match[1])
 
 
-@pytest.mark.parametrize('words', ['Synthetic evidence ' * 4000, '合成ロボット 🤖 ' * 4000])
-def test_twelve_large_records_budget_and_selection_share_payload(words):
+@pytest.mark.parametrize(
+    'words', ['Synthetic evidence ' * 4000, 'Tiếng Việt: rô bốt tổng hợp đang thảo luận về bánh răng. ' * 4000]
+)
+def test_large_records_budget_and_selection_share_payload(words):
     records = {}
-    for i in range(12):
+    for i in range(4):
         row = conversation()
         row['transcript_segments'][-1]['text'] = words + 'Synthetic tail'
         records[f'conversations/{i}'] = row
     caps = Caps(tokens=16000)
-    budget = min(6000, caps.tokens // 3)
+    budget = min(12000, caps.tokens // 2)
     messages = dream_prompt.evidence_message(records, Triage, budget)
     assert dream_prompt.fits_triage(records, caps)
-    assert len(json.loads(messages[0]['content'])['records']) == 12
+    assert len(json.loads(messages[0]['content'])['records']) == 4
     assert (
         dream_transport.input_ceiling(
             dream_prompt.mount(Triage, budget, dream_prompt.TRIAGE_INSTRUCTIONS).messages(messages),
@@ -133,7 +135,7 @@ def test_twelve_large_records_budget_and_selection_share_payload(words):
         + 768
         <= budget
     )
-    assert dream_prompt.evidence_chars(messages) > 0
+    assert all(len(value) >= 600 for value in json.loads(messages[0]['content'])['records'].values())
     assert not dream_prompt.fits_triage(records, Caps(tokens=100))
 
 
@@ -151,10 +153,56 @@ def test_two_lanes_remaining_budget_names_and_counts(monkeypatch, caplog):
 
     _, tokens = asyncio.run(dream_agent.plan_pass('synthetic', records, Caps(tokens=16000), turn=turn, usage_sink=sink))
     assert tokens == 200
-    assert [row[1] for row in seen] == [16000 // 3, 15900]
+    assert [row[1] for row in seen] == [8000, 15900]
     assert sink['triage_evidence_chars'] == dream_prompt.evidence_chars(seen[0][2])
     assert sink['reasoning_evidence_chars'] == dream_prompt.evidence_chars(seen[1][2])
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         dream_metrics.record_pass({'status': 'complete', **sink})
     assert 'triage_evidence_chars=' in caplog.text and 'reasoning_evidence_chars=' in caplog.text
     assert 'Qorbi' not in caplog.text and 'synthetic' not in caplog.text
+
+
+@pytest.mark.parametrize('tokens,expected', [(16000, 8000), (24000, 12000), (40000, 12000)])
+def test_triage_budget_uses_half_the_cap_up_to_twelve_thousand(tokens, expected):
+    assert dream_prompt.triage_budget(Caps(tokens=tokens)) == expected
+
+
+def test_lone_triage_record_can_fit_below_floor_when_necessary():
+    ref = 'conversations/huge'
+    records = {
+        ref: {'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'HEAD ' + 'synthetic ' * 10000 + ' TAIL'}]}
+    }
+    empty = [{'role': 'user', 'content': json.dumps({'records': {ref: ''}})}]
+    overhead = dream_transport.input_ceiling(
+        dream_prompt.mount(Triage, 12000, dream_prompt.TRIAGE_INSTRUCTIONS).messages(empty),
+        Triage.model_json_schema(),
+    )
+    budget = overhead + 768 + 350
+    caps = Caps(tokens=budget * 2)
+    assert dream_prompt.fits_triage(records, caps)
+    messages = dream_prompt.evidence_message(records, Triage, budget)
+    value = json.loads(messages[0]['content'])['records'][ref]
+    assert 0 < len(value) < 600
+    assert value.startswith('SPEAKER_00: HEAD') and value.endswith('TAIL')
+    assert 'chars omitted' in value
+    assert (
+        dream_transport.input_ceiling(
+            dream_prompt.mount(Triage, budget, dream_prompt.TRIAGE_INSTRUCTIONS).messages(messages),
+            Triage.model_json_schema(),
+        )
+        + 768
+        <= budget
+    )
+    assert not dream_prompt.fits_triage({**records, 'conversations/other': records[ref]}, caps)
+
+
+def test_reasoning_preserves_its_own_floor_and_rejects_dilution():
+    row = {'transcript_segments': [{'speaker': 'SPEAKER_00', 'text': 'synthetic ' * 10000}]}
+    records = {'conversations/one': row}
+    empty = [{'role': 'user', 'content': json.dumps({'records': dict.fromkeys(records, '')})}]
+    overhead = dream_transport.input_ceiling(dream_prompt.mount(Plan, 24000).messages(empty), Plan.model_json_schema())
+    budget = overhead + 768 + 2000
+    messages = dream_prompt.evidence_message(records, Plan, budget)
+    assert len(json.loads(messages[0]['content'])['records']['conversations/one']) >= 1500
+    with pytest.raises(ValueError, match='dream_evidence_token_budget'):
+        dream_prompt.evidence_message({**records, 'conversations/two': row}, Plan, budget)

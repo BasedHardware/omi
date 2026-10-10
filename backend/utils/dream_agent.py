@@ -13,7 +13,7 @@ from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
 
-from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS
+from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
 
 
 async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
@@ -41,7 +41,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             usage_sink['usage_unknown'] = previous_unknown
         return result
 
-    triage_tokens = min(6000, caps.tokens // 3)
+    triage_tokens = triage_budget(caps)
     # The byte-based transport gate remains authoritative, including schema.
     triage = await run_loop(
         mount(

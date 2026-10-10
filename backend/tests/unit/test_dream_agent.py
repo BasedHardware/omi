@@ -377,9 +377,9 @@ def test_evidence_shrinks_to_the_triage_budget():
     oversized = {f'screen/{i}': {'ocr_text': 'Synthetic screen words ' * 100} for i in range(50)}
     with pytest.raises(ValueError, match='dream_evidence_token_budget'):
         dream_prompt.evidence_message(oversized, Triage, 6000)
-    records = dict(list(oversized.items())[:12])
+    records = dict(list(oversized.items())[:4])
     messages = dream_prompt.evidence_message(records, Triage, 6000)
-    assert len(__import__('json').loads(messages[0]['content'])['records']) == 12
+    assert len(__import__('json').loads(messages[0]['content'])['records']) == 4
     framed = dream_prompt.mount(Triage, 6000).messages(messages)
     assert dream_transport.input_ceiling(framed, Triage.model_json_schema()) + 768 <= 6000
 

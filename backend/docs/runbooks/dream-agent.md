@@ -84,7 +84,7 @@ repeated writes; it does not claim fewer billed writes for multi-reference batch
 Drain considers the highest weighted score first, at most 100 users per
 invocation. A pass reads distinct queued references newest first, at most 400
 before enrichment, stopping when their conservatively encoded triage excerpts
-would exceed `min(6000, Caps.tokens / 3)` including schema/framing/completion.
+would exceed `min(12000, Caps.tokens / 2)` including schema/framing/completion.
 Touched identities and up to 30 synced OCR rows share that budget. Records
 changed after admission stay queued. Successful completion deletes only the
 versions actually selected; failed passes retain the queue. Missing or invisible
@@ -104,11 +104,14 @@ while segment IDs, timestamps and provider/speaker-scope metadata stay out of th
 projection. Long text keeps head and tail with an explicit omitted-character count.
 
 Queue selection and inference share the same projection and conservative transport
-gate. Triage gets `min(6000, Caps.tokens // 3)`; reasoning gets the pass budget minus
+gate. Triage gets `min(12000, Caps.tokens // 2)`; reasoning gets the pass budget minus
 observed triage tokens. Per-record character allowances use the space left after
 schema, framing, refs and completion reserve, then halve until the encoded request
-fits. The 128-character minimum stops admission before further dilution starves
-individual records. Conversation summary fields retain space before transcript text
+fits. Triage retains an allowance of at least 600 characters per record; reasoning
+retains at least 1,500. Additional records that cannot fit at the triage floor stay
+queued for a later pass. A single triage record may shrink below its floor with
+head/tail retention if needed to fit the transport gate, preventing oversized
+records from blocking the queue. Short source text is never padded. Conversation summary fields retain space before transcript text
 is shortened. Mutation tools retain complete snapshots and fence current records.
 
 Triage uses `omi:auto:dream-triage` (Luna). Empty triage buys no reasoning. Main
