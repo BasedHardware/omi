@@ -1,6 +1,6 @@
 # Agent Grants and Approval UX Design
 
-**Status:** Design for TICKET-005. The desktop runtime now parks the on-device tools (`send_message`, `run_applescript`, `read_message_history`, `list_message_chats`, `list_mail_messages`) and the live screenshot tool (`capture_screen`) behind an invocation-bound `approval` dispatch and resolves it through `resolve_desktop_dispatch`; that implementation is described in `desktop/macos/docs/device-tool-surface.md`. Everything else here, including the Swift card and the Claude Code lane, remains design-only.
+**Status:** Design for TICKET-005. The desktop runtime now parks the on-device tools (`send_message`, `run_applescript`, `read_message_history`, `list_message_chats`, `list_mail_messages`, `ui_snapshot`) and the live screenshot tool (`capture_screen`) behind an invocation-bound `approval` dispatch and resolves it through `resolve_desktop_dispatch`; that implementation is described in `desktop/macos/docs/device-tool-surface.md`. Everything else here, including the Swift card and the Claude Code lane, remains design-only.
 
 This document narrows the approval and grant UX design that follows the Agent Control Plane spec, especially sections 6.8, 11.2, 17, and 24. It does not change cloud relay behavior, artifact lifecycle, or adapter contracts.
 
