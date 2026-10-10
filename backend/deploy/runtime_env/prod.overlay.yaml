@@ -247,6 +247,9 @@ overlay:
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '0'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_RESCUE:
+          value: 'shadow'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
@@ -380,6 +383,9 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_RESCUE:
+          value: 'shadow'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
@@ -681,6 +687,9 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_RESCUE:
+            value: 'shadow'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
@@ -863,6 +872,9 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_RESCUE:
+            value: 'shadow'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
@@ -1012,6 +1024,9 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_RESCUE:
+            value: 'shadow'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
