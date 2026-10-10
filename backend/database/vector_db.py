@@ -30,6 +30,8 @@ from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 from utils.observability.fallback import record_fallback
 
+from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
+
 logger = logging.getLogger(__name__)
 
 R = TypeVar("R")
@@ -143,8 +145,6 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 @_account_external_data_write
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
-    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
-
     if index is None:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
         return False

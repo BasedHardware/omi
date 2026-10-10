@@ -130,6 +130,7 @@ from utils.observability.owner_recognition import (
     owner_recognition_needs_profile,
 )
 from utils.metrics import (
+    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL,
     record_jit_first_open,
     record_lazy_desktop_deferral,
     record_memory_owner_jev,
@@ -2173,13 +2174,11 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
-    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as outcomes
-
     if conversation.discarded:
-        outcomes.labels(outcome='skipped_discarded').inc()
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_discarded').inc()
         return False
     if not conversation.structured:
-        outcomes.labels(outcome='skipped_no_structured').inc()
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
         return False
     try:
         vector = generate_embedding(str(conversation.structured)) if not update_only else None
@@ -2210,14 +2209,14 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
         metadata['created_at'] = int(conversation.created_at.timestamp())
     except Exception:
         if not update_only:
-            outcomes.labels(outcome='error').inc()
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
         raise
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
         if not upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata):
             return False
-        outcomes.labels(outcome='success').inc()
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='success').inc()
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
