@@ -70,6 +70,7 @@ _EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter 
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
 _NOOP = (noop, 'callback side-effect neutralized; does not affect filters')
+_DAY_ZONE = (None, 'zone the day window is built in; moves the bounds, same filters')
 
 
 def _seed(path: str, data: dict):
@@ -1008,10 +1009,17 @@ _add(
         'database.focus_sessions.get_focus_sessions',
         base={'uid': UID},
         domains={'date': [None, '2026-01-01']},
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'tz': _DAY_ZONE},
     )
 )
-_add(DriverEntry('database.focus_sessions.get_focus_stats', base={'uid': UID}, domains={'date': [None, '2026-01-01']}))
+_add(
+    DriverEntry(
+        'database.focus_sessions.get_focus_stats',
+        base={'uid': UID},
+        domains={'date': [None, '2026-01-01']},
+        neutrals={'tz': _DAY_ZONE},
+    )
+)
 
 _add(
     DriverEntry(

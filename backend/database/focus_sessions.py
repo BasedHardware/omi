@@ -7,6 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, cast
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -95,12 +96,19 @@ def _normalize_focus_session_doc(doc_id: str, data: Dict[str, Any]) -> Dict[str,
     }
 
 
-def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def get_focus_sessions(
+    uid: str,
+    date: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    tz: Optional[ZoneInfo] = None,
+) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     if date:
-        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        zone = tz or timezone.utc
+        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=zone)
         day_end = day_start + timedelta(days=1)
         query = query.where(filter=FieldFilter('created_at', '>=', day_start))
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
@@ -121,15 +129,15 @@ def delete_focus_session(uid: str, session_id: str) -> bool:
     return True
 
 
-def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
+def get_focus_stats(uid: str, date: Optional[str] = None, tz: Optional[ZoneInfo] = None) -> Dict[str, Any]:
     # A day's stats need a day.  Passing date=None straight through meant
     # get_focus_sessions applied no created_at filter at all, so the totals
     # below were summed from the user's entire history -- up to the 5000-row
     # cap -- and then labelled with a single date.  Anyone opening focus
     # stats without picking a day saw months of focus reported as today's.
     # get_daily_score resolves the same way: no date means today.
-    day = date or datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    sessions = get_focus_sessions(uid, date=day, limit=5000, offset=0)
+    day = date or datetime.now(tz or timezone.utc).strftime('%Y-%m-%d')
+    sessions = get_focus_sessions(uid, date=day, limit=5000, offset=0, tz=tz)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
