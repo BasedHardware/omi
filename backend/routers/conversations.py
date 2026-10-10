@@ -495,7 +495,7 @@ def process_in_progress_conversation(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     conversation = retrieve_in_progress_conversation(uid)
-    if not conversation:
+    if not conversation or conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
 
     conversation = deserialize_conversation(conversation)
