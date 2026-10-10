@@ -2,6 +2,7 @@
 
 import json
 from collections import Counter
+from functools import lru_cache
 from typing import get_args
 
 from pydantic import ValidationError
@@ -55,17 +56,24 @@ def _truncate_arrays(value, schema, root):
     return value
 
 
+@lru_cache(maxsize=1)
+def _diagnostic_fields():
+    # Static model metadata only; never retain response values or exception data.
+    fields = set()
+    for model in (Plan, Triage):
+        schema = model.model_json_schema()
+        for node in [schema, *schema.get('$defs', {}).values()]:
+            fields.update(node.get('properties', {}))
+    return frozenset(fields)
+
+
 def validation_counts(exc, *, prefix=()):
     """Only schema-owned field names and Pydantic error types may leave parsing.
 
     Unknown extra keys can contain user content; never log them, input, message,
     context or URL. Numeric locations collapse into their enclosing field path.
     """
-    schemas = [model.model_json_schema() for model in (Plan, Triage)]
-    fields = set()
-    for schema in schemas:
-        for node in [schema, *schema.get('$defs', {}).values()]:
-            fields.update(node.get('properties', {}))
+    fields = _diagnostic_fields()
     counts = Counter()
     for error in exc.errors(include_input=False, include_context=False, include_url=False):
         path = (
