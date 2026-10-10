@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -32,12 +33,19 @@ Future<void> Function(String name, String number) addContactLauncher = _addConta
 
 Future<void> _addContact(String name, String number) async {
   await FlutterContacts.native.showCreator(
-    contact: Contact(name: Name(first: name), phones: [Phone(number: number)]),
+    contact: Contact(
+      name: Name(first: name),
+      phones: [Phone(number: number)],
+    ),
   );
 }
 
-const _messagesBlue = Color(0xFF0A84FF); // omi-ux-allow: color-literal -- the Messages bubble, a brand colour
-const _onMessagesBlue = Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- text on the Messages bubble
+const _messagesBlue = Color(
+  0xFF0A84FF,
+); // omi-ux-allow: color-literal -- the Messages bubble, a brand colour
+const _onMessagesBlue = Color(
+  0xFFFFFFFF,
+); // omi-ux-allow: color-literal -- text on the Messages bubble
 
 class IMessageConnectSheet extends StatefulWidget {
   const IMessageConnectSheet({super.key});
@@ -60,6 +68,12 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
   ChatChannel get waitChannel => ChatChannel.imessage;
 
   ChatChannelEndpoint? get _endpoint => context.read<MessagingChannelsProvider>().config.endpoint(ChatChannel.imessage);
+
+  String? _address(wire.GeneratedChannelLinkProof? proof) {
+    final fromApi = proof?.address?.trim();
+    if (fromApi != null && fromApi.isNotEmpty) return fromApi;
+    return _endpoint?.address;
+  }
 
   bool get _expired => _proof != null && !_proof!.expiresAt.isAfter(DateTime.now());
 
@@ -92,7 +106,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
       _minting = true;
       _problem = null;
     });
-    final result = await context.read<MessagingChannelsProvider>().mintProof(ChatChannel.imessage, kind: 'code');
+    final result = await context.read<MessagingChannelsProvider>().mintProof(
+          ChatChannel.imessage,
+          kind: 'code',
+        );
     if (!mounted) return;
     setState(() {
       _minting = false;
@@ -117,10 +134,21 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     final proof = _proof;
     if (endpoint == null || proof == null) return;
     if (!_sent) ChatAppsAnalytics.connectStarted(ChatChannel.imessage);
-    final opened = await openChatApp(ChatChannel.imessage, endpoint, body: _body(proof.proof));
+    final uri = chatAppProofUri(
+      channel: ChatChannel.imessage,
+      endpoint: endpoint,
+      deepLink: proof.deepLink,
+      address: proof.address,
+      body: _body(proof.proof),
+      platform: defaultTargetPlatform,
+    );
+    final opened = uri != null && await chatAppLauncher(uri);
     if (!mounted) return;
     if (!opened) {
-      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsMessagesApp));
+      OmiFeedback.error(
+        context,
+        context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsMessagesApp),
+      );
     }
     // Waiting starts either way: the code can also be sent by hand.
     setState(() => _sent = true);
@@ -131,9 +159,13 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     final endpoint = _endpoint;
     if (endpoint == null) return;
     try {
-      await addContactLauncher('Omi', endpoint.address);
+      await addContactLauncher('Omi', _address(_proof) ?? endpoint.address);
     } catch (_) {
-      if (mounted) OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsContactsApp));
+      if (mounted)
+        OmiFeedback.error(
+          context,
+          context.l10n.chatAppsCouldNotOpen(context.l10n.chatAppsContactsApp),
+        );
     }
   }
 
@@ -157,7 +189,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
       children: [
         const Center(child: ChatAppLogo(ChatChannel.imessage, size: 56)),
         const SizedBox(height: OmiSpacing.md),
-        ChatAppsSheetHeading(title: l10n.chatAppsConnectIMessageTitle, message: l10n.chatAppsConnectIMessageMessage),
+        ChatAppsSheetHeading(
+          title: l10n.chatAppsConnectIMessageTitle,
+          message: l10n.chatAppsConnectIMessageMessage,
+        ),
         const SizedBox(height: OmiSpacing.lg),
         Container(
           padding: const EdgeInsets.all(OmiSpacing.md),
@@ -173,11 +208,18 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
                 children: [
                   Expanded(
                     child: Text(
-                      l10n.chatAppsIMessageTo(endpoint?.address ?? ''),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                      l10n.chatAppsIMessageTo(_address(proof) ?? ''),
+                      style: OmiType.footnote.copyWith(
+                        color: OmiColors.textTertiary,
+                      ),
                     ),
                   ),
-                  Text(l10n.chatAppsPrefilled, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  Text(
+                    l10n.chatAppsPrefilled,
+                    style: OmiType.footnote.copyWith(
+                      color: OmiColors.textTertiary,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: OmiSpacing.sm),
@@ -186,16 +228,26 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
                 child: proof == null
                     ? (_minting
                         ? const Padding(
-                            padding: EdgeInsets.all(OmiSpacing.xs), child: OmiSpinner(size: OmiSpinnerSize.small))
+                            padding: EdgeInsets.all(OmiSpacing.xs),
+                            child: OmiSpinner(size: OmiSpinnerSize.small),
+                          )
                         : const SizedBox(height: 40))
                     : Container(
                         key: const ValueKey('chat_apps_imessage_bubble'),
-                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm + 2, vertical: OmiSpacing.sm - 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: OmiSpacing.sm + 2,
+                          vertical: OmiSpacing.sm - 2,
+                        ),
                         decoration: const BoxDecoration(
                           color: _messagesBlue,
                           borderRadius: BorderRadius.all(Radius.circular(18)),
                         ),
-                        child: Text(_body(proof.proof), style: OmiType.callout.copyWith(color: _onMessagesBlue)),
+                        child: Text(
+                          _body(proof.proof),
+                          style: OmiType.callout.copyWith(
+                            color: _onMessagesBlue,
+                          ),
+                        ),
                       ),
               ),
             ],
@@ -240,7 +292,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     );
   }
 
-  Widget _buildWaiting(BuildContext context, wire.GeneratedChannelLinkProof proof) {
+  Widget _buildWaiting(
+    BuildContext context,
+    wire.GeneratedChannelLinkProof proof,
+  ) {
     final l10n = context.l10n;
     final endpoint = _endpoint;
     final remaining = proof.expiresAt.difference(DateTime.now());
@@ -251,7 +306,13 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
         const SizedBox(height: OmiSpacing.lg),
         Center(
           child: expired
-              ? ExcludeSemantics(child: Icon(Icons.timer_off_outlined, size: 40, color: OmiColors.textTertiary))
+              ? ExcludeSemantics(
+                  child: Icon(
+                    Icons.timer_off_outlined,
+                    size: 40,
+                    color: OmiColors.textTertiary,
+                  ),
+                )
               : const OmiSpinner(size: OmiSpinnerSize.large),
         ),
         const SizedBox(height: OmiSpacing.xl),
@@ -262,7 +323,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
         const SizedBox(height: OmiSpacing.xl),
         if (!expired)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm + 2),
+            padding: const EdgeInsets.symmetric(
+              horizontal: OmiSpacing.md,
+              vertical: OmiSpacing.sm + 2,
+            ),
             decoration: BoxDecoration(
               color: OmiColors.surface0,
               border: Border.all(color: OmiColors.border),
@@ -272,8 +336,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  l10n.chatAppsTextThisTo(endpoint?.address ?? ''),
-                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                  l10n.chatAppsTextThisTo(_address(proof) ?? ''),
+                  style: OmiType.footnote.copyWith(
+                    color: OmiColors.textTertiary,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -293,7 +359,11 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
                       key: const ValueKey('chat_apps_copy_code'),
                       label: l10n.copy,
                       size: OmiButtonSize.compact,
-                      onPressed: () => OmiClipboard.copy(context, _body(proof.proof), what: l10n.chatAppsMessage),
+                      onPressed: () => OmiClipboard.copy(
+                        context,
+                        _body(proof.proof),
+                        what: l10n.chatAppsMessage,
+                      ),
                     ),
                   ],
                 ),
@@ -305,7 +375,9 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
           Semantics(
             liveRegion: false,
             child: Text(
-              l10n.chatAppsCodeExpiresIn(OmiDuration.offset(remaining.inSeconds)),
+              l10n.chatAppsCodeExpiresIn(
+                OmiDuration.offset(remaining.inSeconds),
+              ),
               key: const ValueKey('chat_apps_code_countdown'),
               textAlign: TextAlign.center,
               style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),

@@ -19,13 +19,25 @@ class ChatAppLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget mark = switch (channel) {
-      ChatChannel.telegram => Assets.images.telegramLogo.image(width: size, height: size),
-      ChatChannel.whatsapp => Assets.images.whatsappLogo.image(width: size, height: size),
-      ChatChannel.imessage => SvgPicture.asset(Assets.images.imessageLogo, width: size, height: size),
+      ChatChannel.telegram => Assets.images.telegramLogo.image(
+          width: size,
+          height: size,
+        ),
+      ChatChannel.whatsapp => Assets.images.whatsappLogo.image(
+          width: size,
+          height: size,
+        ),
+      ChatChannel.imessage => SvgPicture.asset(
+          Assets.images.imessageLogo,
+          width: size,
+          height: size,
+        ),
     };
     return ExcludeSemantics(
       child: ClipRRect(
-          borderRadius: BorderRadius.circular(size * 0.22), child: SizedBox.square(dimension: size, child: mark)),
+        borderRadius: BorderRadius.circular(size * 0.22),
+        child: SizedBox.square(dimension: size, child: mark),
+      ),
     );
   }
 }
@@ -38,7 +50,11 @@ class StackedChatAppLogos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const channels = [ChatChannel.telegram, ChatChannel.imessage, ChatChannel.whatsapp];
+    const channels = [
+      ChatChannel.telegram,
+      ChatChannel.imessage,
+      ChatChannel.whatsapp,
+    ];
     final step = size - 10;
     return SizedBox(
       width: step * (channels.length - 1) + size + 4,
@@ -93,8 +109,14 @@ class ChatAppsOutlineTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 3),
-      decoration: BoxDecoration(border: Border.all(color: OmiColors.border), borderRadius: OmiRadius.pillAll),
+      padding: const EdgeInsets.symmetric(
+        horizontal: OmiSpacing.xs,
+        vertical: 3,
+      ),
+      decoration: BoxDecoration(
+        border: Border.all(color: OmiColors.border),
+        borderRadius: OmiRadius.pillAll,
+      ),
       child: Text(
         label,
         style: OmiType.caption.copyWith(
@@ -116,11 +138,21 @@ class ChatAppsFilledTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 3),
-      decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+      padding: const EdgeInsets.symmetric(
+        horizontal: OmiSpacing.xs,
+        vertical: 3,
+      ),
+      decoration: BoxDecoration(
+        color: OmiColors.accent,
+        borderRadius: OmiRadius.pillAll,
+      ),
       child: Text(
         label,
-        style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w600, letterSpacing: 0.4),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.onAccent,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
+        ),
       ),
     );
   }
@@ -128,7 +160,13 @@ class ChatAppsFilledTag extends StatelessWidget {
 
 /// A line with a leading glyph, used for the capability list and the sheets' notes.
 class ChatAppsBullet extends StatelessWidget {
-  const ChatAppsBullet({super.key, required this.icon, required this.text, this.iconColor, this.style});
+  const ChatAppsBullet({
+    super.key,
+    required this.icon,
+    required this.text,
+    this.iconColor,
+    this.style,
+  });
 
   final IconData icon;
   final String text;
@@ -142,10 +180,21 @@ class ChatAppsBullet extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 1),
-          child: ExcludeSemantics(child: Icon(icon, size: 18, color: iconColor ?? OmiColors.textSecondary)),
+          child: ExcludeSemantics(
+            child: Icon(
+              icon,
+              size: 18,
+              color: iconColor ?? OmiColors.textSecondary,
+            ),
+          ),
         ),
         const SizedBox(width: OmiSpacing.xs),
-        Expanded(child: Text(text, style: style ?? OmiType.subhead.copyWith(color: OmiColors.textSecondary))),
+        Expanded(
+          child: Text(
+            text,
+            style: style ?? OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          ),
+        ),
       ],
     );
   }
@@ -162,15 +211,23 @@ class ChatAppsNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm + 2, vertical: OmiSpacing.sm),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+      padding: const EdgeInsets.symmetric(
+        horizontal: OmiSpacing.sm + 2,
+        vertical: OmiSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.mdAll,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
             Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: ExcludeSemantics(child: Icon(icon, size: 18, color: OmiColors.textSecondary)),
+              child: ExcludeSemantics(
+                child: Icon(icon, size: 18, color: OmiColors.textSecondary),
+              ),
             ),
             const SizedBox(width: OmiSpacing.xs + 2),
           ],
@@ -179,10 +236,20 @@ class ChatAppsNote extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (title != null) ...[
-                  Text(title!, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    title!,
+                    style: OmiType.subhead.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: OmiSpacing.xxs),
                 ],
-                Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                Text(
+                  message,
+                  style: OmiType.footnote.copyWith(
+                    color: OmiColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -194,7 +261,11 @@ class ChatAppsNote extends StatelessWidget {
 
 /// The sheets' centred heading and description.
 class ChatAppsSheetHeading extends StatelessWidget {
-  const ChatAppsSheetHeading({super.key, required this.title, required this.message});
+  const ChatAppsSheetHeading({
+    super.key,
+    required this.title,
+    required this.message,
+  });
 
   final String title;
   final String message;
@@ -204,11 +275,19 @@ class ChatAppsSheetHeading extends StatelessWidget {
     return Column(
       children: [
         Semantics(
-            header: true,
-            child:
-                Text(title, textAlign: TextAlign.center, style: OmiType.title2.copyWith(fontWeight: FontWeight.w700))),
+          header: true,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: OmiType.title2.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
         const SizedBox(height: OmiSpacing.xs),
-        Text(message, textAlign: TextAlign.center, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+        ),
       ],
     );
   }
@@ -221,14 +300,30 @@ class ChatAppsConnectedChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      padding: const EdgeInsets.symmetric(
+        horizontal: OmiSpacing.sm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.pillAll,
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: OmiColors.success, shape: BoxShape.circle)),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: OmiColors.success,
+              shape: BoxShape.circle,
+            ),
+          ),
           const SizedBox(width: 6),
-          Text(context.l10n.connected, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500)),
+          Text(
+            context.l10n.connected,
+            style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
@@ -240,8 +335,19 @@ class ChatAppsConnectedChip extends StatelessWidget {
 /// Telegram opens `https://t.me/<bot>` (with `?start=<token>` while linking), which the
 /// Telegram app claims when installed. iMessage opens the Messages composer through `sms:`,
 /// prefilled with [body]; iOS reads the body after `&`, Android after `?`.
-Future<bool> openChatApp(ChatChannel channel, ChatChannelEndpoint endpoint, {String? startToken, String? body}) {
-  final uri = chatAppUri(channel, endpoint, startToken: startToken, body: body, platform: defaultTargetPlatform);
+Future<bool> openChatApp(
+  ChatChannel channel,
+  ChatChannelEndpoint endpoint, {
+  String? startToken,
+  String? body,
+}) {
+  final uri = chatAppUri(
+    channel,
+    endpoint,
+    startToken: startToken,
+    body: body,
+    platform: defaultTargetPlatform,
+  );
   if (uri == null) return Future.value(false);
   return chatAppLauncher(uri);
 }
@@ -256,6 +362,37 @@ Future<bool> _launch(Uri uri) async {
   } catch (_) {
     return false;
   }
+}
+
+/// Prefer the mint response. [deepLink] is a full `https` or `sms` URI. [address] replaces the
+/// flag payload's address. When neither is present, [endpoint] is the fallback.
+@visibleForTesting
+Uri? chatAppProofUri({
+  required ChatChannel channel,
+  required ChatChannelEndpoint? endpoint,
+  String? deepLink,
+  String? address,
+  String? startToken,
+  String? body,
+  required TargetPlatform platform,
+}) {
+  final deep = deepLink?.trim();
+  if (deep != null && deep.isNotEmpty) {
+    final uri = Uri.tryParse(deep);
+    if (uri != null && (uri.isScheme('https') || uri.isScheme('sms'))) return uri;
+  }
+  if (endpoint == null) return null;
+  final override = address?.trim();
+  final resolved = override == null || override.isEmpty
+      ? endpoint
+      : ChatChannelEndpoint(provider: endpoint.provider, address: override);
+  return chatAppUri(
+    channel,
+    resolved,
+    startToken: channel == ChatChannel.telegram ? startToken : null,
+    body: channel == ChatChannel.imessage ? body : null,
+    platform: platform,
+  );
 }
 
 @visibleForTesting
@@ -279,15 +416,21 @@ Uri? chatAppUri(
       final number = endpoint.address.replaceAll(RegExp(r'[\s()-]'), '');
       if (body == null) return Uri(scheme: 'sms', path: number);
       final separator = platform == TargetPlatform.iOS ? '&' : '?';
-      return Uri.parse('sms:$number${separator}body=${Uri.encodeComponent(body)}');
+      return Uri.parse(
+        'sms:$number${separator}body=${Uri.encodeComponent(body)}',
+      );
     case ChatChannel.whatsapp:
       return null;
   }
 }
 
 /// `t.me/<bot>?start=<token>`: the link a person can open on another device.
-String telegramLinkText(ChatChannelEndpoint endpoint, String token) =>
-    chatAppUri(ChatChannel.telegram, endpoint, startToken: token, platform: TargetPlatform.iOS).toString();
+String telegramLinkText(ChatChannelEndpoint endpoint, String token) => chatAppUri(
+      ChatChannel.telegram,
+      endpoint,
+      startToken: token,
+      platform: TargetPlatform.iOS,
+    ).toString();
 
 /// The one-time code in four-character groups, for reading aloud or retyping.
 String groupedLinkCode(String code) {

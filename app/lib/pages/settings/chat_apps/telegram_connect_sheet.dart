@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -44,7 +45,10 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
 
   bool get _proofFresh {
     final proof = _proof;
-    return proof != null && proof.expiresAt.isAfter(DateTime.now().add(const Duration(seconds: 15)));
+    return proof != null &&
+        proof.expiresAt.isAfter(
+          DateTime.now().add(const Duration(seconds: 15)),
+        );
   }
 
   @override
@@ -56,7 +60,10 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
   /// A token that is still good for at least a few seconds, minting a new one if needed.
   Future<wire.GeneratedChannelLinkProof?> _token() async {
     if (_proofFresh) return _proof;
-    final result = await context.read<MessagingChannelsProvider>().mintProof(ChatChannel.telegram, kind: 'token');
+    final result = await context.read<MessagingChannelsProvider>().mintProof(
+          ChatChannel.telegram,
+          kind: 'token',
+        );
     if (!mounted) return null;
     switch (result) {
       case ApiSuccess(:final data):
@@ -80,10 +87,21 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
     ChatAppsAnalytics.connectStarted(ChatChannel.telegram);
     final proof = await _token();
     if (proof == null || !mounted) return;
-    final opened = await openChatApp(ChatChannel.telegram, endpoint, startToken: proof.proof);
+    final uri = chatAppProofUri(
+      channel: ChatChannel.telegram,
+      endpoint: endpoint,
+      deepLink: proof.deepLink,
+      address: proof.address,
+      startToken: proof.proof,
+      platform: defaultTargetPlatform,
+    );
+    final opened = uri != null && await chatAppLauncher(uri);
     if (!mounted) return;
     if (!opened) {
-      OmiFeedback.error(context, context.l10n.chatAppsCouldNotOpen(ChatChannel.telegram.displayName));
+      OmiFeedback.error(
+        context,
+        context.l10n.chatAppsCouldNotOpen(ChatChannel.telegram.displayName),
+      );
       return;
     }
     setState(() => _opened = true);
@@ -95,7 +113,20 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
     if (endpoint == null) return;
     final proof = await _token();
     if (proof == null || !mounted) return;
-    await OmiClipboard.copy(context, telegramLinkText(endpoint, proof.proof), what: context.l10n.chatAppsLink);
+    final link = chatAppProofUri(
+      channel: ChatChannel.telegram,
+      endpoint: endpoint,
+      deepLink: proof.deepLink,
+      address: proof.address,
+      startToken: proof.proof,
+      platform: TargetPlatform.iOS,
+    );
+    if (link == null) return;
+    await OmiClipboard.copy(
+      context,
+      link.toString(),
+      what: context.l10n.chatAppsLink,
+    );
     if (!mounted) return;
     setState(() => _opened = true);
     startWaiting(until: proof.expiresAt);
@@ -114,7 +145,13 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
             children: [
               const ChatAppLogo(ChatChannel.telegram, size: 56),
               const SizedBox(width: OmiSpacing.sm),
-              ExcludeSemantics(child: Icon(Icons.arrow_forward_rounded, size: 20, color: OmiColors.textDisabled)),
+              ExcludeSemantics(
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 20,
+                  color: OmiColors.textDisabled,
+                ),
+              ),
               const SizedBox(width: OmiSpacing.sm),
               Container(
                 width: 56,
@@ -130,7 +167,10 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
             ],
           ),
           const SizedBox(height: OmiSpacing.lg),
-          ChatAppsSheetHeading(title: l10n.chatAppsConnectTelegramTitle, message: l10n.chatAppsConnectTelegramMessage),
+          ChatAppsSheetHeading(
+            title: l10n.chatAppsConnectTelegramTitle,
+            message: l10n.chatAppsConnectTelegramMessage,
+          ),
           const SizedBox(height: OmiSpacing.xl),
           _Step(number: 1, text: l10n.chatAppsTelegramStepOpen),
           const SizedBox(height: OmiSpacing.sm + 2),
@@ -138,7 +178,10 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
           const SizedBox(height: OmiSpacing.sm + 2),
           _Step(number: 3, text: l10n.chatAppsTelegramStepReturn),
           const SizedBox(height: OmiSpacing.xl),
-          ChatAppsNote(icon: Icons.lock_outline_rounded, message: l10n.chatAppsTelegramPrivacyNote),
+          ChatAppsNote(
+            icon: Icons.lock_outline_rounded,
+            message: l10n.chatAppsTelegramPrivacyNote,
+          ),
           if (_problem != null) ...[
             const SizedBox(height: OmiSpacing.md),
             ChatAppsProblemLine(_problem!),
@@ -166,7 +209,10 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(l10n.chatAppsTelegramOtherDevice, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              Text(
+                l10n.chatAppsTelegramOtherDevice,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
               OmiButton.tertiary(
                 key: const ValueKey('chat_apps_copy_telegram_link'),
                 label: l10n.copyLink,
@@ -196,8 +242,14 @@ class _Step extends StatelessWidget {
           width: 28,
           height: 28,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-          child: Text('$number', style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
+          decoration: BoxDecoration(
+            color: OmiColors.surface2,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '$number',
+            style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
+          ),
         ),
         const SizedBox(width: OmiSpacing.sm),
         Expanded(child: Text(text, style: OmiType.callout)),
@@ -220,7 +272,12 @@ class _WaitingLine extends StatelessWidget {
         children: [
           const OmiSpinner(size: OmiSpinnerSize.small),
           const SizedBox(width: OmiSpacing.xs),
-          Flexible(child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+          Flexible(
+            child: Text(
+              text,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
+          ),
         ],
       ),
     );

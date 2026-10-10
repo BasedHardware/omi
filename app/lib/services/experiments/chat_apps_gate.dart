@@ -38,8 +38,9 @@ class ChatChannelEndpoint {
 /// Client gate for the chat apps surface. The backend stays the authority (cohort, Pro entitlement
 /// and the kill switch); this only decides whether to show the entry and which addresses to open.
 ///
-/// The link-proof API does not return a deep link or Omi's number, so the PostHog flag payload
-/// carries them: `{"telegram": {"provider": "telegram", "address": "<bot username>"},
+/// The link-proof response carries `deep_link` and `address` when the server is configured.
+/// The PostHog flag payload is only the fallback, and it still names the provider used to mint:
+/// `{"telegram": {"provider": "telegram", "address": "<bot username>"},
 /// "imessage": {"provider": "<provider>", "address": "+1..."}}`. A channel without an address
 /// is not offered. Fail-closed: no analytics identity, a slow read or a malformed payload all mean
 /// off.
@@ -73,7 +74,10 @@ class ChatAppsConfig {
         final provider = row['provider'];
         final address = row['address'];
         if (provider is String && _wireId.hasMatch(provider) && address is String && address.trim().isNotEmpty) {
-          endpoints[channel] = ChatChannelEndpoint(provider: provider, address: address.trim());
+          endpoints[channel] = ChatChannelEndpoint(
+            provider: provider,
+            address: address.trim(),
+          );
         }
       }
     }
@@ -99,10 +103,16 @@ abstract final class ChatAppsGate {
       return ChatAppsConfig.fromPayload(enabled: true, payload: _debugPayload);
     }
     try {
-      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
+      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(
+        enabledFlag,
+      );
       if (!enabled) return ChatAppsConfig.off;
       return ChatAppsConfig.fromPayload(
-          enabled: true, payload: await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag));
+        enabled: true,
+        payload: await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(
+          enabledFlag,
+        ),
+      );
     } catch (_) {
       return ChatAppsConfig.off;
     }

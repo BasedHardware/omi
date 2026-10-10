@@ -18,6 +18,10 @@ class ChannelLink {
     required this.externalId,
     required this.linkedAt,
     this.visibleInApp = false,
+    this.voiceNotes = true,
+    this.keepPrivateMemoriesInApp = true,
+    this.insights = false,
+    this.displayHandle,
   });
 
   factory ChannelLink.fromGenerated(wire.GeneratedChannelLink link) => ChannelLink(
@@ -27,6 +31,10 @@ class ChannelLink {
         externalId: link.externalId,
         linkedAt: link.linkedAt,
         visibleInApp: link.visibleInApp,
+        voiceNotes: link.voiceNotes,
+        keepPrivateMemoriesInApp: link.keepPrivateMemoriesInApp,
+        insights: link.insights,
+        displayHandle: link.displayHandle,
       );
 
   final String id;
@@ -35,13 +43,23 @@ class ChannelLink {
   final String externalId;
   final DateTime linkedAt;
   final bool visibleInApp;
+  final bool voiceNotes;
+  final bool keepPrivateMemoriesInApp;
+  final bool insights;
+  final String? displayHandle;
 
   ChatChannel? get channel => ChatChannel.fromWire(channelId);
 
   /// What the person recognizes the link by, or null when the backend only knows an opaque id.
   ///
-  /// A Telegram link stores the numeric user id, which nobody knows, so it shows no handle.
+  /// A Telegram username from the link is shown when we have one. Otherwise a numeric Telegram
+  /// user id, which nobody knows, shows no handle.
   String? get handle {
+    final stored = displayHandle?.trim();
+    if (stored != null && stored.isNotEmpty) {
+      if (channel == ChatChannel.telegram) return stored.startsWith('@') ? stored : '@$stored';
+      return stored;
+    }
     final id = externalId.trim();
     if (id.isEmpty) return null;
     if (channel == ChatChannel.telegram) {
@@ -51,13 +69,22 @@ class ChannelLink {
     return id;
   }
 
-  ChannelLink copyWith({bool? visibleInApp}) => ChannelLink(
+  ChannelLink copyWith({
+    bool? visibleInApp,
+    bool? voiceNotes,
+    bool? keepPrivateMemoriesInApp,
+  }) =>
+      ChannelLink(
         id: id,
         channelId: channelId,
         provider: provider,
         externalId: externalId,
         linkedAt: linkedAt,
         visibleInApp: visibleInApp ?? this.visibleInApp,
+        voiceNotes: voiceNotes ?? this.voiceNotes,
+        keepPrivateMemoriesInApp: keepPrivateMemoriesInApp ?? this.keepPrivateMemoriesInApp,
+        insights: insights,
+        displayHandle: displayHandle,
       );
 }
 
@@ -159,10 +186,20 @@ class MessagingChannelsProvider extends ChangeNotifier {
 
   /// Mints a one-time proof for [channel]: `token` for a deep link, `code` for the person to
   /// text. Fails with `forbidden` outside the cohort or without Pro.
-  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(ChatChannel channel, {required String kind}) {
+  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(
+    ChatChannel channel, {
+    required String kind,
+  }) {
     final endpoint = _config.endpoint(channel);
-    if (endpoint == null) return Future.value(const ApiFailure(ApiProblem(ApiProblemKind.forbidden)));
-    return _api.mintProof(channel: channel.wireId, provider: endpoint.provider, kind: kind);
+    if (endpoint == null)
+      return Future.value(
+        const ApiFailure(ApiProblem(ApiProblemKind.forbidden)),
+      );
+    return _api.mintProof(
+      channel: channel.wireId,
+      provider: endpoint.provider,
+      kind: kind,
+    );
   }
 
   /// Unlinks and forgets the link locally; a 404 means it was already gone.
@@ -175,7 +212,7 @@ class MessagingChannelsProvider extends ChangeNotifier {
     if (gone) {
       _links = [
         for (final l in _links)
-          if (l.id != link.id) l
+          if (l.id != link.id) l,
       ];
       notifyListeners();
       return const ApiSuccess(null);
@@ -184,18 +221,48 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Applies the switch at once and reverts it if the server refuses.
-  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) async {
-    _replace(link.id, (l) => l.copyWith(visibleInApp: visible));
-    final result = await _api.setVisibleInApp(link.id, visible);
+  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) => _patch(
+        link,
+        visible,
+        (l, value) => l.copyWith(visibleInApp: value),
+        _api.setVisibleInApp,
+      );
+
+  Future<ApiResult<void>> setVoiceNotes(ChannelLink link, bool enabled) => _patch(
+        link,
+        enabled,
+        (l, value) => l.copyWith(voiceNotes: value),
+        _api.setVoiceNotes,
+      );
+
+  Future<ApiResult<void>> setKeepPrivateMemoriesInApp(
+    ChannelLink link,
+    bool enabled,
+  ) =>
+      _patch(
+        link,
+        enabled,
+        (l, value) => l.copyWith(keepPrivateMemoriesInApp: value),
+        _api.setKeepPrivateMemoriesInApp,
+      );
+
+  Future<ApiResult<void>> _patch(
+    ChannelLink link,
+    bool value,
+    ChannelLink Function(ChannelLink link, bool value) apply,
+    Future<ApiResult<void>> Function(String linkId, bool value) send,
+  ) async {
+    _replace(link.id, (l) => apply(l, value));
+    final result = await send(link.id, value);
     if (result case ApiFailure(:final problem)) {
       if (problem.kind == ApiProblemKind.notFound) {
         _links = [
           for (final l in _links)
-            if (l.id != link.id) l
+            if (l.id != link.id) l,
         ];
         notifyListeners();
       } else {
-        _replace(link.id, (l) => l.copyWith(visibleInApp: !visible));
+        _replace(link.id, (l) => apply(l, !value));
       }
     }
     return result;
