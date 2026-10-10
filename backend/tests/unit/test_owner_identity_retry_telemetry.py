@@ -79,7 +79,7 @@ def test_counter_failure_is_nonfatal(monkeypatch):
         ('missing_position', 'no_proven_window'),
         ('spanless', 'manifest_unvalidated'),
         ('zero', 'resolved'),
-        ('invalid', 'resolved'),
+        ('invalid', 'partial'),
         ('overlap_and_zero', 'global_manifest_ambiguity'),
         ('hole', 'capture_coverage_hole'),
         ('resolved', 'resolved'),
@@ -130,6 +130,9 @@ def test_real_resolver_emits_one_primary_exit(env, monkeypatch, pass_name, case,
     if pass_name == 'first':
         expected.update({('entry', 'candidate'): 1, ('eligible', 'candidate'): 1})
     assert delta(pass_name, before) == expected
+    if case in ('zero', 'invalid'):
+        assert conversation.speaker_resolution.status == ('unavailable' if case == 'invalid' else 'resolved')
+        assert not conversation.transcript_segments[1].is_user
 
 
 @pytest.mark.parametrize('pass_name', ['first', 'late'])

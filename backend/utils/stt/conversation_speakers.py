@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import heapq
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
@@ -36,7 +37,6 @@ import config.speaker_match_scores as match_scores
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
-from utils.conversations.audio_placement import text_window_refusal
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.stt.speaker_match import (
     SPEAKER_MATCH_MARGIN as SPEAKER_MATCH_MARGIN,
@@ -635,19 +635,17 @@ def _coverage(
     manual_speakers: Mapping[int, Identity],
     abstained: Set[str],
 ) -> float:
-    # Malformed text has no usable duration. Unplaced but valid windows still
-    # count against coverage exactly as before.
+    # Finite speech duration still counts when its text window cannot be placed,
+    # including negative-start windows. Only nonfinite durations are unusable.
     embeddable = [
-        s
-        for s in eligible
-        if text_window_refusal(_seg(s, 'start'), _seg(s, 'end')) is None and _duration(s) >= MIN_EMBED_SECONDS
+        (s, duration) for s in eligible if math.isfinite(duration := _duration(s)) and duration >= MIN_EMBED_SECONDS
     ]
-    total = sum(_duration(s) for s in embeddable)
+    total = sum(duration for _, duration in embeddable)
     if total <= 0:
         return 1.0
     placed = sum(
-        _duration(s)
-        for s in embeddable
+        duration
+        for s, duration in embeddable
         if _seg(s, 'id') not in abstained
         and (_seg(s, 'id') in vectors or int(_seg(s, 'speaker_id')) in manual_speakers)
     )

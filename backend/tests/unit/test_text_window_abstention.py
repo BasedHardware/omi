@@ -45,7 +45,7 @@ def _fixture(monkeypatch, window):
 
 @pytest.mark.parametrize('pass_name', ['first', 'late'])
 @pytest.mark.parametrize('window', BAD_WINDOWS)
-def test_mixed_invalid_text_resolves_owner_without_labeling_bad_segment(env, monkeypatch, pass_name, window):
+def test_mixed_invalid_text_applies_owner_without_labeling_bad_segment(env, monkeypatch, pass_name, window):
     conversation, bad = _fixture(monkeypatch, window)
     before = bad.model_dump(mode='python')
     located = []
@@ -56,9 +56,11 @@ def test_mixed_invalid_text_resolves_owner_without_labeling_bad_segment(env, mon
         return locate(*args, **kwargs)
 
     monkeypatch.setattr(stage, 'locate', track)
+    finite_speech = math.isfinite(window[1] - window[0]) and window[1] - window[0] >= 1.0
     with telemetry.identity_pass(pass_name):
         assert stage.resolve_speakers_for_processing('u1', conversation)
-    assert conversation.speaker_resolution.status == 'resolved'
+        assert telemetry.resolver_trace().reason == ('partial' if finite_speech else 'resolved')
+    assert conversation.speaker_resolution.status == ('unavailable' if finite_speech else 'resolved')
     assert all(s.is_user for s in conversation.transcript_segments[:-1])
     assert not bad.is_user
     assert bad.model_dump(mode='python') == before
@@ -98,7 +100,13 @@ def test_late_compressed_encrypted_roundtrip_preserves_abstained_labels(env, mon
     before = read()['transcript_segments'][-1]
     assert store.rows[path]['transcript_segments_compressed']
     assert stage.refresh_completed_speaker_identity('u1', 'c1')
-    after = read()['transcript_segments']
+    committed = read()
+    after = committed['transcript_segments']
+    finite_speech = math.isfinite(window[1] - window[0]) and window[1] - window[0] >= 1.0
+    assert committed['speaker_resolution']['status'] == ('unavailable' if finite_speech else 'resolved')
+    assert stage.completed_identity_retry_skip_reason(committed) == (
+        None if finite_speech else 'already_resolved_owner'
+    )
     assert all(s['is_user'] for s in after[:-1])
     for field in stage._IDENTITY_FIELDS:
         assert after[-1].get(field) == before.get(field)
@@ -106,6 +114,26 @@ def test_late_compressed_encrypted_roundtrip_preserves_abstained_labels(env, mon
         a, b = after[-1][field], before[field]
         assert a == b or (math.isnan(a) and math.isnan(b))
     assert env[1].calls == 2
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_negative_start_can_be_repaired_after_partial_owner_commit(env, monkeypatch, level):
+    conversation, _ = _fixture(monkeypatch, (-1.0, 10.0))
+    store, path, read = _commit_store(monkeypatch, conversation, level)
+    assert stage.refresh_completed_speaker_identity('u1', 'c1')
+    committed = read()
+    assert committed['speaker_resolution']['status'] == 'unavailable'
+    assert stage.completed_identity_retry_skip_reason(committed) is None
+    assert all(s['is_user'] for s in committed['transcript_segments'][:-1])
+    assert not committed['transcript_segments'][-1]['is_user']
+    # Repair the raw window in the stored document, then run the actual late path.
+    committed['transcript_segments'][-1].update(start=8.0, end=11.8)
+    store.rows[path] = stage.conversations_db.encode_conversation_for_write('u1', committed, level)
+    assert stage.refresh_completed_speaker_identity('u1', 'c1')
+    repaired = read()
+    assert repaired['speaker_resolution']['status'] == 'resolved'
+    assert all(s['is_user'] for s in repaired['transcript_segments'])
+    assert env[1].calls == 3
 
 
 @pytest.mark.parametrize(
