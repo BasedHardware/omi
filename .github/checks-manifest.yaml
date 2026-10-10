@@ -1710,6 +1710,11 @@ checks:
     triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
+  - id: shipbob-app-security-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_shipbob_security.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET / setup page must safely JSON-serialize uid in inline scripts to prevent script-context breakouts, URL-encode uid in links, and escape callback errors"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
