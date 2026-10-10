@@ -953,9 +953,9 @@ class ChatToolExecutor {
       )
     }
     guard
-      let capture = performOwnerBoundPhysicalEffect(
+      let capture = await performOwnerBoundAsyncPhysicalEffect(
         expectedOwnerID: expectedOwnerID,
-        effect: { ScreenCaptureManager.captureScreenWithDetailTiles() }) ?? nil
+        effect: { await captureScreenLeavingOutRefusedApps() }) ?? nil
     else {
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       ScreenContextToolTelemetry.trackToolResult(

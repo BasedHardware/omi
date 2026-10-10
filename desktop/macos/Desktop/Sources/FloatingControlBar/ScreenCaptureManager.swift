@@ -165,8 +165,13 @@ class ScreenCaptureManager {
   /// plus native-resolution detail tiles so the model can re-read small text
   /// (titles, prices, labels) at legible sharpness. Tiles are best-effort — the
   /// full-screen file is the contract.
-  static func captureScreenWithDetailTiles() -> ChatScreenshotCapture? {
-    guard let image = captureScreenImage() else { return nil }
+  ///
+  /// Apps Omi never looks at (`CaptureScreenExclusion`) are left out of the
+  /// image; with `excluding` empty only Omi's own process is.
+  static func captureScreenWithDetailTiles(excluding excluded: Set<pid_t>) async -> ChatScreenshotCapture? {
+    guard CGPreflightScreenCaptureAccess() else { return nil }
+    guard let image = await CaptureScreenExclusion.captureDisplay(displayIDUnderMouse(), excluding: excluded)
+    else { return nil }
     guard let directory = screenshotsDirectory() else { return nil }
     // The capture_screen chat tool writes the full frame plus native-resolution
     // detail tiles (multiple MB per call) and never deletes them. Sweep stale
@@ -249,7 +254,7 @@ class ScreenCaptureManager {
     return directory
   }
 
-  private static func displayIDUnderMouse() -> CGDirectDisplayID {
+  static func displayIDUnderMouse() -> CGDirectDisplayID {
     let mouseLocation = NSEvent.mouseLocation
     for screen in NSScreen.screens {
       if screen.frame.contains(mouseLocation),
