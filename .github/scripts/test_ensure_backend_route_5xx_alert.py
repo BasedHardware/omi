@@ -210,8 +210,10 @@ class PolicyConfigTests(unittest.TestCase):
         self.assertEqual(body["combiner"], "OR")
         self.assertIs(body["enabled"], True)
         self.assertEqual(body["notificationChannels"], [])
+        self.assertEqual(body["alertStrategy"], {"notificationPrompts": ["OPENED"]})
+        self.assertIn("more than 60 server errors in a rolling 3600-second window", body["documentation"]["content"])
         condition = _condition(body)
-        self.assertEqual(condition["displayName"], "One route exceeds 15 5xx in 15 minutes for 10 minutes")
+        self.assertEqual(condition["displayName"], "One route exceeds 60 5xx in 60 minutes for 10 minutes")
         threshold = condition["conditionThreshold"]
         self.assertEqual(
             threshold["filter"],
@@ -222,11 +224,11 @@ class PolicyConfigTests(unittest.TestCase):
         for retired in ("route_resource", "route_action", "status_class"):
             self.assertNotIn(retired, threshold["filter"])
         self.assertEqual(threshold["comparison"], "COMPARISON_GT")
-        self.assertEqual(threshold["thresholdValue"], 15)
+        self.assertEqual(threshold["thresholdValue"], 60)
         self.assertEqual(threshold["duration"], "600s")
         self.assertEqual(threshold["trigger"], {"count": 1})
         (aggregation,) = threshold["aggregations"]
-        self.assertEqual(aggregation["alignmentPeriod"], "900s")
+        self.assertEqual(aggregation["alignmentPeriod"], "3600s")
         self.assertEqual(aggregation["perSeriesAligner"], "ALIGN_SUM")
         self.assertEqual(aggregation["crossSeriesReducer"], "REDUCE_SUM")
         self.assertEqual(list(aggregation["groupByFields"]), ["metric.label.method", "metric.label.route"])
@@ -239,9 +241,9 @@ class PolicyConfigTests(unittest.TestCase):
 
     def test_create_arguments_come_from_the_frozen_body(self) -> None:
         threshold = _condition(policy_body())["conditionThreshold"]
-        self.assertEqual(_comparison(threshold), "> 15")
+        self.assertEqual(_comparison(threshold), "> 60")
         aggregation = json.loads(_aggregation(threshold))
-        self.assertEqual(aggregation["alignmentPeriod"], "900s")
+        self.assertEqual(aggregation["alignmentPeriod"], "3600s")
         self.assertEqual(aggregation["perSeriesAligner"], "ALIGN_SUM")
         self.assertEqual(aggregation["crossSeriesReducer"], "REDUCE_SUM")
         self.assertEqual(list(aggregation["groupByFields"]), list(GROUP_BY_FIELDS))
@@ -347,6 +349,25 @@ class EnsureAlertTests(unittest.TestCase):
         )
         self.assertEqual(self.writes(calls, ("logging", "metrics"), ("monitoring", "policies")), [])
 
+    def test_live_alert_strategy_extras_with_matching_prompts_make_no_writes(self) -> None:
+        def mutate(body: dict) -> None:
+            body["alertStrategy"] = {
+                "notificationPrompts": ["OPENED"],
+                "autoClose": "604800s",
+            }
+
+        calls: list[list[str]] = []
+        self.assertEqual(
+            ensure_alert(
+                project=PROJECT,
+                notification_channels=CHANNELS,
+                runner=self.runner(calls, policy=described_policy(mutate=mutate)),
+                sleep=lambda _: None,
+            ),
+            POLICY,
+        )
+        self.assertEqual(self.writes(calls, ("logging", "metrics"), ("monitoring", "policies")), [])
+
     def test_policy_drift_updates_once_and_preserves_condition_name(self) -> None:
         def mutate(body: dict) -> None:
             threshold = body["conditions"][0]["conditionThreshold"]
@@ -370,8 +391,9 @@ class EnsureAlertTests(unittest.TestCase):
         self.assertEqual(len(updates), 1)
         sent = json.loads(next(v.removeprefix("--policy=") for v in updates[0] if v.startswith("--policy=")))
         self.assertEqual(sent["conditions"][0]["name"], CONDITION_NAME)
-        self.assertEqual(sent["conditions"][0]["displayName"], "One route exceeds 15 5xx in 15 minutes for 10 minutes")
-        self.assertEqual(sent["conditions"][0]["conditionThreshold"]["thresholdValue"], 15)
+        self.assertEqual(sent["conditions"][0]["displayName"], "One route exceeds 60 5xx in 60 minutes for 10 minutes")
+        self.assertEqual(sent["conditions"][0]["conditionThreshold"]["thresholdValue"], 60)
+        self.assertEqual(sent["alertStrategy"], {"notificationPrompts": ["OPENED"]})
         self.assertEqual(sent["notificationChannels"], [CHANNELS])
         describes = [call for call in calls if call[1:3] == ["monitoring", "policies"] and "describe" in call]
         self.assertEqual(len(describes), 2)
@@ -397,6 +419,13 @@ class EnsureAlertTests(unittest.TestCase):
             "reducer": aggregation("crossSeriesReducer", "REDUCE_MAX"),
             "group-by fields": aggregation("groupByFields", ["metric.label.route"]),
             "notification channels": lambda body: body.__setitem__("notificationChannels", [CHANNELS_2]),
+            "notification prompts": lambda body: body.__setitem__(
+                "alertStrategy", {"notificationPrompts": ["OPENED", "CLOSED"]}
+            ),
+            "missing alert strategy": lambda body: body.pop("alertStrategy"),
+            "malformed notification prompts": lambda body: body.__setitem__(
+                "alertStrategy", {"notificationPrompts": "OPENED"}
+            ),
         }
         for name, mutate in cases.items():
             with self.subTest(drift=name):
@@ -418,6 +447,7 @@ class EnsureAlertTests(unittest.TestCase):
                     sent["conditions"][0]["conditionThreshold"],
                     policy_body()["conditions"][0]["conditionThreshold"],
                 )
+                self.assertEqual(sent["alertStrategy"], {"notificationPrompts": ["OPENED"]})
                 self.assertEqual(self.writes(calls, ("logging", "metrics")), [])
                 self.assertEqual(sum("create" in call for call in calls), 0)
 
@@ -519,13 +549,13 @@ class EnsureAlertTests(unittest.TestCase):
         self.assertEqual(len(creates), 2)
         create_call = creates[-1]
         self.assertIn("--duration=600s", create_call)
-        self.assertIn("--if=> 15", create_call)
+        self.assertIn("--if=> 60", create_call)
         self.assertIn("--trigger-count=1", create_call)
         self.assertIn(f"--notification-channels={CHANNELS}", create_call)
         aggregation = json.loads(
             next(v.removeprefix("--aggregation=") for v in create_call if v.startswith("--aggregation="))
         )
-        self.assertEqual(aggregation["alignmentPeriod"], "900s")
+        self.assertEqual(aggregation["alignmentPeriod"], "3600s")
         self.assertEqual(aggregation["perSeriesAligner"], "ALIGN_SUM")
         self.assertEqual(aggregation["crossSeriesReducer"], "REDUCE_SUM")
         self.assertEqual(list(aggregation["groupByFields"]), list(GROUP_BY_FIELDS))
@@ -535,6 +565,7 @@ class EnsureAlertTests(unittest.TestCase):
         def mutate(body: dict) -> None:
             body["documentation"]["mimeType"] = ""
             body["notificationChannels"] = []
+            body.pop("alertStrategy")
 
         calls: list[list[str]] = []
         self.assertEqual(
@@ -555,6 +586,7 @@ class EnsureAlertTests(unittest.TestCase):
         self.assertEqual(len(updates), 1)
         sent = json.loads(next(v.removeprefix("--policy=") for v in updates[0] if v.startswith("--policy=")))
         self.assertEqual(sent["conditions"][0]["name"], CONDITION_NAME)
+        self.assertEqual(sent["alertStrategy"], {"notificationPrompts": ["OPENED"]})
 
     def test_update_retries_only_metric_propagation(self) -> None:
         drifted = described_policy(

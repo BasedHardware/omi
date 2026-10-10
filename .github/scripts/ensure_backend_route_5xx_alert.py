@@ -174,6 +174,16 @@ def _sole_condition_name(policy: dict[str, object]) -> str:
     return name
 
 
+def _sorted_notification_prompts(strategy: object) -> list[str] | None:
+    """Return sorted prompt names when the managed alertStrategy field is present."""
+    if not isinstance(strategy, dict):
+        return None
+    prompts = strategy.get("notificationPrompts")
+    if not isinstance(prompts, list) or not all(isinstance(item, str) for item in prompts):
+        return None
+    return sorted(prompts)
+
+
 def _policy_drift(policy: dict[str, object], body: dict[str, object], channels: list[str]) -> list[str]:
     condition = _condition(body)
     expected_threshold = condition["conditionThreshold"]
@@ -196,6 +206,8 @@ def _policy_drift(policy: dict[str, object], body: dict[str, object], channels: 
     actual_doc_content = documentation.get("content") if isinstance(documentation, dict) else None
     actual_doc_mime = documentation.get("mimeType") if isinstance(documentation, dict) else None
     actual_channels = policy.get("notificationChannels")
+    expected_prompts = _sorted_notification_prompts(body.get("alertStrategy"))
+    actual_prompts = _sorted_notification_prompts(policy.get("alertStrategy"))
 
     checks = (
         (policy.get("displayName") == body["displayName"], "policy display name"),
@@ -213,6 +225,10 @@ def _policy_drift(policy: dict[str, object], body: dict[str, object], channels: 
         (actual_threshold.get("thresholdValue") == expected_threshold["thresholdValue"], "threshold value"),
         (actual_threshold.get("duration") == expected_threshold["duration"], "duration"),
         (actual_trigger_count == expected_threshold["trigger"]["count"], "trigger count"),
+        (
+            expected_prompts is None or actual_prompts == expected_prompts,
+            "notification prompts",
+        ),
     )
     errors.extend(label for matches, label in checks if not matches)
 
