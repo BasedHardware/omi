@@ -5,9 +5,14 @@ on cascade conversation delete (tombstone_source) and review-queue resolve (mark
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, List, Optional, TypeGuard, cast
 
+from google.api_core.exceptions import NotFound
+
 from ._client import db
+
+logger = logging.getLogger(__name__)
 
 users_collection = 'users'
 short_term_collection = 'short_term'
@@ -20,25 +25,42 @@ def _is_payload(value: object) -> TypeGuard[Payload]:
 
 
 def mark_consolidated(uid: str, short_term_id: str, commit_id: Optional[str]) -> None:
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return
+    if not short_term_id or not isinstance(short_term_id, str) or not short_term_id.strip():
+        return
+
     doc_ref = db.collection(users_collection).document(uid).collection(short_term_collection).document(short_term_id)
     # A conflict's source_short_term_id can point at an absent short-term doc (the universal runtime writes
     # memory_items, not short_term). Firestore .update() raises NotFound on a missing doc (unlike set),
     # which would surface as a 500 on resolve; no-op instead, mirroring memory_app_key_grants.
-    if not doc_ref.get().exists:
+    doc = doc_ref.get()
+    if not getattr(doc, "exists", False):
         return
     now = datetime.now(timezone.utc)
-    doc_ref.update(
-        {
-            'status': 'consolidated',
-            'consolidated_at': now,
-            'consolidated_commit_id': commit_id,
-            'soft_pruned_at': now,
-            'updated_at': now,
-        }
-    )
+    try:
+        doc_ref.update(
+            {
+                'status': 'consolidated',
+                'consolidated_at': now,
+                'consolidated_commit_id': commit_id,
+                'soft_pruned_at': now,
+                'updated_at': now,
+            }
+        )
+    except NotFound:
+        return
+    except Exception as e:
+        logger.warning(f"Failed to mark short_term {short_term_id} as consolidated for {uid}: {e}")
+        return
 
 
 def tombstone_source(uid: str, source_id: str) -> List[str]:
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
+    if not source_id or not isinstance(source_id, str) or not source_id.strip():
+        return []
+
     collection_ref = db.collection(users_collection).document(uid).collection(short_term_collection)
     now = datetime.now(timezone.utc)
     tombstoned_ids: List[str] = []
@@ -73,6 +95,12 @@ def tombstone_source(uid: str, source_id: str) -> List[str]:
                     'redaction_status': 'payload_tombstoned',
                 }
             )
-        doc.reference.update(update_payload)
-        tombstoned_ids.append(doc.id)
+        try:
+            doc.reference.update(update_payload)
+            tombstoned_ids.append(doc.id)
+        except NotFound:
+            continue
+        except Exception as e:
+            logger.warning(f"Failed to tombstone short_term {doc.id} for {uid}: {e}")
+            continue
     return tombstoned_ids
