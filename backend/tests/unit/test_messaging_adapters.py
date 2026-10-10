@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timezone
 from dataclasses import replace
 from pathlib import Path
 
@@ -152,6 +153,62 @@ def test_groups_bots_outbound_edits_are_not_turns(adapter):
         value['data']['chat']['is_group'] = False
         value['data']['direction'] = 'outbound'
     assert not adapter.parse(json.dumps(value).encode())
+
+
+def test_linq_link_code_is_extracted_from_surrounding_text(adapter):
+    if adapter.channel != 'imessage':
+        return
+    code = '0123456789ABCDEF0123456789ABCDEF'
+    value = json.loads(fixture('linq', 'start'))
+    value['data']['parts'][0]['value'] = f'Your Omi code is {code}. Tap to connect.'
+    message = adapter.parse(json.dumps(value).encode())[0]
+    assert message.link_proof == code
+    assert not message.unlink
+    value['data']['parts'][0]['value'] = f'{code} and {code}'
+    assert adapter.parse(json.dumps(value).encode())[0].link_proof is None
+    value['data']['parts'][0]['value'] = code + 'AA'
+    assert adapter.parse(json.dumps(value).encode())[0].link_proof is None
+
+
+def test_telegram_username_is_a_display_handle(adapter):
+    if adapter.channel != 'telegram':
+        return
+    value = json.loads(fixture('telegram'))
+    value['message']['from']['username'] = '@OmiFriend'
+    assert adapter.parse(json.dumps(value).encode())[0].display_name == '@OmiFriend'
+    value['message']['from'].pop('username')
+    assert adapter.parse(json.dumps(value).encode())[0].display_name is None
+
+
+def test_voice_notes_off_does_not_run_a_turn(adapter):
+    if adapter.channel != 'telegram':
+        return
+    from utils.messaging.contracts import ChannelMessage, InboundAttachment
+
+    store = MemoryStore()
+    message = ChannelMessage(
+        adapter.channel,
+        adapter.provider,
+        'fixture-user',
+        'fixture-chat',
+        'voice-1',
+        '',
+        datetime.now(timezone.utc),
+        attachments=(InboundAttachment('file', 'voice.ogg', 'audio/ogg', 12, True),),
+    )
+    store.identities[(message.channel, message.provider, message.external_user_id)] = dict(
+        uid='user', active=True, generation='gen', voice_notes=False
+    )
+    path = store.enqueue(message)
+    turns = []
+
+    async def turn(*args, **kwargs):
+        turns.append(args)
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    asyncio.run(gateway.process(path))
+    assert turns == []
+    assert 'Voice notes are turned off' in adapter.sent[-1]['text']
 
 
 def test_linq_legacy_payload_version(adapter):

@@ -1038,14 +1038,20 @@ export interface ChangeRef {
 
 export interface ChannelLink {
   channel: string;
+  display_handle?: string | null;
   external_id: string;
   id: string;
+  insights?: boolean;
+  keep_private_memories_in_app?: boolean;
   linked_at: string;
   provider: string;
   visible_in_app?: boolean;
+  voice_notes?: boolean;
 }
 
 export interface ChannelLinkProof {
+  address?: string | null;
+  deep_link?: string | null;
   expires_at: string;
   kind: "token" | "code";
   proof: string;
@@ -1066,7 +1072,10 @@ export interface ChannelLinksResponse {
 }
 
 export interface ChannelVisibilityRequest {
-  visible_in_app: boolean;
+  insights?: boolean | null;
+  keep_private_memories_in_app?: boolean | null;
+  visible_in_app?: boolean | null;
+  voice_notes?: boolean | null;
 }
 
 export interface ChartData {
@@ -1129,12 +1138,15 @@ export interface ChatRatingResponse {
 
 export interface ChatSessionResponse {
   app_id?: string | null;
+  channel?: string | null;
+  channel_link_id?: string | null;
   created_at: string;
   id: string;
   message_count: number;
   plugin_id?: string | null;
   preview?: string | null;
   starred: boolean;
+  surface?: string | null;
   title: string;
   updated_at: string;
 }

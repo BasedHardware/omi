@@ -85,8 +85,8 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 
 | Collection | Fields and purpose |
 | --- | --- |
-| `channel_identities/{sha256(channel,provider,external_id)}` | Reverse index: uid, channel, provider, external_id, active, generation, linked_at, visible_in_app. Unlinked admission creates a content-free provider marker. |
-| `users/{uid}/channel_links/{identity_id}` | Mirror for listing, revocation and deletion; visibility defaults false. |
+| `channel_identities/{sha256(channel,provider,external_id)}` | Reverse index: uid, channel, provider, external_id, active, generation, linked_at, visible_in_app, voice_notes (default on), keep_private_memories_in_app (default on), insights (default off, not honored), display_handle. Unlinked admission creates a content-free provider marker. |
+| `users/{uid}/channel_links/{identity_id}` | Mirror for listing, revocation, settings and deletion; visibility defaults false. |
 | `channel_link_proofs/{sha256(proof)}` | uid, audience, kind, expires_at. Raw proof never persisted. |
 | `users/{uid}/channel_link_proofs/{proof_id}` | Cleanup inventory for pending proofs. |
 | `channel_identities/{identity_id}/inbox/{dedup_id}` | Encrypted normalized payload, created_at, pending/running/done. Done removes the payload. |
@@ -100,7 +100,12 @@ and single-use in a Firestore transaction. The token supports app-to-channel dee
 the human-copyable code supports user-initiated channel-to-app proof. A phone number
 alone is never proof. Linking cannot transfer another uid's existing identity. The
 transaction reads everything before any write. App endpoints expose mint/list/unlink
-and per-link visibility; OpenAPI and generated Dart wire models include those schemas.
+and per-link settings; OpenAPI and generated Dart wire models include those schemas.
+Mint returns `deep_link` and `address` from `OMI_MESSAGING_LINK_TARGETS` when that
+channel entry is configured, and nulls otherwise. `GET /v2/chat-sessions` includes
+optional `channel`, `channel_link_id` and `surface`. Channel retrieval drops memories
+marked private and memories with a restricted sensitivity label while
+`keep_private_memories_in_app` is on. Insights is stored and not yet applied.
 Revocation/listing remain available if the feature is disabled or entitlement is lost.
 
 Channel content is solely user-serving data. It must never enter model training,

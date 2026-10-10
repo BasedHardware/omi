@@ -103,6 +103,7 @@ class TelegramAdapter(BaseAdapter):
                     else ('undo' if command in ('undo', '/undo') else None)
                 ),
                 attachments=tuple(attachments),
+                display_name=sender.get('username') if isinstance(sender.get('username'), str) else None,
             ),
         )
 

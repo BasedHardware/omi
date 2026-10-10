@@ -16,6 +16,16 @@ from utils.messaging.adapters.rendering import plain, split_text
 from utils.messaging.adapters.transport import request_json, ProviderError
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 
+_LINK_CODE = re.compile(r'(?<![A-Fa-f0-9])([A-Fa-f0-9]{32})(?![A-Fa-f0-9])')
+
+
+def _link_code(text: str) -> str | None:
+    """One 32-hex code anywhere in the text. Extra codes are not a link."""
+    found = _LINK_CODE.findall(text or '')
+    if len(found) != 1:
+        return None
+    return found[0].upper()
+
 
 class IMessageProvider(Protocol):
     name: str
@@ -85,7 +95,7 @@ class LinqProvider:
             raise ValueError('Unsupported Linq webhook version')
         text = '\n'.join(str(p['value']) for p in parts if p['type'] in ('text', 'link'))
         command = text.strip().lower()
-        proof = text.strip().upper() if re.fullmatch(r'[A-Fa-f0-9]{32}', text.strip()) else None
+        proof = _link_code(text)
         attachments = tuple(
             InboundAttachment(
                 p['url'],

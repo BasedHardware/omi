@@ -4,6 +4,7 @@ import asyncio
 import base64
 import logging
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from database.messaging import MessagingStore
@@ -61,9 +62,16 @@ class Gateway:
             await self.adapter.admitted(message)
         link = await run_blocking(db_executor, self.store.lookup, message)
         if message.link_proof:
-            owner = await run_blocking(db_executor, self.store.proof_owner, message.link_proof)
-            await run_blocking(db_executor, self.admission, owner)
-            link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
+            try:
+                owner = await run_blocking(db_executor, self.store.proof_owner, message.link_proof)
+                await run_blocking(db_executor, self.admission, owner)
+                link = await run_blocking(db_executor, self.store.consume, message.link_proof, message)
+            except PermissionError:
+                # Same fixed reply as an unknown sender. Do not distinguish a bad,
+                # expired, or unauthorized proof.
+                await ChannelReplySink(self.adapter, message).finish('Link your account in Omi to chat here.')
+                await run_blocking(db_executor, self.store.complete, path)
+                return True
         if not link or not link.get('active'):
             sink = ChannelReplySink(self.adapter, message)
             await sink.finish('Link your account in Omi to chat here.')
@@ -102,9 +110,21 @@ class Gateway:
 
                 await sink.finish(await run_blocking(db_executor, UndoStore(self.store).undo, uid, session['id']))
             else:
-                if hasattr(self.adapter, 'prepare'):
-                    message = await self.adapter.prepare(message, uid, session, guard)
-                await self._turn(uid, session, message, link, Principal(uid))
+                if link.get('voice_notes', True) is False and any(item.voice for item in message.attachments):
+                    message = replace(
+                        message, attachments=tuple(item for item in message.attachments if not item.voice)
+                    )
+                if (
+                    link.get('voice_notes', True) is False
+                    and not message.text.strip()
+                    and not message.attachments
+                    and not message.media
+                ):
+                    await sink.finish('Voice notes are turned off for this chat. Send a text message instead.')
+                else:
+                    if hasattr(self.adapter, 'prepare'):
+                        message = await self.adapter.prepare(message, uid, session, guard)
+                    await self._turn(uid, session, message, link, Principal(uid))
             await run_blocking(db_executor, self.store.complete, path)
         except BaseException:
             # Ambiguous billable/effect work: leave running + lease, never blindly replay.
@@ -172,6 +192,7 @@ class Gateway:
             guard,
             self.store.persist_message,
             write_reports=[],
+            withhold_private_memories=link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)
         typing_stop = asyncio.Event()

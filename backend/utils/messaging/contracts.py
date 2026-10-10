@@ -43,6 +43,7 @@ class ChannelMessage:
     unlink: bool = False
     command: str | None = None
     attachments: tuple[InboundAttachment, ...] = ()
+    display_name: str | None = None
 
     def __post_init__(self):
         if not all(

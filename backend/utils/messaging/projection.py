@@ -47,6 +47,7 @@ class SurfaceRuntime:
     guard: Any = None
     persist: Any = None
     write_reports: list[str] | None = None
+    withhold_private_memories: bool = False
 
 
 surface_runtime: ContextVar[SurfaceRuntime | None] = ContextVar('messaging_surface', default=None)
