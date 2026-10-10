@@ -1445,6 +1445,34 @@ def upload_owner_evidence_cache(uid: str, conversation_id: str, data: bytes) -> 
         blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
 
 
+def _owner_prompt_embedding_cache_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'audio/{uid}/{conversation_id}/owner-prompt-embeddings.v1.enc')
+
+
+def download_owner_prompt_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
+    try:
+        encrypted = _owner_prompt_embedding_cache_blob(uid, conversation_id).download_as_bytes()
+    except BlobNotFound:
+        return None
+    return encryption.decrypt_audio_file(encrypted, uid)
+
+
+def upload_owner_prompt_embedding_cache(uid: str, conversation_id: str, data: bytes) -> None:
+    blob = _owner_prompt_embedding_cache_blob(uid, conversation_id)
+    with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
+        blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
+
+
+def delete_owner_prompt_embedding_cache(uid: str, conversation_id: str) -> None:
+    if not private_cloud_sync_bucket:
+        return  # No private store was provisioned, so no prompt object exists.
+    try:
+        _owner_prompt_embedding_cache_blob(uid, conversation_id).delete()
+    except BlobNotFound:
+        pass
+
+
 # ----------------------------------------------------------------------------
 # Playback artifacts: merged MP3 under playback/, expiry via the bucket's
 # 30-day lifecycle rule on the prefix (existence == validity, no metadata).

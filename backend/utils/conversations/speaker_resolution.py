@@ -45,6 +45,7 @@ from utils.conversations.audio_placement import (
     locate,
     prepare_audio_coverage,
     saved_sync_window,
+    text_window_refusal,
 )
 from utils.conversations.speaker_grouping_shadow import compare_and_select
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
@@ -903,6 +904,13 @@ def resolve_speakers_for_processing(
     receipt: Mapping[str, Any] = {}
     receipt_read = False
     receipt_applied = False
+    # Automatic abstention preserves existing labels on every exit, including
+    # the no-resolution path's withdrawal of conflicting sync owner claims.
+    preserved = [
+        (s, {field: getattr(s, field) for field in (*_IDENTITY_FIELDS, 'speaker')})
+        for s in conversation.transcript_segments
+        if text_window_refusal(s.start, s.end) is not None
+    ]
     try:
         receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
         receipt_read = True
@@ -943,6 +951,9 @@ def resolve_speakers_for_processing(
         if resolution_enabled():
             _without_resolution(conversation, 'failed')
     finally:
+        for segment, labels in preserved:
+            for field, value in labels.items():
+                setattr(segment, field, value)
         if trace is not None:
             record_retry(trace.pass_name, 'resolver_exit', trace.reason)
         # The persistence transaction reapplies this receipt, but the summary
@@ -1125,11 +1136,13 @@ def _no_embeddings_diagnostics(
     return reason, fields
 
 
-def _inventory_refusal_reason(index, placements, segments) -> str:
+def _inventory_refusal_reason(index, placements, segments, invalid_text=()) -> str:
     """Classify an already taken global veto; no new placement/read/proof work."""
     if index.ambiguity:
         return 'global_manifest_ambiguity'
-    invalid = [s for s in segments if s.id in placements and placements[s.id].reason == 'invalid_window']
+    invalid = list(invalid_text) + [
+        s for s in segments if s.id in placements and placements[s.id].reason == 'invalid_window'
+    ]
     if any(s.start == s.end for s in invalid):
         return 'zero_text_window'
     if invalid:
@@ -1159,6 +1172,15 @@ def _resolve(
         _without_resolution(conversation, 'no_audio')
         return
     spans_on = live_speaker_span_resolution_enabled()
+
+    invalid_text = [s for s in segments if text_window_refusal(s.start, s.end) is not None]
+    invalid_text_ids = {s.id for s in invalid_text if s.id is not None}
+    trace = resolver_trace()
+    if trace is not None:
+        for reason in ('zero_text_window', 'invalid_text_window'):
+            count = sum(text_window_refusal(s.start, s.end) == reason for s in invalid_text)
+            if count:
+                record_retry(trace.pass_name, 'segment_abstained', reason, count)
 
     embeddable = [s for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL and _duration(s) >= MIN_EMBED_SECONDS]
     placements: Dict[str, AudioPlacement] = {}
@@ -1209,7 +1231,7 @@ def _resolve(
                     resolver_reason('placement_deadline')
                     _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
                     return
-                if segment.id is None:
+                if segment.id is None or segment.id in invalid_text_ids:
                     continue
                 placements[segment.id] = place_segment(segment, mapping, index)
         else:
@@ -1237,7 +1259,7 @@ def _resolve(
                         or time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS
                     ):
                         break
-                    if segment.id is None:
+                    if segment.id is None or segment.id in invalid_text_ids:
                         continue
                     placements[segment.id] = place_segment(segment, mapping, index)
                     measured += 1
@@ -1264,7 +1286,7 @@ def _resolve(
     if spans_on:
         keys = {}
         for segment in segments:
-            if not segment.id:
+            if not segment.id or segment.id in invalid_text_ids:
                 continue
             placement = placements.get(segment.id)
             if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
@@ -1286,12 +1308,14 @@ def _resolve(
         selected = set(keys.values())
         stale = [sid for sid in cache if sid not in selected]
     else:
-        live_ids = {s.id for s in segments}
+        live_ids = {s.id for s in segments if s.id not in invalid_text_ids}
         stale = [sid for sid in cache if sid not in live_ids]
     for sid in stale:
         del cache[sid]
 
     def needs_embedding(segment: TranscriptSegment) -> bool:
+        if text_window_refusal(segment.start, segment.end) is not None:
+            return False
         if segment.speaker_id == OMI_SPEAKER_ID_SENTINEL or _duration(segment) < MIN_EMBED_SECONDS:
             return False
 
@@ -1324,13 +1348,15 @@ def _resolve(
         return True
 
     pending = [s for s in segments if needs_embedding(s)]
-    abstained = set()
+    abstained = set(invalid_text_ids)
     if spans_on and embeddable:
         # One missing provider window does not invalidate other proven windows.
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
+        all_usable_invalid = bool(invalid_text) and not any(s.id not in invalid_text_ids for s in embeddable)
         if (
             index.ambiguity
+            or all_usable_invalid
             or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())
             or any(
                 s.audio_capture_start is not None
@@ -1339,7 +1365,9 @@ def _resolve(
                 for s in segments
             )
         ):
-            resolver_reason(_inventory_refusal_reason(index, placements, segments))
+            resolver_reason(
+                _inventory_refusal_reason(index, placements, segments, invalid_text if all_usable_invalid else ())
+            )
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
 
@@ -1353,7 +1381,7 @@ def _resolve(
                 and not needs_embedding(segment)
             )
 
-        abstained = {
+        abstained |= {
             s.id
             for s in segments
             if s.id and (s.id not in placements or placements[s.id].window is None) and not historical_cache(s)
@@ -1431,7 +1459,7 @@ def _resolve(
             if segment.id in keys and keys[segment.id] in cache and segment.id not in abstained
         }
     else:
-        vectors = {sid: vector for sid, (_, vector) in cache.items()}
+        vectors = {sid: vector for sid, (_, vector) in cache.items() if sid not in abstained}
     # Evidence duration is identity policy, independent of score instrumentation.
     # Older v1 entries remain useful for grouping; without clip metadata they
     # contribute no claimed owner evidence until new verified audio is embedded.

@@ -39,7 +39,7 @@ extension SettingsContentView {
             // whether focus nudges are generated at all.
             settingRow(
               title: "Focus Notifications",
-              subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
+              subtitle: "Short suggestions in the notch based on what you're working on",
               settingId: "notifications.livesuggestions"
             ) {
               Toggle("", isOn: $liveSuggestionsEnabled)
@@ -297,7 +297,7 @@ extension SettingsContentView {
           privacyToggleRow(
             icon: "cloud.fill",
             title: "Private Cloud Sync",
-            subtitle: "Sync your data securely to your private cloud storage",
+            subtitle: "Upload your recordings to your own cloud storage",
             isOn: $privateCloudSyncEnabled
           ) { newValue in
             updatePrivateCloudSync(newValue)

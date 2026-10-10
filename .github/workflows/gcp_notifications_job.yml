@@ -164,6 +164,15 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
+      # The action appends custom flags after image/env/secrets. A --container
+      # flag there violates gcloud ordering; without it gcloud needs a singleton.
+      # Restore that shape before every deploy, then reattach the collector.
+      - name: Detach Managed Prometheus sidecar before job deploy
+        run: |
+          python3 backend/scripts/attach_cloud_run_gmp_sidecar.py \
+            --job --detach --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" --service="$SERVICE"
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
@@ -181,7 +190,6 @@ jobs:
           flags: >-
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
             ${{ steps.runtime-env.outputs.notifications_job_flags }}
-            --container=notifications-job
             --remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,MEMORY_CANONICAL_MAINTENANCE_ENABLED,MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,TYPESENSE_HOST_PORT,TYPESENSE_API_KEY,HOSTED_PUSHER_API_URL,DAILY_SUMMARY_SELECTION_MODE,GOOGLE_APPLICATION_CREDENTIALS,${{ steps.runtime-env.outputs.notifications_job_secret_names }}
 
       - name: Attach Managed Prometheus sidecar to notifications job

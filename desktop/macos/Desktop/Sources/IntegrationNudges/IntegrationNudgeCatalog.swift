@@ -163,7 +163,7 @@ enum IntegrationNudgeCatalog {
       useCases: [
         "Walk into a call already briefed on who you're meeting and what you last discussed.",
         "Ask \"what did I agree to in Monday's standup?\" and get the answer with the meeting attached.",
-        "Let Omi plan around the day you actually have, not the one you described.",
+        "Omi sees your real meetings and plans around them.",
       ],
       dataScope: "Reads event titles, times, and attendees from your calendar.",
       triggers: [
@@ -228,9 +228,9 @@ enum IntegrationNudgeCatalog {
       route: .importConnector("apple-notes"),
       displayName: "Apple Notes",
       brand: .appleNotes,
-      pitch: "Half your thinking already lives in Notes. Omi can read it.",
+      pitch: "Omi can search your Apple Notes.",
       useCases: [
-        "Recall a note by what you meant, not by the words you happened to type.",
+        "Find a note by describing it, even without the exact words.",
         "Let Omi connect something you wrote in March to the conversation you're having today.",
         "Stop re-explaining context you already captured once.",
       ],
@@ -274,8 +274,8 @@ enum IntegrationNudgeCatalog {
       pitch: "Bring what ChatGPT already knows about you into Omi.",
       useCases: [
         "Start Omi with the preferences and history you spent a year teaching ChatGPT.",
-        "Keep one memory instead of two that each know half of you.",
-        "Import once — Omi keeps learning from there.",
+        "Keep one memory instead of splitting it across two apps.",
+        "Import once. Omi adds new memories from your conversations after that.",
       ],
       dataScope: "You paste a ChatGPT memory export. Omi never signs in to your ChatGPT account.",
       triggers: []
@@ -288,8 +288,8 @@ enum IntegrationNudgeCatalog {
       pitch: "Bring what Claude already knows about you into Omi.",
       useCases: [
         "Start Omi with the context you've already built up in Claude.",
-        "Keep one memory instead of two that each know half of you.",
-        "Import once — Omi keeps learning from there.",
+        "Keep one memory instead of splitting it across two apps.",
+        "Import once. Omi adds new memories from your conversations after that.",
       ],
       dataScope: "You paste a Claude memory export. Omi never signs in to your Claude account.",
       triggers: []
@@ -439,7 +439,7 @@ enum IntegrationNudgeCatalog {
       brand: .openclaw,
       pitch: "Give OpenClaw your Omi memory, so its agents work from your context.",
       useCases: [
-        "Let a long-running agent pick up what you already know.",
+        "Its agents start with what Omi already knows about you.",
         "Hand off work without writing a brief first.",
         "Keep one memory across every agent you run.",
       ],
@@ -453,7 +453,7 @@ enum IntegrationNudgeCatalog {
       brand: .hermes,
       pitch: "Give Hermes your Omi memory, so its agents work from your context.",
       useCases: [
-        "Let a long-running agent pick up what you already know.",
+        "Its agents start with what Omi already knows about you.",
         "Hand off work without writing a brief first.",
         "Keep one memory across every agent you run.",
       ],
@@ -467,8 +467,8 @@ enum IntegrationNudgeCatalog {
       brand: .agents,
       pitch: "Give your own agents the same memory Omi has.",
       useCases: [
-        "Point any MCP-speaking agent at your Omi memory.",
-        "Build on your own history instead of a blank context window.",
+        "Connect any MCP-compatible agent to your Omi memory.",
+        "Agents start from your history instead of from scratch.",
         "Revoke access from one place when you're done.",
       ],
       dataScope: "Exposes your Omi memory over MCP to the agent you authorize.",

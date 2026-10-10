@@ -535,6 +535,13 @@ def patch_job(
     # Job probes cannot reach the loopback metrics listener. Also remove any
     # probe retained from an earlier attachment so it cannot terminate the task.
     app.pop('startupProbe', None)
+    # Cloud Run rejects depends_on when the depended-upon container lacks a
+    # startup probe (run.googleapis.com/container-dependencies), and jobs
+    # cannot carry a reachable probe for this app (no serving port; TCP
+    # probes cannot reach the loopback listener). Drop the dependency on the
+    # job path: the collector's done-file handshake plus its 30s scrape loop
+    # already sequence it, and failed early scrapes are retried harmlessly.
+    rendered['metadata']['annotations'].pop('run.googleapis.com/container-dependencies', None)
     app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
     app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
     # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.
@@ -552,6 +559,120 @@ def patch_job(
     for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
         patched['metadata'].pop(field, None)
     return patched
+
+
+def detach_job(job: Mapping[str, Any]) -> ConfigDict:
+    """Restore a singleton task for an action deploy that cannot select a container."""
+    patched = cast(ConfigDict, json.loads(json.dumps(job)))
+    if patched.get('kind') != 'Job':
+        raise ValueError('expected a Cloud Run Job export')
+    execution = patched['spec']['template']
+    task = execution['spec']['template']['spec']
+    containers = task['containers']
+    applications = [c for c in containers if c.get('name') != SIDECAR_NAME]
+    collectors = [c for c in containers if c.get('name') == SIDECAR_NAME]
+    if len(applications) != 1 or len(collectors) > 1:
+        raise ValueError('job must have exactly one application container and at most one collector')
+    if not collectors:
+        return patched
+    app = applications[0]
+    app['env'] = [
+        e for e in app.get('env', []) if e['name'] not in ('PROMETHEUS_SIDECAR_PORT', 'PROMETHEUS_SIDECAR_DONE_FILE')
+    ]
+    app['volumeMounts'] = [
+        m for m in app.get('volumeMounts', []) if m['name'] not in (JOB_DONE_VOLUME, CONFIG_VOLUME_NAME)
+    ]
+    task['containers'] = applications
+    task['volumes'] = [v for v in task.get('volumes', []) if v['name'] not in (JOB_DONE_VOLUME, CONFIG_VOLUME_NAME)]
+    annotations = execution.get('metadata', {}).get('annotations', {})
+    dependency_key = 'run.googleapis.com/container-dependencies'
+    if dependency_key in annotations:
+        # Reuse the attach parser's shape validation before removing the collector.
+        dependencies = json.loads(
+            _merge_container_dependencies(annotations[dependency_key], ingress_container_name=app['name'])
+        )
+        dependencies.pop(SIDECAR_NAME)
+        dependencies = {name: [d for d in required if d != SIDECAR_NAME] for name, required in dependencies.items()}
+        dependencies = {name: required for name, required in dependencies.items() if required}
+        if dependencies:
+            annotations[dependency_key] = json.dumps(dependencies, separators=(',', ':'), sort_keys=True)
+        else:
+            annotations.pop(dependency_key)
+    # Keep unrelated annotations (including secret aliases) and all runtime bindings.
+    patched.pop('status', None)
+    for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
+        patched['metadata'].pop(field, None)
+    return patched
+
+
+def detach_job_sidecar(args: argparse.Namespace) -> None:
+    # List distinguishes absence from auth/network failures without interpreting stderr.
+    names = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'list',
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                f'--filter=metadata.name={args.service}',
+                '--format=value(metadata.name)',
+            ],
+            capture_output=True,
+        ),
+        action='checking job existence',
+    ).splitlines()
+    if args.service not in names:
+        if names:
+            raise ValueError('job existence query returned an unexpected name')
+        return
+    export = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'describe',
+                args.service,
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                '--format=export',
+            ],
+            capture_output=True,
+        ),
+        action='exporting job for detach',
+    )
+    job = yaml.load(export, Loader=GcloudExportLoader)
+    patched = detach_job(job)
+    if patched == job:
+        return
+    with tempfile.TemporaryDirectory(prefix='gmp-job-detach-') as directory:
+        target = Path(directory) / 'job.yaml'
+        target.write_text(yaml.safe_dump(patched, sort_keys=False), encoding='utf-8')
+        target.chmod(0o600)
+        _check(
+            _run(
+                [
+                    'gcloud',
+                    'run',
+                    'jobs',
+                    'replace',
+                    str(target),
+                    '--project',
+                    args.project,
+                    '--region',
+                    args.region,
+                    '--quiet',
+                ],
+                capture_output=True,
+            ),
+            action='detaching job sidecar',
+        )
 
 
 def attach_job_sidecar(args: argparse.Namespace) -> None:
@@ -911,6 +1032,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--region', default='us-central1')
     parser.add_argument('--service', required=True)
     parser.add_argument('--job', action='store_true', help='Attach to a Cloud Run Job, not a service revision.')
+    parser.add_argument('--detach', action='store_true', help='With --job, restore a singleton before deploying.')
     # Attach-only. Not argparse-required so --repair-secret-annotations can run
     # standalone; main() enforces them for the attach path instead.
     parser.add_argument('--base-revision')
@@ -935,6 +1057,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.detach:
+        if not args.job or args.repair_secret_annotations or args.dry_run:
+            raise SystemExit('--detach is only supported with --job')
+        detach_job_sidecar(args)
+        return 0
     if args.job:
         if args.repair_secret_annotations or args.dry_run or args.config is None or not args.config.is_file():
             raise SystemExit('--job requires an existing --config and cannot repair service annotations')
