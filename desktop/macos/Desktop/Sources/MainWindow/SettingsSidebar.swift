@@ -24,7 +24,7 @@ struct SettingsSearchItem: Identifiable {
       icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
-      name: "Interface Sounds", subtitle: "Sounds for important arrivals and completions",
+      name: "Interface Sounds", subtitle: "Sounds when an answer finishes or a card appears",
       keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
       section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
     SettingsSearchItem(
@@ -36,7 +36,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["resize", "window", "default size"], section: .general, icon: "macwindow",
       settingId: "general.window"),
     SettingsSearchItem(
-      name: "Transparency", subtitle: "How much of the desktop shows through the glass",
+      name: "Transparency", subtitle: "How see-through Omi's windows are",
       keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
       section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
@@ -119,7 +119,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily summary", "frequency", "alerts"], section: .notifications, icon: "bell",
       settingId: "notifications.settings"),
     SettingsSearchItem(
-      name: "Notification Frequency", subtitle: "How often to receive notifications",
+      name: "Notification Frequency", subtitle: "How many proactive suggestions Omi sends",
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
@@ -165,7 +165,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["store", "save recordings", "audio storage"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.storerecordings"),
     SettingsSearchItem(
-      name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
+      name: "Private Cloud Sync", subtitle: "Upload your recordings to your own cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
       settingId: "privacy.storerecordings"),
     SettingsSearchItem(
@@ -173,7 +173,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
       settingId: "privacy.encryption"),
     SettingsSearchItem(
-      name: "What We Track", subtitle: "View analytics and telemetry data we collect",
+      name: "What We Track", subtitle: "See the usage data Omi collects",
       keywords: ["tracking", "analytics", "telemetry", "data collection"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.tracking"),
 

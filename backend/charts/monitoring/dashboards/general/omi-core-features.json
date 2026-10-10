@@ -3632,6 +3632,147 @@
           "type": "stat"
         }
       ]
+    },
+    {
+      "id": 72,
+      "type": "row",
+      "title": "Conversation search freshness",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Successful summary vector writes divided by successes plus errors; skipped rows are excluded. No traffic produces no percentage.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "no traffic",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 34
+          },
+          "id": 70,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) / sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "title": "Summary vector upsert success %",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Retrieval path outcomes per second, aggregated across all processes and scrape jobs (including idle zero-export children). Degraded marks unavailable indexes/errors; empty marks a successful search with no matches.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 34
+          },
+          "id": 71,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (path, outcome) (rate(omi_chat_search_tool_outcomes_total[5m]))",
+              "legendFormat": "{{path}} / {{outcome}}",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "title": "Chat search paths and outcomes",
+          "type": "timeseries"
+        }
+      ]
     }
   ],
   "refresh": "2m",

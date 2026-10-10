@@ -23,7 +23,7 @@ enum TranscriptionAllowancePresentation {
   static func statusText(_ allowance: TranscriptionAllowanceSnapshot?) -> String {
     guard let allowance else { return "Transcription allowance unavailable — refresh to check" }
     switch allowance.reason {
-    case "byok": return "Transcription: Deepgram BYOK active"
+    case "byok": return "Transcription: using your Deepgram key"
     case "plan_within_allowance": return "Transcription: Omi-managed allowance"
     case "plan_allowance_exhausted": return "Transcription: Omi-managed allowance exhausted"
     case "plan_unlimited", "marketplace_reviewer": return "Transcription: Omi-managed (unlimited)"
@@ -118,7 +118,7 @@ extension SettingsContentView {
       return "Fetching subscription details from Omi."
     }
     if userSubscription?.subscription.features.contains("byok") == true {
-      return "LLM BYOK active for supported AI features."
+      return "Using your own AI keys for supported features."
     }
     if let detail = currentPlanBillingDetail {
       return detail
