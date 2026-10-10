@@ -22,7 +22,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from models.dream_agent import Plan, Triage  # noqa: E402
 from database import dream_feedback
 from scripts.dream_triage_eval import validate_dev  # noqa: E402
-from utils import dream_prompt, dream_transport  # noqa: E402
+from utils import dream_prompt, dream_transport, dream_guards  # noqa: E402
 from utils.http_client import close_all_clients  # noqa: E402
 
 FIXTURE = BACKEND_ROOT / 'evals/dream_reasoning/fixture.json'
@@ -72,7 +72,7 @@ async def run(args):
                             framed,
                             usage_sink=sink,
                         )
-                    plan = turn.value
+                    plan = dream_guards.filter_plan(turn.value, case['records'], usage_sink=sink)
                     refs = set(case['records'])
                     expected = case.get('expected_kind')
                     matching = [
@@ -84,20 +84,36 @@ async def run(args):
                         and (not case.get('after_contains') or case['after_contains'] in e.after)
                     ]
                     privacy_rejected = 0
+                    accepted = []
                     for feedback in plan.feedback:
                         try:
                             dream_feedback.validate(
                                 feedback, case['records'], [t.model_dump() for t in plan.vocabulary]
                             )
+                            accepted.append(feedback)
                         except ValueError:
                             privacy_rejected += 1
+                    if privacy_rejected:
+                        counts = Counter(sink.get('rejected', {}))
+                        counts['privacy_rejected'] += privacy_rejected
+                        sink['rejected'] = dict(counts)
+                    plan.feedback = dream_guards.cap_feedback(accepted, usage_sink=sink)
+                    expected_hit = (
+                        bool(matching) if expected else bool(plan.edits) if case['id'] == 'original' else True
+                    )
+                    if case.get('expect_no_edits'):
+                        expected_hit = not plan.edits
+                    if case.get('expect_no_overview_edits'):
+                        expected_hit = not any(e.kind == 'overview' for e in plan.edits)
+                    if case.get('expect_no_feedback'):
+                        expected_hit = expected_hit and not plan.feedback
                     row.update(
                         error=None,
+                        edits_by_kind=dict(Counter(e.kind for e in plan.edits)),
+                        raw_edits_by_kind=dict(Counter(e.kind for e in turn.value.edits)),
                         kept={name: len(getattr(plan, name)) for name in Plan.model_fields},
                         title_proposals=sum(e.kind == 'title' for e in matching),
-                        expected_edit_hit=(
-                            bool(matching) if expected else bool(plan.edits) if case['id'] == 'original' else True
-                        ),
+                        expected_edit_hit=expected_hit,
                         # Every transcription report on this clean bilingual fixture is a false positive.
                         language_false_positives=(
                             sum(f.component == 'transcription' for f in plan.feedback)
@@ -110,6 +126,8 @@ async def run(args):
                 except Exception as exc:
                     row.update(
                         error=type(exc).__name__,
+                        edits_by_kind={},
+                        raw_edits_by_kind={},
                         kept={name: 0 for name in Plan.model_fields},
                         title_proposals=0,
                         expected_edit_hit=False,
@@ -126,6 +144,7 @@ async def run(args):
                     latency_ms=round((time.monotonic() - started) * 1000),
                     dropped_invalid=sink.get('dropped_invalid', {}),
                     validation_errors=sink.get('validation_errors', {}),
+                    rejected=sink.get('rejected', {}),
                 )
                 report['rows'].append(row)
                 report['summary'] = summarize(report['rows'], expected_runs=5 * len(cases))
@@ -137,14 +156,14 @@ async def run(args):
         await close_all_clients()
     print(json.dumps(report['summary']), flush=True)
     if not report['summary']['targets_met']:
-        raise RuntimeError('five successful edit-producing reasoning runs required')
+        raise RuntimeError('five successful repeats meeting fixture expectations required')
 
 
 def summarize(rows, *, expected_runs=5):
     def total(key):
         counts = Counter()
         for row in rows:
-            counts.update(row[key])
+            counts.update(row.get(key, {}))
         return dict(counts)
 
     errors_by_type = Counter()
@@ -155,6 +174,9 @@ def summarize(rows, *, expected_runs=5):
         'failed_runs': sum(row['error'] is not None for row in rows),
         'kept': total('kept'),
         'dropped_invalid': total('dropped_invalid'),
+        'rejected': total('rejected'),
+        'edits_by_kind': total('edits_by_kind'),
+        'raw_edits_by_kind': total('raw_edits_by_kind'),
         'validation_errors': total('validation_errors'),
         'errors_by_type': dict(errors_by_type),
         'tokens': sum(row['tokens'] for row in rows),

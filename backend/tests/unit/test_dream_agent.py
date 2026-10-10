@@ -399,13 +399,15 @@ def test_summary_proposals_are_shadow_only(monkeypatch, pass_context, kind):
     records['conversations/c1'] = {
         'id': 'c1',
         'structured': {'title': '', 'overview': ''},
-        'transcript_segments': [{'text': 'We will build a toy boat.'}],
+        'transcript_segments': [{'text': 'We will build a toy boat. ' * 7}],
     }
     edit = Edit(
         kind=kind,
         target='conversations/c1',
         before='',
-        after='Building a toy boat',
+        after=(
+            'Building a toy boat' if kind == 'title' else '## Toy boat\n\n- We will build and test a toy boat tomorrow.'
+        ),
         reason='Missing heading',
         evidence=['conversations/c1'],
     )

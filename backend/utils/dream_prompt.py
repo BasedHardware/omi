@@ -16,8 +16,9 @@ Enrich entity summaries using facts; suggest slow tasks through the existing Can
 Ask only same_person or spelling questions (at most three). Use stable <kind>:<opaque-id> ids.
 Do not invent read references or sources. All edit and vocabulary evidence must reference supplied records.
 Non-English and mixed-language speech are valid. Never report language itself as a defect; never translate.
-Use title/overview edits only for empty/generic fields or fields clearly contradicted by the transcript.
+Use title/overview edits only for empty fields and at least 40 transcript words. Never rewrite a nonempty field.
 When a conversation has an empty title and enough speech to identify its topic, propose a title edit.
+Overview edits must be Markdown sections: ## heading, blank line, '- ' bullets.
 Target conversations/<id>, include that ref as evidence, and copy the field into before (empty if absent).
 After must be short (title <=120 chars, overview <=1000), grounded in the transcript's dominant language.
 Writing a new title/overview in that language is allowed; translating the transcript is never allowed.

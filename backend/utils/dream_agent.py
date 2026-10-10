@@ -11,7 +11,7 @@ from config.dream_agent import Caps, mode
 from database import dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
-from utils import dream_reads, dream_tools, dream_transport
+from utils import dream_reads, dream_tools, dream_transport, dream_guards
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass
@@ -128,6 +128,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                     if isinstance(row.get(key), str):
                         names.append({'spelling': row[key]})
             plan, tokens = await plan_pass(uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary)
+            plan = dream_guards.filter_plan(plan, records, usage_sink=report)
             report.update(
                 status='planned',
                 tokens=tokens,
@@ -149,7 +150,11 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                     )
                     accepted.append(feedback)
                 except ValueError:
+                    counts = Counter(report.get('rejected', {}))
+                    counts['privacy_rejected'] += 1
+                    report['rejected'] = dict(counts)
                     report['outcomes'].append({'tool': 'feedback', 'status': 'privacy_rejected'})
+            accepted = dream_guards.cap_feedback(accepted, usage_sink=report)
             report['proposed']['feedback'] = [f.model_dump() for f in accepted]
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             outcomes: list[dict[str, Any]] = report['outcomes']

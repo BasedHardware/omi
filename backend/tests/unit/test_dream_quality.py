@@ -70,7 +70,11 @@ def summary(kind='title', **overrides):
         kind=kind,
         target='conversations/c1',
         before='',
-        after='Trồng rau trên ban công',
+        after=(
+            'Trồng rau trên ban công'
+            if kind == 'title'
+            else '## Trồng rau\n\n- Chúng ta chuẩn bị trồng rau trên ban công vào cuối tuần.'
+        ),
         evidence=['conversations/c1'],
         reason='Missing heading',
         **overrides
@@ -98,10 +102,10 @@ def row():
         'structured': {
             'title': '',
             'overview': '',
-            'sections': [{'heading': 'Old'}],
+            'sections': [],
             'note_claims': [{'text': 'Old claim'}],
         },
-        'transcript_segments': [{'text': 'Chúng ta trồng rau trên ban công.'}],
+        'transcript_segments': [{'text': 'Chúng ta trồng rau trên ban công. ' * 6}],
     }
 
 
@@ -120,10 +124,10 @@ def test_summary_applies_only_owned_fields_through_journal(monkeypatch, kind):
     assert dream_tools.apply_edit('synthetic', summary(kind), {'conversations/c1': source}) == 'applied'
     args, kw = calls[0]
     patch = args[2][0].patch
-    assert patch['structured.' + kind] == 'Trồng rau trên ban công'
+    assert patch['structured.' + kind] == summary(kind).after
     assert set(patch) <= review_changes.ALLOWED_FIELDS['conversations']
     assert kw['expected_documents'] == {'c1': source}
-    assert args[1].snippet == 'Trồng rau trên ban công'
+    assert args[1].snippet == summary(kind).after
     assert args[1].refs[0].id == 'c1'
     if kind == 'overview':
         assert patch['structured.sections'] == patch['structured.note_claims'] == []
