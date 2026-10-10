@@ -11125,7 +11125,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Брза проверка на гласовите од последните два дена';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Дали ова сте вие?';
+  String get speakerTagPromptIsThisYou => 'Дали ова бевте вие?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12101,8 +12101,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Го одржува вашиот гласовен профил прецизен, за Omi никогаш да не ве именува како некој друг.';
+  String get speakerTagPromptHintOwner => 'Вашиот одговор го означува само пуштениот извадок.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12864,4 +12863,7 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Одговорот е зачуван за овој извадок.';
 }

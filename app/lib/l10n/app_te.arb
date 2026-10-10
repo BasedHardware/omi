@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "వాయిస్ మ్యాచ్: {level}",
     "speakerTagPromptHintIdentify": "ప్రతి సమాధానం Omiకి ఒక వాయిస్‌ను నేర్పి, ఆ వ్యక్తి నమ్మకాన్ని పెంచుతుంది.",
     "speakerTagPromptHintConfirm": "అవును అంటే {name} నమ్మకం పెరుగుతుంది.",
-    "speakerTagPromptHintOwner": "మీ స్వంత వాయిస్ ప్రొఫైల్‌ను కచ్చితంగా ఉంచుతుంది, కాబట్టి Omi మిమ్మల్ని మరొకరిగా పేర్కొనదు.",
+    "speakerTagPromptHintOwner": "మీ సమాధానం ప్లే చేసిన భాగాన్ని మాత్రమే గుర్తిస్తుంది.",
     "speakerTagPromptSavedAs": "{name}గా సేవ్ చేయబడింది",
     "speakerTagPromptSavedAsYou": "మీరుగా సేవ్ చేయబడింది",
     "speakerTagPromptIgnoredNote": "ఈ వాయిస్ గురించి Omi మళ్లీ అడగదు",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{ఈరోజు ఇంకా 1 మాన్యువల్ రన్ మిగిలింది} other{ఈరోజు ఇంకా {count} మాన్యువల్ రన్‌లు మిగిలాయి}}",
     "dreamReportFound": "{fixes, plural, =1{1 సవరణ} other{{fixes} సవరణలు}} · {asks, plural, =1{1 సూచన} other{{asks} సూచనలు}}",
     "dreamReportDropped": "{count, plural, =1{1 పాత మార్పు దాటవేయబడింది} other{{count} పాత మార్పులు దాటవేయబడ్డాయి}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది} other{గోప్యత కోసం {count} నివేదికలు ఆపివేయబడ్డాయి}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది} other{గోప్యత కోసం {count} నివేదికలు ఆపివేయబడ్డాయి}}",
+    "speakerTagPromptExcerptSaved": "ఈ భాగానికి సమాధానం సేవ్ చేయబడింది."
 }

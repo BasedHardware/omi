@@ -3539,7 +3539,7 @@
     "helpAndAbout": "Hjælp og om",
     "speakerTagPromptTitle": "Hjælp Omi med at genkende stemmer",
     "speakerTagPromptSubtitle": "Et hurtigt tjek af stemmer fra de sidste to dage",
-    "speakerTagPromptIsThisYou": "Er det dig?",
+    "speakerTagPromptIsThisYou": "Var det dig?",
     "speakerTagPromptIsThisPerson": "Er det {name}?",
     "speakerTagPromptWhoIsThis": "Hvem er det?",
     "speakerTagPromptThatsMe": "Det er mig",
@@ -3789,7 +3789,7 @@
     "voiceMatchMeterLabel": "Stemmematch: {level}",
     "speakerTagPromptHintIdentify": "Hvert svar lærer Omi en stemme og øger sikkerheden for personen.",
     "speakerTagPromptHintConfirm": "Ja øger sikkerheden for {name}.",
-    "speakerTagPromptHintOwner": "Holder din egen stemmeprofil skarp, så Omi aldrig navngiver dig som en anden.",
+    "speakerTagPromptHintOwner": "Dit svar mærker kun det afspillede uddrag.",
     "speakerTagPromptSavedAs": "Gemt som {name}",
     "speakerTagPromptSavedAsYou": "Gemt som dig",
     "speakerTagPromptIgnoredNote": "Omi spørger ikke om denne stemme igen",
@@ -3988,5 +3988,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{1 manuel kørsel tilbage i dag} other{{count} manuelle kørsler tilbage i dag}}",
     "dreamReportFound": "{fixes, plural, =1{1 rettelse} other{{fixes} rettelser}} · {asks, plural, =1{1 forslag} other{{asks} forslag}}",
     "dreamReportDropped": "{count, plural, =1{1 ældre ændring sprunget over} other{{count} ældre ændringer sprunget over}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 rapport tilbageholdt af hensyn til privatlivet} other{{count} rapporter tilbageholdt af hensyn til privatlivet}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 rapport tilbageholdt af hensyn til privatlivet} other{{count} rapporter tilbageholdt af hensyn til privatlivet}}",
+    "speakerTagPromptExcerptSaved": "Svaret er gemt for dette uddrag."
 }

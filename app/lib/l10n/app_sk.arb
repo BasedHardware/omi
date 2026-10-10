@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Pomoc a o aplikácii",
     "speakerTagPromptTitle": "Pomôžte Omi rozpoznávať hlasy",
     "speakerTagPromptSubtitle": "Rýchla kontrola hlasov z posledných dvoch dní",
-    "speakerTagPromptIsThisYou": "Ste to vy?",
+    "speakerTagPromptIsThisYou": "Boli ste to vy?",
     "speakerTagPromptIsThisPerson": "Je to {name}?",
     "speakerTagPromptWhoIsThis": "Kto je to?",
     "speakerTagPromptThatsMe": "To som ja",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Zhoda hlasu: {level}",
     "speakerTagPromptHintIdentify": "Každá odpoveď naučí Omi hlas a zvýši istotu o tejto osobe.",
     "speakerTagPromptHintConfirm": "Odpoveď „Áno“ zvyšuje istotu o osobe {name}.",
-    "speakerTagPromptHintOwner": "Udržiava váš hlasový profil presný, aby vás Omi nikdy nepomenoval ako niekoho iného.",
+    "speakerTagPromptHintOwner": "Vaša odpoveď označí iba prehratý úryvok.",
     "speakerTagPromptSavedAs": "Uložené ako {name}",
     "speakerTagPromptSavedAsYou": "Uložené ako vy",
     "speakerTagPromptIgnoredNote": "Omi sa na tento hlas už nebude pýtať",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Dnes zostáva 1 ručné spustenie} other{Dnes zostáva {count} ručných spustení}}",
     "dreamReportFound": "{fixes, plural, =1{1 oprava} other{{fixes} opráv}} · {asks, plural, =1{1 návrh} other{{asks} návrhov}}",
     "dreamReportDropped": "{count, plural, =1{1 staršia zmena preskočená} other{{count} starších zmien preskočených}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 hlásenie zadržané z dôvodu súkromia} other{{count} hlásení zadržaných z dôvodu súkromia}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 hlásenie zadržané z dôvodu súkromia} other{{count} hlásení zadržaných z dôvodu súkromia}}",
+    "speakerTagPromptExcerptSaved": "Odpoveď uložená pre tento úryvok."
 }

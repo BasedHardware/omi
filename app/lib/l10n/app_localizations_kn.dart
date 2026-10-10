@@ -11102,7 +11102,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'ಕಳೆದ ಎರಡು ದಿನಗಳ ಧ್ವನಿಗಳ ತ್ವರಿತ ಪರಿಶೀಲನೆ';
 
   @override
-  String get speakerTagPromptIsThisYou => 'ಇದು ನೀವೇನಾ?';
+  String get speakerTagPromptIsThisYou => 'ಇದು ನೀವಾಗಿದ್ದಿರಾ?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12078,8 +12078,7 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'ನಿಮ್ಮ ಸ್ವಂತ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಅನ್ನು ನಿಖರವಾಗಿ ಇಡುತ್ತದೆ, ಆದ್ದರಿಂದ Omi ನಿಮ್ಮನ್ನು ಬೇರೊಬ್ಬರೆಂದು ಎಂದಿಗೂ ಹೆಸರಿಸುವುದಿಲ್ಲ.';
+  String get speakerTagPromptHintOwner => 'ನಿಮ್ಮ ಉತ್ತರವು ಪ್ಲೇ ಮಾಡಿದ ಭಾಗವನ್ನು ಮಾತ್ರ ಗುರುತಿಸುತ್ತದೆ.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12841,4 +12840,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'ಈ ಭಾಗಕ್ಕೆ ಉತ್ತರವನ್ನು ಉಳಿಸಲಾಗಿದೆ.';
 }

@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Abi ja teave",
     "speakerTagPromptTitle": "Aita Omil hääli ära tunda",
     "speakerTagPromptSubtitle": "Kiire ülevaade viimase kahe päeva häältest",
-    "speakerTagPromptIsThisYou": "Kas see oled sina?",
+    "speakerTagPromptIsThisYou": "Kas see olid sina?",
     "speakerTagPromptIsThisPerson": "Kas see on {name}?",
     "speakerTagPromptWhoIsThis": "Kes see on?",
     "speakerTagPromptThatsMe": "See olen mina",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Hääle vaste: {level}",
     "speakerTagPromptHintIdentify": "Iga vastus õpetab Omile ühe hääle ja tõstab selle inimese kindlust.",
     "speakerTagPromptHintConfirm": "Jah tõstab inimese {name} kindlust.",
-    "speakerTagPromptHintOwner": "Hoiab sinu enda häälprofiili täpsena, et Omi ei nimetaks sind kunagi kellekski teiseks.",
+    "speakerTagPromptHintOwner": "Sinu vastus märgistab ainult esitatud lõigu.",
     "speakerTagPromptSavedAs": "Salvestatud kui {name}",
     "speakerTagPromptSavedAsYou": "Salvestatud sinuna",
     "speakerTagPromptIgnoredNote": "Omi ei küsi selle hääle kohta enam",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Täna jäi 1 käsitsi käivitus} other{Täna jäi {count} käsitsi käivitust}}",
     "dreamReportFound": "{fixes, plural, =1{1 parandus} other{{fixes} parandust}} · {asks, plural, =1{1 soovitus} other{{asks} soovitust}}",
     "dreamReportDropped": "{count, plural, =1{1 vanem muudatus vahele jäetud} other{{count} vanemat muudatust vahele jäetud}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 aruanne hoiti privaatsuse tõttu tagasi} other{{count} aruannet hoiti privaatsuse tõttu tagasi}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 aruanne hoiti privaatsuse tõttu tagasi} other{{count} aruannet hoiti privaatsuse tõttu tagasi}}",
+    "speakerTagPromptExcerptSaved": "Vastus on selle lõigu jaoks salvestatud."
 }

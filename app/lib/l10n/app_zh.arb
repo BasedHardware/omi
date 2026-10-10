@@ -3497,7 +3497,7 @@
     "helpAndAbout": "帮助与关于",
     "speakerTagPromptTitle": "帮助 Omi 识别声音",
     "speakerTagPromptSubtitle": "快速确认最近两天的声音",
-    "speakerTagPromptIsThisYou": "这是你吗？",
+    "speakerTagPromptIsThisYou": "刚才是你吗？",
     "speakerTagPromptIsThisPerson": "这是 {name} 吗？",
     "speakerTagPromptWhoIsThis": "这是谁？",
     "speakerTagPromptThatsMe": "是我",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "声音匹配：{level}",
     "speakerTagPromptHintIdentify": "每次回答都会让 Omi 学会一个声音，并提升此人的可信度。",
     "speakerTagPromptHintConfirm": "选“是”会提升 {name} 的可信度。",
-    "speakerTagPromptHintOwner": "让你自己的声音档案保持精准，这样 Omi 就不会把你认成别人。",
+    "speakerTagPromptHintOwner": "你的回答仅标记播放的片段。",
     "speakerTagPromptSavedAs": "已保存为 {name}",
     "speakerTagPromptSavedAsYou": "已保存为你",
     "speakerTagPromptIgnoredNote": "Omi 不会再询问这个声音",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{今天还可手动运行 1 次} other{今天还可手动运行 {count} 次}}",
     "dreamReportFound": "{fixes, plural, =1{1 项修复} other{{fixes} 项修复}} · {asks, plural, =1{1 条建议} other{{asks} 条建议}}",
     "dreamReportDropped": "{count, plural, =1{已跳过 1 项较早的更改} other{已跳过 {count} 项较早的更改}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{出于隐私考虑，已扣留 1 份报告} other{出于隐私考虑，已扣留 {count} 份报告}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{出于隐私考虑，已扣留 1 份报告} other{出于隐私考虑，已扣留 {count} 份报告}}",
+    "speakerTagPromptExcerptSaved": "已保存此片段的回答。"
 }

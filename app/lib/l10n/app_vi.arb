@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Khớp giọng nói: {level}",
     "speakerTagPromptHintIdentify": "Mỗi câu trả lời dạy Omi một giọng nói và tăng độ tin cậy của người đó.",
     "speakerTagPromptHintConfirm": "Chọn Có sẽ tăng độ tin cậy của {name}.",
-    "speakerTagPromptHintOwner": "Giữ hồ sơ giọng nói của bạn chính xác, để Omi không bao giờ gọi bạn là người khác.",
+    "speakerTagPromptHintOwner": "Câu trả lời của bạn chỉ gắn nhãn đoạn trích đã phát.",
     "speakerTagPromptSavedAs": "Đã lưu là {name}",
     "speakerTagPromptSavedAsYou": "Đã lưu là bạn",
     "speakerTagPromptIgnoredNote": "Omi sẽ không hỏi lại về giọng nói này",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Hôm nay còn 1 lượt chạy thủ công} other{Hôm nay còn {count} lượt chạy thủ công}}",
     "dreamReportFound": "{fixes, plural, =1{1 bản sửa} other{{fixes} bản sửa}} · {asks, plural, =1{1 gợi ý} other{{asks} gợi ý}}",
     "dreamReportDropped": "{count, plural, =1{1 thay đổi cũ hơn đã bị bỏ qua} other{{count} thay đổi cũ hơn đã bị bỏ qua}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 báo cáo bị giữ lại vì quyền riêng tư} other{{count} báo cáo bị giữ lại vì quyền riêng tư}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 báo cáo bị giữ lại vì quyền riêng tư} other{{count} báo cáo bị giữ lại vì quyền riêng tư}}",
+    "speakerTagPromptExcerptSaved": "Đã lưu câu trả lời cho đoạn trích này."
 }

@@ -11094,7 +11094,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Швидка перевірка голосів за останні два дні';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Це ви?';
+  String get speakerTagPromptIsThisYou => 'Це були ви?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12069,8 +12069,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Підтримує точність вашого голосового профілю, щоб Omi ніколи не називав вас кимось іншим.';
+  String get speakerTagPromptHintOwner => 'Ваша відповідь позначає лише відтворений уривок.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12832,4 +12831,7 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Відповідь збережено для цього уривка.';
 }

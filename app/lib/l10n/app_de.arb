@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Hilfe & Info",
     "speakerTagPromptTitle": "Hilf Omi, Stimmen zu erkennen",
     "speakerTagPromptSubtitle": "Ein kurzer Check der Stimmen der letzten zwei Tage",
-    "speakerTagPromptIsThisYou": "Bist du das?",
+    "speakerTagPromptIsThisYou": "Warst du das?",
     "speakerTagPromptIsThisPerson": "Ist das {name}?",
     "speakerTagPromptWhoIsThis": "Wer ist das?",
     "speakerTagPromptThatsMe": "Das bin ich",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Stimmübereinstimmung: {level}",
     "speakerTagPromptHintIdentify": "Jede Antwort bringt Omi eine Stimme bei und erhöht die Sicherheit für diese Person.",
     "speakerTagPromptHintConfirm": "Ja erhöht die Sicherheit für {name}.",
-    "speakerTagPromptHintOwner": "Hält dein eigenes Stimmprofil präzise, damit Omi dich nie als jemand anderen benennt.",
+    "speakerTagPromptHintOwner": "Deine Antwort kennzeichnet nur den abgespielten Ausschnitt.",
     "speakerTagPromptSavedAs": "Gespeichert als {name}",
     "speakerTagPromptSavedAsYou": "Als deine Stimme gespeichert",
     "speakerTagPromptIgnoredNote": "Omi fragt nicht mehr nach dieser Stimme",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Heute noch 1 manueller Durchlauf} other{Heute noch {count} manuelle Durchläufe}}",
     "dreamReportFound": "{fixes, plural, =1{1 Korrektur} other{{fixes} Korrekturen}} · {asks, plural, =1{1 Vorschlag} other{{asks} Vorschläge}}",
     "dreamReportDropped": "{count, plural, =1{1 ältere Änderung übersprungen} other{{count} ältere Änderungen übersprungen}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 Meldung aus Datenschutzgründen zurückgehalten} other{{count} Meldungen aus Datenschutzgründen zurückgehalten}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 Meldung aus Datenschutzgründen zurückgehalten} other{{count} Meldungen aus Datenschutzgründen zurückgehalten}}",
+    "speakerTagPromptExcerptSaved": "Antwort für diesen Ausschnitt gespeichert."
 }

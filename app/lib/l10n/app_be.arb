@@ -11054,7 +11054,7 @@
     "helpAndAbout": "Дапамога і пра праграму",
     "speakerTagPromptTitle": "Дапамажыце Omi распазнаваць галасы",
     "speakerTagPromptSubtitle": "Хуткая праверка галасоў за апошнія два дні",
-    "speakerTagPromptIsThisYou": "Гэта вы?",
+    "speakerTagPromptIsThisYou": "Гэта былі вы?",
     "speakerTagPromptIsThisPerson": "Гэта {name}?",
     "speakerTagPromptWhoIsThis": "Хто гэта?",
     "speakerTagPromptThatsMe": "Гэта я",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "Супадзенне голасу: {level}",
     "speakerTagPromptHintIdentify": "Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.",
     "speakerTagPromptHintConfirm": "«Так» павышае ўпэўненасць у {name}.",
-    "speakerTagPromptHintOwner": "Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.",
+    "speakerTagPromptHintOwner": "Ваш адказ пазначае толькі праслуханы ўрывак.",
     "speakerTagPromptSavedAs": "Захавана як {name}",
     "speakerTagPromptSavedAsYou": "Захавана як вы",
     "speakerTagPromptIgnoredNote": "Omi больш не будзе пытацца пра гэты голас",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Сёння застаўся 1 ручны запуск} other{Сёння засталося {count} ручныя запускі}}",
     "dreamReportFound": "{fixes, plural, =1{1 выпраўленне} other{{fixes} выпраўленні}} · {asks, plural, =1{1 прапанова} other{{asks} прапановы}}",
     "dreamReportDropped": "{count, plural, =1{1 больш старая змена прапушчана} other{{count} больш старыя змены прапушчаны}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}",
+    "speakerTagPromptExcerptSaved": "Адказ захаваны для гэтага ўрыўка."
 }

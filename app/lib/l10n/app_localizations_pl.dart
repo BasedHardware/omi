@@ -11107,7 +11107,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Szybkie sprawdzenie głosów z ostatnich dwóch dni';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Czy to Ty?';
+  String get speakerTagPromptIsThisYou => 'Czy to był Twój głos?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12080,8 +12080,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Utrzymuje dokładność Twojego profilu głosowego, dzięki czemu Omi nigdy nie uzna Cię za kogoś innego.';
+  String get speakerTagPromptHintOwner => 'Twoja odpowiedź oznacza tylko odtworzony fragment.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12842,4 +12841,7 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Odpowiedź zapisana dla tego fragmentu.';
 }

@@ -1,5 +1,6 @@
 """Closed funnel and resolver diagnostics, preserving the existing outcomes."""
 
+import asyncio
 import importlib
 import os
 import subprocess
@@ -32,6 +33,7 @@ from tests.unit.test_owner_recognition_telemetry import (
     _sync_incoming,
 )
 from utils.observability import owner_identity_retry as telemetry, owner_recognition
+from utils import executors
 
 
 def count(pass_name, stage, reason):
@@ -181,10 +183,13 @@ def test_batch_pass_cap_and_skips_preserve_reads_and_attempts(monkeypatch):
     monkeypatch.setattr(stage.conversations_db, 'get_conversation', read)
     monkeypatch.setattr(stage, 'refresh_completed_speaker_identity', lambda uid, cid, **kw: repairs.append(cid))
     before = snapshot('late')
-    retry._retry_batch('u', tuple(f'c{i:02}' for i in range(11)))
+    result = retry._retry_batch('u', tuple(f'c{i:02}' for i in range(11)))
     assert reads == [f'c{i:02}' for i in range(9)]
     assert repairs == [f'c{i:02}' for i in range(1, 9)]
-    assert delta('late', before) == {('skipped', 'not_completed'): 1, ('skipped', 'pass_limit'): 2}
+    assert result.pending == ('c00',) and result.attempted == 8
+    # A processing row is now an unfinished attempt until the coordinator's
+    # bounded completion rechecks finish, rather than an immediate terminal.
+    assert delta('late', before) == {('skipped', 'pass_limit'): 2}
 
 
 def test_slot_denial_counts_deduplicated_candidates_and_keeps_return(monkeypatch):
@@ -194,7 +199,7 @@ def test_slot_denial_counts_deduplicated_candidates_and_keeps_return(monkeypatch
     assert delta('late', before) == {('entry', 'candidate'): 2, ('skipped', 'slot_limit'): 2}
 
 
-def test_scan_cap_preserves_submitted_candidates(monkeypatch):
+async def test_scan_cap_preserves_submitted_candidates(monkeypatch):
     submitted, released = [], []
     future = Future()
 
@@ -202,11 +207,7 @@ def test_scan_cap_preserves_submitted_candidates(monkeypatch):
         submitted.extend(candidates)
         return future
 
-    def background(coro, **kw):
-        coro.close()
-
     monkeypatch.setattr(retry, 'submit_with_context', submit)
-    monkeypatch.setattr(retry, 'start_background_task', background)
     monkeypatch.setattr(
         retry, '_slots', SimpleNamespace(acquire=lambda **kw: True, release=lambda: released.append(True))
     )
@@ -215,7 +216,8 @@ def test_scan_cap_preserves_submitted_candidates(monkeypatch):
     assert submitted == [f'c{i:03}' for i in range(128)]
     assert delta('late', before) == {('entry', 'candidate'): 130, ('skipped', 'scan_limit'): 2}
     assert not released
-    future.set_result(None)
+    future.set_result(retry.RetryRound((), 0))
+    await asyncio.gather(*list(executors._background_tasks))
     assert released == [True]
 
 

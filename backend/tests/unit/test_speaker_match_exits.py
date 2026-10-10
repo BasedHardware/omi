@@ -87,8 +87,14 @@ async def test_exit_reasons_are_enumerated():
             'manual_decision',
             'voice_capacity',
             'embedding_budget',
+            'authority_unavailable',
         }
     )
+    assert any(
+        sample.name.endswith('_total') and sample.labels == {'reason': 'authority_unavailable'} and sample.value == 0
+        for metric in OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.collect()
+        for sample in metric.samples
+    ), 'the authority-unavailable exit must be exported even before the first attempt'
 
 
 @pytest.mark.anyio

@@ -11054,7 +11054,7 @@
     "helpAndAbout": "मदत आणि माहिती",
     "speakerTagPromptTitle": "Omi ला आवाज ओळखायला मदत करा",
     "speakerTagPromptSubtitle": "गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी",
-    "speakerTagPromptIsThisYou": "हे तुम्ही आहात का?",
+    "speakerTagPromptIsThisYou": "हे तुम्ही होता का?",
     "speakerTagPromptIsThisPerson": "हे {name} आहेत का?",
     "speakerTagPromptWhoIsThis": "हे कोण आहे?",
     "speakerTagPromptThatsMe": "हा मी आहे",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "आवाज जुळणी: {level}",
     "speakerTagPromptHintIdentify": "प्रत्येक उत्तर Omi ला एक आवाज शिकवते आणि त्या व्यक्तीची खात्री वाढवते.",
     "speakerTagPromptHintConfirm": "होय म्हटल्याने {name} बद्दलची खात्री वाढते.",
-    "speakerTagPromptHintOwner": "तुमचे स्वतःचे आवाज प्रोफाइल अचूक ठेवते, जेणेकरून Omi तुम्हाला कधीही दुसरे कोणी म्हणून नाव देणार नाही.",
+    "speakerTagPromptHintOwner": "तुमचे उत्तर फक्त ऐकवलेल्या उताऱ्याला लेबल करते.",
     "speakerTagPromptSavedAs": "{name} म्हणून सेव्ह केले",
     "speakerTagPromptSavedAsYou": "तुम्ही म्हणून सेव्ह केले",
     "speakerTagPromptIgnoredNote": "Omi या आवाजाबद्दल पुन्हा विचारणार नाही",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{आज 1 मॅन्युअल रन शिल्लक} other{आज {count} मॅन्युअल रन शिल्लक}}",
     "dreamReportFound": "{fixes, plural, =1{1 दुरुस्ती} other{{fixes} दुरुस्त्या}} · {asks, plural, =1{1 सूचना} other{{asks} सूचना}}",
     "dreamReportDropped": "{count, plural, =1{1 जुना बदल वगळला} other{{count} जुने बदल वगळले}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{गोपनीयतेसाठी 1 अहवाल रोखला} other{गोपनीयतेसाठी {count} अहवाल रोखले}}",
+    "speakerTagPromptExcerptSaved": "या उताऱ्यासाठी उत्तर जतन केले."
 }

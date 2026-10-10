@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Pagalba ir apie",
     "speakerTagPromptTitle": "Padėkite Omi atpažinti balsus",
     "speakerTagPromptSubtitle": "Greita paskutinių dviejų dienų balsų patikra",
-    "speakerTagPromptIsThisYou": "Ar tai jūs?",
+    "speakerTagPromptIsThisYou": "Ar tai buvote jūs?",
     "speakerTagPromptIsThisPerson": "Ar tai {name}?",
     "speakerTagPromptWhoIsThis": "Kas tai?",
     "speakerTagPromptThatsMe": "Tai aš",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Balso atitikimas: {level}",
     "speakerTagPromptHintIdentify": "Kiekvienas atsakymas moko Omi balso ir didina to žmogaus tikrumą.",
     "speakerTagPromptHintConfirm": "Taip padidina {name} tikrumą.",
-    "speakerTagPromptHintOwner": "Palaiko jūsų balso profilį tikslų, kad Omi niekada nepavadintų jūsų kitu asmeniu.",
+    "speakerTagPromptHintOwner": "Jūsų atsakymas žymi tik paleistą ištrauką.",
     "speakerTagPromptSavedAs": "Išsaugota kaip {name}",
     "speakerTagPromptSavedAsYou": "Išsaugota kaip jūs",
     "speakerTagPromptIgnoredNote": "Omi daugiau nebeklaus apie šį balsą",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Šiandien liko 1 rankinis paleidimas} other{Šiandien liko {count} rankinių paleidimų}}",
     "dreamReportFound": "{fixes, plural, =1{1 pataisymas} other{{fixes} pataisymų}} · {asks, plural, =1{1 pasiūlymas} other{{asks} pasiūlymų}}",
     "dreamReportDropped": "{count, plural, =1{1 senesnis pakeitimas praleistas} other{{count} senesnių pakeitimų praleista}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 ataskaita sulaikyta dėl privatumo} other{{count} ataskaitų sulaikyta dėl privatumo}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 ataskaita sulaikyta dėl privatumo} other{{count} ataskaitų sulaikyta dėl privatumo}}",
+    "speakerTagPromptExcerptSaved": "Atsakymas išsaugotas šiai ištraukai."
 }

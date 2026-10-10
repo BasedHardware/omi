@@ -2033,20 +2033,75 @@ no overflow speaker ID is invented. Backend-side defaults use
 `SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
 Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 
-### 4.1 Speaker tag prompts ("Is this you?" / "Who is this?")
+### 4.1 Speaker tag prompts ("Was this you?" / "Who is this?")
 
-`routers/speaker_tag_prompts.py` serves a small daily set of voices to confirm,
-chosen by `utils/speaker_tag_prompts/selection.py` from conversations
-started in the last **48 hours** that have stored audio (`audio_files`, i.e.
-private cloud sync was on). A candidate is one diarized speaker's longest clean
-stretch: consecutive segments with no other voice between them, at least 5 s,
-clipped to 10 s, never already decided by a manual receipt. Kinds:
-`owner_check` (free: an automatic owner label, or the loudest unnamed voice in a
-conversation with no owner segments or when the owner has no voiceprint),
-`confirm_person` (an unreviewed automatic person match) and `identify` (an
-unnamed voice); the last two need a paid plan (named speaker-ID). At most 4
-prompts, 2 per conversation, 2 owner checks; answered prompt ids are remembered
-for 7 days in `users/{uid}/speaker_tag_prompts/state`.
+`routers/speaker_tag_prompts.py` serves a small daily set from completed,
+unlocked conversations started in the last **48 hours** with stored audio.
+`owner_check` is free on every plan and asks only **Was this you? — Yes / No /
+Skip**. `confirm_person` and `identify` remain paid automatic non-owner naming
+cards; manually naming a voice through the tag sheet remains free.
+
+Owner cards require `GET /v1/speaker-tag-prompts?owner_excerpt=true`. The updated
+Flutter client declares that capability; default false withholds owner cards from
+older clients. Existing voice-profile settings still gate prompts. There is no
+server rollout environment flag: client capability is the enablement boundary.
+Legacy owner answers without excerpt evidence reject with 409 rather than assign
+a whole speaker. Paid cards keep their existing protocol.
+
+Owner selection loads only the enrolled owner's print. It embeds complete,
+placed, source-consistent 5–10 second constituent windows (at most 16 per
+conversation, inside the existing 8 second list budget), pools each scoped voice,
+and chooses the group whose cosine owner distance is closest to .50. It plays
+the constituent closest to that centroid. Current diagnostic score rows use
+`min_constituent_v1`, so they do not substitute for pooled evidence. Labels never
+rank a question. No enrollment, incomplete evidence, long segments requiring a
+crop, mixed capture/source windows or overlapping unselected audio mean no owner
+card. No threshold or voice model changes.
+
+Prompt constituent vectors use a separate owner-encrypted private evidence object
+`audio/{uid}/{conversation_id}/owner-prompt-embeddings.v1.enc`, not generic Redis
+JSON. It holds at most 16 PCM-digest entries (4096 dimensions each), usable for
+12 hours, with a 2 MiB serialized cap. Uploads use the existing owner storage
+write fence; conversation audio and account storage purges remove the object.
+It does not overwrite the post-resolution owner-evidence cache.
+Ordinary conversation deletion also purges this derived object immediately after
+the durable deletion intent, independent of the primary-audio cascade policy.
+Fill checks that intent and source existence before and after upload; a late fill
+or unconfirmed post-write check removes the object rather than leaving an orphan.
+
+At most four cards, two per conversation and two owner cards per daily set remain;
+**at most one owner card can ever be issued per conversation**. Issuance claims
+`owner_confirmation_prompt` atomically on that conversation. This durable quota
+survives Skip, refresh, concurrent list requests and the seven-day answered-ID
+retention; a lost list response can consume the opportunity. Deleted or merged
+cards are not retargeted. Existing shown/dismissed cooldowns remain.
+
+The server stores the selected segment IDs, exact complete bounds, speaker scope,
+capture run, receipt generation, roster/audio fingerprint, PCM digest and every
+selected segment's baseline owner/person/status label. The
+clip request carries `prompt_id` and `evidence_id`, must use those exact bounds,
+and stamps delivery only when the bytes match selection. Flutter enables Yes/No
+after complete playback; Skip needs no playback. The server can prove delivery,
+not human listening. It validates the current binding inside the assignment
+transaction, so regrouping, deletion, locking, audio replacement, receipt changes
+or a consumed card reject atomically with 409. Yes/No pass `segment_ids` and
+`segment_only=True` through the shared manual receipt/effects path. No creates
+only an excerpt-local `not_me` rejection, without a name or print; existing
+non-owner labels in that excerpt are preserved. Answers return
+only changed IDs for client reconciliation, never all equal speaker numbers.
+
+Explicit segment-only owner decisions do not reserve the owner conversation-wide
+or become a whole-voice anchor/rejection in listen, sync or post resolution.
+Legacy whole-voice Me receipts retain their reservation. Owner-card decisions
+set `use_for_speech_training=False`; even a matching legacy `card_generation`
+cannot override that opt-out on segment-only receipts. Enrollment remains a
+separate explicit-consent tag/enrollment action with its existing purity gates.
+
+Desktop coverage is retained for the two-channel path: `channels>=2` uses mic
+channel 0x01 as owner and system/remote channel 0x02 as non-owner through receiver
+callbacks and transcript persistence. Mono desktop source alone grants no owner
+identity. Shared microphones, echo and someone else at the mic remain risks;
+no incremental desktop lift or fleet coverage is claimed.
 
 Before offering a prompt, selection checks the exact clip window against v2
 validated chunk spans or conservative legacy `audio_files` bounds. Legacy file
@@ -2069,8 +2124,8 @@ for 2 h so repeated app opens do not rescan 30 conversations.
 Answers apply through the same `assign_conversation_speaker` transaction as the
 transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
 writes that same ledger (optionally per `segment_ids` of that speaker).
-`someone_else` with a `person_id`/`name` labels that person. Every negative
-answer writes `rejection: {kind, person_id}` on the receipt decision —
+`someone_else` with a `person_id`/`name` labels that person on paid naming
+cards. Their negative answers write `rejection: {kind, person_id}` on the receipt decision —
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
 stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
 filtered from live matching, resolution, and prompt selection until a newer
@@ -2099,7 +2154,8 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
   that function now returns early when the user turned off
   `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
   sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
-- **Owner** ("That's me" prompt or `is_user` tag-sheet assignment): the
+- **Owner** (explicit-consent `is_user` tag-sheet assignment or enrollment;
+  excerpt owner checks do not teach): the
   confirmed clip is the longest clean same-voice run, 5-10 s of distinct owner
   speech, passing `verify_and_transcribe_sample`; its embedding pools into
   `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
@@ -2110,10 +2166,25 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
 privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,skipped,sets,answers,
 quality,voice_samples}_total` and `omi_voice_profile_setting_changes_total`
-carry only closed-enum labels. `quality` turns answers into precision
+carry only closed-enum labels. `omi_owner_confirmation_events_total` counts
+`shown|yes|no|skip|stale_rejected`, without identifiers or content. `quality` turns answers into precision
 (`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall
 (`owner_missed`, `person_missed_known`) observations — biased toward what was
 asked, so compare trends per kind rather than reading absolute accuracy.
+
+Mixed-baseline excerpts are classified independently of segment order and emit
+`owner_mixed_yes|owner_mixed_no`; their denominator is one answered mixed excerpt,
+not segments or speech seconds. They do not increment uniform precision/recall
+outcomes. The released response enum stays `unknown_voice` for these answers;
+Skip stays `skipped`. Binary owner answers to uniformly named non-owner excerpts
+observe owner misses/non-owner abstentions, not that person's naming precision.
+
+The updated client reports the current visible question, once per card; subsequent owner cards
+use `set_shown=false` to retain the original set cooldown and set-count semantics. Unbound
+owner cards from an older backend are withheld by the client. Visibility stamps
+the exact issued prompt/evidence/segment identity once, even if Yes/No/Skip
+committed first and changed the transcript fingerprint. This bookkeeping never
+clears the consumed marker or restores playback/answer/issuance authority.
 
 ### People-stats aggregate cache
 
@@ -3044,7 +3115,10 @@ emergency lever, not a toggle.
 
 Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
-`window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
+`window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
+authority is unavailable records exactly one `authority_unavailable` exit, after applying known
+receiving rejections/retractions. It does not fabricate an acoustic decision; short probes also retain
+their separate reconnect-rejection accounting. A finished transcript records one `owner_recognition_outcome` log and
 `omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
 every successful persist, including the free-tier terminal stores. Sync intake's completed status is
 not a prior observation: the first enrichment counts, and a later pass counts only when that row had
@@ -3748,13 +3822,24 @@ behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
 at most two submitted/running late batches, without a waiting queue. Each scans
-at most 128 conversation snapshots and selects at most eight eligible rows.
+at most 128 distinct conversations and selects at most eight eligible rows,
+including all deferred completion rechecks. Rows still `in_progress` or
+`processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
+re-read only those rows (at most six metadata snapshots per candidate, 768 per
+batch). Waits borrow no executor thread but retain the batch's admission slot.
+The eight-pass ceiling is shared across every round; a row that enters repair
+is removed from subsequent rounds even if matching or CAS fails. Rechecks use
+the freshly completed row's revision, never the earlier processing snapshot.
+Overlapping drain submissions coalesce per process while a candidate is active;
+the active set is bounded by two batches of 128 and cleared on task completion.
+This is an in-process handoff, not a durable job: completion after the 230 seconds
+of waits, process shutdown, or slot refusal can still lose this retry.
 Selection follows eligibility, so ineligible early rows do not consume the eight
 passes. The snapshot is reused for the revision CAS. Each pass has a five-second
 advisory elapsed budget and at most 24 model attempts, including failures; no
 late pass repairs enrollment audio. Cancellation of an async waiter cannot free
 admission while its storage thread is still running. SDK/network timeouts are
-not a hard five-second deadline. Admission refusal/shutdown can lose this retry.
+not a hard five-second deadline.
 It changes only transcript identity and speaker resolution on completed,
 unlocked pendant/WAL rows. The commit compares the read document revision and
 reapplies manual authority; intervening edits defeat it. It performs no notes,
@@ -3798,6 +3883,10 @@ remains outside this patch and is a merge residual.
 Free-desktop deterministic minimum paths still emit no managed calls. This
 patch does not add a diarizer pass before those admission exits; unmatched free
 desktop captures and budget-skipped custom-STT captures remain a residual.
+
+[Owner continuity across rollover and reconnect](owner-continuity.md) documents
+the complete carry/drop reasons, encrypted handoff lifetime, acoustic guards,
+and metric denominators.
 
 Rollover rechecks the donor after profile loading and reevaluates the retained centroid
 against the current eligible prints. Late manual rejection, deletion, lock, or a new
@@ -3868,6 +3957,17 @@ those pages; observers that lose the same cursor generation cannot multiply a
 single refusal into a fleet-wide alarm burst. Standalone verification pages
 immediately. Recovery never regenerates admitted audio from old chunk snapshots.
 
+Owner continuity decisions use one final Firestore transaction snapshot for the
+receiving receipt, original acoustic donor and immediate rollover donor (at most
+three projected documents). Live arbitration/publication runs synchronously after
+the snapshot and generation check, so a receiving correction during earlier
+awaits cannot be replaced by a stale automatic owner suggestion.
+
+Snapshot unavailability is kept separate from the receiving receipt. A failed
+final transaction passes only already-known receiving rejections/retractions.
+One publication gate stops manual, automatic, carried and shortened owner naming
+and continuity renewal whenever final authority is unavailable.
+
 ### Live capture inactivity observation
 
 `omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
@@ -3887,13 +3987,17 @@ alert thresholds against the idle baseline before paging.
 ## Owner identity attempt funnel
 
 `omi_owner_identity_retry_total{pass,stage,reason}` observes the existing speaker
-resolver without changing placement, identity, cache, admission or persistence.
+resolver without changing placement, identity, cache or persistence policy.
 `pass="first"` is a first-finalization call that reaches the shared resolver
 (using the existing owner-outcome `already_observed` test). A reprocess already
 observed by that test emits no first-pass funnel. Earlier processing admission
 returns do not reach this counter. `pass="late"` is a pusher drain retry candidate,
-deduplicated within that batch; another batch may count the same conversation
-again. These are attempts, not unique conversations or evidence of owner speech.
+including its bounded completion rechecks. A processing row is unfinished, not
+an immediate terminal `skipped/not_completed`; that terminal is emitted once
+only when the recheck ceiling is exhausted or the row cannot reach completion.
+Rechecks do not increment `entry`, and coalesced active submissions emit nothing.
+Another batch after completion may count the same conversation again. These
+are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
 The 28 funnel `(stage,reason)` pairs are closed:

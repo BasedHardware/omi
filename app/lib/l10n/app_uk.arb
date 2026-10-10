@@ -3497,7 +3497,7 @@
     "helpAndAbout": "Допомога і про програму",
     "speakerTagPromptTitle": "Допоможіть Omi розпізнавати голоси",
     "speakerTagPromptSubtitle": "Швидка перевірка голосів за останні два дні",
-    "speakerTagPromptIsThisYou": "Це ви?",
+    "speakerTagPromptIsThisYou": "Це були ви?",
     "speakerTagPromptIsThisPerson": "Це {name}?",
     "speakerTagPromptWhoIsThis": "Хто це?",
     "speakerTagPromptThatsMe": "Це я",
@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Збіг голосу: {level}",
     "speakerTagPromptHintIdentify": "Кожна відповідь навчає Omi голосу й підвищує впевненість щодо цієї людини.",
     "speakerTagPromptHintConfirm": "«Так» підвищує впевненість щодо {name}.",
-    "speakerTagPromptHintOwner": "Підтримує точність вашого голосового профілю, щоб Omi ніколи не називав вас кимось іншим.",
+    "speakerTagPromptHintOwner": "Ваша відповідь позначає лише відтворений уривок.",
     "speakerTagPromptSavedAs": "Збережено як {name}",
     "speakerTagPromptSavedAsYou": "Збережено як ви",
     "speakerTagPromptIgnoredNote": "Omi більше не питатиме про цей голос",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{Сьогодні залишився 1 ручний запуск} other{Сьогодні залишилось {count} ручні запуски}}",
     "dreamReportFound": "{fixes, plural, =1{1 виправлення} other{{fixes} виправлення}} · {asks, plural, =1{1 пропозиція} other{{asks} пропозиції}}",
     "dreamReportDropped": "{count, plural, =1{1 старішу зміну пропущено} other{{count} старіші зміни пропущено}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 звіт затримано з міркувань конфіденційності} other{{count} звіти затримано з міркувань конфіденційності}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 звіт затримано з міркувань конфіденційності} other{{count} звіти затримано з міркувань конфіденційності}}",
+    "speakerTagPromptExcerptSaved": "Відповідь збережено для цього уривка."
 }

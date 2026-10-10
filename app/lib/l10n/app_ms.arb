@@ -3747,7 +3747,7 @@
     "voiceMatchMeterLabel": "Padanan suara: {level}",
     "speakerTagPromptHintIdentify": "Setiap jawapan mengajar Omi satu suara dan meningkatkan keyakinan terhadap orang itu.",
     "speakerTagPromptHintConfirm": "Ya meningkatkan keyakinan terhadap {name}.",
-    "speakerTagPromptHintOwner": "Memastikan profil suara anda tepat, supaya Omi tidak pernah menamakan anda sebagai orang lain.",
+    "speakerTagPromptHintOwner": "Jawapan anda hanya melabel petikan yang dimainkan.",
     "speakerTagPromptSavedAs": "Disimpan sebagai {name}",
     "speakerTagPromptSavedAsYou": "Disimpan sebagai anda",
     "speakerTagPromptIgnoredNote": "Omi tidak akan bertanya tentang suara ini lagi",
@@ -3946,5 +3946,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{1 larian manual lagi hari ini} other{{count} larian manual lagi hari ini}}",
     "dreamReportFound": "{fixes, plural, =1{1 pembetulan} other{{fixes} pembetulan}} · {asks, plural, =1{1 cadangan} other{{asks} cadangan}}",
     "dreamReportDropped": "{count, plural, =1{1 perubahan lama dilangkau} other{{count} perubahan lama dilangkau}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 laporan ditahan atas sebab privasi} other{{count} laporan ditahan atas sebab privasi}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 laporan ditahan atas sebab privasi} other{{count} laporan ditahan atas sebab privasi}}",
+    "speakerTagPromptExcerptSaved": "Jawapan disimpan untuk petikan ini."
 }

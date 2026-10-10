@@ -10876,7 +10876,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speakerTagPromptSubtitle => '快速确认最近两天的声音';
 
   @override
-  String get speakerTagPromptIsThisYou => '这是你吗？';
+  String get speakerTagPromptIsThisYou => '刚才是你吗？';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11834,7 +11834,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner => '让你自己的声音档案保持精准，这样 Omi 就不会把你认成别人。';
+  String get speakerTagPromptHintOwner => '你的回答仅标记播放的片段。';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12590,4 +12590,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => '已保存此片段的回答。';
 }

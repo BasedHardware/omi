@@ -11054,7 +11054,7 @@
     "helpAndAbout": "সাহায্য ও সম্পর্কে",
     "speakerTagPromptTitle": "Omi-কে কণ্ঠস্বর চিনতে সাহায্য করুন",
     "speakerTagPromptSubtitle": "গত দুই দিনের কণ্ঠস্বরের একটি দ্রুত যাচাই",
-    "speakerTagPromptIsThisYou": "এটা কি আপনি?",
+    "speakerTagPromptIsThisYou": "এটা কি আপনি ছিলেন?",
     "speakerTagPromptIsThisPerson": "এটা কি {name}?",
     "speakerTagPromptWhoIsThis": "এটা কে?",
     "speakerTagPromptThatsMe": "এটা আমি",
@@ -11304,7 +11304,7 @@
     "voiceMatchMeterLabel": "ভয়েস মিল: {level}",
     "speakerTagPromptHintIdentify": "প্রতিটি উত্তর Omi-কে একটি ভয়েস শেখায় এবং ওই ব্যক্তির নিশ্চয়তা বাড়ায়।",
     "speakerTagPromptHintConfirm": "“হ্যাঁ” বললে {name}-এর নিশ্চয়তা বাড়ে।",
-    "speakerTagPromptHintOwner": "আপনার নিজের ভয়েস প্রোফাইল নির্ভুল রাখে, যাতে Omi কখনো আপনাকে অন্য কেউ বলে না ডাকে।",
+    "speakerTagPromptHintOwner": "আপনার উত্তর শুধু শোনা অংশটিকে চিহ্নিত করে।",
     "speakerTagPromptSavedAs": "{name} হিসেবে সংরক্ষিত",
     "speakerTagPromptSavedAsYou": "আপনি হিসেবে সংরক্ষিত",
     "speakerTagPromptIgnoredNote": "Omi এই ভয়েস নিয়ে আর জিজ্ঞেস করবে না",
@@ -11503,5 +11503,6 @@
     "dreamReportRunsLeft": "{count, plural, =1{আজ আর ১টি ম্যানুয়াল রান বাকি} other{আজ আর {count}টি ম্যানুয়াল রান বাকি}}",
     "dreamReportFound": "{fixes, plural, =1{১টি সংশোধন} other{{fixes}টি সংশোধন}} · {asks, plural, =1{১টি পরামর্শ} other{{asks}টি পরামর্শ}}",
     "dreamReportDropped": "{count, plural, =1{১টি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে} other{{count}টি পুরোনো পরিবর্তন বাদ দেওয়া হয়েছে}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{গোপনীয়তার জন্য ১টি রিপোর্ট আটকে রাখা হয়েছে} other{গোপনীয়তার জন্য {count}টি রিপোর্ট আটকে রাখা হয়েছে}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{গোপনীয়তার জন্য ১টি রিপোর্ট আটকে রাখা হয়েছে} other{গোপনীয়তার জন্য {count}টি রিপোর্ট আটকে রাখা হয়েছে}}",
+    "speakerTagPromptExcerptSaved": "এই অংশের জন্য উত্তর সংরক্ষিত হয়েছে।"
 }

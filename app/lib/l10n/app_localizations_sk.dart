@@ -11063,7 +11063,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get speakerTagPromptSubtitle => 'Rýchla kontrola hlasov z posledných dvoch dní';
 
   @override
-  String get speakerTagPromptIsThisYou => 'Ste to vy?';
+  String get speakerTagPromptIsThisYou => 'Boli ste to vy?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -12037,8 +12037,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintOwner =>
-      'Udržiava váš hlasový profil presný, aby vás Omi nikdy nepomenoval ako niekoho iného.';
+  String get speakerTagPromptHintOwner => 'Vaša odpoveď označí iba prehratý úryvok.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12800,4 +12799,7 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Odpoveď uložená pre tento úryvok.';
 }
