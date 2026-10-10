@@ -45,7 +45,13 @@ def test_owner_link_config_never_reaches_authoritative_projection(monkeypatch, s
         receipt={},
     )
     assert result is incumbent
-    apply_speaker_resolution(c, result.speaker_ids, result.voice_identities, result.voice_identity_statuses)
+    apply_speaker_resolution(
+        c,
+        result.speaker_ids,
+        result.voice_identities,
+        result.voice_identity_statuses,
+        owner_voiceprint_available=result.owner_voiceprint_available,
+    )
     assert all(not s.is_user for s in c.transcript_segments)
     if shadow_mode == 'owner':
         assert all(s.speaker_grouping_shadow['owner_link'] == 'user' for s in c.transcript_segments)
@@ -128,7 +134,13 @@ def test_epoch_and_renumbered_partition_survive_reprocessing():
             c.transcript_segments, vectors, grouping='provider_strict', provider_keys=keys
         )
         assert result.speaker_ids['0'] != result.speaker_ids['1']
-        apply_speaker_resolution(c, result.speaker_ids, result.voice_identities, result.voice_identity_statuses)
+        apply_speaker_resolution(
+            c,
+            result.speaker_ids,
+            result.voice_identities,
+            result.voice_identity_statuses,
+            owner_voiceprint_available=result.owner_voiceprint_available,
+        )
 
 
 @pytest.mark.parametrize('fault', ['unserializable', 'plaintext_sidecar', 'encrypt_returns_plaintext'])
