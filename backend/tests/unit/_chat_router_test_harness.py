@@ -83,6 +83,8 @@ def wire_common_stubs(install) -> SimpleNamespace:
     to ``ModuleType`` because both suites installed them that way. Returns the
     handles a suite layers extra attributes onto.
     """
+    sys.modules.pop('utils.chat_turn', None)
+    install('utils.messaging.app_awareness', ModuleType('utils.messaging.app_awareness'))
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
 
     notification_db = install('database.notifications')
