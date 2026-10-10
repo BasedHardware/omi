@@ -535,6 +535,13 @@ def patch_job(
     # Job probes cannot reach the loopback metrics listener. Also remove any
     # probe retained from an earlier attachment so it cannot terminate the task.
     app.pop('startupProbe', None)
+    # Cloud Run rejects depends_on when the depended-upon container lacks a
+    # startup probe (run.googleapis.com/container-dependencies), and jobs
+    # cannot carry a reachable probe for this app (no serving port; TCP
+    # probes cannot reach the loopback listener). Drop the dependency on the
+    # job path: the collector's done-file handshake plus its 30s scrape loop
+    # already sequence it, and failed early scrapes are retried harmlessly.
+    rendered['metadata']['annotations'].pop('run.googleapis.com/container-dependencies', None)
     app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
     app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
     # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.
