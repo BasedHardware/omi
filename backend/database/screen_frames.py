@@ -28,7 +28,7 @@ from google.cloud import firestore
 
 from utils import encryption
 from ._client import db, get_firestore_client
-from .conversations import conversations_collection, prepare_conversation_for_read
+from .conversations import conversations_collection, is_soft_deleted, prepare_conversation_for_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 screen_frames_subcollection = 'screen_frames'
@@ -92,7 +92,7 @@ def get_conversation_screen_frames(uid: str, conversation_id: str) -> List[Dict[
 
 
 @set_data_protection_level(data_arg_name='frames')
-@prepare_for_write(data_arg_name='frames', prepare_func=_prepare_screen_frame_for_write)
+@prepare_for_write(data_arg_name='frames', prepare_func=_prepare_screen_frame_for_write, preserve_result=True)
 def store_conversation_screen_frames(
     uid: str,
     conversation_id: str,
@@ -117,7 +117,8 @@ def store_conversation_screen_frames(
     @firestore.transactional
     def _store(transaction) -> bool:
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not getattr(conversation_snapshot, 'exists', False):
+        raw = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+        if not raw or is_soft_deleted(raw):
             return False
         for frame in frames:
             frame_id = frame['id']
