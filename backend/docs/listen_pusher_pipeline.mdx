@@ -3748,13 +3748,24 @@ behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
 at most two submitted/running late batches, without a waiting queue. Each scans
-at most 128 conversation snapshots and selects at most eight eligible rows.
+at most 128 distinct conversations and selects at most eight eligible rows,
+including all deferred completion rechecks. Rows still `in_progress` or
+`processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
+re-read only those rows (at most six metadata snapshots per candidate, 768 per
+batch). Waits borrow no executor thread but retain the batch's admission slot.
+The eight-pass ceiling is shared across every round; a row that enters repair
+is removed from subsequent rounds even if matching or CAS fails. Rechecks use
+the freshly completed row's revision, never the earlier processing snapshot.
+Overlapping drain submissions coalesce per process while a candidate is active;
+the active set is bounded by two batches of 128 and cleared on task completion.
+This is an in-process handoff, not a durable job: completion after the 230 seconds
+of waits, process shutdown, or slot refusal can still lose this retry.
 Selection follows eligibility, so ineligible early rows do not consume the eight
 passes. The snapshot is reused for the revision CAS. Each pass has a five-second
 advisory elapsed budget and at most 24 model attempts, including failures; no
 late pass repairs enrollment audio. Cancellation of an async waiter cannot free
 admission while its storage thread is still running. SDK/network timeouts are
-not a hard five-second deadline. Admission refusal/shutdown can lose this retry.
+not a hard five-second deadline.
 It changes only transcript identity and speaker resolution on completed,
 unlocked pendant/WAL rows. The commit compares the read document revision and
 reapplies manual authority; intervening edits defeat it. It performs no notes,
@@ -3887,13 +3898,17 @@ alert thresholds against the idle baseline before paging.
 ## Owner identity attempt funnel
 
 `omi_owner_identity_retry_total{pass,stage,reason}` observes the existing speaker
-resolver without changing placement, identity, cache, admission or persistence.
+resolver without changing placement, identity, cache or persistence policy.
 `pass="first"` is a first-finalization call that reaches the shared resolver
 (using the existing owner-outcome `already_observed` test). A reprocess already
 observed by that test emits no first-pass funnel. Earlier processing admission
 returns do not reach this counter. `pass="late"` is a pusher drain retry candidate,
-deduplicated within that batch; another batch may count the same conversation
-again. These are attempts, not unique conversations or evidence of owner speech.
+including its bounded completion rechecks. A processing row is unfinished, not
+an immediate terminal `skipped/not_completed`; that terminal is emitted once
+only when the recheck ceiling is exhausted or the row cannot reach completion.
+Rechecks do not increment `entry`, and coalesced active submissions emit nothing.
+Another batch after completion may count the same conversation again. These
+are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
 The 28 funnel `(stage,reason)` pairs are closed:
