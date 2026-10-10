@@ -232,8 +232,12 @@ def get_pending_sync_items(
 ):
     """Get action items that need sync: pending export + already synced items for bidirectional sync."""
     result = action_items_db.get_pending_apple_reminders_sync(uid)
-    pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
-    synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
+    pending_export = [
+        item for item in result["pending_export"] if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
+    synced_items = [
+        item for item in result["synced_items"] if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
     return {
         "pending_export": _safe_action_item_responses(pending_export, uid=uid, context='pending_export'),
         "synced_items": _safe_action_item_responses(synced_items, uid=uid, context='synced_items'),
@@ -251,16 +255,20 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
     if not request.items:
         return {"status": "ok", "updated_count": 0}
 
-    # Pre-fetch items to skip locked ones
+    # Pre-fetch items to skip locked ones and filter deleted or nonexistent tombstones
     locked_ids = set()
+    skipped_ids = set()
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
-        if existing and existing.get('is_locked', False):
+        if not existing or existing.get('deleted', False):
+            skipped_ids.add(item.id)
+            continue
+        if existing.get('is_locked', False):
             locked_ids.add(item.id)
 
     updates = []
     for item in request.items:
-        if item.id in locked_ids:
+        if item.id in locked_ids or item.id in skipped_ids:
             continue
         update_data = {}
         if item.description is not None:
@@ -283,6 +291,9 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             updates.append({'id': item.id, 'data': update_data})
 
     result = action_items_db.batch_sync_update_action_items(uid, updates)
+    for sid in sorted(skipped_ids):
+        if sid not in result.missing_ids:
+            result.missing_ids.append(sid)
 
     updated_ids = set(result.updated_ids)
     desc_updates = [u for u in updates if u['id'] in updated_ids and 'description' in u['data']]
