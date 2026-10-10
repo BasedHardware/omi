@@ -706,24 +706,37 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private fun batteryHistoryKey(address: String) = "battery_history_${address.uppercase()}"
 
+    fun retireDeviceHealth() {
+        batteryHistoryRecorder.retire()
+        chargingState.clear()
+    }
+
     private val batteryHistoryRecorder by lazy {
         val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
         BatteryHistoryRecorder(
             read = { key -> prefs.getString(key, "[]") ?: "[]" },
-            write = { key, value -> prefs.edit().putString(key, value).apply() },
+            write = { key, value -> if (DeviceHealthPersistence.enabled(application)) prefs.edit().putString(key, value).commit() },
         )
     }
 
     @Synchronized
     private fun persistBatteryReading(address: String, level: Int) {
-        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()])
+        synchronized(DeviceHealthPersistence) {
+            if (!DeviceHealthPersistence.enabled(application)) return
+            batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()],
+                DeviceHealthPersistence.build(application),
+                application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null), DeviceHealthPersistence.epoch(application))
+        }
     }
 
     @Synchronized
     fun recordChargingState(address: String, charging: Boolean) {
-        val addr = address.uppercase()
-        chargingState[addr] = charging
-        batteryHistoryRecorder.backfillCharging(batteryHistoryKey(addr), charging)
+        synchronized(DeviceHealthPersistence) {
+            if (!DeviceHealthPersistence.enabled(application)) return
+            val addr = address.uppercase()
+            chargingState[addr] = charging
+            batteryHistoryRecorder.backfillCharging(batteryHistoryKey(addr), charging)
+        }
     }
 
     fun getBatteryHistory(address: String): List<BleBatteryPoint> {
@@ -873,6 +886,10 @@ class OmiBleManager private constructor(private val application: Application) {
             // A diagnostics callback arriving after its timeout no longer owns the queue.
             if (charUuid == DIAGNOSTICS_CHAR && completion == null) return@dispatchGattCallback
             if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (charUuid == "00002a26-0000-1000-8000-00805f9b34fb") {
+                    application.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE).edit()
+                        .putString("observed_firmware_$address", value.toString(Charsets.UTF_8)).apply()
+                }
                 completion?.invoke(Result.success(value))
             } else {
                 completion?.invoke(Result.failure(Exception("Read failed with status $status")))

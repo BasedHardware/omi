@@ -36,6 +36,14 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
+            if (call.method != "setPolicy") { result.notImplemented() } else {
+                com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,
+                    call.argument<Boolean>("enabled") == true, call.argument<Number>("epoch")!!.toLong(), call.argument<Boolean>("retire") == true)
+                result.success(null)
+            }
+        }
+
 
         // Read the sticky battery snapshot without registering a receiver.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/phone_battery").setMethodCallHandler {
