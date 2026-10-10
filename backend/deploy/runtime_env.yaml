@@ -1983,6 +1983,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
@@ -2082,6 +2083,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
           CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
@@ -2457,6 +2459,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
@@ -2679,6 +2682,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
@@ -2883,6 +2887,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}

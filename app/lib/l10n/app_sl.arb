@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "Ustvari in deli svojo prilagojeno aplikacijo",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "Iskanje aplikacij",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "Pridružite se skupnosti!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ članov in več.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "Izbriši račun",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Pri Omi smo zavezani zaščiti vaše zasebnosti. Ta stran vam omogoči nadzor nad tem, kako se vaši podatki shranjevajo in uporabljajo.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "Izvedite več…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "Raven zaščite podatkov",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "Vaši podatki so privzeto zaščiteni s krepko enkripcijo. Preglejte svoje nastavitve in prihodnje možnosti zasebnosti spodaj.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "Dostop aplikacije",
     "@appAccess": {
@@ -845,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "Nastavite ponudnika STT",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "Časovna omejitev pogovora",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "Nastavite, kdaj se pogovori avtomatsko končajo",
+    "conversationTimeoutConfig": "Kako dolgo Omi čaka v tišini, preden konča pogovor",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "Uvozite podatke",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "Uvozite podatke iz drugih virov",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "Razhroščevanje in diagnostika",
     "@debugDiagnostics": {
@@ -929,10 +905,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "Besede razumene iz vaših pogovorov.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "Zagotavljanje",
     "@providing": {
         "description": "Providing stat title"
@@ -944,10 +916,6 @@
     "remembering": "Pomnjenje",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "Dejstva in podrobnosti, ki se jih za vas spomnijo.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "Neomejen načrt",
     "@unlimitedPlan": {
@@ -1065,7 +1033,6 @@
     },
     "debugLogs": "Dnevniki razhroščevanja",
     "debugLogsAutoDelete": "Samodejno briše po 3 dneh.",
-    "debugLogsDesc": "Pomaga pri diagnostiki težav",
     "noLogFilesFound": "Nobena dnevniška datoteka ni bila najdena.",
     "omiDebugLog": "Omi dnevnik razhroščevanja",
     "logShared": "Dnevnik deljen",
@@ -1078,7 +1045,6 @@
     "exportedConversations": "Izvoženi pogovori iz Omi",
     "exportShared": "Izvoz deljen",
     "deleteKnowledgeGraphTitle": "Izbriši graf znanja?",
-    "deleteKnowledgeGraphMessage": "To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaši izvirni spomin ostanejo varni. Graf se bo sčasoma ponovno zgrajen ali ob naslednji zahtevi.",
     "knowledgeGraphDeleted": "Graf znanja je izbrisan",
     "deleteGraphFailed": "Brisanje grafa je spodletelo: {error}",
     "@deleteGraphFailed": {
@@ -1090,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "Izbriši graf znanja",
-    "deleteKnowledgeGraphDesc": "Očisti vsa vozlišča in povezave",
     "mcp": "MCP",
     "mcpServer": "MCP strežnik",
     "mcpServerDesc": "Povežite AI pomočnike s svojimi podatki",
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "Profilov usposabljanja za prijatelje in družino",
     "trainFamilyProfilesDesc": "Vaši posnetki nam pomagajo prepoznati in ustvariti profile za vaše prijatelje in družino.",
     "enhanceTranscriptAccuracy": "Izboljšaj natančnost prepisa",
-    "enhanceTranscriptAccuracyDesc": "Ko se naš model izboljša, lahko zagotovimo boljše rezultate transkripcije za vaše posnetke.",
     "legalNotice": "Pravno obvestilo: Zakonitost snemanja in shranjevanja podatkov govora se lahko razlikuje glede na vašo lokacijo in kako uporabljate to funkcijo. Vaša odgovornost je, da zagotovite skladnost z lokalnimi zakoni in predpisi.",
     "alreadyAuthorized": "Že avtorizirano",
     "authorize": "Avtoriziraj",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "Povejte nam svoj primarni jezik",
-    "languageForTranscription": "Nastavite svoj jezik za boljše transkripcije in osebno izkušnjo.",
+    "languageForTranscription": "Omi to jezik uporablja za transkripcije, povzetke in spomine.",
     "singleLanguageModeInfo": "Način enega jezika je omogočen. Prevajanje je onemogočeno za večjo natančnost.",
     "searchLanguageHint": "Poiščite jezik po imenu ali kodi",
     "noLanguagesFound": "Ni najdenih jezikov",
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "Integracija z {appName} bo kmalu na voljo! Trudimo se, da vam prinesemo več možnosti za upravljanje nalog.",
+    "integrationComingSoon": "{appName} še ni podprt.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "Uvozite nastavitve",
     "exportConfiguration": "Izvozite nastavitve",
     "bringYourOwn": "Prinesite svoje",
-    "payYourSttProvider": "Prostorocno uporabite omi. Plačujete samo svojemu STT ponudniku.",
+    "payYourSttProvider": "Omi je brezplačen. Ponudniku transkripcije plačate neposredno vi.",
     "freeMinutesMonth": "300 brezplačnih minut/mesec vključenih. Neomejeno z ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Potreben je gostitelj",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "Vnesite svoj neposredni STT WebSocket končni točki",
     "apiKey": "API ključ",
     "enterApiKey": "Vnesite svoj API ključ",
-    "storedLocallyNeverShared": "Shranjeno lokalno, nikoli deljeno",
+    "storedLocallyNeverShared": "Shranjeno v tem telefonu. Pošlje se samo vašemu ponudniku transkripcije.",
     "host": "Gostitelj",
     "port": "Port",
     "advanced": "Napredne",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "Resetuj zahtevo na privzeto",
     "logs": "Dnevniki",
     "logsCopied": "Dnevniki so kopirani",
-    "noLogsYet": "Dnevniki še niso. Začnite snemati in vidite aktivnost po meri STT.",
-    "deviceUsesCodec": "{device} uporablja {reason}. Korišten bo Omi.",
+    "noLogsYet": "Dnevnikov še ni. Posnemite nekaj, da vidite zahteve za vašega ponudnika transkripcije.",
+    "deviceUsesCodec": "{device} snema v obliki, ki je ta ponudnik ne more prebrati ({reason}), zato se namesto tega uporabi transkripcija Omi.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,13 +1509,9 @@
         }
     },
     "omiTranscription": "Omi Transkripcija",
-    "bestInClassTranscription": "Najboljša transkripcija brez nastavitve",
     "instantSpeakerLabels": "Takojšnje oznake govorcev",
     "languageTranslation": "Prevajanje v 100+ jezikov",
-    "optimizedForConversation": "Optimizirana za pogovor",
     "autoLanguageDetection": "Samodejno zaznavanje jezika",
-    "highAccuracy": "Visoka natančnost",
-    "privacyFirst": "Zasebnost na prvem mestu",
     "saveChanges": "Shrani spremembe",
     "resetToDefault": "Resetuj na privzeto",
     "viewTemplate": "Ogled predloge",
@@ -1705,10 +1665,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "Nadaljujte, odličko se vam dogaja",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "Preskoči to vprašanje",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1812,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "Zajemite vsak trenutek. Dobite povzetke na podlagi umetne inteligence.\nNikoli več ne pisujte opombk.",
+    "captureEveryMoment": "Omi snema vaše pogovore in za vas napiše\npovzetek in opravila.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1881,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "Nastavite svoj jezik za boljše transkripcije in osebno izkušnjo",
+    "languageBenefits": "Omi to jezik uporablja za transkripcije, povzetke in spomine.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1898,10 +1854,6 @@
     "selectYourLanguage": "Izberite svoj jezik",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "Vaša osebna pot rasti z AI, ki je pozorna na vsako vaše besedo.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "Naloge",
     "@actionItemsTitle": {
@@ -2553,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "Nastavite ponudnika STT",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "Nastavite, kdaj se pogovori samodejno končajo",
+    "setWhenConversationsAutoEnd": "Kako dolgo Omi čaka v tišini, preden konča pogovor",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2606,9 +2554,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "Grafikon znanja je uspešno izbrisan",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2624,10 +2569,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "Počisti vse vozlišča in povezave",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2822,10 +2763,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Dobrodošli v Omi! Vaš AI spremljevalec je pripravljen, da vam pomaga s pogovori, nalogami in še več.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Začni uporabljati Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2939,14 +2876,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "Pogovori se obdelajo samodejno",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Takoj prejmi vpoglede in povzetke",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "Prikaži vse",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2958,10 +2887,6 @@
     "dailyScore": "DNEVNA OCENA",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "Ocena, ki ti pomaga bolje\nosredotočiti se na izvajanje.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "Rezultati iskanja",
     "@searchResults": {
@@ -3476,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "Začni pogovor in pusti čaradi, da se dogaja",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "Prosimo, preverite svojo internetno povezavo",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3738,10 +3659,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "Nošljiv AI spremljevalec",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "Spomin se nalagajo…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3813,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "Organizirajte in nadzorujte svoje spomine",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "Skupno",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3825,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "Nastavi vse spomine na zasebno vidljivost",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "Naredi vse spomine javne",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "Nastavi vse spomine na javno vidljivost",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Trajno odstrani vse spomine iz Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3920,7 +3825,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "Prosimo, izberite svoj primarni jezik",
     "chooseYourLanguage": "Izberite svoj jezik",
-    "selectPreferredLanguageForBestExperience": "Izberite svoj izbrani jezik za najboljšo izkušnjo z Omi",
     "searchLanguages": "Iskanje jezikov",
     "selectALanguage": "Izberite jezik",
     "tryDifferentSearchTerm": "Poskusite z drugim iskalnim izrazom",
@@ -3935,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "Omogočite funkcije za najboljšo izkušnjo z Omi na vaši napravi.",
     "microphoneAccess": "Dostop do mikrofona",
     "recordAudioConversations": "Snemanje audio pogovorov",
     "microphoneAccessDescription": "Omi potrebuje dostop do mikrofona za snemanje vaših pogovorov in zagotavljanje prepisov.",
@@ -4301,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "Kdaj prejeti dnevni povzetek",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "Naročnina",
     "@subscription": {
         "description": "Subscription section title"
@@ -4330,14 +4229,10 @@
     "checkingNext7Days": "Preverjam naslednjih 7 dni",
     "shortcuts": "Bljižnice",
     "shortcutChangeInstruction": "Kliknite na bljižnico, da jo spremenite. Pritisnite Escape za preklic.",
-    "configureSTTProvider": "Konfigurirajte ponudnika STT",
-    "setConversationEndDescription": "Nastavite, kdaj se pogovori samodejno končajo",
     "importDataDescription": "Uvozite podatke iz drugih virov",
     "exportConversationsDescription": "Izvozite pogovore v JSON",
     "exportingConversations": "Izvažam pogovore…",
-    "clearNodesDescription": "Izbrišite vse vozlišče in povezave",
     "deleteKnowledgeGraphQuestion": "Izbriši graf znanja?",
-    "deleteKnowledgeGraphWarning": "To bo izbrisalo vse izpeljane podatke grafa znanja. Vaši prvotni spomini ostajajo varni.",
     "connectOmiWithAI": "Povežite Omi s pomočniki umetne inteligence",
     "noAPIKeys": "Nobenih ključev API. Ustvarite enega, da bi se začeli.",
     "autoCreateWhenDetected": "Samodejna ustvaritev pri zaznavi imena",
@@ -4750,10 +4645,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "Ustvarite in delite svojo aplikacijo",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "Aplikacija",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4900,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "Šifriranje od konca do konca je zlati standard za zasebnost. Ko je omogočeno, se vaši podatki šifrirajo na vaši napravi, preden se pošljejo na naše strežnike. To pomeni, da nihče, niti Omi, ne more dostopati do vaše vsebine.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "Pomembni kompromisi:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4956,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "Vaši podatki so šifrirani s ključem, ki je edinstven za vas na naših strežnikih, gostovanih na Google Cloud. To pomeni, da je vaša surova vsebina nedostopna komurkoli, vključno z osebjem Omi ali Google, neposredno iz baze podatkov.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "Šifriranje od konca do konca",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "Omogočite za največjo varnost, kjer samo vi lahko dostopate do vaših podatkov. Tapnite, da se več naučite.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "Ne glede na raven so vaši podatki vedno šifrirani v mirovanju in med prenosom.",
     "@dataAlwaysEncrypted": {
@@ -5065,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• Vaši podatki pomagajo izboljšati modele umetne inteligence\n• Samo necitljivi podatki se delijo\n• Povsem transparenten proces",
+    "trainingDataBullets": "• Vaši podatki pomagajo izboljšati modele umetne inteligence\n• Delijo se samo nesobčutljivi podatki",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5174,10 +5053,6 @@
     "youAreOnUnlimitedPlan": "Ste na načrtu Unlimited.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "Vaš Omi, osvobođen. Pojdite na unlimited za neskončne možnosti.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "Vaš načrt se je končal {date}.\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.",
     "@planEndedOn": {
@@ -5295,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "V Omi zelo resno jemljemo vašo zasebnost. Želimo biti transparentni o podatkih, ki jih zbiramo, in kako jih uporabljamo za izboljšanje našega izdelka za vas. Tukaj je, kaj morate vedeti:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "Kaj sledimo",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5314,14 +5185,6 @@
     "ourCommitment": "Naše zavezanosti",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "Zavezani smo, da podatke, ki jih zbiramo, uporabljamo samo za izboljšanje Omija za vas. Vaša zasebnost in zaupanje sta nam največje.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Hvala, ker ste dragoceni uporabnik Omija. Če imate vprašanja ali pomisleke, se lahko obrnete na nas na team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "Geslo",
     "@password": {
@@ -5384,10 +5247,6 @@
     "exportStartedMayTakeFewSeconds": "Izvoz se je začel. To lahko traja nekaj sekund…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaša originalna spomina bodo ostala varna. Graf bo ponovno zgrajen s časom ali ob naslednji zahtevi.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "Nastavite svoj dnevni povzetek nalog",
     "@configureDailySummaryDigest": {
@@ -5577,10 +5436,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "Ko je oseba ustvarjena, lahko greste na prepis pogovora in jim dodelite njihove pripadajoče segmente, na ta način bo Omi sposoben prepoznati tudi njihov govor!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "Tapnite za brisanje",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5659,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "Shranite svoje posnetke v realnem času v zasebno oblačno shranjevanje, medtem ko govorite. Avdio je zajeti in varno shranjen v realnem času.",
+    "storeAudioCloudDescription": "Vaše posnetke naloži sproti, medtem ko govorite, da jih boste lahko kasneje predvajali.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6772,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "Sestavi in deli svojo prilagojeno aplikacijo",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "Iskanje 1500+ aplikacij",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6812,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "Samo kritični opomniki",
+    "frequencyDescMinimal": "Samo nujne stvari, približno 1–3 na dan",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "Samo pomembne posodobitve",
+    "frequencyDescLow": "Samo pomembne stvari, približno 3–5 na dan",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "Redni koristni podioni",
+    "frequencyDescBalanced": "Koristni predlogi, približno 5–8 na dan",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "Pogosti preverjeni",
+    "frequencyDescHigh": "Več predlogov, približno 6–9 na dan",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "Ostanite nenehno vključeni",
+    "frequencyDescMaximum": "Vsaka koristna povezava, do 9 na dan",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8076,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "Zasebno in varno na vaši napravi",
+    "privateAndSecureOnDevice": "Shranjeno v tem telefonu",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8736,14 +8587,6 @@
     "onboardingTellUsAboutYourself": "Povejte nam o sebi",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "Izberite svojo preference",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Dodelite potreben dostop",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "Vse ste pripravljeni",
     "@onboardingYoureAllSet": {
@@ -9680,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "Izberi, s katerim zaledjem se želiš povezati",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "Produkcija",
     "@production": {
         "description": "Label for production API environment"
@@ -9855,10 +9694,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "Tvoji klici so zasebni in varni",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "Nadgradi na Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9960,7 +9795,7 @@
     "fairUse3Day": "3-dnevni rolling",
     "fairUseWeekly": "Tedenski rolling",
     "fairUseAboutTitle": "O pošteni rabi",
-    "fairUseAboutBody": "Omi je namenjen osebnim pogovorom, sestankom in živim interakcijam. Poraba se meri z detektiranim dejanskim časom govora, ne s časom povezave. Če poraba bistveno presega običajne vzorce za neprofesionalno vsebino, se lahko uporabijo prilagoditve.",
+    "fairUseAboutBody": "Omi je zasnovan za osebne pogovore, sestanke in žive interakcije. Poraba se meri po času govorjenja, ne po času povezave. Če je vaša poraba precej nad običajno osebno rabo, boste najprej prejeli opozorilo. Nadaljnja intenzivna raba lahko upočasni ali omeji transkripcijo.",
     "fairUseCaseRefCopied": "{caseRef} kopiran",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10065,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "Ko se tvoj Omi ne poveži s tvojim telefonom, shranja avdio lokalno v svoji vgrajeni pomnilnik. Nikoli ne izgubiš posnetka.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Ko se Omi znova poveži, se posnetki avtomatično prenesejo na tvoj telefon kot začasno skladišče, preden se naložijo.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10105,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "Ta dovoljenja so ključna za delovanje Omi. Omogočajo ključne funkcije, kot so obvestila, izkušnje na osnovi lokacije in zajemanje avdija.",
+    "permissionsPageDescription": "Omi to uporablja za povezavo z vašo napravo, snemanje zvoka, delovanje v ozadju, pošiljanje opomnikov in beleženje, kje so potekali pogovori.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10116,10 +9947,6 @@
     "permissionsSetupTitle": "Pridobi najboljšo izkušnjo",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "Omogoči nekaj dovoljenj, da Omi deluje s polno zmogljivostjo.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "Ta dovoljenja lahko kadarkoli spremenišv Nastavitve > Dovoljenja",
     "@permissionsChangeAnytime": {
@@ -10452,7 +10279,6 @@
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} vprašanj na mesec",
     "operatorSubtitle": "{count} vprašanj na mesec",
-    "architectSubtitle": "Napreden AI — tisoče pogovorov + agentna avtomatizacija",
     "chatUsageCost": "Klepet: ${used} / ${limit} porabljeno ta mesec",
     "chatUsageCostNoLimit": "Klepet: ${used} porabljeno ta mesec",
     "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
@@ -10479,7 +10305,7 @@
     "record": "Posnemi",
     "stop": "Ustavi",
     "recordWithPhoneMic": "Snemaj s telefonskim mikrofonom",
-    "recordWithPhoneMicSubtitle": "Posnemite zvok okoli sebe",
+    "recordWithPhoneMicSubtitle": "Snemanje in prepisovanje z mikrofonom tega telefona",
     "phoneCall": "Telefonski klic",
     "phoneCallSubtitle": "Posnemite klic s prepisom v živo",
     "bulkExportInProgress": "Izvažanje…",
@@ -10550,7 +10376,6 @@
     "invalidPromotionCode": "Neveljavna promocijska koda.",
     "backgroundModeTitle": "Način v ozadju",
     "backgroundModeDescription": "Ohranite snemanje Omi tudi ko je aplikacija popolnoma zaprta.",
-    "backgroundModeNote": "Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.",
     "regenerateRecap": "Ponovno ustvari povzetek",
     "recapRegeneratedSnackbar": "Povzetek ponovno ustvarjen",
     "recapRegenerateFailed": "Povzetka ni bilo mogoče ponovno ustvariti. Poskusite pozneje.",
@@ -10606,7 +10431,7 @@
     "deviceOnboardingContinue": "Naprej",
     "deviceOnboardingFinish": "Končaj",
     "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
-    "deviceOnboardingIntroSubtitle": "Hiter, praktičen ogled vsega, kar zmore vaš Omi.",
+    "deviceOnboardingIntroSubtitle": "Preizkusite živo transkripcijo, postavite vprašanje in bližnjico z dvojnim dotikom.",
     "deviceOnboardingIntroDuration": "Približno 1 minuta",
     "jumpToLatestMessage": "Skoči na najnovejše sporočilo",
     "latest": "Najnovejše",
@@ -10726,7 +10551,6 @@
     "pinAsBaseline": "Pripni kot osnovo",
     "unpinAsBaseline": "Odpni z osnove",
     "baselineMemory": "Osnovni spomin",
-    "alwaysInContext": "Vedno v kontekstu",
     "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
     "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
@@ -10781,7 +10605,7 @@
     "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
     "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
     "home": "Domov",
-    "failedToUpdateBaselineStatus": "Posodobitev osnovnega statusa je spodletela.",
+    "failedToUpdateBaselineStatus": "Tega spomina ni bilo mogoče posodobiti. Poskusite znova.",
     "memoryAllowUse": "Dovoli uporabo",
     "memoryDontUse": "Ne uporabljaj",
     "unstarConversation": "Odstrani zvezdico s pogovora",
@@ -10837,8 +10661,8 @@
     "memoryReviewRight": "Drži",
     "memoryReviewWrong": "Ne drži",
     "memoryReviewFix": "Popravi",
-    "memoryReviewConfirmed": "Potrjeno. Upošteval bom to.",
-    "memoryReviewDropped": "Zavrženo. Izogibal se bom takim dejstvom.",
+    "memoryReviewConfirmed": "Potrjeno.",
+    "memoryReviewDropped": "Odstranjeno iz vaših spominov.",
     "memoryReviewUpdated": "Posodobljeno.",
     "memoryReviewSaveFailed": "Shranjevanje ni uspelo, poskusite znova",
     "indentTask": "Zamik",
@@ -10913,7 +10737,7 @@
     "homeScreen": "Domači zaslon",
     "phoneCalls": "Telefonski klici",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "Filtriranje glasu na strežniku za nižje stroške pretvorbe govora v besedilo",
+    "vadGateDescription": "Pred transkripcijo preskoči tihi zvok, da zniža stroške.",
     "flashCustomFirmware": "Namesti prilagojeno vdelano programsko opremo",
     "flashCustomFirmwareDescription": "Namestite prilagojene različice vdelane programske opreme",
     "selectFirmwareZip": "Izberite datoteko ZIP z vdelano programsko opremo",
@@ -10932,7 +10756,7 @@
     "permissionBlockedHint": "Izklopljeno v Nastavitvah. Dovolite to tam, da boste to lahko uporabljali.",
     "useDifferentAccount": "Uporabi drug račun",
     "onboardingStepOf": "Korak {current} od {total}",
-    "onboardingCompleteMessage": "Pustite, da Omi 2 dni teče v ozadju, in začel vam bo dajati koristne povratne informacije.",
+    "onboardingCompleteMessage": "Omi naj nekaj dni teče. Vaši pogovori, spomini in opravila se bodo začeli polniti.",
     "cantFindDeviceHint": "Ne najdete naprave? Preverite, ali je vklopljena in blizu telefona, nato znova iščite.",
     "scanAgain": "Išči znova",
     "howToPair": "Kako seznaniti",
@@ -11053,8 +10877,7 @@
     "notificationsAndDisplay": "Obvestila in prikaz",
     "helpAndAbout": "Pomoč in o aplikaciji",
     "speakerTagPromptTitle": "Pomagajte Omiju prepoznavati glasove",
-    "speakerTagPromptSubtitle": "Hiter pregled glasov iz zadnjih dveh dni",
-    "speakerTagPromptIsThisYou": "Ste to vi?",
+    "speakerTagPromptIsThisYou": "Ste bili to vi?",
     "speakerTagPromptIsThisPerson": "Je to {name}?",
     "speakerTagPromptWhoIsThis": "Kdo je to?",
     "speakerTagPromptThatsMe": "To sem jaz",
@@ -11229,24 +11052,24 @@
     "confidenceMeterLabel": "Zanesljivost: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{Označili ste enkrat} other{Označili ste {count}-krat}}",
     "confidenceReasonPicked": "{count, plural, =1{Izbrano v 1 predlogu} other{Izbrano v predlogih: {count}}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{Potrdili ste 1 ujemanje} other{Potrjenih ujemanj: {count}}}",
-    "confidenceReasonAutoOnly": "Samo samodejno ujemanje, nikoli potrjeno",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Potrdili ste 1 samodejno oznako} other{Potrdili ste {count} samodejnih oznak}}",
+    "confidenceReasonAutoOnly": "Samodejno označeno, še ni potrjeno",
     "confidenceReasonNeverConfirmed": "Nikoli potrjeno",
     "confidenceReasonCorrected": "Ujemanje ste popravili",
-    "confidenceReasonVoiceReady": "glas pripravljen",
-    "confidenceReasonNeedsVoice": "potreben glas",
+    "confidenceReasonVoiceReady": "glas shranjen",
+    "confidenceReasonNeedsVoice": "še ni vzorca glasu",
     "confidenceReasonNotHeard": "še ni slišan",
     "confidenceSheetTitle": "Zanesljivost",
     "confidenceSummaryConfirmed": "Omi prepozna glas osebe {name}, vi pa ste to potrdili.",
     "confidenceSummaryLikely": "Omi običajno prepozna glas osebe {name}, vendar ste ga potrdili le nekajkrat.",
-    "confidenceSummaryUnverified": "Ničesar, kar ste storili, ne potrjuje osebe {name}.",
+    "confidenceSummaryUnverified": "Osebe {name} še niste označili ali potrdili, zato Omi ni prepričan, ali pozna glas te osebe.",
     "confidenceEvidenceHeader": "Dokazi",
     "evidenceManualLabels": "{count, plural, =1{Označili ste v 1 pogovoru} other{Označili ste v pogovorih: {count}}}",
     "evidenceCardConfirms": "{count, plural, =1{Da pri 1 predlogu} other{Da pri predlogih: {count}}}",
     "evidenceCardPicks": "{count, plural, =1{Izbrano v 1 predlogu} other{Izbrano v predlogih: {count}}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{Potrjeno 1 samodejno ujemanje} other{Potrjenih samodejnih ujemanj: {count}}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 ujemanje premaknjeno k drugi osebi} other{Ujemanj, premaknjenih k drugi osebi: {count}}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 samodejno ujemanje, ki ga nihče ni potrdil} other{Samodejnih ujemanj brez potrditve: {count}}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Potrdili ste 1 samodejno oznako} other{Potrdili ste {count} samodejnih oznak}}",
+    "evidenceAutoCorrected": "{count, plural, =1{1 samodejno oznako ste spremenili na drugo osebo} other{Samodejnih oznak ste spremenili na drugo osebo: {count}}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 samodejna oznaka še ni potrjena} other{Samodejnih oznak še ni potrjenih: {count}}}",
     "evidenceVoiceReady": "Glasovni vzorec je pripravljen",
     "evidenceNoVoice": "Še ni glasovnega vzorca",
     "evidenceNotHeard": "Še ni slišan v pogovoru",
@@ -11259,12 +11082,10 @@
     "effectNeeded": "Potrebno za raven Potrjeno",
     "confidenceToReachConfirmed": "Za raven Potrjeno",
     "confidenceNextVoice": "Omi potrebuje tudi glasovni vzorec osebe {name}. Označite jo z vklopljeno možnostjo Zapomni si glasove.",
-    "confidenceIsConfirmed": "{name}: Potrjeno. Omi se uči ob vsaki oznaki.",
-    "confidenceFootnote": "Zanesljivost bistveno spreminjajo le vaši odgovori. Samodejna ujemanja sama komaj pomagajo.",
+    "confidenceIsConfirmed": "{name}: Potrjeno. Ničesar drugega ni treba storiti.",
+    "confidenceFootnote": "Oznake in potrditve, ki jih naredite vi, štejejo najbolj. Samodejne oznake štejejo malo, dokler jih ne potrdite.",
     "personWhyConfidence": "Zakaj?",
     "pinPersonTitle": "Pripni osebo {name}",
-    "pinPersonSubtitle": "Obdrži osebo {name} in jo pričakuj v svojih pogovorih",
-    "pinPersonHonestLine": "Omi vpraša, preden poveže podobne glasove.",
     "pinAction": "Pripni",
     "unpinAction": "Odpni",
     "personPinnedToast": "Oseba {name} pripeta",
@@ -11302,9 +11123,8 @@
     "voiceMatchPossible": "Možno ujemanje",
     "voiceMatchWeak": "Šibko ujemanje",
     "voiceMatchMeterLabel": "Ujemanje glasu: {level}",
-    "speakerTagPromptHintIdentify": "Vsak odgovor nauči Omi glasu in poveča zanesljivost te osebe.",
-    "speakerTagPromptHintConfirm": "Da poveča zanesljivost osebe {name}.",
-    "speakerTagPromptHintOwner": "Ohranja vaš glasovni profil natančen, da vas Omi nikoli ne poimenuje kot koga drugega.",
+    "speakerTagPromptHintIdentify": "Vaš odgovor bo Omiju pomagal prepoznati ta glas naslednjič.",
+    "speakerTagPromptHintOwner": "Vaš odgovor označi samo predvajani odlomek.",
     "speakerTagPromptSavedAs": "Shranjeno kot {name}",
     "speakerTagPromptSavedAsYou": "Shranjeno kot vi",
     "speakerTagPromptIgnoredNote": "Omi vas o tem glasu ne bo več spraševal",
@@ -11380,7 +11200,7 @@
     "conversationProcessingFailedMessage": "Tega pogovora ni bilo mogoče obdelati.",
     "waitForReprocessing": "Počakajte, da se ponovna obdelava konča.",
     "unnamedSpeakerLabel": "Govorec",
-    "unresolvedSpeakersNotice": "Govorci niso ločeni med posnetki.",
+    "unresolvedSpeakersNotice": "Oznake govorcev se morda ne ujemajo med posnetki tega pogovora.",
     "unresolvedSpeakersTitle": "O oznakah govorcev",
     "unresolvedSpeakersMessage": "Omi ni mogel ločiti drugih glasov med posnetki. Tapnite oznako govorca, da poimenujete, kdo govori.",
     "nameSpeakerTitle": "Poimenujte govorca",
@@ -11504,6 +11324,188 @@
     "dreamReportFound": "{fixes, plural, =1{1 popravek} other{{fixes} popravkov}} · {asks, plural, =1{1 predlog} other{{asks} predlogov}}",
     "dreamReportDropped": "{count, plural, =1{1 starejša sprememba preskočena} other{{count} starejših sprememb preskočenih}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 poročilo zadržano zaradi zasebnosti} other{{count} poročil zadržanih zaradi zasebnosti}}",
+    "speakerTagPromptExcerptSaved": "Odgovor shranjen za ta odlomek.",
+    "pinPersonDescription": "Pripete osebe ostanejo na vrhu vašega seznama Ljudje in jih ne odstrani Počisti.",
+    "buildAndShareApp": "Ustvari in deli svojo prilagojeno aplikacijo",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ članov in več.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "Pri Omi smo zavezani zaščiti vaše zasebnosti. Ta stran vam omogoči nadzor nad tem, kako se vaši podatki shranjevajo in uporabljajo.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Vaši podatki so privzeto zaščiteni s krepko enkripcijo. Preglejte svoje nastavitve in prihodnje možnosti zasebnosti spodaj.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "Nastavite ponudnika STT",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "Uvozite podatke iz drugih virov",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Besede razumene iz vaših pogovorov.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Dejstva in podrobnosti, ki se jih za vas spomnijo.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Pomaga pri diagnostiki težav",
+    "deleteKnowledgeGraphMessage": "To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaši izvirni spomin ostanejo varni. Graf se bo sčasoma ponovno zgrajen ali ob naslednji zahtevi.",
+    "deleteKnowledgeGraphDesc": "Očisti vsa vozlišča in povezave",
+    "enhanceTranscriptAccuracyDesc": "Ko se naš model izboljša, lahko zagotovimo boljše rezultate transkripcije za vaše posnetke.",
+    "bestInClassTranscription": "Najboljša transkripcija brez nastavitve",
+    "optimizedForConversation": "Optimizirana za pogovor",
+    "highAccuracy": "Visoka natančnost",
+    "privacyFirst": "Zasebnost na prvem mestu",
+    "keepGoing": "Nadaljujte, odličko se vam dogaja",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Vaša osebna pot rasti z AI, ki je pozorna na vsako vaše besedo.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "configureSttProvider": "Nastavite ponudnika STT",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Počisti vse vozlišča in povezave",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Dobrodošli v Omi! Vaš AI spremljevalec je pripravljen, da vam pomaga s pogovori, nalogami in še več.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Pogovori se obdelajo samodejno",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Takoj prejmi vpoglede in povzetke",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "Ocena, ki ti pomaga bolje\nosredotočiti se na izvajanje.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Začni pogovor in pusti čaradi, da se dogaja",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Nošljiv AI spremljevalec",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Organizirajte in nadzorujte svoje spomine",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Nastavi vse spomine na zasebno vidljivost",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Nastavi vse spomine na javno vidljivost",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Izberite svoj izbrani jezik za najboljšo izkušnjo z Omi",
+    "enableFeaturesForBestExperience": "Omogočite funkcije za najboljšo izkušnjo z Omi na vaši napravi.",
+    "deliveryTimeDescription": "Kdaj prejeti dnevni povzetek",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "Konfigurirajte ponudnika STT",
+    "setConversationEndDescription": "Nastavite, kdaj se pogovori samodejno končajo",
+    "clearNodesDescription": "Izbrišite vse vozlišče in povezave",
+    "deleteKnowledgeGraphWarning": "To bo izbrisalo vse izpeljane podatke grafa znanja. Vaši prvotni spomini ostajajo varni.",
+    "createAndShareYourApp": "Ustvarite in delite svojo aplikacijo",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "Šifriranje od konca do konca je zlati standard za zasebnost. Ko je omogočeno, se vaši podatki šifrirajo na vaši napravi, preden se pošljejo na naše strežnike. To pomeni, da nihče, niti Omi, ne more dostopati do vaše vsebine.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Vaši podatki so šifrirani s ključem, ki je edinstven za vas na naših strežnikih, gostovanih na Google Cloud. To pomeni, da je vaša surova vsebina nedostopna komurkoli, vključno z osebjem Omi ali Google, neposredno iz baze podatkov.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Omogočite za največjo varnost, kjer samo vi lahko dostopate do vaših podatkov. Tapnite, da se več naučite.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Vaš Omi, osvobođen. Pojdite na unlimited za neskončne možnosti.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "V Omi zelo resno jemljemo vašo zasebnost. Želimo biti transparentni o podatkih, ki jih zbiramo, in kako jih uporabljamo za izboljšanje našega izdelka za vas. Tukaj je, kaj morate vedeti:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "Zavezani smo, da podatke, ki jih zbiramo, uporabljamo samo za izboljšanje Omija za vas. Vaša zasebnost in zaupanje sta nam največje.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Hvala, ker ste dragoceni uporabnik Omija. Če imate vprašanja ali pomisleke, se lahko obrnete na nas na team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "To bo izbrisalo vse izpeljane podatke grafa znanja (vozlišča in povezave). Vaša originalna spomina bodo ostala varna. Graf bo ponovno zgrajen s časom ali ob naslednji zahtevi.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Ko je oseba ustvarjena, lahko greste na prepis pogovora in jim dodelite njihove pripadajoče segmente, na ta način bo Omi sposoben prepoznati tudi njihov govor!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Sestavi in deli svojo prilagojeno aplikacijo",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "Izberite svojo preference",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Dodelite potreben dostop",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Izberi, s katerim zaledjem se želiš povezati",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Tvoji klici so zasebni in varni",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "Ko se tvoj Omi ne poveži s tvojim telefonom, shranja avdio lokalno v svoji vgrajeni pomnilnik. Nikoli ne izgubiš posnetka.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Omogoči nekaj dovoljenj, da Omi deluje s polno zmogljivostjo.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "Napreden AI — tisoče pogovorov + agentna avtomatizacija",
+    "backgroundModeNote": "Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.",
+    "alwaysInContext": "Vedno v kontekstu",
+    "speakerTagPromptSubtitle": "Hiter pregled glasov iz zadnjih dveh dni",
+    "pinPersonSubtitle": "Obdrži osebo {name} in jo pričakuj v svojih pogovorih",
+    "pinPersonHonestLine": "Omi vpraša, preden poveže podobne glasove.",
+    "speakerTagPromptHintConfirm": "Da poveča zanesljivost osebe {name}.",
     "onboardingRatingPromptBody": "Ocena s 5 zvezdicami nam res zelo pomaga ❤️",
     "maxDeviceNameBytesExceeded": "Največ 25 bajtov ({count} bajtov, znaki, ki niso ASCII, uporabljajo več bajtov)"
 }

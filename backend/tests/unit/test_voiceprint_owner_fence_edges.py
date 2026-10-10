@@ -18,9 +18,11 @@ def queued(world, card):
     if not card:
         return assign(segment_ids=['s'])
     tasks = Tasks()
+    # Paid naming/tag cards retain their existing explicit owner-learning action;
+    # the free owner_check path is label-only and covered by test_owner_confirmation_scope.
     request = SpeakerTagPromptAnswerRequest(
         prompt_id='pid',
-        kind='owner_check',
+        kind='identify',
         origin='unnamed',
         conversation_id='c',
         speaker_id=1,

@@ -317,9 +317,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createYourOwnApp => 'Skapa din egen app';
 
   @override
-  String get buildAndShareApp => 'Bygg och dela din anpassade app';
-
-  @override
   String get searchApps => 'Sök appar';
 
   @override
@@ -345,9 +342,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get joinCommunity => 'Gå med i communityn!';
-
-  @override
-  String get membersAndCounting => '8000+ medlemmar och ökar.';
 
   @override
   String get deleteAccountTitle => 'Ta bort konto';
@@ -474,18 +468,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get yourPrivacyYourControl => 'Din integritet, din kontroll';
 
   @override
-  String get privacyIntro =>
-      'På Omi är vi engagerade i att skydda din integritet. Denna sida låter dig kontrollera hur din data lagras och används.';
-
-  @override
   String get learnMore => 'Läs mer…';
 
   @override
   String get dataProtectionLevel => 'Dataskyddsnivå';
-
-  @override
-  String get dataProtectionDesc =>
-      'Din data är säkrad som standard med stark kryptering. Granska dina inställningar och framtida integritetsalternativ nedan.';
 
   @override
   String get appAccess => 'Appåtkomst';
@@ -661,19 +647,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcription => 'Transkription';
 
   @override
-  String get transcriptionConfig => 'Konfigurera STT-leverantör';
-
-  @override
   String get conversationTimeout => 'Konversations timeout';
 
   @override
-  String get conversationTimeoutConfig => 'Ställ in när konversationer avslutas automatiskt';
+  String get conversationTimeoutConfig => 'Hur länge Omi väntar i tystnad innan en konversation avslutas';
 
   @override
   String get importData => 'Importera data';
-
-  @override
-  String get importDataConfig => 'Importera data från andra källor';
 
   @override
   String get debugDiagnostics => 'Felsökning och diagnostik';
@@ -725,9 +705,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get understanding => 'Förstår';
 
   @override
-  String get understandingSubtitle => 'Ord förstådda från dina konversationer.';
-
-  @override
   String get providing => 'Tillhandahåller';
 
   @override
@@ -735,9 +712,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get remembering => 'Kommer ihåg';
-
-  @override
-  String get rememberingSubtitle => 'Fakta och detaljer som kommer ihåg för dig.';
 
   @override
   String get unlimitedPlan => 'Obegränsad plan';
@@ -811,9 +785,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get debugLogsAutoDelete => 'Raderas automatiskt efter 3 dagar.';
 
   @override
-  String get debugLogsDesc => 'Hjälper till att diagnostisera problem';
-
-  @override
   String get noLogFilesFound => 'Inga loggfiler hittades.';
 
   @override
@@ -850,10 +821,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'Ta bort kunskapsgraf?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      'Detta kommer att ta bort all härledd kunskapsgrafsdata (noder och kopplingar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.';
-
-  @override
   String get knowledgeGraphDeleted => 'Kunskapsgraf raderad';
 
   @override
@@ -863,9 +830,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteKnowledgeGraph => 'Ta bort kunskapsgraf';
-
-  @override
-  String get deleteKnowledgeGraphDesc => 'Rensa alla noder och kopplingar';
 
   @override
   String get mcp => 'MCP';
@@ -1110,10 +1074,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get enhanceTranscriptAccuracy => 'Förbättra transkriptionsnoggrannhet';
 
   @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'När vår modell förbättras kan vi ge bättre transkriptionsresultat för dina inspelningar.';
-
-  @override
   String get legalNotice =>
       'Juridiskt meddelande: Lagligheten av att spela in och lagra röstdata kan variera beroende på var du befinner dig och hur du använder denna funktion. Det är ditt ansvar att säkerställa efterlevnad av lokala lagar och förordningar.';
 
@@ -1281,7 +1241,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get languageForTranscription =>
-      'Ställ in ditt språk för skarpare transkriptioner och en personlig upplevelse.';
+      'Omi använder det här språket för transkriptioner, sammanfattningar och minnen.';
 
   @override
   String get singleLanguageModeInfo => 'Enspråksläge är aktiverat. Översättning är inaktiverad för högre noggrannhet.';
@@ -1439,7 +1399,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String integrationComingSoon(String appName) {
-    return 'Integration med $appName kommer snart! Vi arbetar hårt för att ge dig fler alternativ för uppgiftshantering.';
+    return '$appName stöds inte än.';
   }
 
   @override
@@ -1461,7 +1421,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get bringYourOwn => 'Ta med din egen';
 
   @override
-  String get payYourSttProvider => 'Använd Omi fritt. Du betalar bara din STT-leverantör direkt.';
+  String get payYourSttProvider => 'Gratis i Omi. Du betalar din transkriptionsleverantör direkt.';
 
   @override
   String get freeMinutesMonth => '300 gratis minuter/månad ingår. Obegränsat med ';
@@ -1548,7 +1508,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get enterApiKey => 'Ange din API-nyckel';
 
   @override
-  String get storedLocallyNeverShared => 'Lagras lokalt, delas aldrig';
+  String get storedLocallyNeverShared => 'Sparat i telefonen. Skickas bara till din transkriptionsleverantör.';
 
   @override
   String get host => 'Värd';
@@ -1581,18 +1541,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String get logsCopied => 'Loggar kopierade';
 
   @override
-  String get noLogsYet => 'Inga loggar ännu. Börja spela in för att se anpassad STT-aktivitet.';
+  String get noLogsYet =>
+      'Inga loggar ännu. Spela in något för att se förfrågningar till din transkriptionsleverantör.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device använder $reason. Omi kommer att användas.';
+    return '$device spelar in i ett format som leverantören inte kan läsa ($reason), så Omis transkription används i stället.';
   }
 
   @override
   String get omiTranscription => 'Omi-transkription';
-
-  @override
-  String get bestInClassTranscription => 'Bästa i klassen transkription utan konfiguration';
 
   @override
   String get instantSpeakerLabels => 'Omedelbara talaretiketter';
@@ -1601,16 +1559,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get languageTranslation => '100+ språköversättning';
 
   @override
-  String get optimizedForConversation => 'Optimerad för konversation';
-
-  @override
   String get autoLanguageDetection => 'Automatisk språkdetektering';
-
-  @override
-  String get highAccuracy => 'Hög noggrannhet';
-
-  @override
-  String get privacyFirst => 'Integritet först';
 
   @override
   String get saveChanges => 'Spara ändringar';
@@ -1801,9 +1750,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get allDone => 'Allt klart!';
 
   @override
-  String get keepGoing => 'Fortsätt, du gör det bra';
-
-  @override
   String get skipThisQuestion => 'Hoppa över denna fråga';
 
   @override
@@ -1883,8 +1829,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – Din AI-följeslagare';
 
   @override
-  String get captureEveryMoment =>
-      'Fånga varje ögonblick. Få AI-drivna\nsammanfattningar. Ta aldrig anteckningar igen.';
+  String get captureEveryMoment => 'Omi spelar in dina samtal och skriver\nsammanfattningen och uppgifterna åt dig.';
 
   @override
   String get appleWatchSetup => 'Apple Watch-konfiguration';
@@ -1934,16 +1879,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get selectPrimaryLanguage => 'Välj ditt primära språk';
 
   @override
-  String get languageBenefits => 'Ställ in ditt språk för skarpare transkriptioner och en personlig upplevelse';
+  String get languageBenefits => 'Omi använder det här språket för transkriptioner, sammanfattningar och minnen.';
 
   @override
   String get whatsYourPrimaryLanguage => 'Vilket är ditt primära språk?';
 
   @override
   String get selectYourLanguage => 'Välj ditt språk';
-
-  @override
-  String get personalGrowthJourney => 'Din personliga tillväxtresa med AI som lyssnar på varje ord.';
 
   @override
   String get actionItemsTitle => 'Uppgifter';
@@ -2142,9 +2084,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get baselineMemory => 'Utgångsminne';
-
-  @override
-  String get alwaysInContext => 'Alltid i kontexten';
 
   @override
   String get memoryContentHint => 'Jag föredrar möten på morgonen.';
@@ -2442,10 +2381,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createKeyToGetStarted => 'Skapa en nyckel för att komma igång';
 
   @override
-  String get configureSttProvider => 'Konfigurera STT-leverantör';
-
-  @override
-  String get setWhenConversationsAutoEnd => 'Ställ in när konversationer avslutas automatiskt';
+  String get setWhenConversationsAutoEnd => 'Hur länge Omi väntar i tystnad innan en konversation avslutas';
 
   @override
   String get importDataFromOtherSources => 'Importera data från andra källor';
@@ -2472,9 +2408,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String failedToDeleteGraph(String error) {
     return 'Kunde inte radera graf: $error';
   }
-
-  @override
-  String get clearAllNodesAndConnections => 'Rensa alla noder och anslutningar';
 
   @override
   String get connectAiAssistantsToData => 'Anslut AI-assistenter till dina data';
@@ -2571,10 +2504,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get youreAllSet => 'Du är redo!';
 
   @override
-  String get welcomeToOmiDescription =>
-      'Välkommen till Omi! Din AI-följeslagare är redo att hjälpa dig med samtal, uppgifter och mer.';
-
-  @override
   String get startUsingOmi => 'Börja använda Omi';
 
   @override
@@ -2654,12 +2583,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get useMobileAppToCapture => 'Använd din mobilapp för att spela in ljud';
 
   @override
-  String get conversationsProcessedAutomatically => 'Konversationer bearbetas automatiskt';
-
-  @override
-  String get getInsightsInstantly => 'Få insikter och sammanfattningar omedelbart';
-
-  @override
   String get showAll => 'Visa alla →';
 
   @override
@@ -2667,9 +2590,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dailyScore => 'DAGLIG POÄNG';
-
-  @override
-  String get dailyScoreDescription => 'En poäng för att hjälpa dig\nfokusera bättre på utförande.';
 
   @override
   String get searchResults => 'Sökresultat';
@@ -3061,9 +2981,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get connectionNeeded => '🌐 Anslutning krävs';
 
   @override
-  String get startConversation => 'Starta en konversation och låt magin börja';
-
-  @override
   String get checkInternetConnection => 'Kontrollera din internetanslutning';
 
   @override
@@ -3251,9 +3168,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get getOmiDevice => 'Skaffa Omi-enhet';
 
   @override
-  String get wearableAiCompanion => 'Bärbar AI-följeslagare';
-
-  @override
   String get loadingMemories => 'Laddar minnen…';
 
   @override
@@ -3296,22 +3210,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get makePrivate => 'Gör privat';
 
   @override
-  String get organizeAndControlMemories => 'Organisera och kontrollera dina minnen';
-
-  @override
   String get total => 'Totalt';
 
   @override
   String get makeAllMemoriesPrivate => 'Gör alla minnen privata';
 
   @override
-  String get setAllMemoriesToPrivate => 'Ställ in alla minnen till privat synlighet';
-
-  @override
   String get makeAllMemoriesPublic => 'Gör alla minnen offentliga';
-
-  @override
-  String get setAllMemoriesToPublic => 'Ställ in alla minnen till offentlig synlighet';
 
   @override
   String get permanentlyRemoveAllMemories => 'Ta bort alla minnen permanent från Omi';
@@ -3380,9 +3285,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chooseYourLanguage => 'Välj ditt språk';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'Välj ditt föredragna språk för den bästa Omi-upplevelsen';
-
-  @override
   String get searchLanguages => 'Sök språk';
 
   @override
@@ -3405,9 +3307,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String charactersCount(int count) {
     return '$count tecken';
   }
-
-  @override
-  String get enableFeaturesForBestExperience => 'Aktivera funktioner för den bästa Omi-upplevelsen på din enhet.';
 
   @override
   String get microphoneAccess => 'Mikrofonåtkomst';
@@ -3825,9 +3724,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deliveryTime => 'Leveranstid';
 
   @override
-  String get deliveryTimeDescription => 'När du ska få din dagliga sammanfattning';
-
-  @override
   String get subscription => 'Prenumeration';
 
   @override
@@ -3867,12 +3763,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get shortcutChangeInstruction => 'Klicka på en genväg för att ändra den. Tryck på Escape för att avbryta.';
 
   @override
-  String get configureSTTProvider => 'Konfigurera STT-leverantör';
-
-  @override
-  String get setConversationEndDescription => 'Ställ in när konversationer avslutas automatiskt';
-
-  @override
   String get importDataDescription => 'Importera data från andra källor';
 
   @override
@@ -3882,14 +3772,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get exportingConversations => 'Exporterar konversationer…';
 
   @override
-  String get clearNodesDescription => 'Rensa alla noder och anslutningar';
-
-  @override
   String get deleteKnowledgeGraphQuestion => 'Ta bort kunskapsgraf?';
-
-  @override
-  String get deleteKnowledgeGraphWarning =>
-      'Detta raderar all härledd kunskapsgrafdata. Dina ursprungliga minnen förblir säkra.';
 
   @override
   String get connectOmiWithAI => 'Anslut Omi till AI-assistenter';
@@ -4210,9 +4093,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get createAnApp => 'Skapa en app';
 
   @override
-  String get createAndShareYourApp => 'Skapa och dela din app';
-
-  @override
   String get itemApp => 'App';
 
   @override
@@ -4306,10 +4186,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get maximumSecurityE2ee => 'Maximal säkerhet (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      'End-to-end-kryptering är guldstandarden för integritet. När det är aktiverat krypteras dina data på din enhet innan de skickas till våra servrar. Det betyder att ingen, inte ens Omi, kan komma åt ditt innehåll.';
-
-  @override
   String get importantTradeoffs => 'Viktiga avvägningar:';
 
   @override
@@ -4341,15 +4217,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get secureEncryption => 'Säker kryptering';
 
   @override
-  String get secureEncryptionDescription =>
-      'Dina data krypteras med en nyckel som är unik för dig på våra servrar, som finns på Google Cloud. Det betyder att ditt råa innehåll är otillgängligt för alla, inklusive Omi-personal eller Google, direkt från databasen.';
-
-  @override
   String get endToEndEncryption => 'End-to-end-kryptering';
-
-  @override
-  String get e2eeCardDescription =>
-      'Aktivera för maximal säkerhet där endast du kan komma åt dina data. Tryck för att lära dig mer.';
 
   @override
   String get dataAlwaysEncrypted => 'Oavsett nivå är dina data alltid krypterade i vila och under överföring.';
@@ -4421,7 +4289,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get trainingDataBullets =>
-      '• Dina data hjälper till att förbättra AI-modeller\n• Endast icke-känsliga data delas\n• Helt transparent process';
+      '• Dina data hjälper till att förbättra AI-modeller\n• Endast icke känsliga data delas';
 
   @override
   String get learnMoreAtOmiTraining => 'Läs mer på omi.me/training';
@@ -4501,9 +4369,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Du har den obegränsade planen.';
 
   @override
-  String get yourOmiUnleashed => 'Din Omi, frigjord. Bli obegränsad för oändliga möjligheter.';
-
-  @override
   String planEndedOn(String date) {
     return 'Din plan avslutades $date.\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
   }
@@ -4581,10 +4446,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'Din integritet är viktig för oss';
 
   @override
-  String get privacyIntroText =>
-      'På Omi tar vi din integritet på största allvar. Vi vill vara transparenta om de uppgifter vi samlar in och hur vi använder dem. Här är vad du behöver veta:';
-
-  @override
   String get whatWeTrack => 'Vad vi spårar';
 
   @override
@@ -4595,14 +4456,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get ourCommitment => 'Vårt åtagande';
-
-  @override
-  String get commitmentText =>
-      'Vi förbinder oss att endast använda de uppgifter vi samlar in för att göra Omi till en bättre produkt för dig. Din integritet och ditt förtroende är av största vikt för oss.';
-
-  @override
-  String get thankYouText =>
-      'Tack för att du är en uppskattad användare av Omi. Om du har frågor eller funderingar, kontakta oss gärna på team@basedhardware.com.';
 
   @override
   String get password => 'Lösenord';
@@ -4648,10 +4501,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get exportStartedMayTakeFewSeconds => 'Export startad. Detta kan ta några sekunder…';
-
-  @override
-  String get knowledgeGraphDeleteDescription =>
-      'Detta kommer att radera alla härledda kunskapsgrafdata (noder och anslutningar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.';
 
   @override
   String get configureDailySummaryDigest => 'Konfigurera din dagliga uppgiftssammanfattning';
@@ -4777,10 +4626,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get howItWorksTitle => 'Hur fungerar det?';
 
   @override
-  String get howPeopleWorks =>
-      'När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!';
-
-  @override
   String get tapToDelete => 'Tryck för att ta bort';
 
   @override
@@ -4840,7 +4685,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get storeAudioCloudDescription =>
-      'Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid.';
+      'Laddar upp dina inspelningar när du talar så att du kan spela upp dem senare.';
 
   @override
   String get downloadingFirmware => 'Laddar ner firmware';
@@ -5662,9 +5507,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get removeFromAllFolders => 'Ta bort från alla mappar';
 
   @override
-  String get buildAndShareYourCustomApp => 'Bygg och dela din anpassade app';
-
-  @override
   String get searchAppsPlaceholder => 'Sök bland 1500+ appar';
 
   @override
@@ -5692,19 +5534,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get frequencyDescOff => 'Inga proaktiva aviseringar';
 
   @override
-  String get frequencyDescMinimal => 'Endast kritiska påminnelser';
+  String get frequencyDescMinimal => 'Bara det brådskande, ungefär 1–3 om dagen';
 
   @override
-  String get frequencyDescLow => 'Endast viktiga uppdateringar';
+  String get frequencyDescLow => 'Bara viktiga saker, ungefär 3–5 om dagen';
 
   @override
-  String get frequencyDescBalanced => 'Regelbundna hjälpsamma påminnelser';
+  String get frequencyDescBalanced => 'Användbara förslag, ungefär 5–8 om dagen';
 
   @override
-  String get frequencyDescHigh => 'Frekventa kontroller';
+  String get frequencyDescHigh => 'Fler förslag, ungefär 6–9 om dagen';
 
   @override
-  String get frequencyDescMaximum => 'Håll dig ständigt engagerad';
+  String get frequencyDescMaximum => 'Varje användbar koppling, upp till 9 om dagen';
 
   @override
   String get clearChatQuestion => 'Rensa chatt?';
@@ -6625,7 +6467,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transferToPhone => 'Överför till telefon';
 
   @override
-  String get privateAndSecureOnDevice => 'Privat och säker på din enhet';
+  String get privateAndSecureOnDevice => 'Sparat i den här telefonen';
 
   @override
   String get recordingInfo => 'Inspelningsinformation';
@@ -7093,12 +6935,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingTellUsAboutYourself => 'Berätta om dig själv';
-
-  @override
-  String get onboardingChooseYourPreference => 'Välj dina inställningar';
-
-  @override
-  String get onboardingGrantRequiredAccess => 'Bevilja nödvändig åtkomst';
 
   @override
   String get onboardingYoureAllSet => 'Du är redo';
@@ -7981,9 +7817,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get apiEnvironment => 'API-miljö';
 
   @override
-  String get apiEnvironmentDescription => 'Välj vilken server att ansluta till';
-
-  @override
   String get production => 'Produktion';
 
   @override
@@ -8247,9 +8080,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get phoneCallsUpsellFeature3 => 'Mottagare ser ditt riktiga nummer, inte ett slumpmässigt';
 
   @override
-  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
-
-  @override
   String get phoneCallsUpgradeButton => 'Uppgradera till Obegränsad';
 
   @override
@@ -8355,7 +8185,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get fairUseAboutBody =>
-      'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts efter faktisk detekterad taltid, inte anslutningstid. Om användningen avsevärt överstiger normala mönster för icke-personligt innehåll kan justeringar tillämpas.';
+      'Omi är utformat för personliga samtal, möten och liveinteraktioner. Användningen mäts i tid du talar, inte i anslutningstid. Om din användning ligger långt över normal personlig användning får du först en varning. Fortsatt kraftig användning kan göra transkriptionen långsammare eller begränsa den.';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8449,10 +8279,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get cancelSyncQuestion => 'Avbryta synkronisering?';
 
   @override
-  String get omisStorageDesc =>
-      'När din Omi inte är ansluten till din telefon lagrar den ljud lokalt i sitt inbyggda minne. Du förlorar aldrig en inspelning.';
-
-  @override
   String get phoneStorageDesc =>
       'När Omi återansluter överförs inspelningar automatiskt till din telefon innan uppladdning.';
 
@@ -8483,7 +8309,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get permissionsPageDescription =>
-      'Dessa behörigheter är centrala för hur Omi fungerar. De aktiverar nyckelfunktioner som aviseringar, platsbaserade upplevelser och ljudinspelning.';
+      'Omi använder dessa för att ansluta till din enhet, spela in ljud, fortsätta arbeta i bakgrunden, skicka påminnelser och notera var konversationer ägde rum.';
 
   @override
   String get permissionsRequiredDescription =>
@@ -8491,9 +8317,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get permissionsSetupTitle => 'Få den bästa upplevelsen';
-
-  @override
-  String get permissionsSetupDescription => 'Aktivera några behörigheter så att Omi kan göra sin magi.';
 
   @override
   String get permissionsChangeAnytime => 'Du kan ändra dessa när som helst i Inställningar > Behörigheter';
@@ -9011,9 +8834,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get architectSubtitle => 'Avancerad AI — tusentals chattar + agentautomatisering';
-
-  @override
   String chatUsageCost(String used, String limit) {
     return 'Chatt: \$$used / \$$limit använt denna månad';
   }
@@ -9086,7 +8906,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get recordWithPhoneMic => 'Spela in med telefonmikrofon';
 
   @override
-  String get recordWithPhoneMicSubtitle => 'Fånga ljudet runt dig';
+  String get recordWithPhoneMicSubtitle => 'Spela in och transkribera med telefonens mikrofon';
 
   @override
   String get phoneCall => 'Telefonsamtal';
@@ -9320,9 +9140,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get backgroundModeDescription => 'Håll din Omi inspelande även när appen är helt stängd.';
 
   @override
-  String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
-
-  @override
   String get backgroundModeUnavailable =>
       'Bakgrundsläge är inte tillgängligt eftersom ingen kompatibel enhet är ansluten. Anslut en Omi-, OpenGlass- eller Friend Pendant-enhet för att använda den här funktionen.';
 
@@ -9494,7 +9311,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
 
   @override
-  String get deviceOnboardingIntroSubtitle => 'En snabb, praktisk rundtur i allt din Omi kan.';
+  String get deviceOnboardingIntroSubtitle => 'Testa liveinspelning, att ställa en fråga och genvägen med dubbeltryck.';
 
   @override
   String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
@@ -10003,7 +9820,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get home => 'Hem';
 
   @override
-  String get failedToUpdateBaselineStatus => 'Det gick inte att uppdatera baslinjestatus.';
+  String get failedToUpdateBaselineStatus => 'Det gick inte att uppdatera minnet. Försök igen.';
 
   @override
   String get unstarConversation => 'Ta bort stjärna från konversation';
@@ -10261,10 +10078,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryReviewFix => 'Rätta';
 
   @override
-  String get memoryReviewConfirmed => 'Bekräftat. Jag agerar utifrån det.';
+  String get memoryReviewConfirmed => 'Bekräftat.';
 
   @override
-  String get memoryReviewDropped => 'Borttaget. Jag undviker fakta som detta.';
+  String get memoryReviewDropped => 'Borttaget från dina minnen.';
 
   @override
   String get memoryReviewUpdated => 'Uppdaterat.';
@@ -10567,7 +10384,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get vadGate => 'VAD Gate';
 
   @override
-  String get vadGateDescription => 'Röstfilter på servern för att sänka kostnaderna för tal-till-text';
+  String get vadGateDescription => 'Hoppar över tyst ljud före transkriptionen för att minska kostnaden.';
 
   @override
   String get flashCustomFirmware => 'Installera egen firmware';
@@ -10632,7 +10449,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingCompleteMessage =>
-      'Låt Omi köras i bakgrunden i 2 dagar så börjar den ge dig användbar feedback.';
+      'Låt Omi vara igång i ett par dagar. Dina konversationer, minnen och uppgifter börjar fyllas på.';
 
   @override
   String get cantFindDeviceHint =>
@@ -11073,10 +10890,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get speakerTagPromptTitle => 'Hjälp Omi att känna igen röster';
 
   @override
-  String get speakerTagPromptSubtitle => 'En snabb koll på röster från de senaste två dagarna';
-
-  @override
-  String get speakerTagPromptIsThisYou => 'Är det här du?';
+  String get speakerTagPromptIsThisYou => 'Var det här du?';
 
   @override
   String speakerTagPromptIsThisPerson(String name) {
@@ -11707,14 +11521,14 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Du bekräftade $count matchningar',
-      one: 'Du bekräftade 1 matchning',
+      other: 'Du bekräftade $count automatiska märkningar',
+      one: 'Du bekräftade 1 automatisk märkning',
     );
     return '$_temp0';
   }
 
   @override
-  String get confidenceReasonAutoOnly => 'Bara automatiskt matchad, aldrig bekräftad';
+  String get confidenceReasonAutoOnly => 'Märkt automatiskt, inte bekräftat ännu';
 
   @override
   String get confidenceReasonNeverConfirmed => 'Aldrig bekräftad';
@@ -11723,10 +11537,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get confidenceReasonCorrected => 'Du korrigerade matchningen';
 
   @override
-  String get confidenceReasonVoiceReady => 'röst klar';
+  String get confidenceReasonVoiceReady => 'röst sparad';
 
   @override
-  String get confidenceReasonNeedsVoice => 'behöver röst';
+  String get confidenceReasonNeedsVoice => 'inget röstprov ännu';
 
   @override
   String get confidenceReasonNotHeard => 'ännu inte hörd';
@@ -11746,7 +11560,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String confidenceSummaryUnverified(String name) {
-    return 'Inget du gjort stöder $name än.';
+    return 'Du har ännu inte märkt eller bekräftat $name, så Omi är inte säker på att den känner igen personens röst.';
   }
 
   @override
@@ -11790,8 +11604,8 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Bekräftade $count automatiska matchningar',
-      one: 'Bekräftade 1 automatisk matchning',
+      other: 'Du bekräftade $count automatiska märkningar',
+      one: 'Du bekräftade 1 automatisk märkning',
     );
     return '$_temp0';
   }
@@ -11801,8 +11615,8 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count matchningar flyttade till någon annan',
-      one: '1 matchning flyttad till någon annan',
+      other: 'Du ändrade $count automatiska märkningar till en annan person',
+      one: 'Du ändrade 1 automatisk märkning till en annan person',
     );
     return '$_temp0';
   }
@@ -11812,8 +11626,8 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count automatiska matchningar som ingen bekräftat',
-      one: '1 automatisk matchning som ingen bekräftat',
+      other: '$count automatiska märkningar har inte bekräftats än',
+      one: '1 automatisk märkning har inte bekräftats än',
     );
     return '$_temp0';
   }
@@ -11858,12 +11672,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String confidenceIsConfirmed(String name) {
-    return '$name är Bekräftad. Omi fortsätter lära sig av varje märkning.';
+    return '$name är Bekräftad. Du behöver inte göra något mer.';
   }
 
   @override
   String get confidenceFootnote =>
-      'Bara dina svar påverkar säkerheten mycket. Automatiska matchningar hjälper knappt på egen hand.';
+      'Dina egna märkningar och bekräftelser väger tyngst. Automatiska märkningar väger lite tills du bekräftar dem.';
 
   @override
   String get personWhyConfidence => 'Varför?';
@@ -11872,14 +11686,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String pinPersonTitle(String name) {
     return 'Fäst $name';
   }
-
-  @override
-  String pinPersonSubtitle(String name) {
-    return 'Behåll $name och förvänta dig personen i dina konversationer';
-  }
-
-  @override
-  String get pinPersonHonestLine => 'Omi frågar innan liknande röster matchas.';
 
   @override
   String get pinAction => 'Fäst';
@@ -12040,16 +11846,10 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintIdentify => 'Varje svar lär Omi en röst och ökar personens säkerhet.';
+  String get speakerTagPromptHintIdentify => 'Ditt svar hjälper Omi att känna igen den här rösten nästa gång.';
 
   @override
-  String speakerTagPromptHintConfirm(String name) {
-    return 'Ja ökar säkerheten för $name.';
-  }
-
-  @override
-  String get speakerTagPromptHintOwner =>
-      'Håller din egen röstprofil skarp, så att Omi aldrig döper dig till någon annan.';
+  String get speakerTagPromptHintOwner => 'Ditt svar märker bara det spelade utdraget.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -12378,7 +12178,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get unnamedSpeakerLabel => 'Talare';
 
   @override
-  String get unresolvedSpeakersNotice => 'Talarna är inte separerade mellan inspelningar.';
+  String get unresolvedSpeakersNotice =>
+      'Talaretiketter kanske inte stämmer överens mellan inspelningarna i den här konversationen.';
 
   @override
   String get unresolvedSpeakersTitle => 'Om talarmarkeringar';
@@ -12808,6 +12609,212 @@ class AppLocalizationsSv extends AppLocalizations {
       one: '1 rapport hölls tillbaka av sekretesskäl',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get speakerTagPromptExcerptSaved => 'Svaret har sparats för detta utdrag.';
+
+  @override
+  String get pinPersonDescription =>
+      'Fästa personer ligger överst i din lista över Personer och tas inte bort av Rensa upp.';
+
+  @override
+  String get buildAndShareApp => 'Bygg och dela din anpassade app';
+
+  @override
+  String get membersAndCounting => '8000+ medlemmar och ökar.';
+
+  @override
+  String get privacyIntro =>
+      'På Omi är vi engagerade i att skydda din integritet. Denna sida låter dig kontrollera hur din data lagras och används.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Din data är säkrad som standard med stark kryptering. Granska dina inställningar och framtida integritetsalternativ nedan.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurera STT-leverantör';
+
+  @override
+  String get importDataConfig => 'Importera data från andra källor';
+
+  @override
+  String get understandingSubtitle => 'Ord förstådda från dina konversationer.';
+
+  @override
+  String get rememberingSubtitle => 'Fakta och detaljer som kommer ihåg för dig.';
+
+  @override
+  String get debugLogsDesc => 'Hjälper till att diagnostisera problem';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Detta kommer att ta bort all härledd kunskapsgrafsdata (noder och kopplingar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Rensa alla noder och kopplingar';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'När vår modell förbättras kan vi ge bättre transkriptionsresultat för dina inspelningar.';
+
+  @override
+  String get bestInClassTranscription => 'Bästa i klassen transkription utan konfiguration';
+
+  @override
+  String get optimizedForConversation => 'Optimerad för konversation';
+
+  @override
+  String get highAccuracy => 'Hög noggrannhet';
+
+  @override
+  String get privacyFirst => 'Integritet först';
+
+  @override
+  String get keepGoing => 'Fortsätt, du gör det bra';
+
+  @override
+  String get personalGrowthJourney => 'Din personliga tillväxtresa med AI som lyssnar på varje ord.';
+
+  @override
+  String get alwaysInContext => 'Alltid i kontexten';
+
+  @override
+  String get configureSttProvider => 'Konfigurera STT-leverantör';
+
+  @override
+  String get clearAllNodesAndConnections => 'Rensa alla noder och anslutningar';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Välkommen till Omi! Din AI-följeslagare är redo att hjälpa dig med samtal, uppgifter och mer.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Konversationer bearbetas automatiskt';
+
+  @override
+  String get getInsightsInstantly => 'Få insikter och sammanfattningar omedelbart';
+
+  @override
+  String get dailyScoreDescription => 'En poäng för att hjälpa dig\nfokusera bättre på utförande.';
+
+  @override
+  String get startConversation => 'Starta en konversation och låt magin börja';
+
+  @override
+  String get wearableAiCompanion => 'Bärbar AI-följeslagare';
+
+  @override
+  String get organizeAndControlMemories => 'Organisera och kontrollera dina minnen';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Ställ in alla minnen till privat synlighet';
+
+  @override
+  String get setAllMemoriesToPublic => 'Ställ in alla minnen till offentlig synlighet';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Välj ditt föredragna språk för den bästa Omi-upplevelsen';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Aktivera funktioner för den bästa Omi-upplevelsen på din enhet.';
+
+  @override
+  String get deliveryTimeDescription => 'När du ska få din dagliga sammanfattning';
+
+  @override
+  String get configureSTTProvider => 'Konfigurera STT-leverantör';
+
+  @override
+  String get setConversationEndDescription => 'Ställ in när konversationer avslutas automatiskt';
+
+  @override
+  String get clearNodesDescription => 'Rensa alla noder och anslutningar';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Detta raderar all härledd kunskapsgrafdata. Dina ursprungliga minnen förblir säkra.';
+
+  @override
+  String get createAndShareYourApp => 'Skapa och dela din app';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-kryptering är guldstandarden för integritet. När det är aktiverat krypteras dina data på din enhet innan de skickas till våra servrar. Det betyder att ingen, inte ens Omi, kan komma åt ditt innehåll.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dina data krypteras med en nyckel som är unik för dig på våra servrar, som finns på Google Cloud. Det betyder att ditt råa innehåll är otillgängligt för alla, inklusive Omi-personal eller Google, direkt från databasen.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktivera för maximal säkerhet där endast du kan komma åt dina data. Tryck för att lära dig mer.';
+
+  @override
+  String get yourOmiUnleashed => 'Din Omi, frigjord. Bli obegränsad för oändliga möjligheter.';
+
+  @override
+  String get privacyIntroText =>
+      'På Omi tar vi din integritet på största allvar. Vi vill vara transparenta om de uppgifter vi samlar in och hur vi använder dem. Här är vad du behöver veta:';
+
+  @override
+  String get commitmentText =>
+      'Vi förbinder oss att endast använda de uppgifter vi samlar in för att göra Omi till en bättre produkt för dig. Din integritet och ditt förtroende är av största vikt för oss.';
+
+  @override
+  String get thankYouText =>
+      'Tack för att du är en uppskattad användare av Omi. Om du har frågor eller funderingar, kontakta oss gärna på team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Detta kommer att radera alla härledda kunskapsgrafdata (noder och anslutningar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.';
+
+  @override
+  String get howPeopleWorks =>
+      'När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bygg och dela din anpassade app';
+
+  @override
+  String get onboardingChooseYourPreference => 'Välj dina inställningar';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Bevilja nödvändig åtkomst';
+
+  @override
+  String get apiEnvironmentDescription => 'Välj vilken server att ansluta till';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
+
+  @override
+  String get omisStorageDesc =>
+      'När din Omi inte är ansluten till din telefon lagrar den ljud lokalt i sitt inbyggda minne. Du förlorar aldrig en inspelning.';
+
+  @override
+  String get permissionsSetupDescription => 'Aktivera några behörigheter så att Omi kan göra sin magi.';
+
+  @override
+  String get architectSubtitle => 'Avancerad AI — tusentals chattar + agentautomatisering';
+
+  @override
+  String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
+
+  @override
+  String get speakerTagPromptSubtitle => 'En snabb koll på röster från de senaste två dagarna';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Behåll $name och förvänta dig personen i dina konversationer';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi frågar innan liknande röster matchas.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja ökar säkerheten för $name.';
   }
 
   @override
