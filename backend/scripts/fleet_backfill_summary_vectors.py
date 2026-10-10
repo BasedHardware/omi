@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     if state.get('started_at') is None:
         state['started_at'] = datetime.now(timezone.utc).isoformat()
 
-    todo = [u for u in uids if u not in state['done'] and (args.retry_failed or u not in state['failed'])]
+    pending_uids = [u for u in uids if u not in state['done'] and (args.retry_failed or u not in state['failed'])]
     mode_str = 'APPLY' if args.apply else 'DRY-RUN'
     print(
         json.dumps(
@@ -153,13 +153,13 @@ def main(argv: list[str] | None = None) -> int:
                 'total_uids': len(uids),
                 'already_done': len(state['done']),
                 'already_failed': len(state['failed']),
-                'to_run': len(todo),
+                'to_run': len(pending_uids),
             }
         )
     )
 
     exit_code = 0
-    for uid in todo:
+    for uid in pending_uids:
         try:
             summary = backfill_user(
                 uid,
