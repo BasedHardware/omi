@@ -178,6 +178,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             is_app_webhook_disabled=MagicMock(return_value=False),
             disable_app_in_firestore=MagicMock(),
         ),
+        'database.webhook_signing': _auto_module(
+            'database.webhook_signing',
+            active_app_signing_secrets=MagicMock(return_value=[]),
+        ),
         'database.chat': _auto_module(
             'database.chat',
             add_app_message=add_app_message,

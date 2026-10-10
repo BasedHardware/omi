@@ -739,6 +739,7 @@ class TestChatToolCircuitBreaker:
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "active_app_signing_secrets", return_value=[]),
             patch.object(mod, "record_app_webhook_success") as mock_success,
             patch("httpx.AsyncClient") as mock_client_cls,
         ):
@@ -778,6 +779,7 @@ class TestChatToolCircuitBreaker:
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "active_app_signing_secrets", return_value=[]),
             patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
         ):
@@ -813,6 +815,7 @@ class TestChatToolCircuitBreaker:
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "active_app_signing_secrets", return_value=[]),
             patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
         ):
@@ -1368,6 +1371,7 @@ class TestMarketplaceIntegrationHealthPaths:
         with (
             patch.object(_app_tools, 'is_app_webhook_disabled', return_value=False),
             patch.object(_app_tools, 'get_webhook_circuit_breaker', return_value=mock_cb),
+            patch.object(_app_tools, 'active_app_signing_secrets', return_value=[]),
             patch.object(_app_tools, 'record_app_webhook_failure', return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
         ):

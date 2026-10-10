@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from typing import List
 import os
 import time
+import uuid
 
 import httpx
 
@@ -28,6 +29,7 @@ from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
+from database.webhook_signing import active_app_signing_secrets
 from database.webhook_health import (
     ACTION_DISABLE,
     ACTION_REDIRECT_NOT_FOLLOWED,
@@ -55,6 +57,7 @@ from models.chat import Message
 from models.conversation import Conversation
 from models.transcript_segment import transcript_segment_for_client
 from models.conversation_enums import ConversationSource
+from models.users import WebhookType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils.apps import get_available_apps
@@ -78,6 +81,7 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.webhook_signing import signed_body_kwargs
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
@@ -303,16 +307,25 @@ async def trigger_external_integrations(
                     failed_deliveries.append(app.id)
             return
 
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
             payload = serialize_datetimes(conversation_dict)
             headers = dict(pin_kwargs['headers'])
             if idempotency_key:
                 headers['X-Omi-Idempotency-Key'] = idempotency_key
+            body_kwargs = signed_body_kwargs(
+                signing_secrets,
+                headers,
+                uid=uid,
+                event=WebhookType.memory_created.value,
+                delivery_id=idempotency_key or str(uuid.uuid4()),
+                json_payload=payload,
+            )
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    json=payload,
+                    **body_kwargs,
                     headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
@@ -895,16 +908,25 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         if not cb.allow_request():
             return
 
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
             headers = dict(pin_kwargs['headers'])
             headers['Content-Type'] = 'application/octet-stream'
+            body_kwargs = signed_body_kwargs(
+                signing_secrets,
+                headers,
+                uid=uid,
+                event=WebhookType.audio_bytes.value,
+                delivery_id=str(uuid.uuid4()),
+                content=bytes(data),
+            )
             async with get_webhook_semaphore():
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    content=bytes(data),
+                    **body_kwargs,
                     headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
@@ -1006,13 +1028,23 @@ async def _async_trigger_realtime_integrations(
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
             return
 
+        signing_secrets = await run_blocking(db_executor, active_app_signing_secrets, app.id)
         try:
+            headers = dict(pin_kwargs['headers'])
+            body_kwargs = signed_body_kwargs(
+                signing_secrets,
+                headers,
+                uid=uid,
+                event=WebhookType.realtime_transcript.value,
+                delivery_id=str(uuid.uuid4()),
+                json_payload={"session_id": uid, "segments": [transcript_segment_for_client(s) for s in segments]},
+            )
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    json={"session_id": uid, "segments": [transcript_segment_for_client(s) for s in segments]},
-                    headers=pin_kwargs['headers'],
+                    **body_kwargs,
+                    headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
                 )

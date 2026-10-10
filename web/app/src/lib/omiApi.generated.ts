@@ -5627,6 +5627,22 @@ export interface WebSearchAssistantSettings {
   enabled?: boolean | null;
 }
 
+export interface WebhookSigningSecretDeletedResponse {
+  status: string;
+}
+
+export interface WebhookSigningSecretIssuedResponse {
+  created_at: string;
+  previous_valid_until?: string | null;
+  secret: string;
+}
+
+export interface WebhookSigningSecretStatusResponse {
+  configured: boolean;
+  created_at?: string | null;
+  previous_valid_until?: string | null;
+}
+
 export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary" | "button_event";
 
 export interface WhatMattersNowProjection {
@@ -6542,6 +6558,9 @@ export interface OmiApiSchemas {
   "VoiceProfileSettingsUpdate": VoiceProfileSettingsUpdate;
   "VoiceReadiness": VoiceReadiness;
   "WebSearchAssistantSettings": WebSearchAssistantSettings;
+  "WebhookSigningSecretDeletedResponse": WebhookSigningSecretDeletedResponse;
+  "WebhookSigningSecretIssuedResponse": WebhookSigningSecretIssuedResponse;
+  "WebhookSigningSecretStatusResponse": WebhookSigningSecretStatusResponse;
   "WebhookType": WebhookType;
   "WhatMattersNowProjection": WhatMattersNowProjection;
   "WorkIntentReceipt": WorkIntentReceipt;
@@ -7290,6 +7309,34 @@ export interface OmiApiPaths {
       operationId: "cancel_app_subscription_v1_apps__app_id__subscription_delete";
       responses: {
         "200": AppSubscriptionCancelResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/apps/{app_id}/webhook-signing-secret": {
+    get: {
+      operationId: "get_app_webhook_signing_secret_status_v1_apps__app_id__webhook_signing_secret_get";
+      responses: {
+        "200": WebhookSigningSecretStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "issue_app_webhook_signing_secret_v1_apps__app_id__webhook_signing_secret_post";
+      responses: {
+        "200": WebhookSigningSecretIssuedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_app_webhook_signing_secret_v1_apps__app_id__webhook_signing_secret_delete";
+      responses: {
+        "200": WebhookSigningSecretDeletedResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -10365,6 +10412,32 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/users/developer/webhook-signing-secret": {
+    get: {
+      operationId: "get_user_webhook_signing_secret_status_v1_users_developer_webhook_signing_secret_get";
+      responses: {
+        "200": WebhookSigningSecretStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "issue_user_webhook_signing_secret_v1_users_developer_webhook_signing_secret_post";
+      responses: {
+        "200": WebhookSigningSecretIssuedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_user_webhook_signing_secret_v1_users_developer_webhook_signing_secret_delete";
+      responses: {
+        "200": WebhookSigningSecretDeletedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/users/developer/webhook/{wtype}": {
     get: {
       operationId: "get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get";
@@ -13048,6 +13121,63 @@ export async function get_app_subscription_v1_apps__app_id__subscription_get(pat
 export async function cancel_app_subscription_v1_apps__app_id__subscription_delete(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AppSubscriptionCancelResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}/subscription`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_app_webhook_signing_secret_status_v1_apps__app_id__webhook_signing_secret_get(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/apps/${path.app_id}/webhook-signing-secret`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function issue_app_webhook_signing_secret_v1_apps__app_id__webhook_signing_secret_post(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretIssuedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/apps/${path.app_id}/webhook-signing-secret`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_app_webhook_signing_secret_v1_apps__app_id__webhook_signing_secret_delete(path: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretDeletedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/apps/${path.app_id}/webhook-signing-secret`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
@@ -18948,6 +19078,63 @@ export async function post_developer_button_event_v1_users_developer_button_even
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_user_webhook_signing_secret_status_v1_users_developer_webhook_signing_secret_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/webhook-signing-secret`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function issue_user_webhook_signing_secret_v1_users_developer_webhook_signing_secret_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretIssuedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/webhook-signing-secret`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_user_webhook_signing_secret_v1_users_developer_webhook_signing_secret_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<WebhookSigningSecretDeletedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/webhook-signing-secret`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get(path: { wtype: WebhookType }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserWebhookUrlResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhook/${path.wtype}`;
@@ -21544,4 +21731,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 496 client methods generated.
+// Total: 502 client methods generated.
