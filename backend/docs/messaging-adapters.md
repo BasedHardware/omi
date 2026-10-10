@@ -1,9 +1,9 @@
 # Telegram and iMessage adapters (Stage B)
 
 This adds real providers to the [foundation](messaging-channels.md). The feature,
-provider flags and exact UID cohort remain off/empty by default. No deployment or
-provider setup is performed by this change. The entitlement remains exact `pro`
-(Architect); this does not widen Stage A admission.
+provider flags and exact UID cohort remain off/empty by default.
+Production config enables only David on Cloud Run `backend`; provider setup remains
+a separate operator step. Admission accepts every valid paid catalog plan.
 
 ## Provider choices and verification (2026-10-10)
 
@@ -36,7 +36,8 @@ extension, not an untested implementation pretending to be supported.
 ## Runtime configuration
 
 Runtime secret values come from the existing deployment secret bindings, never checked-in
-files. Enabling a provider without credentials fails startup. No bindings are deployed here.
+files. Enabling a provider without credentials fails startup.
+Production bindings are declared only for Cloud Run `backend`.
 
 | Setting | Default / meaning |
 | --- | --- |
@@ -138,7 +139,7 @@ Create a non-secret local JSON config with `test_uid`, `test_account_verified: t
 All identities must be dedicated test identities. The harness rejects non-test senders
 before persistence; its storage and recovery paths cannot address another user's account
 or another identity. It verifies Telegram bot/webhook and Linq line before readiness.
-The existing backend dev environment and test account must support exact `pro` admission.
+The existing backend dev environment and test account must support valid paid-plan admission.
 Do not use David's real account, `?rig=dev`, or signed-in `api.omi.me` calls.
 
 Run `--check-only` to validate non-secret configuration without cloud IO. Runtime secrets
@@ -159,7 +160,7 @@ content-free failures. Do not commit it or use it for training/datasets.
 Live dev is **not run** until setup is confirmed. Missing values at implementation time:
 `test_uid` and test-account verification, `telegram_test_user_id`, `telegram_dev_bot_id`,
 `linq_test_handle`, `linq_dev_line`, and `webhook_origin`; also confirmation of test-account
-`pro` entitlement/cohort, the configured webhook tunnel/subscriptions, and authorized
+paid-plan entitlement/cohort, the configured webhook tunnel/subscriptions, and authorized
 runtime payload access. The dev secret project and four secret names are known from the
 setup guide; their existence/enabled versions remain unconfirmed because `ro-dev` metadata
 reads returned permission denied. Linq's written AI-use,

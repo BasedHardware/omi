@@ -2254,6 +2254,18 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            LINQ_API_KEY:
+              secret: LINQ_API_KEY
+              version: latest
+            LINQ_WEBHOOK_SECRET:
+              secret: LINQ_WEBHOOK_SECRET
+              version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
@@ -2387,6 +2399,14 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
+            OMI_MESSAGING_CHANNELS_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
+            OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
+            OMI_IMESSAGE_PROVIDER: {value: linq, category: rollout}
+            OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
+            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
+              category: rollout}
             DREAM_AGENT_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
             DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}

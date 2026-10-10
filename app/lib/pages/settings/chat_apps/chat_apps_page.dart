@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
-import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/chat_apps/channel_settings_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_app_widgets.dart';
 import 'package:omi/pages/settings/chat_apps/imessage_connect_sheet.dart';
@@ -87,7 +86,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
   _ProStatus _proStatus(UsageProvider usage) {
     final plan = usage.subscription?.subscription.plan;
     if (plan == null) return _ProStatus.unknown;
-    return plan == PlanType.architect ? _ProStatus.pro : _ProStatus.free;
+    return plan.isPaid ? _ProStatus.pro : _ProStatus.free;
   }
 
   void _openPlans() {
