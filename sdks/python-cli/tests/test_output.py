@@ -62,6 +62,60 @@ def test_json_mode_serializes_datetime() -> None:
     assert parsed["created_at"].startswith("2026-04-26T12:00:00")
 
 
+def test_json_mode_serializes_date_path_uuid_and_sets() -> None:
+    import sys
+    import uuid
+    from datetime import date
+    from io import StringIO
+    from pathlib import Path
+
+    sample_uuid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    sample_path = Path("/tmp/omi-test/output.txt")
+    sample_date = date(2026, 9, 24)
+    sample_set = {"b", "a"}
+
+    buffer = StringIO()
+    sys.stdout, original = buffer, sys.stdout
+    renderer = Renderer(json_mode=True)
+    try:
+        renderer.emit(
+            {
+                "target_date": sample_date,
+                "file_path": sample_path,
+                "session_id": sample_uuid,
+                "tags": sample_set,
+            }
+        )
+    finally:
+        sys.stdout = original
+    parsed = json.loads(buffer.getvalue())
+    assert parsed["target_date"] == "2026-09-24"
+    assert parsed["file_path"] == "/tmp/omi-test/output.txt"
+    assert parsed["session_id"] == "12345678-1234-5678-1234-567812345678"
+    assert parsed["tags"] == ["a", "b"]
+
+
+def test_pretty_mode_stringifies_extended_types(capsys) -> None:
+    import uuid
+    from datetime import date
+    from pathlib import Path
+
+    renderer = Renderer(no_color=True)
+    renderer.emit(
+        {
+            "target_date": date(2026, 9, 24),
+            "file_path": Path("/tmp/file.txt"),
+            "session_id": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            "tags": {"x", "y"},
+        }
+    )
+    output = capsys.readouterr().out
+    assert "2026-09-24" in output
+    assert "/tmp/file.txt" in output
+    assert "12345678-1234-5678-1234-567812345678" in output
+    assert "x, y" in output
+
+
 @pytest.mark.parametrize(
     "rows, expected",
     [
