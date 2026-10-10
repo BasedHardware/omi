@@ -1036,6 +1036,39 @@ export interface ChangeRef {
   type: "person" | "organization" | "project" | "conversation" | "memory" | "task";
 }
 
+export interface ChannelLink {
+  channel: string;
+  external_id: string;
+  id: string;
+  linked_at: string;
+  provider: string;
+  visible_in_app?: boolean;
+}
+
+export interface ChannelLinkProof {
+  expires_at: string;
+  kind: "token" | "code";
+  proof: string;
+}
+
+export interface ChannelLinkReceipt {
+  status: string;
+}
+
+export interface ChannelLinkRequest {
+  channel: string;
+  kind: "token" | "code";
+  provider: string;
+}
+
+export interface ChannelLinksResponse {
+  links: Array<ChannelLink>;
+}
+
+export interface ChannelVisibilityRequest {
+  visible_in_app: boolean;
+}
+
 export interface ChartData {
   chart_type: "line" | "bar";
   datasets: Array<ChartDataset>;
@@ -5859,6 +5892,12 @@ export interface OmiApiSchemas {
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChangeRef": ChangeRef;
+  "ChannelLink": ChannelLink;
+  "ChannelLinkProof": ChannelLinkProof;
+  "ChannelLinkReceipt": ChannelLinkReceipt;
+  "ChannelLinkRequest": ChannelLinkRequest;
+  "ChannelLinksResponse": ChannelLinksResponse;
+  "ChannelVisibilityRequest": ChannelVisibilityRequest;
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
@@ -9303,6 +9342,46 @@ export interface OmiApiPaths {
       responses: {
         "200": ExtractMemoryLogResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/messaging/link-proofs": {
+    post: {
+      operationId: "mint_link_proof_v1_messaging_link_proofs_post";
+      responses: {
+        "200": ChannelLinkProof;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/messaging/links": {
+    get: {
+      operationId: "list_links_v1_messaging_links_get";
+      responses: {
+        "200": ChannelLinksResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/messaging/links/{link_id}": {
+    patch: {
+      operationId: "set_visibility_v1_messaging_links__link_id__patch";
+      responses: {
+        "200": ChannelLinkReceipt;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "unlink_v1_messaging_links__link_id__delete";
+      responses: {
+        "200": ChannelLinkReceipt;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -16943,6 +17022,86 @@ export async function extract_memory_log_v1_memories_extract_post(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function mint_link_proof_v1_messaging_link_proofs_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ChannelLinkRequest, init?: OmiApiClientInit): Promise<ChannelLinkProof> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/messaging/link-proofs`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_links_v1_messaging_links_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChannelLinksResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/messaging/links`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function set_visibility_v1_messaging_links__link_id__patch(path: { link_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ChannelVisibilityRequest, init?: OmiApiClientInit): Promise<ChannelLinkReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/messaging/links/${path.link_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function unlink_v1_messaging_links__link_id__delete(path: { link_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChannelLinkReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/messaging/links/${path.link_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function upload_device_diagnostics_v1_mobile_device_diagnostics_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DiagnosticsUpload, init?: OmiApiClientInit): Promise<DiagnosticsReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mobile/device-diagnostics`;
@@ -21355,4 +21514,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 492 client methods generated.
+// Total: 496 client methods generated.
