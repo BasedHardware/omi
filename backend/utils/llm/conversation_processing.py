@@ -7,6 +7,7 @@ from importlib import import_module
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -303,6 +304,62 @@ def _record_shaped_notes_tier(escalated: bool, reason: str, words: int, screen_c
         run.effort = 'xhigh'
 
 
+# A quote ends a JSON string only when the next non-space character closes a
+# value or starts the next key. Anything else is prose the model left unescaped.
+_JSON_STRING_CLOSER_FOLLOWERS = ',}]:"'
+
+
+def _escape_interior_json_quotes(text: str) -> str:
+    """Escape double quotes that sit inside JSON strings.
+
+    Notes completions quote a phrase without backslashes (`asked "what fish?"`).
+    JsonOutputParser raises OutputParserException from langchain json.py, and the
+    conversation never gets a summary. Valid JSON is returned unchanged.
+    """
+    out: List[str] = []
+    in_string = False
+    escaped = False
+    length = len(text)
+    index = 0
+    while index < length:
+        char = text[index]
+        if in_string:
+            if escaped:
+                out.append(char)
+                escaped = False
+            elif char == '\\':
+                out.append(char)
+                escaped = True
+            elif char == '"':
+                follower = index + 1
+                while follower < length and text[follower] in ' \t\r\n':
+                    follower += 1
+                if follower >= length or text[follower] in _JSON_STRING_CLOSER_FOLLOWERS:
+                    out.append(char)
+                    in_string = False
+                else:
+                    out.append('\\"')
+            else:
+                out.append(char)
+        else:
+            if char == '"':
+                in_string = True
+            out.append(char)
+        index += 1
+    return ''.join(out)
+
+
+def _parse_notes_model_output(parser: PydanticOutputParser, content: str) -> Any:
+    text = str(content)
+    try:
+        return parser.parse(text)
+    except OutputParserException:
+        repaired = _escape_interior_json_quotes(text)
+        if repaired == text:
+            raise
+        return parser.parse(repaired)
+
+
 def notes_mount() -> Mount:
     return Mount(
         instructions=_conversation_notes_static_instructions('') + """
@@ -387,7 +444,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
-                return Turn(value=extraction_parser.parse(str(content)))
+                return Turn(value=_parse_notes_model_output(extraction_parser, str(content)))
 
             return await run_loop(mount, evidence, model_turn)
 
