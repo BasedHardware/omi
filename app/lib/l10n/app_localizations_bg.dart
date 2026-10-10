@@ -3678,6 +3678,18 @@ class AppLocalizationsBg extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Записване';
+
+  @override
+  String get settingsSectionSupport => 'Поддръжка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализиране';
+
+  @override
+  String get settingsSectionConnectedApps => 'Свързани приложения';
+
+  @override
   String get plansAndBilling => 'Планове и Фактуриране';
 
   @override

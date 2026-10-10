@@ -7077,6 +7077,30 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
+  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsSectionRecording;
+
+  /// Settings section header above the Help & About and Feedback / Bug rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsSectionSupport;
+
+  /// Settings group header above Memories and Goals
+  ///
+  /// In en, this message translates to:
+  /// **'Personalization'**
+  String get settingsSectionPersonalization;
+
+  /// Settings group header above Integrations
+  ///
+  /// In en, this message translates to:
+  /// **'Connected Apps'**
+  String get settingsSectionConnectedApps;
+
   /// Plans and billing section
   ///
   /// In en, this message translates to:

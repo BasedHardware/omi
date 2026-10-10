@@ -3677,6 +3677,18 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
+  String get settingsSectionRecording => 'Rakaman';
+
+  @override
+  String get settingsSectionSupport => 'Sokongan';
+
+  @override
+  String get settingsSectionPersonalization => 'Pemperibadian';
+
+  @override
+  String get settingsSectionConnectedApps => 'Apl yang disambungkan';
+
+  @override
   String get plansAndBilling => 'Pelan & Pengebilan';
 
   @override

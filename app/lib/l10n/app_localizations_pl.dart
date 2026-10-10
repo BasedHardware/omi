@@ -3673,6 +3673,18 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settingsHeader => 'USTAWIENIA';
 
   @override
+  String get settingsSectionRecording => 'Nagrywanie';
+
+  @override
+  String get settingsSectionSupport => 'Pomoc';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizacja';
+
+  @override
+  String get settingsSectionConnectedApps => 'Połączone aplikacje';
+
+  @override
   String get plansAndBilling => 'Plany i Rozliczenia';
 
   @override

@@ -4110,6 +4110,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "ضبط",
+    "settingsSectionSupport": "پشتیبانی",
+    "settingsSectionPersonalization": "شخصی‌سازی",
+    "settingsSectionConnectedApps": "برنامه‌های متصل",
     "@account": {
         "description": "Account section label"
     },

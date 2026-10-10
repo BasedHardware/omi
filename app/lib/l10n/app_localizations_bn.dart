@@ -3672,6 +3672,18 @@ class AppLocalizationsBn extends AppLocalizations {
   String get settingsHeader => 'সেটিংস';
 
   @override
+  String get settingsSectionRecording => 'রেকর্ডিং';
+
+  @override
+  String get settingsSectionSupport => 'সহায়তা';
+
+  @override
+  String get settingsSectionPersonalization => 'ব্যক্তিগতকরণ';
+
+  @override
+  String get settingsSectionConnectedApps => 'সংযুক্ত অ্যাপ';
+
+  @override
   String get plansAndBilling => 'পরিকল্পনা ও বিলিং';
 
   @override

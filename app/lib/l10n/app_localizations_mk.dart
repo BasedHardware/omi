@@ -3684,6 +3684,18 @@ class AppLocalizationsMk extends AppLocalizations {
   String get settingsHeader => 'ПОСТАВКИ';
 
   @override
+  String get settingsSectionRecording => 'Снимање';
+
+  @override
+  String get settingsSectionSupport => 'Поддршка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализација';
+
+  @override
+  String get settingsSectionConnectedApps => 'Поврзани апликации';
+
+  @override
   String get plansAndBilling => 'Планови и Наплата';
 
   @override

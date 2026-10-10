@@ -3613,6 +3613,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsHeader => '設定';
 
   @override
+  String get settingsSectionRecording => '録音';
+
+  @override
+  String get settingsSectionSupport => 'サポート';
+
+  @override
+  String get settingsSectionPersonalization => 'パーソナライズ';
+
+  @override
+  String get settingsSectionConnectedApps => '連携アプリ';
+
+  @override
   String get plansAndBilling => 'プランと請求';
 
   @override

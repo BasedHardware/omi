@@ -3677,6 +3677,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get settingsHeader => 'AYARLAR';
 
   @override
+  String get settingsSectionRecording => 'Kayıt';
+
+  @override
+  String get settingsSectionSupport => 'Destek';
+
+  @override
+  String get settingsSectionPersonalization => 'Kişiselleştirme';
+
+  @override
+  String get settingsSectionConnectedApps => 'Bağlı uygulamalar';
+
+  @override
   String get plansAndBilling => 'Planlar ve Faturalama';
 
   @override

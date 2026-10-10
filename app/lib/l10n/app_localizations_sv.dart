@@ -3674,6 +3674,18 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settingsHeader => 'INSTÄLLNINGAR';
 
   @override
+  String get settingsSectionRecording => 'Inspelning';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Anpassning';
+
+  @override
+  String get settingsSectionConnectedApps => 'Anslutna appar';
+
+  @override
   String get plansAndBilling => 'Planer och Fakturering';
 
   @override

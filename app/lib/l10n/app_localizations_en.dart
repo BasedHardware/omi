@@ -3671,6 +3671,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsHeader => 'SETTINGS';
 
   @override
+  String get settingsSectionRecording => 'Recording';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalization';
+
+  @override
+  String get settingsSectionConnectedApps => 'Connected Apps';
+
+  @override
   String get plansAndBilling => 'Plans & Billing';
 
   @override

@@ -3671,6 +3671,18 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsHeader => 'تنظیمات';
 
   @override
+  String get settingsSectionRecording => 'ضبط';
+
+  @override
+  String get settingsSectionSupport => 'پشتیبانی';
+
+  @override
+  String get settingsSectionPersonalization => 'شخصی‌سازی';
+
+  @override
+  String get settingsSectionConnectedApps => 'برنامه‌های متصل';
+
+  @override
   String get plansAndBilling => 'طرح‌ها و صورت‌حساب';
 
   @override

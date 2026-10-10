@@ -3609,6 +3609,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHeader => '设置';
 
   @override
+  String get settingsSectionRecording => '录音';
+
+  @override
+  String get settingsSectionSupport => '支持';
+
+  @override
+  String get settingsSectionPersonalization => '个性化';
+
+  @override
+  String get settingsSectionConnectedApps => '已连接的应用';
+
+  @override
   String get plansAndBilling => '计划与账单';
 
   @override

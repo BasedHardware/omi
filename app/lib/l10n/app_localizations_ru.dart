@@ -3677,6 +3677,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Запись';
+
+  @override
+  String get settingsSectionSupport => 'Поддержка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализация';
+
+  @override
+  String get settingsSectionConnectedApps => 'Подключённые приложения';
+
+  @override
   String get plansAndBilling => 'Планы и Оплата';
 
   @override

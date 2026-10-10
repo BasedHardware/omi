@@ -4110,6 +4110,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "రికార్డింగ్",
+    "settingsSectionSupport": "మద్దతు",
+    "settingsSectionPersonalization": "వ్యక్తిగతీకరణ",
+    "settingsSectionConnectedApps": "కనెక్ట్ చేసిన యాప్‌లు",
     "@account": {
         "description": "Account section label"
     },

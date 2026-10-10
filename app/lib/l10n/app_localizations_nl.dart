@@ -3677,6 +3677,18 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settingsHeader => 'INSTELLINGEN';
 
   @override
+  String get settingsSectionRecording => 'Opname';
+
+  @override
+  String get settingsSectionSupport => 'Ondersteuning';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisatie';
+
+  @override
+  String get settingsSectionConnectedApps => 'Gekoppelde apps';
+
+  @override
   String get plansAndBilling => 'Plannen & Facturering';
 
   @override

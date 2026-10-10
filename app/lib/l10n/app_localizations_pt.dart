@@ -3657,6 +3657,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get settingsHeader => 'CONFIGURAÇÕES';
 
   @override
+  String get settingsSectionRecording => 'Gravação';
+
+  @override
+  String get settingsSectionSupport => 'Suporte';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalização';
+
+  @override
+  String get settingsSectionConnectedApps => 'Apps conectados';
+
+  @override
   String get plansAndBilling => 'Planos e Faturamento';
 
   @override

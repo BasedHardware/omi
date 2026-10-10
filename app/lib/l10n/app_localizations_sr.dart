@@ -3674,6 +3674,18 @@ class AppLocalizationsSr extends AppLocalizations {
   String get settingsHeader => 'ПОСТАВКЕ';
 
   @override
+  String get settingsSectionRecording => 'Снимање';
+
+  @override
+  String get settingsSectionSupport => 'Подршка';
+
+  @override
+  String get settingsSectionPersonalization => 'Персонализација';
+
+  @override
+  String get settingsSectionConnectedApps => 'Повезане апликације';
+
+  @override
   String get plansAndBilling => 'Планови и наплате';
 
   @override

@@ -3667,6 +3667,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get settingsHeader => 'SEADED';
 
   @override
+  String get settingsSectionRecording => 'Salvestamine';
+
+  @override
+  String get settingsSectionSupport => 'Tugi';
+
+  @override
+  String get settingsSectionPersonalization => 'Isikupärastamine';
+
+  @override
+  String get settingsSectionConnectedApps => 'Ühendatud rakendused';
+
+  @override
   String get plansAndBilling => 'Plaanid ja Arveldus';
 
   @override

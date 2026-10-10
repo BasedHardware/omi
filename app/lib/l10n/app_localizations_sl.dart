@@ -3673,6 +3673,18 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settingsHeader => 'NASTAVITVE';
 
   @override
+  String get settingsSectionRecording => 'Snemanje';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Prilagajanje';
+
+  @override
+  String get settingsSectionConnectedApps => 'Povezane aplikacije';
+
+  @override
   String get plansAndBilling => 'Načrti in obračun';
 
   @override

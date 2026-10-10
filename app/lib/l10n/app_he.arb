@@ -4110,6 +4110,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "הקלטה",
+    "settingsSectionSupport": "תמיכה",
+    "settingsSectionPersonalization": "התאמה אישית",
+    "settingsSectionConnectedApps": "אפליקציות מחוברות",
     "@account": {
         "description": "Account section label"
     },

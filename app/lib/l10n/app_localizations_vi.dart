@@ -3677,6 +3677,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
+  String get settingsSectionRecording => 'Ghi âm';
+
+  @override
+  String get settingsSectionSupport => 'Hỗ trợ';
+
+  @override
+  String get settingsSectionPersonalization => 'Cá nhân hóa';
+
+  @override
+  String get settingsSectionConnectedApps => 'Ứng dụng đã kết nối';
+
+  @override
   String get plansAndBilling => 'Gói và Thanh toán';
 
   @override

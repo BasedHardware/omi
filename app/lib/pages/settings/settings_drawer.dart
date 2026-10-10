@@ -1,43 +1,33 @@
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
-import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// The Settings sheet: Account, then eight groups (Device, Recording & Transcription, Voice,
-/// Notifications & Display, Integrations, Privacy & Data, Help & About, Developer Settings), plus
-/// search over every row in Settings and its pages ([settingsSearchEntries]).
+/// Settings, a full-screen page pushed from Home: seven labelled groups (Account, Recording,
+/// Personalization, Connected Apps, Preferences, Support, Developer) of rows that lead with an icon
+/// tile, plus search over every row in Settings and its pages ([settingsSearchEntries]).
 ///
-/// Every setting is at most one tap below the sheet: a group row opens its group page
-/// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
-/// Developer Settings keeps only developer tools.
+/// Every setting is at most one tap below this page: a group row opens its group page
+/// (settings_groups.dart), whose rows open the settings pages themselves. Developer Settings keeps
+/// only developer tools.
 class SettingsDrawer extends StatefulWidget {
   const SettingsDrawer({super.key});
 
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
 
-  /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
-  static Future<void> show(BuildContext context) {
-    // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
-    // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
-    // a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
-    // opened here repaints the sheet too.
-    return showOmiSurfaceSheet<void>(
-      context: context,
-      surface: () => OmiColors.surface0,
-      builder: (context) => const FractionallySizedBox(heightFactor: 0.92, child: SettingsDrawer()),
-    );
-  }
+  /// Opens Settings; resolves when the page is popped (callers compare settings after that).
+  static Future<void> show(BuildContext context) => routeToPage(context, const SettingsDrawer());
 }
 
 class _SettingsDrawerState extends State<SettingsDrawer> {
@@ -87,19 +77,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   Widget _row(
     SettingsDestination destination, {
     required String key,
-    required FaIconData icon,
     required String title,
     String? subtitle,
     String? value,
-    Widget? tag,
   }) {
     return OmiSettingsRow(
       key: ValueKey(key),
-      leading: FaIcon(icon),
+      leading: OmiSettingsIconTile(FaIcon(settingsIcon(destination))),
       title: title,
       subtitle: subtitle,
       value: value,
-      trailing: tag,
       showChevron: true,
       onTap: () => _open(destination),
     );
@@ -118,130 +105,99 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
+    const outlined = OmiSettingsGroupStyle.outlined;
+    const gap = SizedBox(height: OmiSpacing.xl);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Who is signed in, on a card of its own: avatar, name, email. Opens Account.
         OmiSettingsGroup(
+          style: outlined,
           children: [
-            _row(
-              SettingsDestination.profile,
-              key: 'settings_account',
-              icon: FontAwesomeIcons.solidUser,
-              title: name.isEmpty ? l10n.account : name,
-              subtitle: email.isEmpty ? null : email,
+            OmiSettingsRow(
+              key: const ValueKey('settings_account'),
+              leading: OmiSettingsAvatar(name: name),
+              // Name, else the email, else "Profile": never "Account", the label of the group below.
+              title: name.isNotEmpty ? name : (email.isNotEmpty ? email : l10n.profile),
+              titleStyle: OmiType.title3,
+              titleMaxLines: 2,
+              subtitle: name.isEmpty || email.isEmpty ? null : email,
+              subtitleMaxLines: 1,
+              showChevron: true,
+              onTap: () => _open(SettingsDestination.profile),
             ),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
-        // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
+        gap,
+        // Plan and referrals stay one tap from Settings (David, 2026-09-24).
         OmiSettingsGroup(
+          style: outlined,
+          header: l10n.account,
           children: [
-            _row(
-              SettingsDestination.planAndUsage,
-              key: 'settings_row_planAndUsage',
-              icon: FontAwesomeIcons.chartLine,
-              title: l10n.planAndUsage,
-              value: planValue,
-            ),
-            _row(
-              SettingsDestination.referral,
-              key: 'settings_row_referral',
-              icon: FontAwesomeIcons.gift,
-              title: l10n.referralProgram,
-              tag: SettingsTag(l10n.newTag, OmiColors.success),
-            ),
+            _row(SettingsDestination.planAndUsage,
+                key: 'settings_row_planAndUsage', title: l10n.planAndUsage, value: planValue),
+            _row(SettingsDestination.referral, key: 'settings_row_referral', title: l10n.referralProgram),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
+        gap,
         OmiSettingsGroup(
+          style: outlined,
+          header: l10n.settingsSectionRecording,
           children: [
-            _row(
-              SettingsDestination.deviceGroup,
-              key: 'settings_group_device',
-              icon: FontAwesomeIcons.bluetooth,
-              title: l10n.device,
-            ),
-            _row(
-              SettingsDestination.recordingGroup,
-              key: 'settings_group_recording',
-              icon: FontAwesomeIcons.microphone,
-              title: l10n.recordingAndTranscription,
-            ),
-            _row(
-              SettingsDestination.voice,
-              key: 'settings_group_voice',
-              icon: FontAwesomeIcons.volumeHigh,
-              title: l10n.assistantVoiceSettingsTitle,
-            ),
-            _row(
-              SettingsDestination.notificationsGroup,
-              key: 'settings_group_notifications',
-              icon: FontAwesomeIcons.solidBell,
-              title: l10n.notificationsAndDisplay,
-            ),
-            _row(
-              SettingsDestination.integrations,
-              key: 'settings_group_integrations',
-              icon: FontAwesomeIcons.networkWired,
-              title: l10n.integrations,
-              tag: SettingsTag(l10n.beta, OmiColors.warning),
-            ),
-            _row(
-              SettingsDestination.privacyGroup,
-              key: 'settings_group_privacy',
-              icon: FontAwesomeIcons.shield,
-              title: l10n.dataAndPrivacy,
-            ),
+            _row(SettingsDestination.deviceGroup, key: 'settings_group_device', title: l10n.device),
+            _row(SettingsDestination.recordingGroup,
+                key: 'settings_group_recording', title: l10n.recordingAndTranscription),
+            _row(SettingsDestination.voice, key: 'settings_group_voice', title: l10n.assistantVoiceSettingsTitle),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
-        // Memories and Goals left the Home tabs (David, 2026-09-29): one tap from the sheet.
+        gap,
+        // Memories and Goals left the Home tabs (David, 2026-09-29): one tap from Settings. Each group is
+        // named for what it holds, not "Features" (David, 2026-10-03).
         OmiSettingsGroup(
+          style: outlined,
+          header: l10n.settingsSectionPersonalization,
           children: [
-            _row(
-              SettingsDestination.memories,
-              key: 'settings_row_memories',
-              icon: FontAwesomeIcons.brain,
-              title: l10n.memories,
-            ),
-            _row(
-              SettingsDestination.goals,
-              key: 'settings_row_goals',
-              icon: FontAwesomeIcons.bullseye,
-              title: l10n.goals,
-            ),
+            _row(SettingsDestination.memories, key: 'settings_row_memories', title: l10n.memories),
+            _row(SettingsDestination.goals, key: 'settings_row_goals', title: l10n.goals),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
+        gap,
         OmiSettingsGroup(
+          style: outlined,
+          header: l10n.settingsSectionConnectedApps,
           children: [
-            _row(
-              SettingsDestination.helpGroup,
-              key: 'settings_group_help',
-              icon: FontAwesomeIcons.circleQuestion,
-              title: l10n.helpAndAbout,
-            ),
+            _row(SettingsDestination.integrations, key: 'settings_group_integrations', title: l10n.integrations),
+          ],
+        ),
+        gap,
+        OmiSettingsGroup(
+          style: outlined,
+          header: l10n.preferences,
+          children: [
+            _row(SettingsDestination.notificationsGroup,
+                key: 'settings_group_notifications', title: l10n.notificationsAndDisplay),
+            _row(SettingsDestination.privacyGroup, key: 'settings_group_privacy', title: l10n.dataAndPrivacy),
+          ],
+        ),
+        gap,
+        OmiSettingsGroup(
+          style: outlined,
+          header: l10n.settingsSectionSupport,
+          children: [
+            _row(SettingsDestination.helpGroup, key: 'settings_group_help', title: l10n.helpAndAbout),
             if (PlatformService.isIntercomSupported)
-              _row(
-                SettingsDestination.feedback,
-                key: 'settings_row_feedback',
-                icon: FontAwesomeIcons.solidEnvelope,
-                title: l10n.feedbackBug,
-              ),
+              _row(SettingsDestination.feedback, key: 'settings_row_feedback', title: l10n.feedbackBug),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
+        gap,
         OmiSettingsGroup(
+          style: outlined,
+          header: l10n.developer,
           children: [
-            _row(
-              SettingsDestination.developer,
-              key: 'settings_group_developer',
-              icon: FontAwesomeIcons.code,
-              title: l10n.developerSettings,
-            ),
+            _row(SettingsDestination.developer, key: 'settings_group_developer', title: l10n.developerSettings),
           ],
         ),
-        const SizedBox(height: OmiSpacing.xl),
+        gap,
       ],
     );
   }
@@ -252,14 +208,23 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       return OmiEmptyState(icon: Icons.search, title: context.l10n.noResultsFound);
     }
     return OmiSettingsGroup(
+      style: OmiSettingsGroupStyle.outlined,
       children: [
-        for (final entry in results)
-          OmiSettingsRow(
-            title: entry.title(context.l10n),
-            isDestructive: entry.destination == SettingsDestination.signOut,
-            onTap: () => _open(entry.destination),
-          ),
+        for (final entry in results) _searchResultRow(context, entry),
       ],
+    );
+  }
+
+  Widget _searchResultRow(BuildContext context, SettingsSearchEntry entry) {
+    // Sign out reads red here too, as it does on Account: title and glyph.
+    final destructive = entry.destination == SettingsDestination.signOut;
+    return OmiSettingsRow(
+      leading: OmiSettingsIconTile(
+        FaIcon(settingsIcon(entry.destination), color: destructive ? OmiColors.danger : null),
+      ),
+      title: entry.title(context.l10n),
+      isDestructive: destructive,
+      onTap: () => _open(entry.destination),
     );
   }
 
@@ -288,19 +253,26 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         ),
       );
     }
+    // A pushed page: back on the leading edge, search trailing, both glass circles like Home's.
     return Padding(
       key: const ValueKey('normal-header'),
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
       child: Row(
         children: [
-          OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
+          const OmiCanvas(child: OmiBackButton.circled()),
           Expanded(
             child: Semantics(
               header: true,
               child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
             ),
           ),
-          const OmiCloseButton(),
+          OmiCanvas(
+            child: OmiIconButton.filled(
+              icon: const OmiLineIcon(OmiLineGlyph.search),
+              label: l10n.search,
+              onPressed: _startSearch,
+            ),
+          ),
         ],
       ),
     );
@@ -309,19 +281,74 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    return Column(
-      children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
-        const SizedBox(height: OmiSpacing.xs),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child:
-                _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
+    return OmiSettingsTypeface(
+      child: Scaffold(
+        backgroundColor: OmiColors.groupedPage,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+              const SizedBox(height: OmiSpacing.sm),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                      OmiSpacing.md, 0, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.md),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: _isSearching && _searchQuery.trim().isNotEmpty
+                      ? _buildSearchResults(context)
+                      : _buildSettings(context),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
+
+/// The icon of the top-level Settings row a destination sits under: the row's own icon, and the
+/// icon a search result for anything below that row leads with (Sign out → Account, Language →
+/// Recording). Exhaustive, so a new destination has to pick its row.
+FaIconData settingsIcon(SettingsDestination destination) => switch (destination) {
+      SettingsDestination.profile ||
+      SettingsDestination.signOut ||
+      SettingsDestination.deleteAccount =>
+        FontAwesomeIcons.solidUser,
+      SettingsDestination.planAndUsage => FontAwesomeIcons.chartLine,
+      SettingsDestination.referral => FontAwesomeIcons.gift,
+      SettingsDestination.deviceGroup ||
+      SettingsDestination.device ||
+      SettingsDestination.offlineSync ||
+      SettingsDestination.phoneCalls ||
+      SettingsDestination.permissions =>
+        FontAwesomeIcons.bluetooth,
+      SettingsDestination.recordingGroup ||
+      SettingsDestination.transcription ||
+      SettingsDestination.language ||
+      SettingsDestination.customVocabulary ||
+      SettingsDestination.voiceProfile ||
+      SettingsDestination.people ||
+      SettingsDestination.conversationTimeout =>
+        FontAwesomeIcons.microphone,
+      SettingsDestination.voice => FontAwesomeIcons.volumeHigh,
+      SettingsDestination.memories => FontAwesomeIcons.brain,
+      SettingsDestination.goals => FontAwesomeIcons.bullseye,
+      SettingsDestination.integrations => FontAwesomeIcons.networkWired,
+      SettingsDestination.notificationsGroup ||
+      SettingsDestination.notifications ||
+      SettingsDestination.conversationDisplay =>
+        FontAwesomeIcons.solidBell,
+      SettingsDestination.privacyGroup ||
+      SettingsDestination.dataPrivacy ||
+      SettingsDestination.exportData ||
+      SettingsDestination.importData =>
+        FontAwesomeIcons.shield,
+      SettingsDestination.helpGroup ||
+      SettingsDestination.helpCenter ||
+      SettingsDestination.whatsNew =>
+        FontAwesomeIcons.circleQuestion,
+      SettingsDestination.feedback => FontAwesomeIcons.solidEnvelope,
+      SettingsDestination.developer || SettingsDestination.creatorPayouts => FontAwesomeIcons.code,
+    };

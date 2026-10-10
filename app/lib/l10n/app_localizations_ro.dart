@@ -3687,6 +3687,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get settingsHeader => 'SETĂRI';
 
   @override
+  String get settingsSectionRecording => 'Înregistrare';
+
+  @override
+  String get settingsSectionSupport => 'Asistență';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalizare';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplicații conectate';
+
+  @override
   String get plansAndBilling => 'Planuri și Facturare';
 
   @override

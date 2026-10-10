@@ -3647,6 +3647,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get settingsHeader => 'การตั้งค่า';
 
   @override
+  String get settingsSectionRecording => 'การบันทึก';
+
+  @override
+  String get settingsSectionSupport => 'ฝ่ายสนับสนุน';
+
+  @override
+  String get settingsSectionPersonalization => 'การปรับให้เป็นส่วนตัว';
+
+  @override
+  String get settingsSectionConnectedApps => 'แอปที่เชื่อมต่อ';
+
+  @override
   String get plansAndBilling => 'แผนและการเรียกเก็บเงิน';
 
   @override

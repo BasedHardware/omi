@@ -3656,6 +3656,18 @@ class AppLocalizationsDa extends AppLocalizations {
   String get settingsHeader => 'INDSTILLINGER';
 
   @override
+  String get settingsSectionRecording => 'Optagelse';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalisering';
+
+  @override
+  String get settingsSectionConnectedApps => 'Forbundne apps';
+
+  @override
   String get plansAndBilling => 'Planer og Fakturering';
 
   @override

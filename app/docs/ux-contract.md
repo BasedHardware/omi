@@ -84,6 +84,11 @@ There are exactly two ways out, and they mean different things.
 | Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
+| Top-level Settings rows | `OmiSettingsGroup(style: OmiSettingsGroupStyle.outlined, header:)` of `OmiSettingsRow(leading: OmiSettingsIconTile(FaIcon(…)))`: labelled outlined cards on `OmiColors.groupedPage`, no hairlines | a bare glyph or a hand-built tile per row |
+| A page inside Settings | `OmiGroupedPage(title:, actions:, body:)`: circled back, centred title, `OmiColors.groupedPage`; under it every `OmiSettingsGroup` is outlined and every `OmiSectionHeader` the small label. Pages of destinations or choices (Device, Recording, Permissions, Language, …) lead rows with `OmiSettingsIconTile`; a page of values and toggles (Notifications & Display, a transcription provider's fields) uses plain rows. A custom block sits in an `OmiGroupedCard` | `Scaffold` + `AppBar` + a `surface1` card |
+| Settings type and row icons | Settings is set in Instrument Sans: `OmiGroupedPage` applies `OmiSettingsTypeface`, and a Settings page with its own `Scaffold` wraps it. A row keeps the app's own FontAwesome or Material icon, inside `OmiSettingsIconTile`, which sizes it and colours it (red on a destructive row) | the system font on one Settings page, an icon leading a Settings row outside its tile |
+| Two to four views of one list or chart (Today · Month · Year, All · Pending · Synced) | `OmiSegmentedControl(value:, segments:, onChanged:)`: full width, 44 pt segments, labels never wrap | a row of tinted chips or a hand-built toggle |
+| A long list on a Settings page (offline recordings) | rows built lazily, each in an `OmiGroupedSlice(first:, last:)` so a run reads as one outlined card, under a small label per day or source; a row's own action is a compact button or a labelled icon, and its text is time-sized so it stays on one line | one card per row, or a card that mounts every row |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | A choice among people or answers (tag a speaker, a likely-speaker Yes / Not) | `OmiFilterChip` as above, with an optional leading `icon:` ("+ Add Person") | a Material `ChoiceChip` on a grey slab that reads as disabled |
@@ -264,6 +269,11 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 
 ## 12. Settings
 
+- Settings is a full-screen page pushed from Home's gear (`SettingsDrawer.show`), with a back
+  button and search in its header: first the profile card (avatar, name, email; opens Account),
+  then the groups Account, Recording, Personalization, Connected Apps, Preferences, Support and
+  Developer. Every page it opens is an `OmiGroupedPage` in the same black-and-white look; colour
+  is kept for warnings, errors and destructive actions.
 - Everyday settings live in top-level Settings (D4): data & privacy, export/import, transcription,
   conversation display and timeout, payment methods, phone calls. Developer Settings keeps only
   developer tools (webhooks, MCP, API keys, firmware channels, experiments).

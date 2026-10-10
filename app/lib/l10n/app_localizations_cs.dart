@@ -3668,6 +3668,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get settingsHeader => 'NASTAVENÍ';
 
   @override
+  String get settingsSectionRecording => 'Nahrávání';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
+  String get settingsSectionPersonalization => 'Přizpůsobení';
+
+  @override
+  String get settingsSectionConnectedApps => 'Připojené aplikace';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturace';
 
   @override

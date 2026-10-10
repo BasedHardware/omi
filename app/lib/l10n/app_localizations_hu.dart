@@ -3690,6 +3690,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settingsHeader => 'BEÁLLÍTÁSOK';
 
   @override
+  String get settingsSectionRecording => 'Felvétel';
+
+  @override
+  String get settingsSectionSupport => 'Támogatás';
+
+  @override
+  String get settingsSectionPersonalization => 'Személyre szabás';
+
+  @override
+  String get settingsSectionConnectedApps => 'Csatlakoztatott alkalmazások';
+
+  @override
   String get plansAndBilling => 'Csomagok és Számlázás';
 
   @override

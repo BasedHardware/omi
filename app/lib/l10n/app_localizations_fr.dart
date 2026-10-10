@@ -3699,6 +3699,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settingsHeader => 'PARAMÈTRES';
 
   @override
+  String get settingsSectionRecording => 'Enregistrement';
+
+  @override
+  String get settingsSectionSupport => 'Assistance';
+
+  @override
+  String get settingsSectionPersonalization => 'Personnalisation';
+
+  @override
+  String get settingsSectionConnectedApps => 'Apps connectées';
+
+  @override
   String get plansAndBilling => 'Plans et Facturation';
 
   @override

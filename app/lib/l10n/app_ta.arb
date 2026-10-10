@@ -4110,6 +4110,10 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "பதிவு",
+    "settingsSectionSupport": "ஆதரவு",
+    "settingsSectionPersonalization": "தனிப்பயனாக்கம்",
+    "settingsSectionConnectedApps": "இணைக்கப்பட்ட ஆப்ஸ்",
     "@account": {
         "description": "Account section label"
     },

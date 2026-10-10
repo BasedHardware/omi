@@ -4156,6 +4156,22 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Recording",
+    "@settingsSectionRecording": {
+        "description": "Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status)."
+    },
+    "settingsSectionSupport": "Support",
+    "@settingsSectionSupport": {
+        "description": "Settings section header above the Help & About and Feedback / Bug rows."
+    },
+    "settingsSectionPersonalization": "Personalization",
+    "@settingsSectionPersonalization": {
+        "description": "Settings group header above Memories and Goals"
+    },
+    "settingsSectionConnectedApps": "Connected Apps",
+    "@settingsSectionConnectedApps": {
+        "description": "Settings group header above Integrations"
+    },
     "@account": {
         "description": "Account section label"
     },

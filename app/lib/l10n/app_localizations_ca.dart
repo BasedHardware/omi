@@ -3686,6 +3686,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get settingsHeader => 'CONFIGURACIÓ';
 
   @override
+  String get settingsSectionRecording => 'Enregistrament';
+
+  @override
+  String get settingsSectionSupport => 'Assistència';
+
+  @override
+  String get settingsSectionPersonalization => 'Personalització';
+
+  @override
+  String get settingsSectionConnectedApps => 'Aplicacions connectades';
+
+  @override
   String get plansAndBilling => 'Plans i Facturació';
 
   @override
