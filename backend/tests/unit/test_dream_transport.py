@@ -22,7 +22,7 @@ def transport(monkeypatch):
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
 
-    def turn(model, response):
+    def turn(model, response, *, sink=None):
         client.post.return_value = httpx.Response(
             200,
             request=httpx.Request('POST', 'https://synthetic.invalid'),
@@ -31,7 +31,7 @@ def transport(monkeypatch):
                 'choices': [{'message': {'content': json.dumps(response)}}],
             },
         )
-        sink = {'tokens': 0}
+        sink = {'tokens': 0} if sink is None else sink
         result = asyncio.run(
             dream_transport.model_turn(
                 'synthetic',
@@ -112,29 +112,92 @@ def test_plan_caps_all_arrays_including_optional_referenced_models(transport):
     assert value.questions[1].spelling.options == ['a', 'b', 'c']
 
 
-@pytest.mark.parametrize(
-    'model,response',
-    [
-        (Triage, {'clusters': [{'refs': [], 'problem': 'spelling'}]}),
-        (Triage, {'clusters': 'invalid'}),
-        (Plan, {'edits': [{'kind': 'spelling', 'target': 'synthetic', 'reason': '', 'evidence': ['synthetic']}]}),
-        (Plan, {'unexpected': True}),
-        (
-            Plan,
-            {
-                'questions': [
-                    {
-                        'item_id': 'synthetic',
-                        'kind': 'task',
-                        'title': 'synthetic',
-                        'created_at': '2026-10-09T00:00:00Z',
-                        'spelling': {'term_id': 'synthetic', 'options': ['a', 'b'], 'allow_custom': True},
-                    }
-                ]
-            },
-        ),
-    ],
-)
-def test_other_validation_failures_remain_errors(transport, model, response):
+@pytest.mark.parametrize('response', [None, [], 'invalid', {'edits': {}}, {'questions': None}, {'unexpected': True}])
+def test_top_level_shape_failures_remain_errors(transport, response):
     with pytest.raises(ValidationError):
-        transport(model, response)
+        transport(Plan, response)
+
+
+def test_invalid_cluster_does_not_discard_valid_cluster(transport):
+    sink = {'tokens': 0}
+    valid = {'refs': ['conversations/synthetic'], 'problem': 'spelling'}
+    value = transport(Triage, {'clusters': [{'refs': [], 'problem': 'spelling'}, valid]}, sink=sink)
+    assert value == Triage(clusters=[valid])
+    assert sink['dropped_invalid'] == {'clusters': 1}
+    assert sink['validation_errors'] == {'clusters.refs:too_short': 1}
+
+
+def test_mixed_plan_retains_valid_items_in_every_list(transport):
+    ref = 'conversations/synthetic'
+    question = {
+        'item_id': 'invented',
+        'kind': 'spelling',
+        'title': 'Invented spelling',
+        'created_at': '2026-10-09T00:00:00Z',
+        'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
+    }
+    valid = {
+        'edits': {'kind': 'spelling', 'target': ref, 'reason': 'Invented typo', 'evidence': [ref]},
+        'questions': question,
+        'vocabulary': {'kind': 'jargon', 'spelling': 'Invented', 'evidence': [ref]},
+        'frames': {'screen_ref': ref, 'question': 'Invented question'},
+        'feedback': {
+            'component': 'dream',
+            'failure_class': 'success',
+            'severity': 'info',
+            'count': 1,
+            'latency_ms': 0,
+            'error_rate': 0,
+            'reproduction': 'Invented robot fixture',
+        },
+        'slow_tasks': {'description': 'Invented followup', 'evidence': [ref]},
+    }
+    invalid = deepcopy(valid)
+    invalid['edits']['evidence'] = []
+    invalid['questions']['spelling']['options'] = ['a']
+    invalid['vocabulary']['spelling'] = ''
+    invalid['frames']['question'] = ''
+    invalid['feedback']['count'] = 0
+    invalid['slow_tasks']['description'] = ''
+    response = {key: [invalid[key], item] for key, item in valid.items()}
+    response['edits'].insert(1, {**valid['edits'], 'reason': ''})
+    sink = {'tokens': 0}
+    value = transport(Plan, response, sink=sink)
+    assert value == Plan.model_validate({key: [item] for key, item in valid.items()})
+    assert sink['dropped_invalid'] == {key: 2 if key == 'edits' else 1 for key in valid}
+    assert sink['validation_errors'] == {
+        'edits.evidence:too_short': 1,
+        'edits.reason:string_too_short': 1,
+        'questions.spelling.options:too_short': 1,
+        'vocabulary.spelling:string_too_short': 1,
+        'frames.question:string_too_short': 1,
+        'feedback.count:greater_than_equal': 1,
+        'slow_tasks.description:string_too_short': 1,
+    }
+
+
+def test_matching_payload_validator_still_drops_question(transport):
+    question = {
+        'item_id': 'invented',
+        'kind': 'task',
+        'title': 'Invented',
+        'created_at': '2026-10-09T00:00:00Z',
+        'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
+    }
+    sink = {'tokens': 0}
+    assert transport(Plan, {'questions': [question]}, sink=sink) == Plan()
+    assert sink['validation_errors'] == {'questions:value_error': 1}
+
+
+def test_validation_diagnostics_never_include_unknown_keys_or_values(transport, caplog):
+    from utils.dream_metrics import record_pass
+
+    sink = {'tokens': 0}
+    secret = 'invented PRIVATE text including spaces'
+    edit = {'kind': 'spelling', 'target': secret, 'reason': '', 'evidence': [secret], secret: secret}
+    assert transport(Plan, {'edits': [edit]}, sink=sink) == Plan()
+    assert sink['validation_errors'] == {'edits.reason:string_too_short': 1, 'edits.unknown_field:extra_forbidden': 1}
+    with caplog.at_level('INFO', logger='utils.dream_metrics'):
+        record_pass({'status': 'complete', **sink})
+    assert secret not in str(sink) and secret not in caplog.text
+    assert 'dropped_invalid=' in caplog.text and 'edits.reason:string_too_short' in caplog.text

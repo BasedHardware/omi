@@ -1,6 +1,7 @@
 """Bounded labels for dream health; never include identities or provider bodies."""
 
 import logging
+import json
 
 from prometheus_client import Counter
 
@@ -41,4 +42,13 @@ def record_pass(report):
     reasoning = max(0, int(report.get('reasoning_evidence_chars', 0)))
     EVIDENCE_CHARS.labels('triage').inc(triage)
     EVIDENCE_CHARS.labels('reasoning').inc(reasoning)
-    logger.info('Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d', status, triage, reasoning)
+    logger.info(
+        'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
+        'dropped_invalid=%s validation_errors=%s poisoned=%d',
+        status,
+        triage,
+        reasoning,
+        json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
+        json.dumps(report.get('validation_errors', {}), sort_keys=True),
+        max(0, int(report.get('poisoned', 0))),
+    )
