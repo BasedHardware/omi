@@ -48,6 +48,13 @@ final class ConversationDetailAutomationState: ObservableObject {
     }
   }
 
+  /// A user-opened citation uses the same transcript focus path as automation without
+  /// publishing a second open request (the caller already owns navigation).
+  func prepareCitationFocus(conversationId: String, transcriptSegmentIds: [String]) {
+    pendingTranscriptConversationId = conversationId
+    pendingTranscriptSegmentIds = transcriptSegmentIds
+  }
+
   func takePendingOpenRequest() -> OpenRequest? {
     defer { pendingOpenRequest = nil }
     return pendingOpenRequest

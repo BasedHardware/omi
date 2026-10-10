@@ -75,6 +75,7 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
   let onRename: () -> Void
   let onMoveToFolder: ((String?) -> Void)?
   let onCopyTranscript: () -> Void
+  let onDraftFollowUp: (() -> Void)?
   let onDiscussInChat: (() -> Void)?
   let onDelete: () -> Void
   @ViewBuilder let bannerInset: () -> BannerInset
@@ -244,6 +245,11 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
         Label("Copy Transcript", systemImage: "doc.on.doc")
       }
       .disabled(!canCopyTranscript)
+      if let onDraftFollowUp {
+        Button(action: onDraftFollowUp) {
+          Label("Draft Follow-up…", systemImage: "square.and.pencil")
+        }
+      }
       Button(action: onRename) {
         Label("Rename…", systemImage: "pencil")
       }

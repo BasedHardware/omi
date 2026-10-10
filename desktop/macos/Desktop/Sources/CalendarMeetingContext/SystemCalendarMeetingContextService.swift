@@ -237,7 +237,8 @@ actor SystemCalendarMeetingContextService {
     self.uploader = uploader
   }
 
-  /// Called asynchronously when a meeting is detected. This is the only path that can prompt.
+  /// Called asynchronously when a meeting is detected. This recording-context path can prompt;
+  /// the meeting-brief setting also has an explicit user-initiated request path.
   /// A denied/restricted decision is terminal until macOS reports a different authorization state.
   func prepareAroundNow(now: Date = Date()) async {
     switch await provider.authorizationState() {
@@ -258,6 +259,24 @@ actor SystemCalendarMeetingContextService {
   func syncAuthorizedEvents(overlapping recordingInterval: DateInterval) async {
     guard await provider.authorizationState() == .allowed else { return }
     await sync(interval: Self.queryInterval(overlapping: recordingInterval))
+  }
+
+  /// A deliberate settings gesture may request Calendar access for the local meeting-brief pilot.
+  /// Reading upcoming events never uploads them or triggers the recording-context sync path.
+  func requestBriefAccess() async -> Bool {
+    switch await provider.authorizationState() {
+    case .allowed: return true
+    case .notDetermined: return await provider.requestAccess()
+    case .unavailable: return false
+    }
+  }
+
+  func upcomingAuthorizedEvents(now: Date, horizon: TimeInterval) async -> [SystemCalendarEventSnapshot] {
+    guard await provider.authorizationState() == .allowed, horizon > 0 else { return [] }
+    let interval = DateInterval(start: now, end: now.addingTimeInterval(horizon))
+    return await provider.events(in: interval)
+      .filter { !$0.isAllDay && !$0.isCanceled && $0.startTime > now && $0.startTime <= interval.end }
+      .sorted { $0.startTime < $1.startTime }
   }
 
   /// Local trigger observations consume an existing calendar grant only. This
