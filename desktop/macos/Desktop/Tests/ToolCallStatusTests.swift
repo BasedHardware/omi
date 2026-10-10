@@ -22,10 +22,10 @@ final class ToolCallStatusTests: XCTestCase {
   /// Adding a new enum case without updating this expectation should
   /// force a conscious decision about whether that state is in-flight.
   func testIsInFlightCoversEveryCase() {
-    XCTAssertEqual(ToolCallStatus.allCases.count, 5)
+    XCTAssertEqual(ToolCallStatus.allCases.count, 6)
     XCTAssertEqual(
       ToolCallStatus.allCases.filter(\.isInFlight),
-      [.running, .slow, .stalled]
+      [.running, .waitingApproval, .slow, .stalled]
     )
   }
 
@@ -128,7 +128,7 @@ final class ToolCallStatusTests: XCTestCase {
     )
     XCTAssertEqual(
       ToolCallStatus.allCases.map(ToolActivityTimelinePresentation.accessibilityValue),
-      ["Running", "Still working", "Taking longer than usual", "Completed", "Failed"]
+      ["Running", "Waiting for your approval", "Still working", "Taking longer than usual", "Completed", "Failed"]
     )
   }
 

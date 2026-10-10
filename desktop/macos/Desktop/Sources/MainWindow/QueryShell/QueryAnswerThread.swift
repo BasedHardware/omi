@@ -85,6 +85,7 @@ struct QueryAnswerThread: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
+        approvalSurface: chatProvider.mainChatSurfaceReference(),
         postcardFirstLanding: DesktopExperimentCoordinator.shared.isMemoryV1,
         // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
         // opener is composed by the provider the moment onboarding finishes — a greeting by name

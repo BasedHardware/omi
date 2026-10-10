@@ -108,6 +108,56 @@ final class ChatStallWatchdogTests: XCTestCase {
       "tool stall guard must interrupt after marking its generation")
   }
 
+  /// A device tool approval card waiting on the person must never count as a
+  /// stalled tool: the tick loop tells the detector about the wait before it
+  /// asks which tools are overdue, so the 90 s abort cannot fire under a card.
+  func testToolStallGuardPausesWhileAnApprovalCardIsPending() throws {
+    let source = try chatProviderSource()
+    guard
+      let wait = source.range(
+        of: #"stallDetector\.setWaitingOnUser\(waitingOnUser,\s*atMs:\s*nowMs\)"#, options: .regularExpression)
+    else {
+      return XCTFail("the stall tick loop must tell the detector when a card is waiting on the person")
+    }
+    XCTAssertNotNil(
+      source[wait.upperBound...].range(
+        of: #"stallDetector\.toolIdsWithoutProgress\("#, options: .regularExpression),
+      "the overdue-tool check must run after the detector knows about the wait")
+    XCTAssertNotNil(
+      source[..<wait.lowerBound].range(of: "ChatProvider.hasPendingToolApproval(sessionId: turnSessionId)"),
+      "the wait must come from the approval store, keyed by the turn's own session, not a timer")
+    XCTAssertNotNil(
+      source.range(of: "let turnSessionId = pinnedSession.sessionId"),
+      "the session is the one the turn resolved for its surface, so a pill or workstream turn sees its own card")
+  }
+
+  /// A card raised on the agent pill's session pauses that turn's guard; the
+  /// main chat's session, with no card, does not. The check is keyed by the
+  /// session the turn resolved, never by the main chat surface.
+  @MainActor
+  func testAPendingCardOnThePillSessionPausesThatTurnAndNotTheMainChat() throws {
+    let store = DesktopToolApprovalStore.shared
+    store.reset()
+    defer { store.reset() }
+    let frame = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"approval_requested","protocolVersion":2,"approvalId":"disp_pill","ownerId":"o","sessionId":"ses_pill","runId":"run_pill","attemptId":"a","invocationId":"i","adapterId":"pi-mono","surfaceKind":"floating_pill","toolName":"send_message","capability":"desktop.messaging.send","operation":"send_message","resourceRef":"+1","title":"Send a message","decisionPrompt":"Send?","preview":{"to":"+1","text":"hi"},"options":[{"id":"allow_once","effect":"allow","scope":"once"},{"id":"deny","effect":"deny","scope":"once"}],"defaultOptionId":"deny","requestedAtMs":1,"expiresAtMs":9999999999999}"#
+      ))
+    store.ingest(message: frame)
+
+    XCTAssertTrue(ChatProvider.hasPendingToolApproval(sessionId: "ses_pill"))
+    XCTAssertFalse(ChatProvider.hasPendingToolApproval(sessionId: "ses_main"))
+    XCTAssertFalse(ChatProvider.hasPendingToolApproval(sessionId: nil))
+
+    let resolved = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"approval_resolved","protocolVersion":2,"approvalId":"disp_pill","ownerId":"o","sessionId":"ses_pill","runId":"run_pill","attemptId":"a","invocationId":"i","toolName":"send_message","decision":"deny","selectedOptionId":"deny","grantId":null,"resolvedBy":"user","resolvedAtMs":2,"automatic":false}"#
+      ))
+    store.ingest(message: resolved)
+    XCTAssertFalse(
+      ChatProvider.hasPendingToolApproval(sessionId: "ses_pill"), "a closed card no longer pauses the guard")
+  }
+
   // MARK: - Helpers
 
   private func chatProviderSource() throws -> String {

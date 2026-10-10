@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import type {
+  ApprovalRequestedMessage,
+  ApprovalResolvedMessage,
   AuthorizedToolExecutionMessage,
+  ClientCapabilitiesMessage,
   AuthorizedToolExecutionResultMessage,
   CancelAckMessage,
   ControlToolResultMessage,
@@ -27,7 +30,9 @@ import type {
   JournalBackendSyncMessage,
 } from "../src/protocol.js";
 import {
+  CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS,
   PROTOCOL_VERSION,
+  RUNTIME_CAPABILITIES,
   assertPublicJournalRecordAuthority,
   assertPublicJournalUpdateAuthority,
   isInboundResponseMessage,
@@ -412,6 +417,71 @@ describe("protocol v2", () => {
     };
     expect([begin, invoke, complete] satisfies InboundMessage[]).toHaveLength(3);
     expect([began, invoked, completed] satisfies OutboundMessage[]).toHaveLength(3);
+  });
+
+  it("types the device-tool approval card and its single resolution as outbound frames", () => {
+    const requested: ApprovalRequestedMessage = {
+      type: "approval_requested",
+      protocolVersion: PROTOCOL_VERSION,
+      approvalId: "disp_1",
+      ownerId: "owner-1",
+      sessionId: "ses_1",
+      runId: "run_1",
+      attemptId: "att_1",
+      invocationId: "inv_1",
+      adapterId: "pi-mono",
+      surfaceKind: "main_chat",
+      policy: "default_user_approval",
+      toolName: "send_message",
+      capability: "desktop.messaging.send",
+      operation: "send_message",
+      resourceRef: "+15551234567",
+      inputHash: "sha256:abc",
+      effectClass: "non_idempotent_write",
+      title: "Send a message",
+      decisionPrompt: "Send this message to +15551234567?",
+      preview: { to: "+15551234567", text: "Running late" },
+      previewTruncated: false,
+      reason: "Sensitive action requires dispatch or scoped grant.",
+      options: [
+        { id: "allow_once", effect: "allow", scope: "run" },
+        { id: "allow_session", effect: "allow", scope: "session" },
+        { id: "deny", effect: "deny", scope: "request" },
+      ],
+      defaultOptionId: "deny",
+      requestedAtMs: 1,
+      expiresAtMs: 180_001,
+    };
+    const resolved: ApprovalResolvedMessage = {
+      type: "approval_resolved",
+      protocolVersion: PROTOCOL_VERSION,
+      approvalId: requested.approvalId,
+      ownerId: requested.ownerId,
+      sessionId: requested.sessionId,
+      runId: requested.runId,
+      attemptId: requested.attemptId,
+      invocationId: requested.invocationId,
+      toolName: requested.toolName,
+      decision: "allow",
+      selectedOptionId: "allow_once",
+      grantId: null,
+      resolvedBy: "user",
+      resolvedAtMs: 2,
+      automatic: false,
+    };
+    expect([requested, resolved] satisfies OutboundMessage[]).toHaveLength(2);
+    // Swift can require this before it offers the approval card.
+    expect(RUNTIME_CAPABILITIES).toContain("desktop_tool_approval_requests");
+    // And it opts the relay into parking only once it can render that card.
+    const declared: ClientCapabilitiesMessage = {
+      type: "client_capabilities",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "caps-1",
+      clientId: "desktop-shell",
+      capabilities: [CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS],
+    };
+    expect([declared] satisfies InboundMessage[]).toHaveLength(1);
+    expect(CLIENT_CAPABILITY_DESKTOP_TOOL_APPROVAL_CARDS).toBe("desktop_tool_approval_cards");
   });
 
   it("keeps removed capability and dual-writer wire names absent", () => {

@@ -221,7 +221,7 @@ do not hand-edit those paths to match a specific machine.
 | `DesktopLocalProfile` harness | Auth emulator bootstrap | Re-bootstrap emulator session; no prod invalidation side effects |
 
 ### On-device tool surface
-- Contacts/Messages/AppleScript actuation goes through kernel policy, never improvised shell; `desktop.messaging.read` is sensitive like `send` (a thread exposes the other party); `desktop.automation.act` never resolves without a dispatch or scoped grant; untrusted values reach `osascript` as `argv` only. `OMI_MESSAGES_DB` overrides the Messages store for tests. See `desktop/macos/docs/device-tool-surface.md`.
+- Contacts/Messages/AppleScript actuation goes through kernel policy, never improvised shell; `desktop.messaging.read` is sensitive like `send` (a thread exposes the other party); `desktop.automation.act`/`observe` never resolve without a dispatch or scoped grant; untrusted values reach `osascript` as `argv` only. `OMI_MESSAGES_DB` overrides the Messages store for tests. See `desktop/macos/docs/device-tool-surface.md`.
 
 ### Database Structure
 - **Firestore** (`based-hardware`): User data, conversations, action items

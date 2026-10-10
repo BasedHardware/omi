@@ -1624,6 +1624,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     send_message: ["to", "text"],
     run_applescript: ["script"],
     get_product_kb: [],
+    ui_snapshot: ["bundle_id"],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];

@@ -747,6 +747,53 @@ export class SqliteAgentStore implements AgentStore {
         this.db.prepare("DELETE FROM workstream_continuation_checkpoints WHERE expires_at_ms <= ?").run(now);
       }
 
+      // An approval parked on a prepared tool invocation cannot survive the
+      // daemon: the ledger row above just became `failed`, so a later user
+      // answer must find nothing to admit. Expire it regardless of its TTL
+      // and record the closure so the card ends with an audit event.
+      const expiredToolApprovalRows = this.allRows(
+        `SELECT dispatch_id, source_session_id, source_run_id, source_attempt_id, payload_json
+         FROM desktop_dispatches
+         WHERE status = 'pending'
+           AND kind = 'approval'
+           AND json_extract(payload_json, '$.invocation.invocationId') IS NOT NULL`,
+      );
+      const expiredToolApprovalDispatchIds = expiredToolApprovalRows.map((row) => text(row.dispatch_id));
+      if (expiredToolApprovalDispatchIds.length > 0) {
+        this.db.prepare(
+          `UPDATE desktop_dispatches
+           SET status = 'expired', resolved_at_ms = ?, resolved_by = 'daemon_startup_reconciliation', resolution_json = ?
+           WHERE status = 'pending'
+             AND kind = 'approval'
+             AND json_extract(payload_json, '$.invocation.invocationId') IS NOT NULL`,
+        ).run(now, JSON.stringify({ decision: "expired", reason: "daemon_startup_reconciliation" }));
+      }
+      for (const row of expiredToolApprovalRows) {
+        if (row.source_session_id == null) continue;
+        const invocation = toolApprovalBindingFromPayload(row.payload_json);
+        eventIds.push(this.appendReconciliationEvent({
+          sessionId: text(row.source_session_id),
+          runId: row.source_run_id == null ? null : text(row.source_run_id),
+          attemptId: row.source_attempt_id == null ? null : text(row.source_attempt_id),
+          type: "approval.resolved",
+          payload: {
+            approvalId: text(row.dispatch_id),
+            dispatchId: text(row.dispatch_id),
+            invocationId: invocation?.invocationId ?? null,
+            toolName: invocation?.toolName ?? null,
+            status: "expired",
+            decision: "expired",
+            selectedOptionId: null,
+            grantId: null,
+            automatic: true,
+            resolvedBy: "daemon_startup_reconciliation",
+            resolvedAtMs: now,
+            resolution: { decision: "expired", reason: "daemon_startup_reconciliation" },
+          },
+          createdAtMs: now,
+        }));
+      }
+
       this.db.prepare(
         `UPDATE desktop_dispatches
          SET status = ?, resolved_at_ms = COALESCE(resolved_at_ms, ?), resolved_by = COALESCE(resolved_by, ?), resolution_json = COALESCE(resolution_json, ?)
@@ -892,6 +939,7 @@ export class SqliteAgentStore implements AgentStore {
         requeuedBackendConversationDeleteIds,
         failedPreparedToolInvocationIds,
         outcomeUnknownToolInvocationIds,
+        expiredToolApprovalDispatchIds,
         repairedSessionProfileIds,
         repairedRunProfileReferenceIds: repairedProfileReferences.runIds,
         repairedAttemptProfileReferenceIds: repairedProfileReferences.attemptIds,
@@ -3544,6 +3592,25 @@ function runTransaction<T>(db: Pick<DatabaseSync, "exec" | "isTransaction">, wor
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
+  }
+}
+
+/** The `invocation` binding an approval dispatch carries, or null when the payload is not one. */
+function toolApprovalBindingFromPayload(payloadJson: unknown): { invocationId: string | null; toolName: string | null } | undefined {
+  if (typeof payloadJson !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(payloadJson) as unknown;
+    const invocation = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>).invocation
+      : undefined;
+    if (!invocation || typeof invocation !== "object" || Array.isArray(invocation)) return undefined;
+    const record = invocation as Record<string, unknown>;
+    return {
+      invocationId: typeof record.invocationId === "string" ? record.invocationId : null,
+      toolName: typeof record.toolName === "string" ? record.toolName : null,
+    };
+  } catch {
+    return undefined;
   }
 }
 

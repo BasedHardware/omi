@@ -557,6 +557,16 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       return result
 
+    // ui_snapshot reads another app's content. The kernel parked it behind the
+    // per-app card and dispatched only after an allow; the owner bind is the second gate.
+    case .uiSnapshot:
+      guard
+        let result = await performOwnerBoundAsyncPhysicalEffect(
+          expectedOwnerID: expectedOwnerID,
+          effect: { await executeUISnapshot(toolCall.arguments) })
+      else { return authorizedOwnerChangedResult() }
+      return result
+
     case .fillCloudConnectorForm:
       guard
         let result = await performOwnerBoundAsyncPhysicalEffect(
@@ -948,9 +958,9 @@ class ChatToolExecutor {
       )
     }
     guard
-      let capture = performOwnerBoundPhysicalEffect(
+      let capture = await performOwnerBoundAsyncPhysicalEffect(
         expectedOwnerID: expectedOwnerID,
-        effect: { ScreenCaptureManager.captureScreenWithDetailTiles() }) ?? nil
+        effect: { await captureScreenLeavingOutRefusedApps() }) ?? nil
     else {
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       ScreenContextToolTelemetry.trackToolResult(
