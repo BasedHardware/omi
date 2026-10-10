@@ -1,3 +1,7 @@
+from database.chat_history_window import (
+    cache_aligned_history_limit,
+)
+from database.channel_visibility import visible_sessions
 import copy
 import hashlib
 import json
@@ -38,8 +42,6 @@ BATCH_LIMIT = 500  # Firestore hard limit
 FILES_BATCH_LIMIT = 499  # Safe Firestore batch limit leaving headroom under 500
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
-CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
-CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # Extra non-automatic documents a visible page may stream beyond the rows needed if none
 # were reported. The floor is the page itself, never this: the previous raw
 # ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
@@ -446,24 +448,6 @@ def get_messages(
         message['files'] = [files[file_id] for file_id in message.get('files_id', []) if file_id in files]
 
     return messages
-
-
-def cache_aligned_history_limit(total_visible_messages: int) -> int:
-    """Return a bounded history size whose start moves only at epoch boundaries.
-
-    A fixed newest-N window changes at the front on every chat turn, invalidating
-    Anthropic's cumulative message-prefix cache. This policy keeps at least the
-    existing ten-message continuity window and lets it grow append-only for eight
-    messages before resetting to ten. The request therefore carries 10..17
-    messages, never less history than before and never an unbounded transcript.
-    """
-    if total_visible_messages < 0:
-        raise ValueError('total_visible_messages must be non-negative')
-    if total_visible_messages <= CHAT_HISTORY_BASE_VISIBLE_MESSAGES:
-        return total_visible_messages
-    return CHAT_HISTORY_BASE_VISIBLE_MESSAGES + (
-        (total_visible_messages - CHAT_HISTORY_BASE_VISIBLE_MESSAGES) % CHAT_HISTORY_APPEND_EPOCH_MESSAGES
-    )
 
 
 def get_cache_aligned_messages(
@@ -1126,7 +1110,8 @@ def get_chat_sessions(
     if starred is not None:
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
-    query = query.offset(offset).limit(limit)
+    extra = visible_sessions(uid) if app_id is None else []
+    query = query.offset(0 if extra else offset).limit(offset + limit if extra else limit)
     items: List[Dict[str, Any]] = []
     for doc in query.stream():
         data: Dict[str, Any] = _typed_doc(doc)
@@ -1134,6 +1119,10 @@ def get_chat_sessions(
         normalized = _normalize_chat_session(data)
         if normalized is not None:
             items.append(normalized)
+    if extra:
+        items.extend(row for row in extra if starred is None or row.get('starred', False) == starred)
+        items.sort(key=lambda row: row['updated_at'], reverse=True)
+        return items[offset : offset + limit]
     return items
 
 
