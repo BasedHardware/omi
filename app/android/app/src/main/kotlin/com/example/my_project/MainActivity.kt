@@ -8,6 +8,7 @@ import android.os.PowerManager
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
+import com.friend.ios.brain.IntentRouterChannel
 import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.ble.OmiCompanionManager
 import com.friend.ios.batch.CaptureAdmissionPolicy
@@ -31,6 +32,7 @@ class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
     private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
+    private var localBrain: IntentRouterChannel? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -66,6 +68,12 @@ class MainActivity: FlutterActivity() {
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
+
+        // Local brain routing layer (IntentRouter over MiniLM-L6-v2).
+        // Lazy: the model loads on first `route`, not at engine configure, so app
+        // startup is not blocked by it.
+        localBrain = IntentRouterChannel(applicationContext)
+        localBrain!!.register(flutterEngine.dartExecutor.binaryMessenger)
 
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
@@ -179,6 +187,14 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The brain channel owns a single-thread executor that the routing worker runs
+        // on after the first load or route. Disposed unconditionally and outside the
+        // isFinishing guard: a configuration change or a system-initiated destroy also
+        // recreates this activity, and without this each recreation leaves another live
+        // executor behind holding a thread that nothing will ever shut down.
+        localBrain?.dispose()
+        localBrain = null
+
         // The engine dies with the activity whether or not it is finishing, so these flags
         // must clear outside the isFinishing guard — a system-initiated destroy otherwise
         // leaves native deferring audio to an engine that is gone (issue #10847).
