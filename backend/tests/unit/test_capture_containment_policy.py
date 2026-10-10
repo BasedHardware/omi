@@ -154,7 +154,7 @@ def test_on_mode_joins_the_complementary_pair_with_containment_evidence(seam, mo
     assert len(lines) == 1
     assert lines[0] == (
         'event=capture_group_containment mode=on phase=rule would_join=true '
-        'reason=contained jev_p=unavailable basis=full dropped_segments=0'
+        'reason=contained jev_p=unavailable basis=full dropped_segments=0 speech=user'
     )
     for cid in ('pendant', 'laptop'):
         strip = {k: v for k, v in seam['store'].rows[path(cid)].items() if k != 'capture_group'}
@@ -366,7 +366,7 @@ def test_jev_success_logs_content_free_companion(seam, monkeypatch, caplog):
     assert len(lines) == 1
     assert lines[0] == (
         'event=capture_group_containment mode=shadow phase=jev would_join=true '
-        'reason=contained jev_p=0.750000 basis=full dropped_segments=0'
+        'reason=contained jev_p=0.750000 basis=full dropped_segments=0 speech=user'
     )
     assert UID not in lines[0] and 'pendant' not in lines[0]
 
@@ -850,7 +850,7 @@ def test_realistic_layout_joins_only_in_on_mode(seam, monkeypatch, caplog, mode,
         assert ('capture_group_joined', 'applied') in seam['events']
         assert lines[0] == (
             'event=capture_group_containment mode=on phase=rule would_join=true '
-            'reason=contained jev_p=unavailable basis=full dropped_segments=0'
+            'reason=contained jev_p=unavailable basis=full dropped_segments=0 speech=user'
         )
         for cid in ('pendant', 'laptop'):
             strip = {k: v for k, v in seam['store'].rows[path(cid)].items() if k != 'capture_group'}

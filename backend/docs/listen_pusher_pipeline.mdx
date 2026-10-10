@@ -720,8 +720,10 @@ bounded spelling, and exact time+word duplicates dedup after the ratio counts
 (one copy allowed, triples reject). Degenerate durations drop and count in the
 clamped `dropped_segments` log field. Every in-window
 string, including whitespace-only text, counts toward the character
-budgets; missing or non-`is_user` attribution, malformed timing, and speech
-outside the shared window are never evidence. Work per pair is additionally
+budgets; on the user-labelled path, missing or non-`is_user` attribution,
+malformed timing, and speech outside the shared window are never evidence —
+when the smaller side carries no `is_user` true segment at all, the stricter
+`speech=all` fallback below applies instead. Work per pair is additionally
 bounded end to end: candidate windows are located by index lookups over the
 sorted target starts rather than a full rescan, the two-shared-bigram half of
 the acceptance conjunction (the pair still needs the 0.8 ordered-LCS coverage)
@@ -744,9 +746,32 @@ word count and the estimator reduces to the original matched/total ratio. The
 sampled coverage is a weighted heuristic estimate, not whole-transcript proof
 and not a raw matched/smaller ratio. The numeric evidence keeps `smaller_words`
 as the full in-window denominator while the matched fields count actual matched
-words in the sampled utterances only. Modes: `off` runs nothing new, `shadow`
+words in the sampled utterances only.
+
+**Unlabelled smaller side (`speech=all`).** When the smaller capture has no
+normalized `is_user is True` segment at all — common when live speaker
+attribution is missing — the detector falls back once, before matching, to
+treating all normalized smaller-side speech as the contained side and all
+normalized larger-side segments (any speaker label or id) as the target. A
+single `is_user` true boolean on the smaller side keeps the user-labelled path
+even when that utterance is below the 8-token floor; there is no retry after a
+failed user-path decision. Because the fallback loses the own-voice guarantee,
+its floors are stricter: 60+ smaller-side words (`no_speech` when either
+normalized side is empty), 60+ matched words, 4+ distinct matched utterances,
+60+ seconds of union support, and coverage of at least 0.85 of all in-window
+smaller-side words; the 8-token utterance floor, 20+ distinct matched tokens,
+0.8 pair coverage, two-shared-bigram gate, layout normalization, non-overlapping
+bundle guard, sampling and every work budget are unchanged. The same fallback
+can join genuinely same audio — including time-aligned background media — while
+generic overlapping talk, shifted transcripts, and partial phrase overlap still
+reject; that residual false-join risk is a known limitation of matching
+unattributed speech. Evidence method reads `all_speech_containment` instead of
+`user_speech_containment` and the log line gains a `speech=` label (`user` or
+`all`, clamped like every other label) appended after `dropped_segments`.
+
+Modes: `off` runs nothing new, `shadow`
 computes and logs the fixed content-free line
-`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=… dropped_segments=…`
+`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=… dropped_segments=… speech=…`
 (labels and numbers only — never transcript, identifiers, or errors), and `on`
 authorizes the same `join_capture_group` writer with the detector's numeric
 evidence and the existing expected windows and transcript fingerprints — but
