@@ -1060,6 +1060,15 @@ function UsageSectionContent({
         </button>
       </div>
 
+      <p className="text-sm leading-relaxed text-text-tertiary">
+        <strong className="font-medium text-text-secondary">
+          Using your own keys on desktop?
+        </strong>{' '}
+        Those keys stay on that device and are not synced to the web app. This web app
+        uses your Omi plan. Omi-hosted usage draws from the same account allowance across
+        devices. Desktop BYOK applies only when that service uses your own key.
+      </p>
+
       {/* Tab Content */}
       {activeTab === 'plan' ? (
         /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
