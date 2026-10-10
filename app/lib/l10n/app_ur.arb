@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "اپنی حسب ضرورت ایپلیکیشن بنائیں اور شیئر کریں",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "ایپلیکیشنز تلاش کریں",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "کمیونٹی میں شامل ہوں!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ اراکین اور بڑھ رہے ہیں۔",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "اکاؤنٹ حذف کریں",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Omi میں، ہم آپ کی رازداری کی حفاظت کے لیے پرتوشامل ہیں۔ یہ صفحہ آپ کو اپنے ڈیٹا کو کیسے محفوظ اور استعمال کیا جاتا ہے اس پر کنٹرول کرنے کی اجازت دیتا ہے۔",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "مزید جانیں…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "ڈیٹا تحفظ کی سطح",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "آپ کا ڈیٹا مضبوط انکوڈنگ کے ساتھ ڈیفالٹ طور پر محفوظ ہے۔ اپنی ترتیبات اور نیچے کی مستقبل کی رازداری کے اختیارات کا جائزہ لیں۔",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "ایپلیکیشن تک رسائی",
     "@appAccess": {
@@ -845,25 +829,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "STT فراہم کنندہ ترتیب دیں",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "بات چیت کا وقت ختم ہونا",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "یہ مقرر کریں کہ بات چیتیں کب خود بند ہوں",
+    "conversationTimeoutConfig": "کسی بات چیت کو ختم کرنے سے پہلے Omi خاموشی میں کتنا انتظار کرتا ہے",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "ڈیٹا درآمد کریں",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "دوسری جگہوں سے ڈیٹا درآمد کریں",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "ڈیبگ اور تشخیص",
     "@debugDiagnostics": {
@@ -929,10 +905,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "آپ کی بات چیتوں سے سمجھے گئے الفاظ۔",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "فراہم کرنا",
     "@providing": {
         "description": "Providing stat title"
@@ -944,10 +916,6 @@
     "remembering": "یاد رکھنا",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "حقائق اور تفصیلات آپ کے لیے یاد رکھی گئیں۔",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "غیر محدود منصوبہ",
     "@unlimitedPlan": {
@@ -1065,7 +1033,6 @@
     },
     "debugLogs": "ڈیبگ لاگز",
     "debugLogsAutoDelete": "3 دن کے بعد خود بخود حذف ہو جاتے ہیں۔",
-    "debugLogsDesc": "مسائل کی تشخیص میں مدد کرتا ہے",
     "noLogFilesFound": "کوئی لاگ فائلیں نہیں ملیں۔",
     "omiDebugLog": "Omi ڈیبگ لاگ",
     "logShared": "لاگ شیئر کیا گیا",
@@ -1078,7 +1045,6 @@
     "exportedConversations": "Omi سے برآمد شدہ بات چیتیں",
     "exportShared": "برآمد شیئر کیا گیا",
     "deleteKnowledgeGraphTitle": "علم کے گراف کو حذف کریں؟",
-    "deleteKnowledgeGraphMessage": "یہ تمام اخذ شدہ علم کے گراف کا ڈیٹا (نوڈز اور تعلقات) حذف کر دے گا۔ آپ کی اصل یادیں محفوظ رہیں گی۔ گراف وقت کے ساتھ یا اگلی درخواست پر دوبارہ تیار ہو گا۔",
     "knowledgeGraphDeleted": "علم کا گراف حذف ہو گیا",
     "deleteGraphFailed": "گراف حذف کرنے میں ناکام: {error}",
     "@deleteGraphFailed": {
@@ -1090,7 +1056,6 @@
         }
     },
     "deleteKnowledgeGraph": "علم کے گراف کو حذف کریں",
-    "deleteKnowledgeGraphDesc": "تمام نوڈز اور تعلقات صاف کریں",
     "mcp": "MCP",
     "mcpServer": "MCP سرور",
     "mcpServerDesc": "AI معاونین کو اپنے ڈیٹا سے جوڑیں",
@@ -1243,7 +1208,6 @@
     "trainFamilyProfiles": "دوستوں اور خاندان کے لیے پروفائلز تربیت دیں",
     "trainFamilyProfilesDesc": "آپ کی ریکارڈنگز ہمیں اپنے دوستوں اور خاندان کو سمجھنے اور پروفائلز بنانے میں مدد کرتے ہیں۔",
     "enhanceTranscriptAccuracy": "ٹرانسکرپٹ کی درستگی میں اضافہ کریں",
-    "enhanceTranscriptAccuracyDesc": "جیسے جیسے ہماری ماڈل بہتر ہوتی ہے، ہم آپ کی ریکارڈنگز کے لیے بہتر تحریری شکل میں تبدیلی کی نتائج فراہم کر سکتے ہیں۔",
     "legalNotice": "قانونی نوٹس: آڈیو ڈیٹا ریکارڈ اور محفوظ کرنے کی قانونی حیثیت آپ کے مقام اور اس خصوصیت کو کس طریقے سے استعمال کرتے ہیں اس پر منحصر ہو سکتی ہے۔ یہ آپ کی ذمہ داری ہے کہ مقامی قوانین اور ضوابط کی تعریف کو یقینی بنائیں۔",
     "alreadyAuthorized": "پہلے سے اجازت دی گئی",
     "authorize": "اجازت دیں",
@@ -1311,7 +1275,7 @@
         }
     },
     "tellUsPrimaryLanguage": "ہمیں اپنی بنیادی زبان بتائیں",
-    "languageForTranscription": "تیز تر ٹرانسکرپشن اور ذاتی نوعیت کے تجربے کے لیے اپنی زبان مقرر کریں۔",
+    "languageForTranscription": "Omi اس زبان کو ٹرانسکرپشن، خلاصوں اور یادوں کے لیے استعمال کرتا ہے۔",
     "singleLanguageModeInfo": "سنگل لینگویج موڈ فعال ہے۔ اعلیٰ درستگی کے لیے ترجمہ غیر فعال ہے۔",
     "searchLanguageHint": "نام یا کوڈ کے لحاظ سے زبان تلاش کریں",
     "noLanguagesFound": "کوئی زبان نہیں ملی",
@@ -1458,7 +1422,7 @@
             }
         }
     },
-    "integrationComingSoon": "{appName} کے ساتھ انضمام جلد آ رہا ہے! ہم آپ کو مزید کام کی تدبیری آپشنز دینے کے لیے سخت محنت کر رہے ہیں۔",
+    "integrationComingSoon": "{appName} ابھی تک تعاون یافتہ نہیں ہے۔",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1436,7 @@
     "importConfiguration": "ترتیب درآمد کریں",
     "exportConfiguration": "ترتیب برآمد کریں",
     "bringYourOwn": "اپنا لے کر آئیں",
-    "payYourSttProvider": "Omi کو آزادانہ استعمال کریں۔ آپ صرف اپنے STT فراہم کنندہ کو براہ راست ادا کریں۔",
+    "payYourSttProvider": "Omi میں مفت۔ آپ براہ راست اپنے ٹرانسکرپشن فراہم کنندہ کو ادائیگی کرتے ہیں۔",
     "freeMinutesMonth": "ہر ماہ 300 منٹ مفت شامل ہیں۔ آن لائن کریں ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان درکار ہے",
@@ -1520,7 +1484,7 @@
     "enterLiveSttWebsocket": "اپنا براہ راست STT WebSocket اختتام پوائنٹ درج کریں",
     "apiKey": "API کلید",
     "enterApiKey": "اپنی API کلید درج کریں",
-    "storedLocallyNeverShared": "مقامی طور پر محفوظ، کبھی شیئر نہیں",
+    "storedLocallyNeverShared": "اس فون پر محفوظ۔ صرف آپ کے ٹرانسکرپشن فراہم کنندہ کو بھیجا جاتا ہے۔",
     "host": "میزبان",
     "port": "پورٹ",
     "advanced": "اعلیٰ",
@@ -1531,8 +1495,8 @@
     "resetRequestConfig": "درخواست ترتیب کو ڈیفالٹ میں ری سیٹ کریں",
     "logs": "لاگز",
     "logsCopied": "لاگز نقل کیے گئے",
-    "noLogsYet": "ابھی کوئی لاگز نہیں۔ حسب ضرورت STT سرگرمی دیکھنے کے لیے ریکارڈنگ شروع کریں۔",
-    "deviceUsesCodec": "{device} {reason} استعمال کرتا ہے۔ Omi استعمال کیا جائے گا۔",
+    "noLogsYet": "ابھی کوئی لاگز نہیں۔ اپنے ٹرانسکرپشن فراہم کنندہ کو بھیجی گئی درخواستیں دیکھنے کے لیے کچھ ریکارڈ کریں۔",
+    "deviceUsesCodec": "{device} ایسے فارمیٹ میں ریکارڈ کرتا ہے جسے یہ فراہم کنندہ نہیں پڑھ سکتا ({reason})، اس لیے اس کے بجائے Omi کی ٹرانسکرپشن استعمال ہو گی۔",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1545,13 +1509,9 @@
         }
     },
     "omiTranscription": "Omi ٹرانسکرپشن",
-    "bestInClassTranscription": "صفر سیٹ اپ کے ساتھ بہترین درجے کی ٹرانسکرپشن",
     "instantSpeakerLabels": "فوری سپیکر لیبلز",
     "languageTranslation": "100+ زبانوں میں ترجمہ",
-    "optimizedForConversation": "بات چیت کے لیے بہتر بنایا گیا",
     "autoLanguageDetection": "خودکار زبان کی شناخت",
-    "highAccuracy": "اعلیٰ درستگی",
-    "privacyFirst": "رازداری پہلے",
     "saveChanges": "تبدیلیوں کو محفوظ کریں",
     "resetToDefault": "ڈیفالٹ میں ری سیٹ کریں",
     "viewTemplate": "ٹیمپلیٹ دیکھیں",
@@ -1705,10 +1665,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "جاری رکھیں، آپ بہترین کام کر رہے ہیں",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "اس سوال کو چھوڑ دیں",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1812,7 +1768,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "ہر لمحہ پکڑیں۔ AI سے چلائے ہوئے\nخلاصے حاصل کریں۔ کبھی نوٹس نہ لیں۔",
+    "captureEveryMoment": "Omi آپ کی بات چیتیں ریکارڈ کرتا ہے اور آپ کے لیے\nخلاصہ اور کرنے کے کام لکھتا ہے۔",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1881,7 +1837,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "تیز تر ٹرانسکرپشن اور ذاتی نوعیت کے تجربے کے لیے اپنی زبان مقرر کریں",
+    "languageBenefits": "Omi اس زبان کو ٹرانسکرپشن، خلاصوں اور یادوں کے لیے استعمال کرتا ہے۔",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1898,10 +1854,6 @@
     "selectYourLanguage": "اپنی زبان منتخب کریں",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "AI کے ساتھ آپ کا ذاتی نشوونما کا سفر جو آپ کے ہر لفظ کو سنتا ہے۔",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "کام",
     "@actionItemsTitle": {
@@ -2553,11 +2505,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "STT فراہم کنندہ کنفیگر کریں",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "سیٹ کریں کہ بات چیتیں کب خودکار طور پر ختم ہوں",
+    "setWhenConversationsAutoEnd": "کسی بات چیت کو ختم کرنے سے پہلے Omi خاموشی میں کتنا انتظار کرتا ہے",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2606,9 +2554,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "علم کا گراف کامیابی سے حذف ہو گیا",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2624,10 +2569,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "تمام نوڈز اور کنکشنز کو صاف کریں",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2822,10 +2763,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Omi میں خوش آمدید! آپ کا AI ساتھی بات چیت، کاموں اور بہت کچھ میں آپ کی مدد کے لیے تیار ہے۔",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Omi استعمال کرنا شروع کریں",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2939,14 +2876,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "بات چیتوں کو خود کار طور پر پروسیس کیا جاتا ہے",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "فوری طور پر بصیرت اور خلاصے حاصل کریں",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "تمام دیکھیں",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2958,10 +2887,6 @@
     "dailyScore": "روز مرہ کا اسکور",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "ایک اسکور جو آپ کو بہتر طریقے سے\nعمل پر توجہ مرکوز کرنے میں مدد کرتا ہے۔",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "تلاش کے نتائج",
     "@searchResults": {
@@ -3476,10 +3401,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "ایک بات چیت شروع کریں اور جادو شروع ہونے دیں",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "براہ کرم اپنے انٹرنیٹ کنکشن کی جانچ کریں",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3738,10 +3659,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "قابل فراغ AI ساتھی",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "یادیں لوڈ ہو رہی ہیں…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3813,10 +3730,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "اپنی یادوں کو منظم اور کنٹرول کریں",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "کل",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3825,17 +3738,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "تمام یادوں کو نجی رویہ پر سیٹ کریں",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "تمام یادوں کو عوامی بنائیں",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "تمام یادوں کو عوامی رویہ پر سیٹ کریں",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Omi سے تمام یادوں کو مستقل طور پر ہٹائیں",
     "@permanentlyRemoveAllMemories": {
@@ -3920,7 +3825,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "براہ کرم اپنی بنیادی زبان منتخب کریں",
     "chooseYourLanguage": "اپنی زبان منتخب کریں",
-    "selectPreferredLanguageForBestExperience": "بہترین Omi تجربے کے لیے اپنی پسندیدہ زبان منتخب کریں",
     "searchLanguages": "زبانوں میں تلاش کریں",
     "selectALanguage": "کوئی زبان منتخب کریں",
     "tryDifferentSearchTerm": "کوئی مختلف تلاش کی اصطلاح آزمائیں",
@@ -3935,7 +3839,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "اپنے ڈیوائس پر بہترین Omi تجربے کے لیے خصوصیات فعال کریں۔",
     "microphoneAccess": "مائیکروفون کی رسائی",
     "recordAudioConversations": "آڈیو کی بات چیت ریکارڈ کریں",
     "microphoneAccessDescription": "Omi کو آپ کی بات چیت ریکارڈ کرنے اور نقول فراہم کرنے کے لیے مائیکروفون کی رسائی کی ضرورت ہے۔",
@@ -4301,10 +4204,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "اپنا روزانہ کا خلاصہ کب حاصل کریں",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "رکنیت",
     "@subscription": {
         "description": "Subscription section title"
@@ -4330,14 +4229,10 @@
     "checkingNext7Days": "اگلے 7 دن کی جانچ کی جا رہی ہے",
     "shortcuts": "شارٹ کٹس",
     "shortcutChangeInstruction": "شارٹ کٹ کو تبدیل کرنے کے لیے اس پر کلک کریں۔ منسوخ کرنے کے لیے Escape دبائیں۔",
-    "configureSTTProvider": "STT فراہم کنندہ کو ترتیب دیں",
-    "setConversationEndDescription": "سیٹ کریں کہ بات چیت کب خود ختم ہو",
     "importDataDescription": "دوسری جگہوں سے ڈیٹا درآمد کریں",
     "exportConversationsDescription": "JSON میں بات چیت برآمد کریں",
     "exportingConversations": "بات چیت برآمد کی جا رہی ہے…",
-    "clearNodesDescription": "تمام نوڈس اور تعلقات صاف کریں",
     "deleteKnowledgeGraphQuestion": "علم کا گراف حذف کریں؟",
-    "deleteKnowledgeGraphWarning": "یہ تمام حاصل شدہ علم کے گراف کو حذف کرے گا۔ آپ کی اصل یادیں محفوظ رہیں گی۔",
     "connectOmiWithAI": "Omi کو AI معاونین کے ساتھ جوڑیں",
     "noAPIKeys": "کوئی API کلیدیں نہیں۔ شروعات کرنے کے لیے کوئی بنائیں۔",
     "autoCreateWhenDetected": "جب نام پایا جائے تو خود بنائیں",
@@ -4750,10 +4645,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "اپنی ایپ بنائیں اور شیئر کریں",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "ایپ",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4900,10 +4791,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "اختتام سے اختتام تک مشفر کاری رازداری کا سونے کا معیار ہے۔ جب فعال ہو تو آپ کا ڈیٹا آپ کے ڈیوائس پر مشفر ہو جاتا ہے اس سے پہلے کہ یہ ہماری سرورز پر بھیجا جائے۔ اس کا مطلب یہ ہے کہ کوئی بھی، یہاں تک کہ Omi، آپ کے مواد تک رسائی حاصل نہیں کر سکتا۔",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "اہم تبادلے:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4956,17 +4843,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "آپ کا ڈیٹا ہماری سرورز پر آپ کے لیے منفرد کلید کے ساتھ مشفر ہے، Google Cloud پر میزبان ہے۔ اس کا مطلب یہ ہے کہ آپ کا خام مواد ڈیٹا بیس سے براہ راست کسی کے لیے بھی رسائی سے دور ہے، بشمول Omi اسٹاف یا Google۔",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "اختتام سے اختتام تک مشفر کاری",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "زیادہ سے زیادہ سیکیورٹی کے لیے فعال کریں جہاں صرف آپ اپنے ڈیٹا تک رسائی حاصل کر سکتے ہوں۔ مزید جاننے کے لیے ٹیپ کریں۔",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "سطح کے قطع نظر، آپ کا ڈیٹا ہمیشہ باقی اور ترسیل میں مشفر ہوتا ہے۔",
     "@dataAlwaysEncrypted": {
@@ -5065,7 +4944,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• آپ کا ڈیٹا AI ماڈلز کو بہتر بنانے میں مدد کرتا ہے\n• صرف غیر حساس ڈیٹا شیئر کیا جاتا ہے\n• مکمل طور پر شفاف عمل",
+    "trainingDataBullets": "• آپ کا ڈیٹا AI ماڈلز کو بہتر بنانے میں مدد کرتا ہے\n• صرف غیر حساس ڈیٹا شیئر کیا جاتا ہے",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5174,10 +5053,6 @@
     "youAreOnUnlimitedPlan": "آپ لامحدود منصوبے پر ہیں۔",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "آپ کا Omi، بیکل ہو گیا۔ لامحدود کے لیے جائیں لامحدود امکانات کے لیے۔",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "آپ کا منصوبہ {date} کو ختم ہو گیا۔\nاب دوبارہ رکنیت حاصل کریں - نیا بلنگ مدت کے لیے فوری طور پر چارج کیا جائے گا۔",
     "@planEndedOn": {
@@ -5295,10 +5170,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Omi میں، ہم آپ کی رازداری کو بہت سنجیدگی سے لیتے ہیں۔ ہم ہماری جمع کردہ ڈیٹا اور اسے آپ کے لیے ہماری پروڈکٹ بہتر بنانے میں کیسے استعمال کرتے ہیں اس کے بارے میں شفاف رہنا چاہتے ہیں۔ یہاں وہ ہے جو آپ کو معلوم ہونے کی ضرورت ہے:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "ہم کیا ٹریک کرتے ہیں",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5314,14 +5185,6 @@
     "ourCommitment": "ہماری پابندی",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "ہم ہماری جمع کردہ ڈیٹا کو صرف Omi کو آپ کے لیے بہتر پروڈکٹ بنانے کے لیے استعمال کرنے کے لیے پابند ہیں۔ آپ کی رازداری اور اعتماد ہمارے لیے سب سے اہم ہے۔",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Omi کے قدری صارف ہونے کے لیے آپ کا شکریہ۔ اگر آپ کے کوئی سوالات یا خدشات ہیں تو براہ کرم ہم سے رابطہ کریں team@basedhardware.com۔",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "پاس ورڈ",
     "@password": {
@@ -5384,10 +5247,6 @@
     "exportStartedMayTakeFewSeconds": "برآمدگی شروع ہو گئی۔ اس میں کچھ سیکنڈ لگ سکتے ہیں…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "اس سے تمام اخذ شدہ علم کے گراف ڈیٹا (نوڈس اور کنکشنز) حذف ہوں گے۔ آپ کی اصل یادیں محفوظ رہیں گی۔ گراف وقت کے ساتھ یا اگلی درخواست پر دوبارہ بنایا جائے گا۔",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "اپنے روزانہ کاموں کا خلاصہ ترتیب دیں",
     "@configureDailySummaryDigest": {
@@ -5577,10 +5436,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "ایک بار جب کوئی شخص بنایا جاتا ہے تو آپ کسی گفتگو کے ٹرانسکرپٹ پر جا سکتے ہیں اور انہیں ان کے متعلقہ حصے تفویض کر سکتے ہیں، اس طریقے سے Omi ان کی بھی تشخیص کرنے کے قابل ہوگا!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "حذف کرنے کے لیے ٹیپ کریں",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5659,7 +5514,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "اپنی حقیقی وقت کی ریکارڈنگز نجی کلاؤڈ اسٹوریج میں محفوظ کریں جیسے جیسے آپ بولتے ہیں۔ آڈیو حقیقی وقت میں محفوظ طریقے سے پکڑی اور محفوظ کی جاتی ہے۔",
+    "storeAudioCloudDescription": "آپ کے بولتے ہوئے ریکارڈنگز اپ لوڈ کرتا ہے تاکہ آپ بعد میں انہیں دوبارہ چلا سکیں۔",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6772,10 +6627,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "اپنی کسٹم ایپ بنائیں اور شیئر کریں",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "1500+ ایپس تلاش کریں",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6812,23 +6663,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "صرف اہم یاد دہانی",
+    "frequencyDescMinimal": "صرف فوری باتیں، تقریباً روزانہ 1–3",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "صرف اہم اپ ڈیٹس",
+    "frequencyDescLow": "صرف اہم باتیں، تقریباً روزانہ 3–5",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "باقاعدہ مددگار تنبیہ",
+    "frequencyDescBalanced": "مفید تجاویز، تقریباً روزانہ 5–8",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "کثرت سے چیک ان",
+    "frequencyDescHigh": "زیادہ تجاویز، تقریباً روزانہ 6–9",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "مسلسل منسلک رہیں",
+    "frequencyDescMaximum": "ہر مفید ربط، روزانہ 9 تک",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8076,7 +7927,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "آپ کے ڈیوائس پر نجی اور محفوظ",
+    "privateAndSecureOnDevice": "اس فون پر محفوظ",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8736,14 +8587,6 @@
     "onboardingTellUsAboutYourself": "ہمیں اپنے بارے میں بتائیں",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "اپنی پسند منتخب کریں",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "ضروری رسائی دیں",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "آپ تیار ہیں",
     "@onboardingYoureAllSet": {
@@ -9680,10 +9523,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "منتخب کریں کہ کس بیک اینڈ سے منسلک کریں",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "پروڈکشن",
     "@production": {
         "description": "Label for production API environment"
@@ -9855,10 +9694,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "آپ کی کالیں نجی اور محفوظ رہتی ہیں",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "غیر محدود میں اپ گریڈ کریں",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9960,7 +9795,7 @@
     "fairUse3Day": "3 دن کی رولنگ",
     "fairUseWeekly": "ہفتہ وار رولنگ",
     "fairUseAboutTitle": "منصفانہ استعمال کے بارے میں",
-    "fairUseAboutBody": "Omi ذاتی بات چیت، میٹنگ، اور براہ راست بات چیت کے لیے ڈیزائن کیا گیا ہے۔ استعمال کو حقیقی تقریر کے وقت سے ماپا جاتا ہے، منسلکی کے وقت سے نہیں۔ اگر استعمال ذاتی غیر مواد کے لیے عام نمونوں کو نمایاں طور پر تجاوز کرے، تو ایڈجسٹمنٹ لاگو ہو سکتے ہیں۔",
+    "fairUseAboutBody": "Omi ذاتی بات چیت، میٹنگز اور لائیو تعاملات کے لیے بنایا گیا ہے۔ استعمال کو بولنے میں صرف ہونے والے وقت سے ماپا جاتا ہے، جڑے رہنے کے وقت سے نہیں۔ اگر آپ کا استعمال عام ذاتی استعمال سے کہیں زیادہ ہو، تو پہلے آپ کو انتباہ ملے گا۔ مسلسل بھاری استعمال ٹرانسکرپشن کو سست یا محدود کر سکتا ہے۔",
     "fairUseCaseRefCopied": "{caseRef} کاپی ہو گیا",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10065,10 +9900,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "جب آپ کا Omi آپ کے فون سے منسلک نہ ہو، تو یہ آڈیو کو اپنی بنی ہوئی میموری میں مقامی طور پر محفوظ کرتا ہے۔ آپ کبھی بھی ریکارڈنگ نہیں کھوتے۔",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "جب Omi دوبارہ منسلک ہوتا ہے، تو ریکارڈنگز خودکار طور پر آپ کے فون میں منتقل ہوتی ہیں اپ لوڈ کرنے سے پہلے ایک عارضی رکھنے والے علاقے کے طور پر۔",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10105,7 +9936,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "یہ اجازتیں Omi کے کام کرنے کے لیے اہم ہیں۔ وہ اطلاعات، مقام پر مبنی تجربات، اور آڈیو کی تفتیش جیسی اہم خصوصیات کو فعال کرتی ہیں۔",
+    "permissionsPageDescription": "Omi ان اجازتوں کو آپ کے ڈیوائس سے جڑنے، آڈیو ریکارڈ کرنے، پس منظر میں کام جاری رکھنے، یاد دہانیاں بھیجنے اور یہ نوٹ کرنے کے لیے استعمال کرتا ہے کہ بات چیتیں کہاں ہوئیں۔",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10116,10 +9947,6 @@
     "permissionsSetupTitle": "بہترین تجربہ حاصل کریں",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "کچھ اجازتیں فعال کریں تاکہ Omi اپنا جادو دکھا سکے۔",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "آپ یہ ترتیبات میں کسی بھی وقت تبدیل کر سکتے ہیں > اجازتیں",
     "@permissionsChangeAnytime": {
@@ -10452,7 +10279,6 @@
     "currentPlan": "موجودہ",
     "neoSubtitle": "ماہانہ {count} سوالات",
     "operatorSubtitle": "ماہانہ {count} سوالات",
-    "architectSubtitle": "پاور یوزر AI — ہزاروں چیٹس + ایجنٹک آٹومیشن",
     "chatUsageCost": "چیٹ: ${used} / ${limit} اس مہینے استعمال ہوا",
     "chatUsageCostNoLimit": "چیٹ: ${used} اس مہینے استعمال ہوا",
     "chatUsageMessages": "چیٹ: {used} / {limit} پیغامات اس مہینے",
@@ -10479,7 +10305,7 @@
     "record": "ریکارڈ کریں",
     "stop": "روکیں",
     "recordWithPhoneMic": "فون مائیک سے ریکارڈ کریں",
-    "recordWithPhoneMicSubtitle": "اپنے ارد گرد کی آواز ریکارڈ کریں",
+    "recordWithPhoneMicSubtitle": "اس فون کے مائیکروفون سے ریکارڈ اور ٹرانسکرائب کریں",
     "phoneCall": "فون کال",
     "phoneCallSubtitle": "لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں",
     "bulkExportInProgress": "ایکسپورٹ ہو رہا ہے…",
@@ -10550,7 +10376,6 @@
     "invalidPromotionCode": "غلط پرومو کوڈ۔",
     "backgroundModeTitle": "بیک گراؤنڈ موڈ",
     "backgroundModeDescription": "ایپ مکمل طور پر بند ہونے پر بھی اپنے Omi کی ریکارڈنگ جاری رکھیں۔",
-    "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔",
     "regenerateRecap": "خلاصہ دوبارہ بنائیں",
     "recapRegeneratedSnackbar": "خلاصہ دوبارہ بن گیا",
     "recapRegenerateFailed": "خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔",
@@ -10606,7 +10431,7 @@
     "deviceOnboardingContinue": "جاری رکھیں",
     "deviceOnboardingFinish": "مکمل کریں",
     "deviceOnboardingIntroTitle": "اپنے Omi کو جانیں",
-    "deviceOnboardingIntroSubtitle": "آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔",
+    "deviceOnboardingIntroSubtitle": "لائیو ٹرانسکرپشن، سوال پوچھنے اور ڈبل ٹیپ شارٹ کٹ کو آزمائیں۔",
     "deviceOnboardingIntroDuration": "تقریباً 1 منٹ",
     "jumpToLatestMessage": "تازہ ترین پیغام پر جائیں",
     "latest": "تازہ ترین",
@@ -10726,7 +10551,6 @@
     "pinAsBaseline": "بنیاد کے طور پر پن کریں",
     "unpinAsBaseline": "بنیاد سے ان پن کریں",
     "baselineMemory": "بنیادی یادداشت",
-    "alwaysInContext": "ہمیشہ سیاق میں",
     "accountCutoverUpdateRequiredTitle": "التحديث مطلوب",
     "accountCutoverUpdateRequiredMessage": "ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.",
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
@@ -10781,7 +10605,7 @@
     "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
     "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
     "home": "ہوم",
-    "failedToUpdateBaselineStatus": "بیس لائن کی حالت اپ ڈیٹ نہیں ہو سکی۔",
+    "failedToUpdateBaselineStatus": "یہ یاد اپ ڈیٹ نہیں ہو سکی۔ دوبارہ کوشش کریں۔",
     "memoryAllowUse": "استعمال کی اجازت دیں",
     "memoryDontUse": "استعمال نہ کریں",
     "unstarConversation": "گفتگو سے ستارہ ہٹائیں",
@@ -10837,8 +10661,8 @@
     "memoryReviewRight": "درست",
     "memoryReviewWrong": "غلط",
     "memoryReviewFix": "درست کریں",
-    "memoryReviewConfirmed": "تصدیق ہو گئی۔ میں اس کے مطابق عمل کروں گا۔",
-    "memoryReviewDropped": "ہٹا دیا گیا۔ میں ایسے حقائق سے گریز کروں گا۔",
+    "memoryReviewConfirmed": "تصدیق ہو گئی۔",
+    "memoryReviewDropped": "آپ کی یادوں سے ہٹا دیا گیا۔",
     "memoryReviewUpdated": "اپ ڈیٹ ہو گیا۔",
     "memoryReviewSaveFailed": "محفوظ نہیں ہو سکا، دوبارہ کوشش کریں",
     "indentTask": "انڈینٹ کریں",
@@ -10913,7 +10737,7 @@
     "homeScreen": "ہوم اسکرین",
     "phoneCalls": "فون کالز",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "اسپیچ ٹو ٹیکسٹ کے اخراجات کم کرنے کے لیے سرور پر آواز کا فلٹر",
+    "vadGateDescription": "لاگت کم کرنے کے لیے ٹرانسکرپشن سے پہلے خاموش آڈیو چھوڑ دیتا ہے۔",
     "flashCustomFirmware": "حسب ضرورت فرم ویئر فلیش کریں",
     "flashCustomFirmwareDescription": "حسب ضرورت فرم ویئر بلڈز فلیش کریں",
     "selectFirmwareZip": "فرم ویئر ZIP فائل منتخب کریں",
@@ -10932,7 +10756,7 @@
     "permissionBlockedHint": "سیٹنگز میں بند ہے۔ اسے استعمال کرنے کے لیے وہاں اجازت دیں۔",
     "useDifferentAccount": "دوسرا اکاؤنٹ استعمال کریں",
     "onboardingStepOf": "مرحلہ {current} از {total}",
-    "onboardingCompleteMessage": "Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔",
+    "onboardingCompleteMessage": "Omi کو چند دن چلنے دیں۔ آپ کی بات چیتیں، یادیں اور کرنے کے کام بھرنا شروع ہو جائیں گے۔",
     "cantFindDeviceHint": "اپنی ڈیوائس نہیں مل رہی؟ یقینی بنائیں کہ وہ آن ہے اور فون کے قریب ہے، پھر دوبارہ اسکین کریں۔",
     "scanAgain": "دوبارہ اسکین کریں",
     "howToPair": "جوڑنے کا طریقہ",
@@ -11053,7 +10877,6 @@
     "notificationsAndDisplay": "اطلاعات اور ڈسپلے",
     "helpAndAbout": "مدد اور تعارف",
     "speakerTagPromptTitle": "Omi کو آوازیں پہچاننے میں مدد کریں",
-    "speakerTagPromptSubtitle": "پچھلے دو دنوں کی آوازوں کا فوری جائزہ",
     "speakerTagPromptIsThisYou": "کیا یہ آپ تھے؟",
     "speakerTagPromptIsThisPerson": "کیا یہ {name} ہیں؟",
     "speakerTagPromptWhoIsThis": "یہ کون ہے؟",
@@ -11229,24 +11052,24 @@
     "confidenceMeterLabel": "اعتماد: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{آپ نے ایک بار لیبل کیا} other{آپ نے {count} بار لیبل کیا}}",
     "confidenceReasonPicked": "{count, plural, =1{1 تجویز میں منتخب کیا گیا} other{{count} تجاویز میں منتخب کیا گیا}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{آپ نے 1 میچ کی تصدیق کی} other{آپ نے {count} میچز کی تصدیق کی}}",
-    "confidenceReasonAutoOnly": "صرف خودکار میچ، کبھی تصدیق نہیں ہوئی",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{آپ نے 1 خودکار لیبل کی تصدیق کی} other{آپ نے {count} خودکار لیبلز کی تصدیق کی}}",
+    "confidenceReasonAutoOnly": "خودکار طور پر لیبل کیا گیا، ابھی تصدیق نہیں ہوئی",
     "confidenceReasonNeverConfirmed": "کبھی تصدیق نہیں ہوئی",
     "confidenceReasonCorrected": "آپ نے اس کا میچ درست کیا",
-    "confidenceReasonVoiceReady": "آواز تیار ہے",
-    "confidenceReasonNeedsVoice": "آواز درکار ہے",
+    "confidenceReasonVoiceReady": "آواز محفوظ ہے",
+    "confidenceReasonNeedsVoice": "ابھی آواز کا نمونہ نہیں",
     "confidenceReasonNotHeard": "ابھی تک سنا نہیں گیا",
     "confidenceSheetTitle": "اعتماد",
     "confidenceSummaryConfirmed": "Omi {name} کی آواز پہچانتا ہے، اور آپ نے اس کی تصدیق کی ہے۔",
     "confidenceSummaryLikely": "Omi عموماً {name} کی آواز پہچان لیتا ہے، لیکن آپ نے اس کی تصدیق صرف چند بار کی ہے۔",
-    "confidenceSummaryUnverified": "آپ کے کسی عمل نے ابھی تک {name} کی تائید نہیں کی۔",
+    "confidenceSummaryUnverified": "آپ نے ابھی تک {name} کو لیبل یا تصدیق نہیں کیا، اس لیے Omi کو یقین نہیں کہ وہ ان کی آواز پہچانتا ہے۔",
     "confidenceEvidenceHeader": "شواہد",
     "evidenceManualLabels": "{count, plural, =1{آپ نے 1 گفتگو میں لیبل کیا} other{آپ نے {count} گفتگوؤں میں لیبل کیا}}",
     "evidenceCardConfirms": "{count, plural, =1{1 تجویز پر ہاں} other{{count} تجاویز پر ہاں}}",
     "evidenceCardPicks": "{count, plural, =1{1 تجویز میں منتخب کیا گیا} other{{count} تجاویز میں منتخب کیا گیا}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{1 خودکار میچ کی تصدیق کی} other{{count} خودکار میچز کی تصدیق کی}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 میچ کسی اور کو منتقل کیا گیا} other{{count} میچز کسی اور کو منتقل کیے گئے}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 خودکار میچ جس کی کسی نے تصدیق نہیں کی} other{{count} خودکار میچز جن کی کسی نے تصدیق نہیں کی}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{آپ نے 1 خودکار لیبل کی تصدیق کی} other{آپ نے {count} خودکار لیبلز کی تصدیق کی}}",
+    "evidenceAutoCorrected": "{count, plural, =1{آپ نے 1 خودکار لیبل کسی اور کو تبدیل کیا} other{آپ نے {count} خودکار لیبلز کسی اور کو تبدیل کیے}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 خودکار لیبل ابھی تصدیق نہیں ہوا} other{{count} خودکار لیبلز ابھی تصدیق نہیں ہوئے}}",
     "evidenceVoiceReady": "آواز کا نمونہ تیار ہے",
     "evidenceNoVoice": "ابھی آواز کا نمونہ نہیں ہے",
     "evidenceNotHeard": "ابھی تک کسی گفتگو میں سنا نہیں گیا",
@@ -11259,12 +11082,10 @@
     "effectNeeded": "«تصدیق شدہ» کے لیے ضروری",
     "confidenceToReachConfirmed": "«تصدیق شدہ» تک پہنچنے کے لیے",
     "confidenceNextVoice": "Omi کو {name} کی آواز کا نمونہ بھی درکار ہے۔ «آوازیں یاد رکھیں» آن کر کے لیبل کریں۔",
-    "confidenceIsConfirmed": "{name} تصدیق شدہ ہے۔ Omi ہر لیبل سے سیکھتا رہتا ہے۔",
-    "confidenceFootnote": "اعتماد میں زیادہ تبدیلی صرف آپ کے جوابات سے آتی ہے۔ خودکار میچز اکیلے بمشکل مدد کرتے ہیں۔",
+    "confidenceIsConfirmed": "{name} تصدیق شدہ ہے۔ آپ کو اور کچھ کرنے کی ضرورت نہیں۔",
+    "confidenceFootnote": "آپ کے دیے گئے لیبلز اور تصدیقات سب سے زیادہ اہم ہیں۔ خودکار لیبلز اس وقت تک کم اہمیت رکھتے ہیں جب تک آپ ان کی تصدیق نہ کریں۔",
     "personWhyConfidence": "کیوں؟",
     "pinPersonTitle": "{name} کو پن کریں",
-    "pinPersonSubtitle": "{name} کو رکھیں، اور اپنی گفتگو میں ان کی توقع رکھیں",
-    "pinPersonHonestLine": "ملتی جلتی آوازوں کو ملانے سے پہلے Omi پوچھتا ہے۔",
     "pinAction": "پن کریں",
     "unpinAction": "پن ہٹائیں",
     "personPinnedToast": "{name} کو پن کر دیا گیا",
@@ -11302,8 +11123,7 @@
     "voiceMatchPossible": "ممکنہ میچ",
     "voiceMatchWeak": "کمزور میچ",
     "voiceMatchMeterLabel": "آواز کا میچ: {level}",
-    "speakerTagPromptHintIdentify": "ہر جواب Omi کو ایک آواز سکھاتا ہے اور اس شخص کا اعتماد بڑھاتا ہے۔",
-    "speakerTagPromptHintConfirm": "ہاں کہنے سے {name} کا اعتماد بڑھتا ہے۔",
+    "speakerTagPromptHintIdentify": "آپ کا جواب اگلی بار Omi کو یہ آواز پہچاننے میں مدد دیتا ہے۔",
     "speakerTagPromptHintOwner": "آپ کا جواب صرف چلائے گئے اقتباس کو لیبل کرتا ہے۔",
     "speakerTagPromptSavedAs": "{name} کے طور پر محفوظ کیا گیا",
     "speakerTagPromptSavedAsYou": "آپ کے طور پر محفوظ کیا گیا",
@@ -11380,7 +11200,7 @@
     "conversationProcessingFailedMessage": "اس گفتگو کو پروسیس نہیں کیا جا سکا۔",
     "waitForReprocessing": "دوبارہ پروسیسنگ مکمل ہونے کا انتظار کریں۔",
     "unnamedSpeakerLabel": "مقرر",
-    "unresolvedSpeakersNotice": "مقررین ریکارڈنگز میں الگ نہیں کیے گئے۔",
+    "unresolvedSpeakersNotice": "اس بات چیت کی ریکارڈنگز میں مقررین کے لیبلز آپس میں نہیں ملتے ہوں گے۔",
     "unresolvedSpeakersTitle": "مقرر لیبلز کے بارے میں",
     "unresolvedSpeakersMessage": "Omi ریکارڈنگز میں دوسری آوازوں کو الگ نہیں کر سکا۔ کون بات کر رہا ہے اسے نام دینے کے لیے اسپیکر لیبل پر ٹیپ کریں۔",
     "nameSpeakerTitle": "مقرر کا نام رکھیں",
@@ -11504,5 +11324,6 @@
     "dreamReportFound": "{fixes, plural, =1{1 اصلاح} other{{fixes} اصلاحات}} · {asks, plural, =1{1 تجویز} other{{asks} تجاویز}}",
     "dreamReportDropped": "{count, plural, =1{1 پرانی تبدیلی چھوڑ دی گئی} other{{count} پرانی تبدیلیاں چھوڑ دی گئیں}}",
     "dreamReportPrivacyHeld": "{count, plural, =1{1 رپورٹ رازداری کے لیے روک لی گئی} other{{count} رپورٹس رازداری کے لیے روک لی گئیں}}",
-    "speakerTagPromptExcerptSaved": "اس اقتباس کے لیے جواب محفوظ ہو گیا۔"
+    "speakerTagPromptExcerptSaved": "اس اقتباس کے لیے جواب محفوظ ہو گیا۔",
+    "pinPersonDescription": "پن کیے گئے لوگ آپ کی لوگوں کی فہرست میں سب سے اوپر رہتے ہیں اور صفائی سے نہیں ہٹتے۔"
 }

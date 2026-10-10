@@ -301,7 +301,7 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .promise:
       return
-        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
+        "Hey, I'm Omi, your second brain. I listen to your conversations, remember the important parts, and help with follow-ups. Three quick things:"
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
@@ -332,7 +332,7 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .notifications:
       return
-        "Turn on Notifications, so I can tell you the moment I notice something — a mistake before you hit send, a meeting about to start, a follow-up you're about to miss."
+        "Turn on Notifications, so I can remind you about meetings that are about to start and follow-ups you might miss."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
