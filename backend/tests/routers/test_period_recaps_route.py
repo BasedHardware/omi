@@ -314,6 +314,45 @@ def test_a_failed_people_scan_keeps_the_tasks(deps, monkeypatch):
     assert [item.id for item in recap.open_action_items] == ['task-1']
 
 
+def test_fifty_locked_tasks_before_a_visible_task_report_partial_coverage(deps, monkeypatch):
+    tasks = [
+        {
+            'id': f'task-{i}',
+            'description': f'Task {i}',
+            'created_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+            'is_locked': i < 50,
+        }
+        for i in range(51)
+    ]
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', lambda uid, *, limit, **kwargs: tasks[:limit])
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert recap.open_action_items == []
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert [person.name for person in recap.top_people] == ['Sam', 'Ana']
+
+
+def test_a_full_task_read_with_ten_visible_tasks_is_complete(deps, monkeypatch):
+    tasks = [
+        {
+            'id': f'task-{i}',
+            'description': f'Task {i}',
+            'created_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+            'is_locked': i < 40,
+        }
+        for i in range(50)
+    ]
+    monkeypatch.setattr(recaps_mod.action_items_db, 'get_action_items', lambda uid, *, limit, **kwargs: tasks[:limit])
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert len(recap.open_action_items) == 10
+    assert OMI_LIST_TRUNCATED_HEADER not in response.headers
+
+
 def test_names_come_from_the_top_ranked_people_only(deps, monkeypatch):
     _, calls = deps
     crowd = [_conversation(f'p-{i:02d}', 100.0 + i) for i in range(20)]
@@ -338,6 +377,52 @@ def test_dismissed_people_are_left_out_like_the_people_list(deps, monkeypatch):
     assert [p.name for p in recap.top_people] == ['Ana']
 
 
+def test_name_resolution_continues_past_fifteen_dismissed_or_unnamed_people(deps, monkeypatch):
+    crowd = [_conversation(f'p-{i}', 100.0 - i) for i in range(16)]
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', lambda uid, **kwargs: iter(crowd))
+    batches = []
+
+    def people_by_ids(uid, person_ids):
+        batches.append(person_ids)
+        return [
+            {
+                'id': person_id,
+                'name': 'Active' if i == 15 else ('Dismissed' if i % 2 else ' '),
+                'is_dismissed': i < 15 and bool(i % 2),
+            }
+            for person_id in person_ids
+            for i in [int(person_id.split('-')[1])]
+        ]
+
+    monkeypatch.setattr(recaps_mod.users_db, 'get_people_by_ids', people_by_ids)
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert batches == [[f'p-{i}' for i in range(15)], ['p-15']]
+    assert [person.name for person in recap.top_people] == ['Active']
+    assert OMI_LIST_TRUNCATED_HEADER not in response.headers
+
+
+def test_name_resolution_reports_partial_when_its_allowance_cannot_find_five_people(deps, monkeypatch):
+    crowd = [_conversation(f'p-{i}', 100.0 - i) for i in range(61)]
+    monkeypatch.setattr(recaps_mod, 'recap_people_scan', lambda uid, **kwargs: iter(crowd))
+    batches = []
+
+    def dismissed_people(uid, person_ids):
+        batches.append(person_ids)
+        return [{'id': person_id, 'name': 'Dismissed', 'is_dismissed': True} for person_id in person_ids]
+
+    monkeypatch.setattr(recaps_mod.users_db, 'get_people_by_ids', dismissed_people)
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert [len(batch) for batch in batches] == [15, 15, 15, 15]
+    assert recap.top_people == []
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+
+
 def test_a_full_read_of_daily_recaps_drops_the_comparison(deps):
     summaries, _ = deps
     summaries.return_value = [_summary('2026-10-01', 1, 10)] * recaps_mod.RECAP_SUMMARY_READ_LIMIT
@@ -346,6 +431,22 @@ def test_a_full_read_of_daily_recaps_drops_the_comparison(deps):
 
     assert recap.stats.total_conversations == 1
     assert recap.previous is None
+
+
+def test_regenerated_summaries_that_hide_a_current_period_day_report_partial_coverage(deps):
+    summaries, _ = deps
+    rows = [_summary('2026-10-03', 1, 10)] * 62 + [_summary('2026-10-02', 1, 10)] * 62 + [_summary('2026-09-28', 8, 80)]
+    summaries.side_effect = lambda uid, *, limit, **kwargs: rows[:limit]
+    response = Response()
+
+    recap = _get('week', '2026-10-01', response=response)
+
+    assert recap.days_recorded == 2
+    assert recap.stats.total_conversations == 2
+    assert recap.previous is None
+    assert response.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
+    assert [item.id for item in recap.open_action_items] == ['task-1']
+    assert [person.name for person in recap.top_people] == ['Sam', 'Ana']
 
 
 def test_a_complete_recap_has_no_truncation_header(deps):

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/recaps.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -28,6 +32,10 @@ class PeriodRecapPage extends StatefulWidget {
 class _PeriodRecapPageState extends State<PeriodRecapPage> {
   late RecapPeriod _period = widget.initialPeriod;
   ApiResult<wire.GeneratedPeriodRecapResponse>? _result;
+  final AuthService _auth = AuthService.instance;
+  late final AuthSessionSnapshot? _session;
+  StreamSubscription<int>? _sessionWatch;
+  bool _sessionEnded = false;
 
   /// Bumped by every load: only the newest request's answer is shown, so a slow
   /// week answer cannot land after Week → Month → Week was already answered.
@@ -36,23 +44,59 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
   @override
   void initState() {
     super.initState();
+    _session = _auth.captureSessionSnapshot();
+    _sessionWatch = _auth.sessionGenerationEvents.listen((_) {
+      if (!_hasCurrentSession) _endSession();
+    });
     _load();
   }
 
   @override
   void dispose() {
     _generation++;
+    _sessionWatch?.cancel();
     super.dispose();
+  }
+
+  bool get _hasCurrentSession {
+    final session = _session;
+    return !_sessionEnded && session != null && _auth.isSessionSnapshotCurrent(session);
+  }
+
+  void _endSession() {
+    if (!mounted || _sessionEnded) return;
+    setState(() {
+      _sessionEnded = true;
+      _result = null;
+      _generation++;
+    });
+    // The auth shell can rebuild underneath a pushed route. Drop this route's
+    // retained private data immediately, then remove only its own route.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route != null && route.isActive && !route.isFirst) {
+        route.navigator?.removeRoute(route);
+      }
+    });
   }
 
   /// Loads the selected period. A pull-to-refresh passes [keepShown] so the recap
   /// stays on screen under the refresh spinner until the new one arrives.
   Future<void> _load({bool keepShown = false}) async {
+    if (!_hasCurrentSession) {
+      _endSession();
+      return;
+    }
     final generation = ++_generation;
     final period = _period;
     if (!keepShown) setState(() => _result = null);
     final result = await widget.load(period);
     if (!mounted || generation != _generation) return;
+    if (!_hasCurrentSession) {
+      _endSession();
+      return;
+    }
     setState(() => _result = result);
   }
 
@@ -64,6 +108,9 @@ class _PeriodRecapPageState extends State<PeriodRecapPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasCurrentSession) {
+      return Scaffold(body: OmiErrorState(message: context.l10n.sessionExpiredSignInAgain));
+    }
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.recaps)),
       body: Column(

@@ -17,6 +17,7 @@ from utils.other import endpoints as auth
 from utils.other.list_budget import ListReadBudget, finish_list_budget
 from utils.people_stats import collect_people_stats
 from utils.period_recaps import (
+    MAX_RECAP_ITEMS,
     MAX_TOP_PEOPLE,
     MIN_RECAP_DATE,
     RECAP_PERIODS,
@@ -32,14 +33,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Two full months of daily recaps (the period plus the one before it), with room
-# for a regenerated copy of every date. A read that fills it may be cut off, so
-# the comparison with the previous period is then left out.
+# for a regenerated copy of every date. A saturated read may omit either
+# period's days, so report partial coverage and leave out the comparison.
 RECAP_SUMMARY_READ_LIMIT = 124
 # Open tasks read for the recap. Locked (paywalled) tasks are dropped after the
 # read and the rest capped at MAX_RECAP_ITEMS, so the read takes more than it
-# shows: newer locked tasks cannot crowd out the open ones. The query cannot
-# filter on is_locked, as older tasks have no such field.
+# shows. If locked tasks fill this allowance before ten visible tasks are
+# found, report partial coverage. The query cannot filter on is_locked, as
+# older tasks have no such field.
 RECAP_TASK_READ_LIMIT = 50
+RECAP_PEOPLE_NAME_BATCH = MAX_TOP_PEOPLE * 3
+RECAP_PEOPLE_NAME_READ_LIMIT = 60
 
 
 @router.get('/v1/users/recaps/{period}', tags=['v1'], response_model=PeriodRecapResponse)
@@ -57,7 +61,8 @@ def get_period_recap(
     decisions, open questions, the live open tasks created in the period, the
     people talked to most, and the previous period's totals over the same
     stretch. No AI call is made. A read cut short by the request budget, or a
-    failed task or people read, sets ``X-Omi-List-Truncated``.
+    failed task or people read, or incomplete coverage at a read ceiling, sets
+    ``X-Omi-List-Truncated``.
     """
     if period not in RECAP_PERIODS:
         raise HTTPException(status_code=422, detail="period must be 'week' or 'month'")
@@ -105,6 +110,12 @@ def get_period_recap(
             people_names=people_names,
         )
     )
+    if len(summaries) >= RECAP_SUMMARY_READ_LIMIT or (
+        len(open_tasks) >= RECAP_TASK_READ_LIMIT and len(recap.open_action_items) < MAX_RECAP_ITEMS
+    ):
+        # Wait until the side reads finish: flagging their shared budget earlier
+        # would prevent otherwise available tasks or people from being read.
+        _mark_capped(budget)
     finish_list_budget(response, budget)
     return recap
 
@@ -117,6 +128,19 @@ def _mark_partial(budget: ListReadBudget) -> None:
     describes a fixed allowance that a retry would hit again.
     """
     budget.mark_exhausted('deadline')
+
+
+def _mark_capped(budget: ListReadBudget) -> None:
+    """A read ceiling prevented complete coverage of a recap section."""
+    budget.mark_exhausted('documents')
+    record_fallback(
+        component='daily_summary',
+        from_mode='complete_recap',
+        to_mode='truncated_prefix',
+        reason='capacity_full',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def _period_open_tasks(
@@ -163,12 +187,25 @@ def _period_people(
         # No uid: the shared People-stats cache is not scoped to a date range.
         stats = collect_people_stats(conversations, scan_cap=RECAP_PEOPLE_SCAN_CAP, budget=budget)
         names: Dict[str, str] = {}
-        for person in users_db.get_people_by_ids(uid, rank_people(stats)[: MAX_TOP_PEOPLE * 3]):
-            person_id = person.get('id') if isinstance(person, dict) else None
-            name = person.get('name') if isinstance(person, dict) else None
-            dismissed = isinstance(person, dict) and person.get('is_dismissed') is True
-            if isinstance(person_id, str) and person_id in stats and isinstance(name, str) and not dismissed:
-                names[person_id] = name
+        ranked = rank_people(stats)
+        for offset in range(0, min(len(ranked), RECAP_PEOPLE_NAME_READ_LIMIT), RECAP_PEOPLE_NAME_BATCH):
+            person_ids = ranked[offset : offset + RECAP_PEOPLE_NAME_BATCH]
+            for person in users_db.get_people_by_ids(uid, person_ids):
+                person_id = person.get('id') if isinstance(person, dict) else None
+                name = person.get('name') if isinstance(person, dict) else None
+                dismissed = isinstance(person, dict) and person.get('is_dismissed') is True
+                if (
+                    isinstance(person_id, str)
+                    and person_id in stats
+                    and isinstance(name, str)
+                    and name.strip()
+                    and not dismissed
+                ):
+                    names[person_id] = name.strip()
+            if len(names) >= MAX_TOP_PEOPLE:
+                break
+        if len(names) < MAX_TOP_PEOPLE and len(ranked) > RECAP_PEOPLE_NAME_READ_LIMIT:
+            _mark_capped(budget)
         return stats, names
     except Exception:
         logger.debug('period recap people scan failed', exc_info=True)

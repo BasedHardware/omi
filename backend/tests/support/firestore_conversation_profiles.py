@@ -87,7 +87,7 @@ SCAN_PROFILES = (
     ),
     _scan_profile(
         'period-recap-people',
-        include_discarded=[False],
+        include_discarded=[True],
         start_date=[FROZEN_NOW],
         end_date=[FROZEN_LATER],
         field_paths=[PEOPLE_STATS_FIELD_PATHS],

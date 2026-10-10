@@ -1,16 +1,24 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/recaps.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/period_recap_page.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 wire.GeneratedPeriodRecapResponse _recap(
   String period, {
@@ -58,13 +66,137 @@ wire.GeneratedPeriodRecapResponse _recap(
 Finder _conversationsTotal(String count) =>
     find.descendant(of: find.widgetWithText(OmiSettingsRow, 'Conversations'), matching: find.text(count));
 
-Widget _app(Widget home) => MaterialApp(
+Widget _app(Widget home, {GlobalKey<NavigatorState>? navigatorKey}) => MaterialApp(
+      navigatorKey: navigatorKey,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: home,
     );
 
 void main() {
+  late _Gateway gateway;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    PlatformManager.initializeForLocalHarness();
+    gateway = _Gateway();
+    AuthService.installLocalHarnessTokenGateway(gateway);
+    AuthService.instance.markAuthenticatedUser(gateway.user!.uid);
+  });
+
+  for (final reason in [AuthSessionExpirationReason.terminalTokenFailure, AuthSessionExpirationReason.accountDeleted]) {
+    for (final lateSuccess in [true, false]) {
+      testWidgets(
+          'background ${reason.name} closes a retained recap before a late ${lateSuccess ? 'success' : 'failure'}',
+          (tester) async {
+        final pending = Completer<ApiResult<wire.GeneratedPeriodRecapResponse>>();
+        var calls = 0;
+        final navigator = await _pushRecap(tester, (period) {
+          calls++;
+          return calls == 1 ? Future.value(ApiSuccess(_recap(period.name))) : pending.future;
+        });
+        await tester.pumpAndSettle();
+        expect(find.text('Sam'), findsOneWidget);
+
+        await tester.fling(find.text('Conversations'), const Offset(0, 400), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(calls, 2);
+        expect(find.text('Sam'), findsOneWidget);
+
+        // An unrelated authenticated request expires the session. The root
+        // reacts below the still-mounted pushed route, as MobileApp does.
+        await _backgroundAuthFailure(gateway, reason);
+        expect(gateway.signOutCalls, 1);
+        expect(AuthService.instance.captureSessionSnapshot(), isNull);
+        expect(find.byType(PeriodRecapPage), findsOneWidget);
+
+        pending.complete(lateSuccess
+            ? ApiSuccess(_recap('week', conversations: 987))
+            : const ApiFailure(ApiProblem(ApiProblemKind.server)));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PeriodRecapPage, skipOffstage: false), findsNothing);
+        expect(find.text('Sam', skipOffstage: false), findsNothing);
+        expect(find.text('987', skipOffstage: false), findsNothing);
+        expect(find.byType(OmiErrorState), findsNothing);
+        expect(find.text('Sign in again'), findsOneWidget);
+        expect(navigator.currentState!.canPop(), isFalse);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('session invalidation removes the recap under another route without popping that route', (tester) async {
+    final navigator = await _pushRecap(tester, (period) async => ApiSuccess(_recap(period.name)));
+    await tester.pumpAndSettle();
+    navigator.currentState!.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Another route'))));
+    await tester.pumpAndSettle();
+
+    await _backgroundAuthFailure(gateway, AuthSessionExpirationReason.accountDeleted);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Another route'), findsOneWidget);
+    expect(find.byType(PeriodRecapPage, skipOffstage: false), findsNothing);
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in again'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('same-owner reauthentication cannot revive the original recap or start another load', (tester) async {
+    final pending = Completer<ApiResult<wire.GeneratedPeriodRecapResponse>>();
+    var calls = 0;
+    await tester.pumpWidget(_app(PeriodRecapPage(load: (_) {
+      calls++;
+      return pending.future;
+    })));
+    await tester.pump();
+    final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh;
+    await _backgroundAuthFailure(gateway, AuthSessionExpirationReason.accountDeleted);
+    gateway.user = const AuthUserSnapshot(uid: 'recap-user');
+    AuthService.instance.markAuthenticatedUser('recap-user');
+    pending.complete(ApiSuccess(_recap('week')));
+    await refresh();
+    await tester.pumpAndSettle();
+
+    // Root-mounted pages cannot be removed, so this also proves the retained
+    // widget rejects stale completion even while it remains mounted.
+    expect(find.byType(PeriodRecapPage), findsOneWidget);
+    expect(find.text('Sam', skipOffstage: false), findsNothing);
+    expect(find.byType(RefreshIndicator), findsNothing);
+    expect(find.text('Session expired — sign in again.'), findsOneWidget);
+    expect(calls, 1);
+  });
+
+  testWidgets('a recap opened without an authenticated session never starts its loader', (tester) async {
+    gateway.user = null;
+    AuthService.instance.handleAuthUserChanged(null);
+    var calls = 0;
+    await tester.pumpWidget(_app(PeriodRecapPage(load: (period) async {
+      calls++;
+      return ApiSuccess(_recap(period.name));
+    })));
+    await tester.pumpAndSettle();
+
+    expect(calls, 0);
+    expect(find.text('Session expired — sign in again.'), findsOneWidget);
+    expect(find.byType(RefreshIndicator), findsNothing);
+  });
+
+  testWidgets('a plain background access denial keeps the current session and recap', (tester) async {
+    await _pushRecap(tester, (period) async => ApiSuccess(_recap(period.name)));
+    await tester.pumpAndSettle();
+    await _backgroundResponse(http.Response('{"detail":"Forbidden"}', 403));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PeriodRecapPage), findsOneWidget);
+    expect(find.text('Sam'), findsOneWidget);
+    expect(gateway.signOutCalls, 0);
+  });
+
   testWidgets('the week recap shows totals, the trend, the busiest day, people and the week\'s threads',
       (tester) async {
     await tester.pumpWidget(_app(PeriodRecapPage(load: (period) async => ApiSuccess(_recap(period.name)))));
@@ -398,4 +530,59 @@ void main() {
     expect(find.byType(PeriodRecapPage), findsOneWidget);
     expect(find.text('Sam'), findsOneWidget);
   });
+}
+
+Future<GlobalKey<NavigatorState>> _pushRecap(WidgetTester tester, PeriodRecapLoader load) async {
+  final navigator = GlobalKey<NavigatorState>();
+  await tester.pumpWidget(_app(
+    StreamBuilder<AuthSessionExpiredEvent>(
+      stream: AuthService.instance.sessionExpiredEvents,
+      builder: (_, snapshot) => Scaffold(body: Text(snapshot.hasData ? 'Sign in again' : 'Signed in')),
+    ),
+    navigatorKey: navigator,
+  ));
+  navigator.currentState!.push(MaterialPageRoute<void>(builder: (_) => PeriodRecapPage(load: load)));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  return navigator;
+}
+
+Future<void> _backgroundAuthFailure(_Gateway gateway, AuthSessionExpirationReason reason) async {
+  gateway.terminalRefresh = reason == AuthSessionExpirationReason.terminalTokenFailure;
+  await _backgroundResponse(reason == AuthSessionExpirationReason.accountDeleted
+      ? http.Response('{"detail":{"code":"account_deletion_in_progress","status":"pending"}}', 403)
+      : http.Response('', 401));
+}
+
+Future<http.Response> _backgroundResponse(http.Response response) => sendUncaughtApiCall(
+      url: 'https://unit-test.invalid/v1/users/language',
+      headers: const {},
+      body: '',
+      method: 'GET',
+      execution: ApiExecutionSeams(
+        auth: AuthService.instance,
+        headers: (_) async => const {'Authorization': 'Bearer fixture-token'},
+        transport: (_) async => response,
+      ),
+    );
+
+final class _Gateway implements AuthTokenGateway {
+  AuthUserSnapshot? user = const AuthUserSnapshot(uid: 'recap-user');
+  bool terminalRefresh = false;
+  int signOutCalls = 0;
+
+  @override
+  AuthUserSnapshot? get currentUser => user;
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async {
+    if (terminalRefresh) throw FirebaseAuthException(code: 'user-token-expired');
+    return RefreshedAuthToken(token: 'fixture-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+  }
+
+  @override
+  Future<void> signOut() async {
+    signOutCalls++;
+    user = null;
+  }
 }

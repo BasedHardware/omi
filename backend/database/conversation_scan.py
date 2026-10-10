@@ -254,14 +254,44 @@ def recap_people_scan(
     budget: ListReadBudget,
     firestore_client: Any = None,
 ) -> Iterator[Dict[str, Any]]:
-    """The period-recap recipe: the People-stats projection bounded to one period."""
-    return iter_conversations(
+    """Read up to 500 visible period conversations, including legacy records.
+
+    Firestore's discarded equality filter excludes documents that predate that
+    field. Read all states under the request's raw-document budget, then apply
+    the visibility predicate before a row consumes the recap's sample allowance.
+    """
+    conversations = iter_conversations(
         uid,
-        limit=RECAP_PEOPLE_SCAN_CAP,
+        limit=CONVERSATION_SCAN_MAX_DOCUMENTS,
         batch=PEOPLE_STATS_BATCH,
+        include_discarded=True,
         start_date=start_date,
         end_date=end_date,
         field_paths=PEOPLE_STATS_FIELD_PATHS,
         budget=budget,
         firestore_client=firestore_client,
     )
+
+    def _visible_rows() -> Iterator[Dict[str, Any]]:
+        visible = 0
+        scanned = 0
+        try:
+            for conversation in conversations:
+                scanned += 1
+                if not is_visible_conversation(conversation):
+                    continue
+                visible += 1
+                yield conversation
+                if visible >= RECAP_PEOPLE_SCAN_CAP:
+                    return
+            # The reader's fixed raw ceiling may end an exact-size stream before
+            # it checks the request budget again. That is still partial coverage.
+            if (scanned >= CONVERSATION_SCAN_MAX_DOCUMENTS or budget.remaining_documents == 0) and not budget.truncated:
+                budget.mark_exhausted('documents')
+                _record_scan_truncation()
+        finally:
+            close = getattr(conversations, 'close', None)
+            if callable(close):
+                close()
+
+    return _visible_rows()
