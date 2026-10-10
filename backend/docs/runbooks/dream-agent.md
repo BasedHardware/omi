@@ -384,7 +384,11 @@ and final five-repeat dev receipts are under `evals/dream_triage/quality-results
 and `evals/dream_reasoning/quality-results.json`.
 
 
-Deterministic feedback policy rejects English/Vietnamese language or translation
+Deterministic feedback policy first drops non-failure classes (`success`, `none`,
+`ok`), `info` severity and English/Vietnamese assurances of accuracy, no issues or
+no required edits (`not_a_failure`). The typed model accepts those class labels
+only so the policy can drop and count them; they never reach storage. It also
+rejects English/Vietnamese language or translation
 complaints (`language_not_defect`) and generic collection/hex refs or bare UUIDs
 (`ref_leak`), including refs absent from the supplied evidence. The existing
 privacy gate still applies. At most one privacy-valid feedback item survives per

@@ -223,6 +223,7 @@ def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, 
         feedback=[
             feedback('English/Vietnamese mixed speech.'),
             feedback('conversations/deadbeef'),
+            feedback('The invented transcript is accurate.', 'notes'),
             feedback('synthetic heading absent.', 'notes'),
             feedback('synthetic heading stale.', 'notes'),
         ],
@@ -259,6 +260,7 @@ def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, 
         'language_not_defect': 1,
         'ref_leak': 1,
         'feedback_cap': 1,
+        'not_a_failure': 1,
     }
     assert saved[0]['rejected'] == result['rejected']
     assert 'insufficient_speech' in caplog.text
@@ -318,3 +320,74 @@ def test_rejection_metric_uses_only_fixed_labels():
     assert not any(
         s.labels.get('reason') == 'private-token' for metric in dream_metrics.REJECTED.collect() for s in metric.samples
     )
+
+
+@pytest.mark.parametrize('failure_class', ['success', 'none', 'ok'])
+def test_non_failure_classes_are_parsed_then_dropped_and_counted(failure_class):
+    item = feedback('invented heading dropped.', 'notes').model_dump()
+    item['failure_class'] = failure_class
+    sink = {}
+    parsed = dream_transport.parse_response(Plan, {'feedback': [item]}, usage_sink=sink)
+    assert len(parsed.feedback) == 1
+    filtered = dream_guards.filter_plan(parsed, {}, usage_sink=sink)
+    assert not filtered.feedback
+    assert sink['rejected'] == {'not_a_failure': 1}
+    assert not sink['dropped_invalid']['feedback']
+    with pytest.raises(ValueError, match='not_a_failure'):
+        dream_feedback.validate(parsed.feedback[0], {}, [])
+
+
+def test_info_severity_is_not_failure_even_with_a_failure_class():
+    item = feedback('invented heading dropped.', 'notes').model_copy(update={'severity': 'info'})
+    assert dream_guards.feedback_rejection(item) == 'not_a_failure'
+    with pytest.raises(ValueError, match='not_a_failure'):
+        dream_feedback.store('invented', item, {}, [], firestore_client=None)
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        'The invented transcript is accurate and does not require any edits.',
+        'The sample is fine.',
+        'Everything looks correct.',
+        'No issues were found.',
+        'No errors in the sample.',
+        'The sample does not need corrections.',
+        "The sample doesn't require any edits.",
+        'Accurate sample transcription.',
+        'The sample accurately captures the test utterance.',
+        'All good.',
+        'Bản chép chính xác và không cần chỉnh sửa.',
+        'Mọi thứ đều ổn.',
+        'Không có vấn đề nào.',
+        'Không có lỗi trong bản ghi.',
+        'Khong can bat ky chinh sua nao.',
+        'Nội dung hoàn toàn chính xác.',
+        'Chính xác hoàn toàn.',
+    ],
+)
+def test_english_and_vietnamese_positive_assurances_are_not_failures(text):
+    item = feedback(text, 'notes')
+    assert dream_guards.feedback_rejection(item) == 'not_a_failure'
+    with pytest.raises(ValueError, match='not_a_failure'):
+        dream_feedback.validate(item, {}, [])
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        'The invented transcript is not accurate.',
+        'The invented transcript is inaccurate.',
+        'Bản chép không chính xác.',
+        'An invented heading disappears after processing.',
+    ],
+)
+def test_actual_failure_descriptions_survive_non_failure_guard(text):
+    assert dream_guards.feedback_rejection(feedback(text, 'notes')) is None
+
+
+def test_non_failure_rejection_metric_is_counted():
+    sample = dream_metrics.REJECTED.labels('not_a_failure')
+    before = sample._value.get()
+    dream_metrics.record_pass({'status': 'complete', 'rejected': {'not_a_failure': 2}})
+    assert sample._value.get() == before + 2

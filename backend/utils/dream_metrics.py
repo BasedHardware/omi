@@ -17,6 +17,7 @@ REJECTION_REASONS = {
     'ungrounded',
     'overview_format',
     'language_not_defect',
+    'not_a_failure',
     'ref_leak',
     'feedback_cap',
     'privacy_rejected',

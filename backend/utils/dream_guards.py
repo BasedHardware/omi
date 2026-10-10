@@ -35,6 +35,22 @@ LANGUAGE = re.compile(
     r'english|vietnamese|code switch\w*|mixed (?:speech|tongue\w*)|'
     r'ngon ngu|chuyen ngu|dich|tieng (?:anh|viet)|song ngu|da ngu|tron tieng|xen ke)\b'
 )
+NON_FAILURE = re.compile(
+    r'\b(?:(?:is|are|was|were|remains?|appears?|looks?|seems?) '
+    r'(?:(?:fully|entirely|already|completely|perfectly|all) )?'
+    r'(?:fine|accurate|correct|valid|ok|okay|good|working correctly)|'
+    r'no (?:issues?|errors?|problems?|defects?|failures?|edits?)|'
+    r'nothing (?:is wrong|needs (?:editing|fixing|correction))|all good|'
+    r'(?:does not|do not|doesn t|don t) (?:require|need) (?:any )?'
+    r'(?:edits?|changes?|corrections?|fixes?)|'
+    r'accurately (?:captures?|reflects?|transcribes?)|'
+    r'khong co (?:van de|loi|sai sot)|'
+    r'khong (?:can|yeu cau) (?:bat ky )?(?:chinh sua|sua doi|sua|thay doi)|'
+    r'(?:moi thu|tat ca) (?:deu )?(?:on|tot|dung)|'
+    r'(?:ban chep|ban ghi|noi dung|loi noi) (?:hoan toan )?(?:chinh xac|dung)|'
+    r'(?:la|van|deu|hoan toan) (?:chinh xac|on|dung))\b|'
+    r'^(?:fine|accurate|correct|valid|ok|okay|chinh xac)\b'
+)
 RECORD_REF = re.compile(
     r'\b[a-z_]+/[0-9a-f-]{8,}\b|' r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b',
     re.IGNORECASE,
@@ -68,6 +84,12 @@ def summary_rejection(edit, row, *, min_words=None):
 
 
 def feedback_rejection(feedback):
+    if (
+        feedback.failure_class in {'success', 'none', 'ok'}
+        or feedback.severity == 'info'
+        or NON_FAILURE.search(' '.join(tokens(feedback.reproduction)))
+    ):
+        return 'not_a_failure'
     text = ' '.join((feedback.component, feedback.failure_class, feedback.reproduction))
     if LANGUAGE.search(' '.join(tokens(text))):
         return 'language_not_defect'
