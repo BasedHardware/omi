@@ -12717,6 +12717,153 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tasksGroupByDate => 'Grupează după dată';
 
   @override
+  String get dreamReportTitle => 'Raport Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Mod previzualizare: Dream arată ce ar modifica, dar în contul tău nu se schimbă încă nimic.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream aplică singur aceste modificări. Le poți anula din Modificări recente.';
+
+  @override
+  String get dreamReportRunNow => 'Rulează acum';
+
+  @override
+  String get dreamReportRunLimit => 'Nu mai ai rulări manuale azi';
+
+  @override
+  String get dreamReportRunInProgress => 'O rulare este deja în desfășurare. Încearcă din nou peste un minut.';
+
+  @override
+  String get dreamReportRunFailed => 'Nu s-a putut rula Dream. Încearcă din nou.';
+
+  @override
+  String get dreamReportIdle => 'Încă nu e nimic nou de verificat.';
+
+  @override
+  String get dreamReportLoadFailed => 'Nu s-a putut încărca raportul Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Încă nu există rulări';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream verifică ce s-a schimbat în contul tău aproximativ o dată pe oră.';
+
+  @override
+  String get dreamReportScheduled => 'Programată';
+
+  @override
+  String get dreamReportManual => 'Manuală';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Eșuată ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Oprită la limita de timp';
+
+  @override
+  String get dreamReportNothingFound => 'Nimic de remediat';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Au fost citite $records elemente · $tokens tokeni';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Ar remedia';
+
+  @override
+  String get dreamReportFixed => 'Remediat';
+
+  @override
+  String get dreamReportWouldAsk => 'Te-ar întreba';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Ar sugera sarcini';
+
+  @override
+  String get dreamReportLearnedWords => 'Cuvinte învățate';
+
+  @override
+  String get dreamReportFeedback => 'Raportat echipei Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Element șters';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count din $limit rulări astăzi';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de modificări în așteptare',
+      one: '1 modificare în așteptare',
+      zero: 'Nicio modificare în așteptare',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Au mai rămas $count de rulări manuale azi',
+      one: 'A mai rămas 1 rulare manuală azi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes de remedieri',
+      one: '1 remediere',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks de sugestii',
+      one: '1 sugestie',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de modificări mai vechi omise',
+      one: '1 modificare mai veche omisă',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de rapoarte reținute pentru confidențialitate',
+      one: '1 raport reținut pentru confidențialitate',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'O evaluare de 5 stele ne ajută cu adevărat ❤️';
+
+  @override
   String get singlePress => 'Apăsare unică';
 
   @override

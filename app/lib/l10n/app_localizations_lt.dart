@@ -12685,6 +12685,154 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tasksGroupByDate => 'Grupuoti pagal datą';
 
   @override
+  String get dreamReportTitle => 'Dream ataskaita';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Peržiūros režimas: Dream parodo, ką pakeistų, bet jūsų paskyroje kol kas niekas nesikeičia.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream šiuos pakeitimus taiko pats. Bet kurį galite atšaukti skiltyje Naujausi pakeitimai.';
+
+  @override
+  String get dreamReportRunNow => 'Vykdyti dabar';
+
+  @override
+  String get dreamReportRunLimit => 'Šiandien rankinių paleidimų nebeliko';
+
+  @override
+  String get dreamReportRunInProgress => 'Ciklas jau vyksta. Bandykite dar kartą po minutės.';
+
+  @override
+  String get dreamReportRunFailed => 'Nepavyko paleisti Dream. Bandykite dar kartą.';
+
+  @override
+  String get dreamReportIdle => 'Kol kas nėra nieko naujo peržiūrėti.';
+
+  @override
+  String get dreamReportLoadFailed => 'Nepavyko įkelti Dream ataskaitos.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Ciklų dar nėra';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream maždaug kartą per valandą peržiūri, kas pasikeitė jūsų paskyroje.';
+
+  @override
+  String get dreamReportScheduled => 'Suplanuota';
+
+  @override
+  String get dreamReportManual => 'Rankinis';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Nepavyko ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Sustojo pasiekus laiko limitą';
+
+  @override
+  String get dreamReportNothingFound => 'Nėra ką taisyti';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Perskaityta elementų: $records · žetonų: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Ką pataisytų';
+
+  @override
+  String get dreamReportFixed => 'Pataisyta';
+
+  @override
+  String get dreamReportWouldAsk => 'Ką paklaustų';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Kokias užduotis pasiūlytų';
+
+  @override
+  String get dreamReportLearnedWords => 'Išmokti žodžiai';
+
+  @override
+  String get dreamReportFeedback => 'Pranešta Omi komandai';
+
+  @override
+  String get dreamReportDeletedItem => 'Ištrintas elementas';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Šiandien $count iš $limit ciklų';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pakeitimų laukia',
+      one: '1 pakeitimas laukia',
+      zero: 'Nėra laukiančių pakeitimų',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Šiandien liko $count rankinių paleidimų',
+      one: 'Šiandien liko 1 rankinis paleidimas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes pataisymų',
+      one: '1 pataisymas',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks pasiūlymų',
+      one: '1 pasiūlymas',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count senesnių pakeitimų praleista',
+      one: '1 senesnis pakeitimas praleistas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ataskaitų sulaikyta dėl privatumo',
+      one: '1 ataskaita sulaikyta dėl privatumo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 žvaigždučių įvertinimas mums labai padeda ❤️';
+
+  @override
   String get singlePress => 'Vienas paspaudimas';
 
   @override

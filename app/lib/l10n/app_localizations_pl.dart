@@ -12701,6 +12701,153 @@ class AppLocalizationsPl extends AppLocalizations {
   String get tasksGroupByDate => 'Grupuj według daty';
 
   @override
+  String get dreamReportTitle => 'Raport Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Tryb podglądu: Dream pokazuje, co by zmienił, ale na Twoim koncie nic się jeszcze nie zmienia.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream sam stosuje te zmiany. Cofniesz każdą z nich w Ostatnich zmianach.';
+
+  @override
+  String get dreamReportRunNow => 'Uruchom teraz';
+
+  @override
+  String get dreamReportRunLimit => 'Na dziś nie zostały żadne ręczne przebiegi';
+
+  @override
+  String get dreamReportRunInProgress => 'Przebieg już trwa. Spróbuj ponownie za minutę.';
+
+  @override
+  String get dreamReportRunFailed => 'Nie udało się uruchomić Dream. Spróbuj ponownie.';
+
+  @override
+  String get dreamReportIdle => 'Na razie nie ma nic nowego do sprawdzenia.';
+
+  @override
+  String get dreamReportLoadFailed => 'Nie udało się wczytać raportu Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Brak przebiegów';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream sprawdza zmiany na Twoim koncie mniej więcej raz na godzinę.';
+
+  @override
+  String get dreamReportScheduled => 'Zaplanowany';
+
+  @override
+  String get dreamReportManual => 'Ręczny';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Błąd ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Zatrzymano po osiągnięciu limitu czasu';
+
+  @override
+  String get dreamReportNothingFound => 'Nic do naprawienia';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Odczytano elementów: $records · tokenów: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Naprawiłby';
+
+  @override
+  String get dreamReportFixed => 'Naprawiono';
+
+  @override
+  String get dreamReportWouldAsk => 'Zapytałby Cię';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Zasugerowałby zadania';
+
+  @override
+  String get dreamReportLearnedWords => 'Poznane słowa';
+
+  @override
+  String get dreamReportFeedback => 'Zgłoszono zespołowi Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Usunięty element';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count z $limit przebiegów dzisiaj';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zmiany czekają',
+      one: '1 zmiana czeka',
+      zero: 'Brak oczekujących zmian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dziś zostało $count ręcznego przebiegu',
+      one: 'Dziś został 1 ręczny przebieg',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes poprawki',
+      one: '1 poprawka',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks sugestii',
+      one: '1 sugestia',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starszej zmiany pominięto',
+      one: '1 starsza zmiana pominięta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zgłoszenia wstrzymano ze względu na prywatność',
+      one: '1 zgłoszenie wstrzymane ze względu na prywatność',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Ocena 5 gwiazdek naprawdę nam pomaga ❤️';
+
+  @override
   String get singlePress => 'Pojedyncze naciśnięcie';
 
   @override

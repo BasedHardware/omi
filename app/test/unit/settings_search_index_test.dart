@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 
@@ -67,7 +68,11 @@ void main() {
     final transcription = searchSettings(en, en.transcription, disconnected);
     expect(transcription.first.destination, SettingsDestination.transcription);
     expect(searchSettings(en, en.exportAllData, disconnected).single.destination, SettingsDestination.exportData);
-    expect(searchSettings(en, en.phoneCalls, disconnected).first.destination, SettingsDestination.phoneCalls);
+    // Phone calls are hidden for now (PhoneCallsFeature.visible): search must not lead to them.
+    expect(
+      searchSettings(en, en.phoneCalls, disconnected).where((e) => e.destination == SettingsDestination.phoneCalls),
+      PhoneCallsFeature.visible ? isNotEmpty : isEmpty,
+    );
 
     // Rows inside a page open that row's page, not the top of Profile.
     expect(searchSettings(en, en.language, disconnected).first.destination, SettingsDestination.language);

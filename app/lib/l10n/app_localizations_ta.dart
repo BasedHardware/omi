@@ -12748,6 +12748,155 @@ class AppLocalizationsTa extends AppLocalizations {
   String get tasksGroupByDate => 'தேதிப்படி குழுவாக்கு';
 
   @override
+  String get dreamReportTitle => 'Dream அறிக்கை';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'முன்னோட்ட முறை: Dream எதை மாற்றியிருக்கும் என்பதைக் காட்டுகிறது, ஆனால் உங்கள் கணக்கில் இன்னும் எதுவும் மாறாது.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream இந்த மாற்றங்களைத் தானாகவே பயன்படுத்துகிறது. எதையும் சமீபத்திய மாற்றங்களில் செயல்தவிர்க்கலாம்.';
+
+  @override
+  String get dreamReportRunNow => 'இப்போது இயக்கு';
+
+  @override
+  String get dreamReportRunLimit => 'இன்று கைமுறை இயக்கங்கள் மீதமில்லை';
+
+  @override
+  String get dreamReportRunInProgress => 'ஒரு சுற்று ஏற்கனவே இயங்குகிறது. ஒரு நிமிடம் கழித்து மீண்டும் முயலவும்.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream-ஐ இயக்க முடியவில்லை. மீண்டும் முயலவும்.';
+
+  @override
+  String get dreamReportIdle => 'பார்க்க புதிதாக எதுவும் இல்லை.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream அறிக்கையை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get dreamReportEmptyTitle => 'இன்னும் சுற்றுகள் இல்லை';
+
+  @override
+  String get dreamReportEmptyBody =>
+      'உங்கள் கணக்கில் என்ன மாறியது என்பதை Dream ஏறத்தாழ ஒரு மணிநேரத்துக்கு ஒருமுறை பார்க்கிறது.';
+
+  @override
+  String get dreamReportScheduled => 'திட்டமிடப்பட்டது';
+
+  @override
+  String get dreamReportManual => 'கைமுறை';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'தோல்வி ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'நேர வரம்பில் நின்றது';
+
+  @override
+  String get dreamReportNothingFound => 'சரிசெய்ய எதுவும் இல்லை';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records உருப்படிகள் படிக்கப்பட்டன · $tokens டோக்கன்கள்';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'சரிசெய்திருக்கும்';
+
+  @override
+  String get dreamReportFixed => 'சரிசெய்யப்பட்டது';
+
+  @override
+  String get dreamReportWouldAsk => 'உங்களிடம் கேட்டிருக்கும்';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'பணிகளைப் பரிந்துரைத்திருக்கும்';
+
+  @override
+  String get dreamReportLearnedWords => 'கற்றுக்கொண்ட சொற்கள்';
+
+  @override
+  String get dreamReportFeedback => 'Omi குழுவுக்குத் தெரிவிக்கப்பட்டது';
+
+  @override
+  String get dreamReportDeletedItem => 'நீக்கப்பட்ட உருப்படி';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'இன்று $count/$limit சுற்றுகள்';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாற்றங்கள் காத்திருக்கின்றன',
+      one: '1 மாற்றம் காத்திருக்கிறது',
+      zero: 'காத்திருக்கும் மாற்றங்கள் இல்லை',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்று $count கைமுறை இயக்கங்கள் மீதம்',
+      one: 'இன்று 1 கைமுறை இயக்கம் மீதம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes திருத்தங்கள்',
+      one: '1 திருத்தம்',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks பரிந்துரைகள்',
+      one: '1 பரிந்துரை',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பழைய மாற்றங்கள் தவிர்க்கப்பட்டன',
+      one: '1 பழைய மாற்றம் தவிர்க்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'தனியுரிமைக்காக $count அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன',
+      one: 'தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 நட்சத்திர மதிப்பீடு எங்களுக்கு மிகவும் உதவும் ❤️';
+
+  @override
   String get singlePress => 'ஒருமுறை அழுத்துக';
 
   @override

@@ -12733,6 +12733,154 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tasksGroupByDate => 'Agrupa per data';
 
   @override
+  String get dreamReportTitle => 'Informe de Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Mode de vista prèvia: Dream mostra què canviaria, però encara no es modifica res al teu compte.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream aplica aquests canvis per si sol. Desfés qualsevol d\'ells a Canvis recents.';
+
+  @override
+  String get dreamReportRunNow => 'Executa ara';
+
+  @override
+  String get dreamReportRunLimit => 'No queden execucions manuals avui';
+
+  @override
+  String get dreamReportRunInProgress => 'Ja hi ha una execució en curs. Torna-ho a provar d\'aquí a un minut.';
+
+  @override
+  String get dreamReportRunFailed => 'No s\'ha pogut executar Dream. Torna-ho a provar.';
+
+  @override
+  String get dreamReportIdle => 'Encara no hi ha res de nou per revisar.';
+
+  @override
+  String get dreamReportLoadFailed => 'No s\'ha pogut carregar l\'informe de Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Encara no hi ha execucions';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream revisa què ha canviat al teu compte aproximadament cada hora.';
+
+  @override
+  String get dreamReportScheduled => 'Programada';
+
+  @override
+  String get dreamReportManual => 'Manual';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Error ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'S\'ha aturat en arribar al límit de temps';
+
+  @override
+  String get dreamReportNothingFound => 'Res a corregir';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'S\'han llegit $records elements · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Corregiria';
+
+  @override
+  String get dreamReportFixed => 'Corregit';
+
+  @override
+  String get dreamReportWouldAsk => 'Et preguntaria';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Suggeriria tasques';
+
+  @override
+  String get dreamReportLearnedWords => 'Paraules que ha après';
+
+  @override
+  String get dreamReportFeedback => 'Informat a l\'equip d\'Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Element eliminat';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count de $limit execucions avui';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count canvis en espera',
+      one: '1 canvi en espera',
+      zero: 'Cap canvi en espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Queden $count execucions manuals avui',
+      one: 'Queda 1 execució manual avui',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes correccions',
+      one: '1 correcció',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks suggeriments',
+      one: '1 suggeriment',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count canvis anteriors omesos',
+      one: '1 canvi anterior omès',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count informes retinguts per privacitat',
+      one: '1 informe retingut per privacitat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Valorar-nos amb 5 estrelles ens ajuda molt ❤️';
+
+  @override
   String get singlePress => 'Pulsació simple';
 
   @override

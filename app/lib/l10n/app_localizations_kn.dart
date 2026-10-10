@@ -12699,6 +12699,154 @@ class AppLocalizationsKn extends AppLocalizations {
   String get tasksGroupByDate => 'ದಿನಾಂಕದ ಪ್ರಕಾರ ಗುಂಪು ಮಾಡಿ';
 
   @override
+  String get dreamReportTitle => 'Dream ವರದಿ';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'ಪೂರ್ವವೀಕ್ಷಣೆ ಮೋಡ್: Dream ಏನನ್ನು ಬದಲಾಯಿಸುತ್ತಿತ್ತು ಎಂಬುದನ್ನು ತೋರಿಸುತ್ತದೆ, ಆದರೆ ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ಬದಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream ಈ ಬದಲಾವಣೆಗಳನ್ನು ತಾನೇ ಅನ್ವಯಿಸುತ್ತದೆ. ಯಾವುದನ್ನಾದರೂ ಇತ್ತೀಚಿನ ಬದಲಾವಣೆಗಳು ನಲ್ಲಿ ರದ್ದುಮಾಡಿ.';
+
+  @override
+  String get dreamReportRunNow => 'ಈಗ ರನ್ ಮಾಡಿ';
+
+  @override
+  String get dreamReportRunLimit => 'ಇಂದು ಹಸ್ತಚಾಲಿತ ರನ್‌ಗಳು ಉಳಿದಿಲ್ಲ';
+
+  @override
+  String get dreamReportRunInProgress => 'ಒಂದು ಪಾಸ್ ಈಗಾಗಲೇ ಚಾಲನೆಯಲ್ಲಿದೆ. ಒಂದು ನಿಮಿಷದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream ರನ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get dreamReportIdle => 'ನೋಡಲು ಇನ್ನೂ ಹೊಸದೇನೂ ಇಲ್ಲ.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream ವರದಿಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get dreamReportEmptyTitle => 'ಇನ್ನೂ ಪಾಸ್‌ಗಳಿಲ್ಲ';
+
+  @override
+  String get dreamReportEmptyBody => 'ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಏನು ಬದಲಾಗಿದೆ ಎಂದು Dream ಸುಮಾರು ಗಂಟೆಗೊಮ್ಮೆ ನೋಡುತ್ತದೆ.';
+
+  @override
+  String get dreamReportScheduled => 'ನಿಗದಿತ';
+
+  @override
+  String get dreamReportManual => 'ಹಸ್ತಚಾಲಿತ';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'ವಿಫಲವಾಗಿದೆ ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'ಸಮಯದ ಮಿತಿಯಲ್ಲಿ ನಿಂತಿತು';
+
+  @override
+  String get dreamReportNothingFound => 'ಸರಿಪಡಿಸಲು ಏನೂ ಇಲ್ಲ';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records ಐಟಂಗಳನ್ನು ಓದಲಾಗಿದೆ · $tokens ಟೋಕನ್‌ಗಳು';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'ಸರಿಪಡಿಸುತ್ತಿತ್ತು';
+
+  @override
+  String get dreamReportFixed => 'ಸರಿಪಡಿಸಲಾಗಿದೆ';
+
+  @override
+  String get dreamReportWouldAsk => 'ನಿಮ್ಮನ್ನು ಕೇಳುತ್ತಿತ್ತು';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'ಕಾರ್ಯಗಳನ್ನು ಸೂಚಿಸುತ್ತಿತ್ತು';
+
+  @override
+  String get dreamReportLearnedWords => 'ಕಲಿತ ಪದಗಳು';
+
+  @override
+  String get dreamReportFeedback => 'Omi ತಂಡಕ್ಕೆ ವರದಿ ಮಾಡಲಾಗಿದೆ';
+
+  @override
+  String get dreamReportDeletedItem => 'ಅಳಿಸಿದ ಐಟಂ';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'ಇಂದು $count/$limit ಪಾಸ್‌ಗಳು';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಬದಲಾವಣೆಗಳು ಕಾಯುತ್ತಿವೆ',
+      one: '1 ಬದಲಾವಣೆ ಕಾಯುತ್ತಿದೆ',
+      zero: 'ಕಾಯುತ್ತಿರುವ ಬದಲಾವಣೆಗಳಿಲ್ಲ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಇಂದು ಇನ್ನೂ $count ಹಸ್ತಚಾಲಿತ ರನ್‌ಗಳು ಉಳಿದಿವೆ',
+      one: 'ಇಂದು ಇನ್ನೂ 1 ಹಸ್ತಚಾಲಿತ ರನ್ ಉಳಿದಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes ತಿದ್ದುಪಡಿಗಳು',
+      one: '1 ತಿದ್ದುಪಡಿ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks ಸಲಹೆಗಳು',
+      one: '1 ಸಲಹೆ',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಹಳೆಯ ಬದಲಾವಣೆಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
+      one: '1 ಹಳೆಯ ಬದಲಾವಣೆಯನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಗೌಪ್ಯತೆಗಾಗಿ $count ವರದಿಗಳನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
+      one: 'ಗೌಪ್ಯತೆಗಾಗಿ 1 ವರದಿಯನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 ಸ್ಟಾರ್ ರೇಟಿಂಗ್ ನೀಡಿದರೆ ನಮಗೆ ತುಂಬಾ ಸಹಾಯವಾಗುತ್ತದೆ ❤️';
+
+  @override
   String get singlePress => 'ಒಮ್ಮೆ ಒತ್ತಿರಿ';
 
   @override

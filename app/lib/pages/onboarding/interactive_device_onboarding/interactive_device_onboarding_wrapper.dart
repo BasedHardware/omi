@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/services/onboarding_sync_runtime.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
@@ -36,6 +37,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   bool _showIntro = true;
   bool _started = false;
   bool _completed = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -125,22 +127,32 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     }
   }
 
-  void _completeOnboarding() {
+  Future<bool> _saveCompletion() async {
+    if (_saving) return false;
+    _saving = true;
+    final saved = await OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true);
+    _saving = false;
+    if (!mounted) return false;
+    if (!saved) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    return saved;
+  }
+
+  Future<void> _completeOnboarding() async {
+    if (!await _saveCompletion() || !mounted) return;
     _completed = true;
     AnalyticsManager().deviceOnboardingCompleted();
     AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    updateUserOnboardingState(deviceOnboardingCompleted: true);
     Navigator.of(context).pop();
   }
 
   /// Leave the tutorial from any point. Persists completion so the forced
   /// first-run never re-fires (redo anytime via Settings → Device Tutorial);
   /// dispose() records the abandoned step for analytics.
-  void _skipOnboarding() {
+  Future<void> _skipOnboarding() async {
+    if (!await _saveCompletion() || !mounted) return;
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
-    updateUserOnboardingState(deviceOnboardingCompleted: true);
     Navigator.of(context).pop();
   }
 

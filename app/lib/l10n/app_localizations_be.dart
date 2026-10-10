@@ -12694,6 +12694,154 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tasksGroupByDate => 'Групаваць па даце';
 
   @override
+  String get dreamReportTitle => 'Справаздача Dream';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Рэжым папярэдняга прагляду: Dream паказвае, што б змяніў, але ў вашым акаўнце пакуль нічога не мяняецца.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream прымяняе гэтыя змены сам. Адмяніць любую з іх можна ў раздзеле «Нядаўнія змены».';
+
+  @override
+  String get dreamReportRunNow => 'Запусціць зараз';
+
+  @override
+  String get dreamReportRunLimit => 'Ручныя запускі на сёння скончыліся';
+
+  @override
+  String get dreamReportRunInProgress => 'Запуск ужо выконваецца. Паўтарыце праз хвіліну.';
+
+  @override
+  String get dreamReportRunFailed => 'Не ўдалося запусціць Dream. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get dreamReportIdle => 'Пакуль няма нічога новага.';
+
+  @override
+  String get dreamReportLoadFailed => 'Не ўдалося загрузіць справаздачу Dream.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Запускаў пакуль няма';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream правярае змены ў вашым акаўнце прыблізна раз на гадзіну.';
+
+  @override
+  String get dreamReportScheduled => 'Па раскладзе';
+
+  @override
+  String get dreamReportManual => 'Уручную';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Памылка ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Спынена з-за ліміту часу';
+
+  @override
+  String get dreamReportNothingFound => 'Няма чаго выпраўляць';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прачытана элементаў: $records · токенаў: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Выправіў бы';
+
+  @override
+  String get dreamReportFixed => 'Выпраўлена';
+
+  @override
+  String get dreamReportWouldAsk => 'Спытаў бы вас';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Прапанаваў бы задачы';
+
+  @override
+  String get dreamReportLearnedWords => 'Вывучаныя словы';
+
+  @override
+  String get dreamReportFeedback => 'Адпраўлена камандзе Omi';
+
+  @override
+  String get dreamReportDeletedItem => 'Выдалены элемент';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count з $limit запускаў сёння';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count змены чакаюць',
+      one: '1 змена чакае',
+      zero: 'Няма змен у чаканні',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Сёння засталося $count ручныя запускі',
+      one: 'Сёння застаўся 1 ручны запуск',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes выпраўленні',
+      one: '1 выпраўленне',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks прапановы',
+      one: '1 прапанова',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count больш старыя змены прапушчаны',
+      one: '1 больш старая змена прапушчана',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count справаздачы затрыманы з меркаванняў прыватнасці',
+      one: '1 справаздача затрымана з меркаванняў прыватнасці',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Ацэнка ў 5 зорак вельмі нам дапаможа ❤️';
+
+  @override
   String get singlePress => 'Адзіночнае націсканне';
 
   @override

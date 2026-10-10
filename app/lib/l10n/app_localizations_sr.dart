@@ -12674,6 +12674,153 @@ class AppLocalizationsSr extends AppLocalizations {
   String get tasksGroupByDate => 'Групиши по датуму';
 
   @override
+  String get dreamReportTitle => 'Dream извештај';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Режим прегледа: Dream приказује шта би променио, али се у вашем налогу засад ништа не мења.';
+
+  @override
+  String get dreamReportLiveBanner => 'Dream сам примењује ове промене. Сваку можете поништити у Недавним променама.';
+
+  @override
+  String get dreamReportRunNow => 'Покрени сада';
+
+  @override
+  String get dreamReportRunLimit => 'Данас нема више ручних покретања';
+
+  @override
+  String get dreamReportRunInProgress => 'Пролаз је већ у току. Покушајте поново за минут.';
+
+  @override
+  String get dreamReportRunFailed => 'Dream није могуће покренути. Покушајте поново.';
+
+  @override
+  String get dreamReportIdle => 'Засад нема ничег новог за преглед.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dream извештај није могуће учитати.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Још нема проласка';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream отприлике једном на сат прегледа шта се променило у вашем налогу.';
+
+  @override
+  String get dreamReportScheduled => 'Заказано';
+
+  @override
+  String get dreamReportManual => 'Ручно';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Није успело ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Заустављено на временском ограничењу';
+
+  @override
+  String get dreamReportNothingFound => 'Нема шта да се исправи';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прочитано ставки: $records · токена: $tokens';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Исправио би';
+
+  @override
+  String get dreamReportFixed => 'Исправљено';
+
+  @override
+  String get dreamReportWouldAsk => 'Питао би вас';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Предложио би задатке';
+
+  @override
+  String get dreamReportLearnedWords => 'Научене речи';
+
+  @override
+  String get dreamReportFeedback => 'Пријављено Omi тиму';
+
+  @override
+  String get dreamReportDeletedItem => 'Избрисана ставка';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Данас $count од $limit проласка';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count промена чека',
+      one: '1 промена чека',
+      zero: 'Нема промена на чекању',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Данас је остало $count ручних покретања',
+      one: 'Данас је остало 1 ручно покретање',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes исправки',
+      one: '1 исправка',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks предлога',
+      one: '1 предлог',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count старијих промена прескочено',
+      one: '1 старија промена прескочена',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count извештаја задржано због приватности',
+      one: '1 извештај задржан због приватности',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => 'Оцена са 5 звездица нам заиста много помаже ❤️';
+
+  @override
   String get singlePress => 'Један притисак';
 
   @override

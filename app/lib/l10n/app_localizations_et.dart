@@ -12657,6 +12657,154 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tasksGroupByDate => 'Rühmita kuupäeva järgi';
 
   @override
+  String get dreamReportTitle => 'Dreami aruanne';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Eelvaate režiim: Dream näitab, mida see muudaks, kuid sinu kontol ei muutu veel midagi.';
+
+  @override
+  String get dreamReportLiveBanner =>
+      'Dream rakendab need muudatused ise. Võta need tagasi jaotises Hiljutised muudatused.';
+
+  @override
+  String get dreamReportRunNow => 'Käivita kohe';
+
+  @override
+  String get dreamReportRunLimit => 'Täna pole käsitsi käivitusi enam järel';
+
+  @override
+  String get dreamReportRunInProgress => 'Käivitus juba töötab. Proovi minuti pärast uuesti.';
+
+  @override
+  String get dreamReportRunFailed => 'Dreami käivitamine ebaõnnestus. Proovi uuesti.';
+
+  @override
+  String get dreamReportIdle => 'Pole veel midagi uut vaadata.';
+
+  @override
+  String get dreamReportLoadFailed => 'Dreami aruande laadimine ebaõnnestus.';
+
+  @override
+  String get dreamReportEmptyTitle => 'Käivitusi pole veel';
+
+  @override
+  String get dreamReportEmptyBody => 'Dream vaatab umbes kord tunnis üle, mis su kontol muutus.';
+
+  @override
+  String get dreamReportScheduled => 'Ajastatud';
+
+  @override
+  String get dreamReportManual => 'Käsitsi';
+
+  @override
+  String dreamReportFailed(String error) {
+    return 'Ebaõnnestus ($error)';
+  }
+
+  @override
+  String get dreamReportTimedOut => 'Peatus ajapiiri tõttu';
+
+  @override
+  String get dreamReportNothingFound => 'Pole midagi parandada';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Loetud $records üksust · $tokens tokenit';
+  }
+
+  @override
+  String get dreamReportWouldFix => 'Parandaks';
+
+  @override
+  String get dreamReportFixed => 'Parandatud';
+
+  @override
+  String get dreamReportWouldAsk => 'Küsiks sinult';
+
+  @override
+  String get dreamReportWouldSuggestTasks => 'Soovitaks ülesandeid';
+
+  @override
+  String get dreamReportLearnedWords => 'Õpitud sõnad';
+
+  @override
+  String get dreamReportFeedback => 'Teatatud Omi tiimile';
+
+  @override
+  String get dreamReportDeletedItem => 'Kustutatud üksus';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit käivitust täna';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count muudatust ootel',
+      one: '1 muudatus ootel',
+      zero: 'Ootel muudatusi pole',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportRunsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Täna jäi $count käsitsi käivitust',
+      one: 'Täna jäi 1 käsitsi käivitus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportFound(int fixes, int asks) {
+    String _temp0 = intl.Intl.pluralLogic(
+      fixes,
+      locale: localeName,
+      other: '$fixes parandust',
+      one: '1 parandus',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      asks,
+      locale: localeName,
+      other: '$asks soovitust',
+      one: '1 soovitus',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vanemat muudatust vahele jäetud',
+      one: '1 vanem muudatus vahele jäetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aruannet hoiti privaatsuse tõttu tagasi',
+      one: '1 aruanne hoiti privaatsuse tõttu tagasi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingRatingPromptBody => '5 tärni aitavad meid tõesti palju ❤️';
+
+  @override
   String get singlePress => 'Ühekordne vajutus';
 
   @override

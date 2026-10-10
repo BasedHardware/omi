@@ -18,11 +18,11 @@ from llm_gateway.gateway.accounting import ProviderUsage
 from llm_gateway.gateway.provider_types import ProviderFailure
 from llm_gateway.gateway.provider_types import _openai_usage_payload  # pyright: ignore[reportPrivateUsage]
 from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.vertex_schema import vertex_response_json_schema
 from utils.llm import vertex_pt_routing as ptr
 
 __all__ = [
     '_bounded_error_text',
-    '_json_schema_to_vertex_response_schema',
     '_nonnegative_int_or_zero',
     '_openai_sse',
     '_openai_sse_done',
@@ -140,7 +140,7 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
             if not isinstance(json_schema, Mapping) or not isinstance(json_schema.get('schema'), Mapping):
                 raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
             generation_config['responseMimeType'] = 'application/json'
-            generation_config['responseSchema'] = _json_schema_to_vertex_response_schema(
+            generation_config['responseJsonSchema'] = vertex_response_json_schema(
                 cast(Mapping[str, Any], json_schema['schema'])
             )
 
@@ -156,70 +156,6 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
     if tool_config is not None:
         payload['toolConfig'] = tool_config
     return payload
-
-
-_JSON_SCHEMA_META_KEYS = frozenset({'$defs', 'definitions', '$schema', '$id', '$comment'})
-_LOCAL_REF_PREFIXES = ('#/$defs/', '#/definitions/')
-
-
-def _json_schema_to_vertex_response_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Convert OpenAI/Pydantic JSON Schema into Vertex ``responseSchema``.
-
-    Vertex ``responseSchema`` is an OpenAPI 3 subset that accepts ``defs``/``ref``,
-    not JSON Schema ``$defs``/``$ref``. Copying a nested Pydantic schema as-is
-    yields ``InvalidArgument`` 400. Inline local refs and drop JSON-Schema-only
-    meta keys so a legal nested schema stays a legal Vertex request.
-    """
-    converted = _inline_json_schema(schema, _collect_json_schema_defs(schema), frozenset())
-    if not isinstance(converted, dict):
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    return converted
-
-
-def _collect_json_schema_defs(schema: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    defs: dict[str, Mapping[str, Any]] = {}
-    for key in ('$defs', 'definitions'):
-        raw = schema.get(key)
-        if not isinstance(raw, Mapping):
-            continue
-        for name, definition in raw.items():
-            if isinstance(name, str) and isinstance(definition, Mapping):
-                defs[name] = cast(Mapping[str, Any], definition)
-    return defs
-
-
-def _inline_json_schema(node: Any, defs: Mapping[str, Mapping[str, Any]], visiting: frozenset[str]) -> Any:
-    if isinstance(node, list):
-        return [_inline_json_schema(item, defs, visiting) for item in cast(list[Any], node)]
-    if not isinstance(node, Mapping):
-        return node
-    typed_node = cast(Mapping[str, Any], node)
-    local_defs = dict(defs)
-    local_defs.update(_collect_json_schema_defs(typed_node))
-    ref = typed_node.get('$ref')
-    if isinstance(ref, str):
-        name = _local_json_schema_ref_name(ref)
-        if name is None or name in visiting:
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        definition = local_defs.get(name)
-        if not isinstance(definition, Mapping):
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        merged = {**definition, **{key: value for key, value in typed_node.items() if key != '$ref'}}
-        return _inline_json_schema(merged, local_defs, visiting | {name})
-    return {
-        key: _inline_json_schema(value, local_defs, visiting)
-        for key, value in typed_node.items()
-        if key not in _JSON_SCHEMA_META_KEYS
-    }
-
-
-def _local_json_schema_ref_name(ref: str) -> str | None:
-    for prefix in _LOCAL_REF_PREFIXES:
-        if ref.startswith(prefix):
-            name = ref[len(prefix) :]
-            if name and '/' not in name:
-                return name
-    return None
 
 
 def _output_limit(request: Mapping[str, Any]) -> int | None:
@@ -395,6 +331,8 @@ def _vertex_rejection_reason(preview: bytes) -> str:
     if not isinstance(message, str):
         return 'unknown'
     message = message.lower()
+    if 'too many states' in message:
+        return 'schema_too_many_states'
     if 'missing a thought_signature' in message or 'missing a thought signature' in message:
         return 'missing_thought_signature'
     if 'thought_signature' in message or 'thought signature' in message:
@@ -402,6 +340,12 @@ def _vertex_rejection_reason(preview: bytes) -> str:
     if 'thinking' in message:
         return 'thinking_config'
     if 'schema' in message:
+        if any(token in message for token in ('too complex', 'nesting', 'depth', 'too large')):
+            return 'schema_complexity'
+        if any(token in message for token in ('$ref', '$defs', 'reference', 'ref:')):
+            return 'schema_reference'
+        if any(token in message for token in ('unknown name', 'unknown field', 'unsupported', 'not supported')):
+            return 'schema_keyword'
         return 'schema'
     return 'unknown'
 

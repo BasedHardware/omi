@@ -212,6 +212,10 @@ speaker, summary, memory, or translation. See
 [`transcription-shadow.md`](transcription-shadow.md) for gates, metrics, storage,
 and the known best-effort background-task limit.
 
+The optional cached-evidence alternatives, encrypted shadow receipts, cohort,
+metrics and promotion criteria are documented in the
+[speaker grouping shadow runbook](speaker_grouping_shadow.mdx).
+
 ## 1. Connection + Streaming + Transcription
 
 ### Segment-upload processing shape
@@ -1217,6 +1221,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A typed chain exhaustion on a mid-session rebuild
+(`LiveChainExhausted` from the managed dial) is classified evidence, not a
+crash: the rebuild arms log one
+`STT failover chain exhausted` ERROR line (FC-typed-failure-collapsed-to-generic)
+while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
+`stt_failed` client status carry the operational signal. Untyped dial faults
+keep the `STT failover connect raised` traceback for diagnosis.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure
@@ -1445,6 +1456,13 @@ degraded telemetry and a generic failure; shared configuration failures still
 stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
+
+Reminder effects read the saved task lifecycle after persistence rather than
+using extraction state. Cancelled, superseded, completed, deleted and undated
+tasks do not arm reminders. An unavailable post-create reminder read emits
+degraded telemetry and skips that reminder step without failing the committed
+extraction or blocking vector/export continuation. This is not a durable
+reminder retry; transport and offline-device delivery remain best effort.
 
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
@@ -1825,6 +1843,16 @@ sequenceDiagram
 
     Note over Backend: Retry exhaustion: after MAX_RETRIES (3),<br/>conversation stays buffered with reset sent_at.<br/>cleanup_processing_conversations picks it up next session.
 ```
+
+Close-code severity: a close the pusher sends for its own rolling update
+(1012 service restart) is expected, self-healing transport churn — buffered
+audio and pending conversations replay on the replacement socket — and logs
+at INFO (`Pusher * Connection closed` lines; FC-lifecycle-close-classified-by-transport-phase).
+Every other close (abnormal 1006, internal 1011, TLS 1015, no close frame)
+keeps the ERROR meaning of those lines. Independently of the close code, a
+close raised by a socket that a reconnect already replaced is informational
+on the flush and receive paths and never tears down the freshly installed
+connection.
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
@@ -3016,7 +3044,10 @@ emergency lever, not a toggle.
 
 Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs.
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
-`window_shorter_than_minimum`. A finished transcript records one `owner_recognition_outcome` log and
+`window_shorter_than_minimum`. An attempt that spent an embedding but cannot publish because final
+authority is unavailable records exactly one `authority_unavailable` exit, after applying known
+receiving rejections/retractions. It does not fabricate an acoustic decision; short probes also retain
+their separate reconnect-rejection accounting. A finished transcript records one `owner_recognition_outcome` log and
 `omi_owner_recognition_conversations_total{surface,source,outcome}` from `process_conversation` after
 every successful persist, including the free-tier terminal stores. Sync intake's completed status is
 not a prior observation: the first enrichment counts, and a later pass counts only when that row had
@@ -3647,11 +3678,48 @@ Live identity consumes positioned provider fragments, accumulating distinct
 intervals in the existing ring before embedding. Overlaps and repeats count
 once; successful extraction reserves its intervals. Account for the clip that
 the three-entry evidence deque will evict before gating the next extraction.
-A rejected voice can then reach another five-second decision on later clean audio.
+A rejected voice, including a far/noisy rejection, can then reach another
+five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
+the usable remainder only if its actual PCM duration still meets the extraction
+floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+remainder reports `window_shorter_than_minimum`.
 
-Each socket admits at most 128 voice ids, with at most 128 pending intervals per
-voice, 16 in-flight tasks, 12 embedding attempts per voice and 256 overall.
-Failures consume attempts; quotas survive conversation/profile refresh. All
+Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
+runner-up gap of at least `0.10` stay `unknown` / `pending` while additional
+fresh audio or the finished-conversation pass can resolve them. This is an
+evidence-state distinction: rejected voices already retry, and the band adds
+no model calls, acceptance, or identity authority. Owner contention remains
+`ambiguous`; insufficient runner-up margin and distances at or above `0.70`
+remain `no_match`. A pending revalidation withdraws earlier automatic labels
+on every segment, preserving manual, carried and channel authority. Optional
+capture score snapshots also record `unknown` / `pending`; live decision logs
+include the explicit `decision` kind. Acceptance stays
+strictly below `0.65`, conversation matching stays at `0.50`, and owner
+recognition remains free on every plan. Held-out calibration found no safe
+acceptance lift from wider thresholds; the pending band must not be interpreted
+as a measured recall improvement.
+
+Each conversation admits at most 128 voice ids, with at most 128 pending intervals
+per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
+uncarried voices' attempts; validated automatic owner carry and copied manual
+mappings retain their attempts. Same-conversation profile refresh does not reset
+them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
+opportunities within both budgets, regardless of their initial distance: noisy
+early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+all evidenced voices and withdraws competing automatic owner mappings.
+Near-threshold misses, print-margin ambiguity, owner contention and missing prints
+stay retryable. No new exit reason is added.
+Retained evidence can still be re-arbitrated or rechecked against a recovered owner
+without another embedding request.
+
+The socket token bucket starts with 16 attempts, has capacity 16, and refills
+at 240/3600 attempts per monotonic wall second (one every 15 seconds). Over `t`
+hours since socket creation, attempts are bounded by `16 + 240*t`: at most 256
+in the first hour and 240/hour in steady state, at no more than 10 seconds of
+query PCM per attempt. Idle credit is capped at 16. Failures spend tokens and
+reservation is synchronous before awaiting extraction; parallel voices share
+the same bucket. Client audio timestamps cannot accelerate refill, and neither
+conversation churn nor profile refresh resets the socket's tokens/refill clock. All
 associated automatic voice state shares admission. Rollover prunes idle locks;
 held/waited locks retire only after their last user finishes. Generation checks
 prevent old work from publishing. Live unknown/ambiguous remains an abstention
@@ -3666,6 +3734,12 @@ known coverage holes and raced blobs still refuse globally. Identity eligibility
 uses actual distinct embedded duration independently of optional score logging.
 Version-1 caches remain readable for grouping; entries without duration metadata
 claim no owner evidence until verified audio supplies it.
+When a segment has a proven audio window, an otherwise valid cache hit with
+missing, zero or invalid measured evidence is refreshed from verified PCM under
+the existing attempt/time limits. Nominal transcript duration is never promoted
+to owner evidence. Unplaceable historical grouping remains cache-readable; a
+failed refresh cannot claim new owner evidence. Valid measured cache entries
+remain reusable without another embedding.
 
 New evidence-policy cache writes use `speaker-embeddings.owner-evidence.v1.enc`
 under the same encrypted, deletion-owned audio prefix. New readers prefer it,
@@ -3677,13 +3751,24 @@ behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
 at most two submitted/running late batches, without a waiting queue. Each scans
-at most 128 conversation snapshots and selects at most eight eligible rows.
+at most 128 distinct conversations and selects at most eight eligible rows,
+including all deferred completion rechecks. Rows still `in_progress` or
+`processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
+re-read only those rows (at most six metadata snapshots per candidate, 768 per
+batch). Waits borrow no executor thread but retain the batch's admission slot.
+The eight-pass ceiling is shared across every round; a row that enters repair
+is removed from subsequent rounds even if matching or CAS fails. Rechecks use
+the freshly completed row's revision, never the earlier processing snapshot.
+Overlapping drain submissions coalesce per process while a candidate is active;
+the active set is bounded by two batches of 128 and cleared on task completion.
+This is an in-process handoff, not a durable job: completion after the 230 seconds
+of waits, process shutdown, or slot refusal can still lose this retry.
 Selection follows eligibility, so ineligible early rows do not consume the eight
 passes. The snapshot is reused for the revision CAS. Each pass has a five-second
 advisory elapsed budget and at most 24 model attempts, including failures; no
 late pass repairs enrollment audio. Cancellation of an async waiter cannot free
 admission while its storage thread is still running. SDK/network timeouts are
-not a hard five-second deadline. Admission refusal/shutdown can lose this retry.
+not a hard five-second deadline.
 It changes only transcript identity and speaker resolution on completed,
 unlocked pendant/WAL rows. The commit compares the read document revision and
 reapplies manual authority; intervening edits defeat it. It performs no notes,
@@ -3728,6 +3813,10 @@ Free-desktop deterministic minimum paths still emit no managed calls. This
 patch does not add a diarizer pass before those admission exits; unmatched free
 desktop captures and budget-skipped custom-STT captures remain a residual.
 
+[Owner continuity across rollover and reconnect](owner-continuity.md) documents
+the complete carry/drop reasons, encrypted handoff lifetime, acoustic guards,
+and metric denominators.
+
 Rollover rechecks the donor after profile loading and reevaluates the retained centroid
 against the current eligible prints. Late manual rejection, deletion, lock, or a new
 competing print defeats automatic carry; distinct covered audio remains reserved.
@@ -3753,8 +3842,12 @@ Participant grouping marked `resolved` does not by itself suppress the late
 identity retry: only a resolved row already containing an owner label is skipped.
 A completed owner miss can therefore use newly available audio/profile evidence.
 
-`omi_owner_identity_repair_total{outcome}` counts only successful late identity
-CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It does not
+`omi_owner_identity_repair_total{outcome}` counts identity changes in successful
+late CAS commits (`owner_added`, `owner_removed`, `identity_updated`). It compares
+decoded transaction-current segments to the actual encoded write after manual
+authority has been reapplied. Missing legacy segment ids use the same stable ids
+as conversation reads. Unchanged identities emit nothing, even when resolution
+metadata is updated. The observer runs once after transaction success. It does not
 observe ordinary finalization again. The existing conversation counter/share
 remain first-finalization snapshots. Metric failure cannot change a committed
 repair into a reported storage failure.
@@ -3792,3 +3885,100 @@ mismatches, and terminal failures. Only the sweep that wins the cursor CAS emits
 those pages; observers that lose the same cursor generation cannot multiply a
 single refusal into a fleet-wide alarm burst. Standalone verification pages
 immediately. Recovery never regenerates admitted audio from old chunk snapshots.
+
+Owner continuity decisions use one final Firestore transaction snapshot for the
+receiving receipt, original acoustic donor and immediate rollover donor (at most
+three projected documents). Live arbitration/publication runs synchronously after
+the snapshot and generation check, so a receiving correction during earlier
+awaits cannot be replaced by a stale automatic owner suggestion.
+
+Snapshot unavailability is kept separate from the receiving receipt. A failed
+final transaction passes only already-known receiving rejections/retractions.
+One publication gate stops manual, automatic, carried and shortened owner naming
+and continuity renewal whenever final authority is unavailable.
+
+### Live capture inactivity observation
+
+`omi_listen_live_no_audio_sessions` counts open backend-STT sockets in either
+state: no accepted, decoded frame within 300 seconds of admission; or, after
+the first decoded frame, no raw byte frame longer than two bytes for 300 seconds.
+The 10-second heartbeat samples the existing receive timestamp and resets a
+monotonic timer only when byte activity changes. Control messages do not reset
+it. Audio arrival/resumption or teardown removes the socket. Custom STT is
+excluded because it sends client transcripts. The gauge has no customer labels
+and starts at zero; a transition logs `omi_listen_capture_idle`. This observes
+inactivity without forcing a disconnect. Intentional idle clients can contribute.
+It cannot see a pendant wedge when the app never opens a backend socket. After
+the first accepted frame, undecodable/unknown-channel frames count as raw byte
+activity; the decode/drop metrics cover those separate cases. Calibrate fleet
+alert thresholds against the idle baseline before paging.
+
+## Owner identity attempt funnel
+
+`omi_owner_identity_retry_total{pass,stage,reason}` observes the existing speaker
+resolver without changing placement, identity, cache or persistence policy.
+`pass="first"` is a first-finalization call that reaches the shared resolver
+(using the existing owner-outcome `already_observed` test). A reprocess already
+observed by that test emits no first-pass funnel. Earlier processing admission
+returns do not reach this counter. `pass="late"` is a pusher drain retry candidate,
+including its bounded completion rechecks. A processing row is unfinished, not
+an immediate terminal `skipped/not_completed`; that terminal is emitted once
+only when the recheck ceiling is exhausted or the row cannot reach completion.
+Rechecks do not increment `entry`, and coalesced active submissions emit nothing.
+Another batch after completion may count the same conversation again. These
+are attempts, not unique conversations or evidence of owner speech.
+The counter cannot reconstruct historical failures or identify an account.
+
+The 28 funnel `(stage,reason)` pairs are closed:
+
+| Stage | Reasons | Meaning |
+| --- | --- | --- |
+| entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
+| eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
+| skipped | slot_limit, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
+| cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
+| cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
+
+`resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
+`no_audio`, `all_short`, `no_eligible`, `no_vectors`, `global_manifest_ambiguity`,
+`zero_text_window`, `invalid_text_window`, `uncovered_window`,
+`manifest_unvalidated`, `capture_coverage_hole`, `placement_deadline`,
+`no_proven_window`, `listing_limit`, `inventory_metadata_invalid`,
+`manifest_inventory_invalid`, `inventory_count_mismatch`,
+`inventory_pair_mismatch`, `blob_missing`, `blob_read_failed`, `blob_decode_failed`,
+`read_budget`, `decoded_duration_mismatch`, `decoded_overlap`,
+`decoded_coverage_hole`, `embedding_budget`, `embedding_failed`, `other`.
+
+Exactly one exit is emitted for each nonempty resolver call in a traced pass.
+It describes the first executed terminal gate. Placement deadline returns before
+later inventory checks. At the existing global inventory veto, attribution is
+ambiguity → zero/other invalid text window → uncovered text window (only with a
+validated manifest) → unvalidated manifest → capture coverage hole. Only after
+those gates pass does the actual inventory/read proof run; its checks retain
+execution order: read budget/listing, object metadata, manifest inventory,
+count/pair equality, blob fetch/decode, decoded duration, overlap, coverage.
+No clock, storage, embedding, eligibility or proof read is added to classify it.
+`read_budget` includes the existing download/byte/deadline/transient-listing
+budget refusal, not proof that audio is absent. `no_proven_window` includes
+missing origin/provider position, explicit unplaced alignment and legacy-clock
+refusal. An unvalidated manifest never counts as a demonstrated coverage hole.
+Embedding failure/budget are primary only if no resolution is produced; a
+usable partial resolution emits `partial`. Disabling resolution emits `disabled`.
+
+There are 58 allowed pairs per pass, at most 116 counter children per process;
+children are created only on observation and collector registration is reload
+safe. No user, conversation, segment, speaker, exception or scope enters labels.
+Late `resolver_exit` is intermediate: unavailable/no-op resolution may still
+commit. Do not add it to late terminal counts. Late terminals are `skipped` +
+`cas_refused` + `cas_committed`; entry minus terminals measures unfinished
+attempts across interval boundaries. First resolver exits end acoustic attempts,
+not the eventual summary/persistence attempt. Compare first and late separately.
+`omi_owner_identity_repair_total` still counts only committed canonical identity
+changes, and `omi_owner_recognition_conversations_total` still counts first
+finalization outcomes. Neither existing counter changes its unit or emission.
+
+Deploy pusher for late and pusher-hosted first passes; deploy backend/listen and
+Cloud Run backend, backend-sync and backend-sync-backfill for their first-pass
+coverage. No new flags, indexes, stored fields, routes or app release are needed.
+This telemetry adds no retries, audio downloads, embedding calls or profile
+reads. Mixed image versions are safe; older images simply emit no new samples.

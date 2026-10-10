@@ -59,6 +59,7 @@
       "policy_class": "direct_command",
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
+        "desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
@@ -72,6 +73,11 @@
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
+        {
+          "path": "desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift",
+          "symbol": "client.createActionItem",
+          "discover": true
+        },
         {
           "path": "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
           "symbol": "client.createActionItem",
