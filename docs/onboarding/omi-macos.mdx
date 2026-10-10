@@ -1,0 +1,127 @@
+---
+title: "Omi for Mac"
+description: "Set up and use the Omi macOS desktop app: capture modes, permissions, surfaces, and where your data lives."
+sidebarTitle: "Omi for Mac"
+---
+
+This guide covers the Omi macOS desktop app. Facts below are checked against
+the app source; each section names the files that own the behavior.
+
+## Install and sign in
+
+Download Omi for Mac from [omi.me](https://www.omi.me/), drag it to
+Applications, and sign in with your Omi account. The app lives in the top bar
+(menu bar), not the Dock, after setup.
+
+## Capture modes
+
+Audio recording has three modes: Off, Always On, and Only Meetings. The
+default is Only Meetings.
+
+- **Off** records nothing.
+- **Always On** keeps the microphone recording, and system audio too on macOS
+  14.4 or later when that permission is granted.
+- **Only Meetings** records the microphone and system audio only while a call
+  is active. Until a call is detected it waits, and it does not keep the
+  microphone open.
+
+A call means a known call app is actually in a call — Zoom, Microsoft Teams,
+FaceTime, Webex, GoTo Meeting, Slack, Discord, WhatsApp, or Telegram — or a
+browser window that is a Google Meet or Teams meeting. An idle chat window
+does not start recording.
+
+**To enable meeting-only recording after onboarding**, change the mode in
+either place:
+
+- Top bar microphone button. The menu is Off, Always On, and Only Meetings.
+- **Settings → General → Audio Recording.** The same three choices are the
+  control on that card. Open Settings from the gear at the trailing edge of
+  the top bar, or press Command-Comma.
+
+**Audio Settings…** in the microphone menu opens Settings → Transcription
+(language and vocabulary). It does not change Only Meetings versus Always On.
+
+**Screen Capture is separate.** Settings → General → Screen Capture turns
+screenshot capture on or off. That is not the audio mode.
+
+## Permissions
+
+Open Settings (the top-bar gear, or Command-Comma) and choose **Permissions**
+to grant or re-grant access. Required: Microphone, Screen Recording, System
+Audio, Notifications, and Accessibility. Optional, one feature each:
+Bluetooth, Full Disk Access, and Automation. A missing required grant shows as
+**Not Granted**.
+
+If macOS already refused a prompt, it will not ask again. Use that row's
+System Settings path, or the reset steps on the row.
+
+- **Microphone:** System Settings → Privacy & Security → Microphone. Required
+  for voice recording and transcription.
+- **Screen Recording:** System Settings → Privacy & Security → Screen
+  Recording. Required to capture the screen.
+- **System Audio (macOS 14.4 and later):** on the System Audio row, click
+  **Test Access**. If System Settings opens, enable Omi under Screen & System
+  Audio Recording, come back, and test again. Older macOS does not offer this.
+- **Notifications:** System Settings → Notifications → Omi. Set the style to
+  Banners to see alerts. Omi can request permission but cannot turn it off;
+  switching notifications off in the app opens System Settings.
+- **Accessibility:** System Settings → Privacy & Security → Accessibility.
+  This lets Omi name the document, page, or file in front, not only the
+  frontmost app. If the switch looks on but Omi says the grant is broken
+  (common after an update or re-sign), remove Omi from the list and add it
+  again.
+- **Full Disk Access:** System Settings → Privacy & Security → Full Disk
+  Access. Optional. Needed to read Messages or Mail headers.
+- **Automation:** System Settings → Privacy & Security → Automation. Optional.
+  Needed to control another app, such as Messages.
+
+You can also ask desktop chat to check or request one named permission. You
+still confirm the system prompt or the Settings switch yourself.
+
+## The app's surfaces
+
+The top bar is **Chat, Memories, Tasks, and Apps**, plus a Settings gear.
+
+- **Chat** is where you talk to Omi. A daily recap is not its own pill. Open
+  it from the recap row in Chat. The page title is Daily recap. When that
+  summary is sent is Settings → Alerts & Privacy → Daily Summary.
+- **Memories** opens captured history. A row on that page switches among
+  Activity, Conversations, Memories, Rewind, and Brain Map. Conversations are
+  spoken audio. Memories are saved facts. Activity is the timeline of what was
+  captured. Brain Map is the graph of those memories.
+- **Rewind** is the screen-history player on that same row. Its search field
+  reads "Search what you've seen and heard…". That search is what was on
+  screen, not the conversation list.
+- **Tasks** is the list of commitments Omi heard.
+- **Apps** is connectors, imports, and exports.
+
+Settings sections include General (screen capture and audio recording),
+Account & Plan, Transcription, Rewind, Floating Bar, Alerts & Privacy,
+Permissions, Shortcuts, AI & Automation, Refer a Friend, and About.
+
+## Where your data lives
+
+Omi stores this Mac's data locally first. For the signed-in user the database
+is `~/Library/Application Support/Omi/users/<account>/omi.db`, with a
+Screenshots folder beside it. Omi Beta uses
+`~/Library/Application Support/Omi Beta/` and does not share the stable app's
+database.
+
+Conversations, memories, and tasks are cached in that local database and sync
+with the signed-in account. Screen history is written on this Mac.
+Settings → Alerts & Privacy → Data Controls has **Store Recordings** (whether
+audio recordings of conversations are stored) and **Private Cloud Sync**. That
+page also says account data is encrypted and stored with Google Cloud
+infrastructure. **Export All Data** downloads a JSON copy of the account.
+
+Account and subscription are **Settings → Account & Plan**. That page shows
+the current plan and upgrades. Plan names it offers include Operator and
+Architect. Sign Out is on Account.
+
+## Source of truth
+
+This page mirrors the product guide shipped inside the Mac app
+(`desktop/macos/Desktop/Sources/Resources/ProductKnowledge/`), which the
+desktop chat agent reads. If the app UI and this page ever disagree, the
+in-app guide for your app version wins — and please open a PR so both stay in
+sync.
