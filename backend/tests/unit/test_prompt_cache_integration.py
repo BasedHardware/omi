@@ -437,6 +437,7 @@ def _get_agentic_module():
     sys.modules.pop("utils.retrieval.agentic", None)
 
     # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    _load_module_from_file("utils.retrieval.chat_mount", BACKEND_DIR / "utils" / "retrieval" / "chat_mount.py")
     chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
     if not hasattr(chat_scope_mod, "build_chat_scope"):
         chat_scope_mod.build_chat_scope = MagicMock(return_value=None)
