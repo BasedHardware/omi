@@ -133,7 +133,8 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
                 status='planned',
                 tokens=tokens,
                 cost_usd_upper_bound=tokens * caps.max_usd_per_token,
-                proposed=plan.model_dump(mode='python'),
+                # A privacy timeout/fault must not leave unchecked feedback in the failed report.
+                proposed={**plan.model_dump(mode='python'), 'feedback': []},
                 outcomes=[],
             )
             # Reject feedback before even saving it in a per-user shadow report.

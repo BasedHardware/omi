@@ -50,7 +50,7 @@ def test_nonempty_fields_cannot_be_rewritten_even_if_claimed_contradicted(kind):
     assert dream_guards.summary_rejection(edit(kind, before=current), row(**{kind: current})) == 'nonempty_field'
 
 
-@pytest.mark.parametrize('speech', ['', 'um yes', 'word ' * 39])
+@pytest.mark.parametrize('speech', [None, '', 'um yes', 'word ' * 39])
 @pytest.mark.parametrize('kind', ['title', 'overview'])
 def test_sparse_conversations_never_gain_placeholders(kind, speech):
     source = row()
@@ -204,7 +204,8 @@ def test_short_spelling_options_are_dropped_and_counted():
     assert sink['validation_errors']['questions.spelling.options:too_short'] == 1
 
 
-def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog):
+@pytest.mark.parametrize('privacy_fault', [False, True])
+def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, privacy_fault):
     records = {'conversations/c1': row(overview='## Garden launch\n\n- Preserve these good notes.')}
     records['conversations/near'] = {'structured': {'title': ''}, 'transcript_segments': [{'text': 'um'}]}
     near_edit = edit().model_copy(
@@ -234,10 +235,21 @@ def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog):
     monkeypatch.setattr(review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_store, 'assert_lease', lambda *a: None)
     monkeypatch.setattr(dream_tools, 'apply_edit', lambda *a: pytest.fail('unsafe edit applied'))
+    if privacy_fault:
+
+        def fail_privacy(*args, **kwargs):
+            raise RuntimeError('invented privacy service fault')
+
+        monkeypatch.setattr(dream_feedback, 'validate', fail_privacy)
     saved = []
     monkeypatch.setattr(dream_store, 'finish', lambda *a, **k: saved.append(deepcopy(a[2])))
     with caplog.at_level('INFO', logger=dream_metrics.__name__):
         result = asyncio.run(dream_agent.run_pass('invented'))
+    if privacy_fault:
+        assert result['status'] == 'failed'
+        assert saved[0]['proposed']['feedback'] == []
+        assert saved[0]['proposed']['edits'] == []
+        return
     assert result['status'] == 'complete'
     assert result['proposed']['edits'] == []
     assert len(result['proposed']['feedback']) == 1

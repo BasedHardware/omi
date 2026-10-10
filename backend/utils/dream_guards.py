@@ -51,7 +51,7 @@ def summary_rejection(edit, row, *, min_words=None):
     # Sections can be the visible overview even when its compatibility field is blank.
     if edit.kind == 'overview' and (row.get('structured') or {}).get('sections'):
         return 'nonempty_field'
-    speech = ' '.join(s.get('text', '') for s in row.get('transcript_segments') or [])
+    speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
     if len(tokens(speech)) < (MIN_SUMMARY_TRANSCRIPT_WORDS if min_words is None else min_words):
         return 'insufficient_speech'
     after_words = tokens(edit.after)
