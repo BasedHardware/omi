@@ -29,20 +29,20 @@ def _valid_file_dict():
     }
 
 
-def testsafe_file_chats_returns_files_for_valid_records():
+def test_safe_file_chats_returns_files_for_valid_records():
     out = cf.safe_file_chats([_valid_file_dict(), {**_valid_file_dict(), 'id': 'f2'}])
     assert [f.id for f in out] == ['f1', 'f2']
     assert all(isinstance(f, FileChat) for f in out)
 
 
-def testsafe_file_chats_skips_malformed_record():
+def test_safe_file_chats_skips_malformed_record():
     # A doc missing required fields (openai_file_id/mime_type/created_at) is skipped, not raised.
     records = [_valid_file_dict(), {'id': 'broken'}, {**_valid_file_dict(), 'id': 'f3'}]
     out = cf.safe_file_chats(records)
     assert [f.id for f in out] == ['f1', 'f3']  # malformed 'broken' skipped, list survives
 
 
-def testsafe_file_chats_empty():
+def test_safe_file_chats_empty():
     assert cf.safe_file_chats([]) == []
 
 

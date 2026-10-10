@@ -20,7 +20,8 @@ def authorize_send(capabilities: ChannelCapabilities, kind: SendClass, last_inbo
 
 class ChannelReplySink:
     def __init__(self, adapter, message, *, kind: SendClass = 'reply', guard=None):
-        self.adapter, self.message, self.kind, self.guard = adapter, message, kind, guard
+        self.adapter, self.message, self.guard = adapter, message, guard
+        self.kind: SendClass = kind
         self.buffer = ''
 
     def response(self, stream, *, media_type):
