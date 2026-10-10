@@ -257,7 +257,9 @@ jobs:
           fi
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          # git 2.54 regressed "<full-sha>^{commit}" peeling (ambiguous argument);
+          # a plain object-type check is version-proof and identical in effect.
+          [ "$(git cat-file -t "${DEPLOY_SHA}" 2>/dev/null)" = "commit" ]
 
           # Always enforced, break-glass or not: only merged main code deploys.
           if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
