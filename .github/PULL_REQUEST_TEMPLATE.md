@@ -32,7 +32,9 @@
      Sibling evidence.json (JSON, 2-space indent, trailing newline):
      {"version": 1, "images": [{"file": "001-desktop-macos-chat-home.png", "platform": "desktop-macos", "description": "Chat home", "captured_by": "agent", "source": "visual-audit"}]}
      captured_by: agent|human; source: visual-audit|playwright-e2e|screencapture|manual.
-     Example: ![Chat home](.agent-artifacts/ui-evidence/my-branch/001-desktop-macos-chat-home.png)
+     Pin the image to a commit that contains it so it renders on GitHub
+     (a bare repo-relative path passes the gate but shows as a broken image):
+     ![Chat home](https://raw.githubusercontent.com/BasedHardware/omi/<commit-sha>/.agent-artifacts/ui-evidence/my-branch/001-desktop-macos-chat-home.png)
      If evidence does not apply, write: UI-Evidence: none -- <reason>
      The reason is optional. Added images still require valid filenames/manifests.
      Before creating a PR: OMI_PR_BODY_FILE=/tmp/pr-body.md git push -->

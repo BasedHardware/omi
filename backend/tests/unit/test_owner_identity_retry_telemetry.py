@@ -53,10 +53,10 @@ def test_registration_reuses_collector_and_only_materializes_closed_pairs():
     telemetry.record_retry('late', 'resolver_exit', 'resolved')
     importlib.reload(telemetry)
     assert telemetry.OWNER_IDENTITY_RETRY is counter
-    assert len(telemetry.PAIRS) == 58
-    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] == 'resolver_exit'}) == 28
+    assert len(telemetry.PAIRS) == 60
+    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 28
     assert set(counter._metrics) <= {(p, s, r) for p in ('first', 'late') for s, r in telemetry.PAIRS}
-    assert len(counter._metrics) < 116
+    assert len(counter._metrics) < 120
     before = snapshot('late')
     telemetry.record_retry('late', 'dynamic-conversation-id', 'dynamic-uid')
     assert delta('late', before) == {('skipped', 'processing_error'): 1}
@@ -80,8 +80,8 @@ def test_counter_failure_is_nonfatal(monkeypatch):
         ('all_short', 'all_short'),
         ('missing_position', 'no_proven_window'),
         ('spanless', 'manifest_unvalidated'),
-        ('zero', 'zero_text_window'),
-        ('invalid', 'invalid_text_window'),
+        ('zero', 'resolved'),
+        ('invalid', 'partial'),
         ('overlap_and_zero', 'global_manifest_ambiguity'),
         ('hole', 'capture_coverage_hole'),
         ('resolved', 'resolved'),
@@ -126,9 +126,15 @@ def test_real_resolver_emits_one_primary_exit(env, monkeypatch, pass_name, case,
     with telemetry.identity_pass(pass_name):
         assert stage.resolve_speakers_for_processing('u1', conversation, **kwargs)
     expected = {('resolver_exit', reason): 1}
+    if case in ('zero', 'overlap_and_zero', 'invalid'):
+        skipped_reason = 'invalid_text_window' if case == 'invalid' else 'zero_text_window'
+        expected[('segment_abstained', skipped_reason)] = 1
     if pass_name == 'first':
         expected.update({('entry', 'candidate'): 1, ('eligible', 'candidate'): 1})
     assert delta(pass_name, before) == expected
+    if case in ('zero', 'invalid'):
+        assert conversation.speaker_resolution.status == ('unavailable' if case == 'invalid' else 'resolved')
+        assert not conversation.transcript_segments[1].is_user
 
 
 @pytest.mark.parametrize('pass_name', ['first', 'late'])
@@ -334,6 +340,15 @@ def test_literal_baseline_and_instrumented_outputs_and_cache_bytes_identical(env
     with telemetry.identity_pass('first'):
         new_result = stage.resolve_speakers_for_processing('u1', second)
     assert old_result == new_result
+    if case == 'zero':
+        # This task deliberately changes the pinned baseline's whole-row veto.
+        # Keep an explicit before/after proof instead of asserting equivalence.
+        assert first.speaker_resolution.status == 'unavailable'
+        assert second.speaker_resolution.status == 'resolved'
+        assert first.transcript_segments[1].model_dump() == second.transcript_segments[1].model_dump()
+        assert old_cache == {}
+        assert len(stage.decode_cache(store['c1'])) == 1
+        return
     assert first.model_dump_json() == second.model_dump_json()
     assert old_cache == store  # Includes byte-identical encoded owner-evidence cache.
 

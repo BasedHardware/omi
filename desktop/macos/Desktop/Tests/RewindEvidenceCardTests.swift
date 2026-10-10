@@ -140,7 +140,7 @@ final class RewindEvidenceCardTests: XCTestCase {
       RewindEvidenceCardPresentationPolicy.accessibilityHint(
         availability: .unavailable,
         hasOpenHandler: true
-      ).contains("unavailable locally")
+      ).contains("no longer on this Mac")
     )
   }
 

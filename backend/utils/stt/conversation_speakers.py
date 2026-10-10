@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import heapq
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
@@ -634,13 +635,17 @@ def _coverage(
     manual_speakers: Mapping[int, Identity],
     abstained: Set[str],
 ) -> float:
-    embeddable = [s for s in eligible if _duration(s) >= MIN_EMBED_SECONDS]
-    total = sum(_duration(s) for s in embeddable)
+    # Finite speech duration still counts when its text window cannot be placed,
+    # including negative-start windows. Only nonfinite durations are unusable.
+    embeddable = [
+        (s, duration) for s in eligible if math.isfinite(duration := _duration(s)) and duration >= MIN_EMBED_SECONDS
+    ]
+    total = sum(duration for _, duration in embeddable)
     if total <= 0:
         return 1.0
     placed = sum(
-        _duration(s)
-        for s in embeddable
+        duration
+        for s, duration in embeddable
         if _seg(s, 'id') not in abstained
         and (_seg(s, 'id') in vectors or int(_seg(s, 'speaker_id')) in manual_speakers)
     )

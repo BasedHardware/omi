@@ -226,7 +226,7 @@ enum TopNavigationRoutes {
       tooltip: "Memories — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
-      tooltip: "Tasks — everything Omi heard you commit to"),
+      tooltip: "Tasks: things you said you'd do"),
     TopNavigationItem(
       index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill",
       tooltip: "Apps — connectors, imports and exports"),

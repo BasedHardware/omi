@@ -271,7 +271,12 @@ def test_tag_prompt_not_me_on_an_unnamed_voice_writes_the_ledger(world, monkeypa
         service.conversations_db,
         'assign_conversation_speaker',
         lambda uid, conversation_id, **kwargs: captured.append(kwargs)
-        or ({'id': conversation_id, 'transcript_segments': []}, [], [], []),
+        or (
+            {'id': conversation_id, 'transcript_segments': [], 'owner_confirmation_prompt': {'origin': 'unnamed'}},
+            [],
+            [],
+            [],
+        ),
     )
     monkeypatch.setattr(service.voice_profiles_db, 'record_tag_prompt_answered', lambda *a: None)
     monkeypatch.setattr(service, 'emit_product_event', lambda **kwargs: None)
@@ -279,6 +284,7 @@ def test_tag_prompt_not_me_on_an_unnamed_voice_writes_the_ledger(world, monkeypa
         UID,
         SpeakerTagPromptAnswerRequest(
             prompt_id='p',
+            evidence_id='bound-evidence',
             kind=SpeakerTagPromptKind.owner_check,
             origin=SpeakerTagPromptOrigin.unnamed,
             conversation_id=CONV,
@@ -288,6 +294,8 @@ def test_tag_prompt_not_me_on_an_unnamed_voice_writes_the_ledger(world, monkeypa
         ),
     )
     assert captured[0]['rejection'] == {'kind': 'not_me', 'person_id': None}
+
+    assert captured[0]['segment_ids'] == ['s0'] and captured[0]['segment_only']
 
 
 def _matcher_host(emitted):

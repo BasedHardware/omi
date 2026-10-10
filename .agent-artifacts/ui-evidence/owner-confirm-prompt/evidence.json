@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-owner-question.png",
+      "platform": "mobile-android",
+      "description": "Native Android 16: free Was this you card; Yes and No require completed bound playback; unknown same-speaker sibling and automatic owner shown.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-android-yes-only-played-row.png",
+      "platform": "mobile-android",
+      "description": "Native Android 16: Yes labels only the played 0-6s row; unplayed same-speaker sibling remains Speaker 1 and automatic owner remains You.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-android-no-only-played-row.png",
+      "platform": "mobile-android",
+      "description": "Native Android 16: No rejects only the played 0-6s row; unplayed same-speaker sibling and automatic owner remain You.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
