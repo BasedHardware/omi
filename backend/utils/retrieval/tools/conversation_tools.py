@@ -25,7 +25,6 @@ from utils.conversations.mcp_transcript_search import (
 )
 from utils.conversations.render import conversation_to_citation_card, conversations_to_string
 from utils.conversations.search import (
-    ConversationSearchUnavailableError,
     conversation_matches_date_range,
     keyword_search_conversation_ids,
     parse_exact_conversation_reference,
@@ -633,7 +632,7 @@ def search_conversations_tool(
                 keyword_ids = keyword_search_conversation_ids(
                     uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
                 )
-            except ConversationSearchUnavailableError:
+            except Exception:  # Keyword errors must not discard semantic results.
                 keyword_degraded = True
                 record_fallback(
                     component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger

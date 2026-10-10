@@ -75,9 +75,10 @@ def test_happy_path_unchanged_and_keyword_semantic_both_used(tools):
     assert value('keyword', 'ok') == before + 1
 
 
+@pytest.mark.parametrize('error_type', [ConversationSearchUnavailableError, RuntimeError])
 @pytest.mark.parametrize('empty,jit', [(False, False), (True, False), (False, True)])
-def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, jit):
-    tools.keyword_search_conversation_ids.side_effect = ConversationSearchUnavailableError('offline')
+def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, jit, error_type):
+    tools.keyword_search_conversation_ids.side_effect = error_type('offline')
     tools.is_jit_conversation_retrieval_enabled.return_value = jit
     tools.format_active_jit_conversations.return_value = 'jit results'
     if jit:
