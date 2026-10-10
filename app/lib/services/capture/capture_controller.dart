@@ -1790,6 +1790,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandSession = null;
     _voiceCommandTrigger = null;
     _lastVoiceCommandAutoSubmitAt = autoSubmitted ? _now() : null;
+    if (autoSubmitted) deviceOnboardingProvider?.onQuestionAutoSubmitted();
 
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session

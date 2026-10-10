@@ -155,6 +155,15 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
+    notifyListeners();
+  }
+
   // --- Step 2: Power cycle ---
 
   void onDeviceDisconnected() {
