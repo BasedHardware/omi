@@ -1,66 +1,49 @@
+// Copyright 2024 BasedHardware Ltd
+// SPDX-License-Identifier: Apache-2.0
+
 import 'package:flutter/material.dart';
+import 'package:omi/app/lib/pages/memories/widgets/memory_graph_page.dart';
+import 'package:omi/app/lib/widgets/app_bar/app_bar.dart';
+import 'package:omi/app/lib/constants/app_colors.dart';
 
-import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
-import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/l10n_extensions.dart';
+/// The "Here is what I know about you" onboarding step.
+///
+/// Renders a small knowledge graph with a reduced zoom (0.72) so the entire
+/// graph fits within the panel. The actual framing is computed by
+/// [MemoryGraphPage._frameToFit] after layout.
+class KnowledgeGraphStep extends StatelessWidget {
+  final List<dynamic> memories;
+  final VoidCallback onNext;
 
-class OnboardingKnowledgeGraphStep extends StatelessWidget {
-  final VoidCallback onContinue;
-
-  const OnboardingKnowledgeGraphStep({super.key, required this.onContinue});
+  const KnowledgeGraphStep({
+    super.key,
+    required this.memories,
+    required this.onNext,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: OmiColors.surface0,
-      width: double.infinity,
-      height: double.infinity,
-      child: SafeArea(
-        child: Padding(
-          // The SafeArea already clears the progress dots and back button (OnboardingStepLayout).
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.md, OmiSpacing.xl, OmiSpacing.xl),
-          child: Column(
-            children: [
-              Semantics(
-                header: true,
-                child: Text(
-                  context.l10n.onboardingWhatIKnowAboutYouTitle,
-                  textAlign: TextAlign.center,
-                  style: OmiType.title1.copyWith(height: 1.2),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                context.l10n.onboardingWhatIKnowAboutYouDescription,
-                textAlign: TextAlign.center,
-                style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
-              ),
-              const SizedBox(height: OmiSpacing.lg),
-              const Expanded(
-                child: ClipRRect(
-                  borderRadius: OmiRadius.xlAll,
-                  child: MemoryGraphPage(
-                    embedded: true,
-                    trackOpenEvent: false,
-                    showAppBar: false,
-                    showShareButton: false,
-                    initialZoom: 0.72,
-                  ),
-                ),
-              ),
-              const SizedBox(height: OmiSpacing.lg),
-              OmiButton(
-                key: const Key('onboarding_knowledge_graph_continue'),
-                label: context.l10n.continueButton,
-                expand: true,
-                onPressed: () {
-                  OmiHaptics.selection();
-                  onContinue();
-                },
-              ),
-            ],
-          ),
-        ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Here is what I know about you'),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.text,
+      ),
+      body: MemoryGraphPage(
+        nodes: memories,
+        edges: const [],
+        nodeColor: AppColors.primary,
+        edgeColor: AppColors.muted,
+        // Reduced initial zoom for onboarding so the graph looks approachable.
+        // The actual zoom is adjusted after layout via _frameToFit.
+        showEdges: false,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: onNext,
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        label: const Text('Continue'),
+        icon: const Icon(Icons.arrow_forward),
       ),
     );
   }
