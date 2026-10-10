@@ -17,6 +17,7 @@
 #include "led.h"
 #include "mic.h"
 #include "speaker.h"
+#include "tap_sequence.h"
 #include "transport.h"
 #include "wdog_facade.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -38,6 +39,8 @@ static struct bt_uuid_128 button_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7924, 0x0000, 0x1000, 0x7450, 0x346EAC492E92));
 static struct bt_uuid_128 button_characteristic_data_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7925, 0x0000, 0x1000, 0x7450, 0x346EAC492E92));
+static struct bt_uuid_128 button_characteristic_taps_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7926, 0x0000, 0x1000, 0x7450, 0x346EAC492E92));
 
 static struct bt_gatt_attr button_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&button_uuid),
@@ -45,6 +48,13 @@ static struct bt_gatt_attr button_service_attr[] = {
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                            BT_GATT_PERM_READ,
                            button_data_read_characteristic,
+                           NULL,
+                           NULL),
+    BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CHARACTERISTIC(&button_characteristic_taps_uuid.uuid,
+                           BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_NONE,
+                           NULL,
                            NULL,
                            NULL),
     BT_GATT_CCC(button_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
@@ -135,6 +145,16 @@ static inline void notify_double_tap()
     }
 }
 
+static inline void notify_tap_sequence(enum tap_sequence_event event, uint8_t count)
+{
+    uint8_t payload[2] = {event, count};
+    LOG_INF("Button tap sequence event %d count %d", event, count);
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL) {
+        bt_gatt_notify(conn, &button_service.attrs[4], payload, sizeof(payload));
+    }
+}
+
 static inline void notify_long_tap()
 {
     final_button_state[0] = LONG_TAP; // button press
@@ -168,11 +188,19 @@ static bool btn_is_pressed;
 
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
+static struct tap_sequence tap_seq;
+
 void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
 
     u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
+
+    uint8_t tap_count = 0;
+    enum tap_sequence_event tap_event = tap_sequence_update(&tap_seq, was_pressed, k_uptime_get_32(), &tap_count);
+    if (tap_event != TAP_SEQUENCE_NONE) {
+        notify_tap_sequence(tap_event, tap_count);
+    }
 
     ButtonEvent event = BUTTON_EVENT_NONE;
 

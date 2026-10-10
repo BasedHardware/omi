@@ -21,6 +21,7 @@ import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/button_action.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
@@ -68,6 +69,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+  bool? _hasButtonTapsFeature;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -102,7 +104,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     super.dispose();
   }
 
-  // Device features: LED dimming and mic gain.
+  // Device features: LED dimming, mic gain and tap counts.
 
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
@@ -112,10 +114,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
+    final hasButtonTaps = (features & OmiFeatures.buttonTaps) != 0;
     if (!mounted) return;
     setState(() {
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
+      _hasButtonTapsFeature = hasButtonTaps;
     });
 
     final ratio = hasDimming ? await connection.getLedDimRatio() : null;
@@ -183,21 +187,55 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  String _singleTapActionLabel(int action) {
+    switch (action) {
+      case 1:
+        return context.l10n.endConversation;
+      case 2:
+        return context.l10n.deviceOnboardingMuteUnmute;
+      case 3:
+        return context.l10n.starConversation;
+      default:
+        return context.l10n.deviceOnboardingAskQuestionTitle;
+    }
+  }
+
+  /// Double and triple tap store the same actions.
   String _doubleTapActionLabel(int action) {
     switch (action) {
       case 1:
         return context.l10n.deviceOnboardingMuteUnmute;
       case 2:
         return context.l10n.starConversation;
+      case 3:
+        return context.l10n.off;
       default:
         return context.l10n.endConversation;
     }
   }
 
+  Future<void> _pickSingleTapAction() async {
+    final action = await showSingleTapActionSheet(context, current: SharedPreferencesUtil().singleTapAction);
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().singleTapAction = action);
+  }
+
   Future<void> _pickDoubleTapAction() async {
-    final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
+    final current = SharedPreferencesUtil().doubleTapAction;
+    // Off needs firmware that reports tap counts; a stored Off stays selectable without it.
+    final action = await showDoubleTapActionSheet(
+      context,
+      current: current,
+      allowOff: _hasButtonTapsFeature == true || current == 3,
+    );
     if (action == null || !mounted) return;
     setState(() => SharedPreferencesUtil().doubleTapAction = action);
+  }
+
+  Future<void> _pickTripleTapAction() async {
+    final action = await showTripleTapActionSheet(context, current: SharedPreferencesUtil().tripleTapAction);
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().tripleTapAction = action);
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -391,6 +429,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
+    final hasButtonTaps = _hasButtonTapsFeature == true;
+    final singleTapRow = OmiSettingsRow(
+      key: const Key('single_tap_row'),
+      leading: const FaIcon(FontAwesomeIcons.handPointer),
+      title: l10n.singleTap,
+      value: _singleTapActionLabel(SharedPreferencesUtil().singleTapAction),
+      onTap: _pickSingleTapAction,
+      showChevron: true,
+    );
     final doubleTapRow = OmiSettingsRow(
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.doubleTap,
@@ -426,10 +473,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
-        ] else
+          // Taps are only configurable while Omi button actions are enabled.
+          if (_omiButtonActionsEnabled) ...[
+            singleTapRow,
+            doubleTapRow,
+            if (hasButtonTaps)
+              OmiSettingsRow(
+                key: const Key('triple_tap_row'),
+                leading: const FaIcon(FontAwesomeIcons.handPointer),
+                title: l10n.tripleTap,
+                value: _doubleTapActionLabel(SharedPreferencesUtil().tripleTapAction),
+                onTap: _pickTripleTapAction,
+                showChevron: true,
+              ),
+          ],
+          // The long press is the hardware power off, which the switch above does not change.
+          if (hasButtonTaps)
+            OmiSettingsRow(
+              key: const Key('long_press_row'),
+              leading: const FaIcon(FontAwesomeIcons.powerOff),
+              title: l10n.deviceOnboardingTurnOffTitle,
+              subtitle: l10n.deviceOnboardingTurnOffSubtitle,
+              showChevron: false,
+            ),
+        ] else ...[
+          singleTapRow,
           doubleTapRow,
+        ],
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),

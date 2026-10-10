@@ -12,6 +12,10 @@ class ScriptedDeviceConnection implements DeviceConnection {
 
   void emitSubscriptionFailure() => transport.errors.add(StateError('CCCD failed'));
   final _audio = StreamController<List<int>>.broadcast(sync: true);
+  final _taps = StreamController<List<int>>.broadcast(sync: true);
+
+  /// Feature bits the pendant reports. 0 is firmware that does not report tap counts.
+  int features = 0;
   int audioSubscriptionsOpened = 0;
   int _open = 0;
 
@@ -25,6 +29,9 @@ class ScriptedDeviceConnection implements DeviceConnection {
 
   /// Emit a caller-owned packet so capture tests can exercise buffer reuse.
   void emitRawAudio(List<int> packet) => _audio.add(packet);
+
+  /// A tap-count notification: `[1, n]` when tap n is released, `[2, n]` when the sequence ends.
+  void emitTaps(List<int> packet) => _taps.add(packet);
 
   @override
   Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {
@@ -41,6 +48,13 @@ class ScriptedDeviceConnection implements DeviceConnection {
 
   @override
   Future<StreamSubscription?> getBleButtonListener({required void Function(List<int>) onButtonReceived}) async => null;
+
+  @override
+  Future<StreamSubscription?> getBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async =>
+      _taps.stream.listen(onTapsReceived);
+
+  @override
+  Future<int> getFeatures() async => features;
 
   @override
   Future<bool> hasPhotoStreamingCharacteristic() async => false;
