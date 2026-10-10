@@ -79,3 +79,29 @@ spelling edit. The final prompt explicitly requests supported empty-title and
 spelling repairs. These earlier failures remain diagnostic evidence, not passing
 runs. Five repeats of four small invented cases do not estimate production quality
 or prove that arbitrary paraphrases can be detected by a lexical privacy gate.
+
+## Deterministic guard regression fixtures
+
+`guard-fixtures.json` adds independent near-empty untitled, good Markdown overview,
+clean bilingual and sufficiently long empty-title cases. Five repeats exercise
+post-model filtering with the same `utils/dream_guards.py` and feedback privacy
+validation used before shadow persistence. Overview edits remain enabled for
+empty fields only and require `## heading`, a blank line and `- ` bullets, matching
+`render_sections_markdown` and the notes generator's body contract.
+
+```sh
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --check-fixture \
+  --fixture backend/evals/dream_reasoning/guard-fixtures.json
+# With the verified dev tunnel and existing service token:
+backend/.venv/bin/python backend/scripts/dream_reasoning_eval.py --live \
+  --fixture backend/evals/dream_reasoning/guard-fixtures.json \
+  --output backend/evals/dream_reasoning/guard-results.json
+```
+
+Rows and totals include `raw_edits_by_kind`, post-guard `edits_by_kind`, fixed-reason
+`rejected` counts, and existing `dropped_invalid`/`validation_errors`. The first
+three cases require no edits; the bilingual case also requires no feedback. The
+fourth requires a grounded title to verify useful output can still survive.
+Schema item drops and policy rejections are counted separately. These invented
+fixtures supplement deterministic regression tests; they do not estimate quality
+on real conversations. Earlier receipts above predate the deterministic policy.

@@ -60,3 +60,28 @@ def test_quality_cases_fit_the_real_reasoning_projection():
     mount = dream_prompt.mount(Plan, 24000)
     for case in fixture['cases']:
         assert evaluation.messages(dict(case, version=1), mount)
+
+
+def test_guard_fixtures_fit_and_enforce_clean_expectations():
+    fixture = json.loads((evaluation.FIXTURE.parent / 'guard-fixtures.json').read_text())
+    assert {c['id'] for c in fixture['cases']} == {
+        'near_empty_untitled',
+        'good_markdown_overview',
+        'clean_bilingual',
+        'grounded_empty_title',
+    }
+    mount = dream_prompt.mount(Plan, 24000)
+    for case in fixture['cases']:
+        assert evaluation.messages(dict(case, version=1), mount)
+    assert fixture['cases'][0]['expect_no_edits']
+    assert fixture['cases'][1]['expect_no_overview_edits']
+    assert fixture['cases'][2]['expect_no_feedback']
+
+
+def test_summary_includes_post_guard_kinds_and_counts_only_reasons():
+    samples = rows()
+    samples[0].update(edits_by_kind={'title': 1}, raw_edits_by_kind={'title': 2}, rejected={'placeholder': 1})
+    summary = evaluation.summarize(samples, expected_runs=20)
+    assert summary['edits_by_kind'] == {'title': 1}
+    assert summary['raw_edits_by_kind'] == {'title': 2}
+    assert summary['rejected'] == {'placeholder': 1}

@@ -13,6 +13,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from models.dream_agent import Feedback
+from utils.dream_guards import feedback_rejection
 
 
 def words(text):
@@ -71,6 +72,9 @@ def _name_terms(inputs, vocabulary):
 
 
 def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
+    reason = feedback_rejection(report)
+    if reason:
+        raise ValueError(reason)
     text = report.reproduction
     output = words(text)
     # References and storage IDs are private even when too short for the n-gram gate.

@@ -16,6 +16,7 @@ from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import ChangeRef, ReviewChange
 from utils.entity_pages import write_entity_summary
+from utils.dream_guards import summary_rejection
 
 
 def edit_key(edit, records=None):
@@ -95,10 +96,11 @@ def validate_summary_edit(edit, row):
         raise review_store.ReviewConflict('Dream conversation unavailable')
     if edit.kind == 'title' and row.get('user_title'):
         raise review_store.ReviewConflict('Dream title was set by the user')
-    if not any(segment.get('text', '').strip() for segment in row.get('transcript_segments') or []):
-        raise ValueError('dream_summary_missing_transcript')
     if edit.before != ((row.get('structured') or {}).get(edit.kind) or ''):
         raise review_store.ReviewConflict('Dream summary changed')
+    reason = summary_rejection(edit, row)
+    if reason:
+        raise ValueError('dream_summary_' + reason)
 
 
 def apply_edit(uid, edit, records):
@@ -167,7 +169,6 @@ def apply_edit(uid, edit, records):
         current = conversations.prepare_conversation_for_read(copy.deepcopy(raw), uid)
         if current is None:
             raise review_store.ReviewConflict('Dream conversation unavailable')
-        validate_summary_edit(edit, current)
         fields = [edit.kind, 'sections', 'note_claims'] if edit.kind == 'overview' else [edit.kind]
         if (
             current.get('transcript_segments') != row.get('transcript_segments')
@@ -175,6 +176,7 @@ def apply_edit(uid, edit, records):
             or current.get('user_title') != row.get('user_title')
         ):
             raise review_store.ReviewConflict('Dream conversation changed')
+        validate_summary_edit(edit, current)
         patch = {'structured.' + edit.kind: edit.after}
         if edit.kind == 'overview':
             # Clients compose notes from sections when present. Clear stale projections
