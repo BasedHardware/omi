@@ -1,7 +1,7 @@
 # Messaging channels rollout
 
 Telegram and iMessage chat for one production uid. The backend switch, the uid
-allowlist, and the Pro (`pro` / Architect) gate all fail closed. This runbook
+allowlist, and the valid paid-plan gate all fail closed. This runbook
 does not deploy, merge, or read secret payloads.
 
 The mobile entry is a separate PostHog flag, `mobile-chat-apps`. The server
@@ -31,11 +31,13 @@ does not belong in it.
 ```json
 {
   "telegram": {
-    "address": "<bot username without @>",
+    "provider": "telegram",
+    "address": "omi_chat_bot",
     "deep_link_template": "https://t.me/{address}?start={proof}"
   },
   "imessage": {
-    "address": "<Omi iMessage number>"
+    "provider": "linq",
+    "address": "+12062808403"
   }
 }
 ```
@@ -48,14 +50,24 @@ addresses in the payload as a fallback:
 
 ```json
 {
-  "telegram": {"provider": "telegram", "address": "<bot username>"},
-  "imessage": {"provider": "linq", "address": "<Omi iMessage number>"}
+  "telegram": {"provider": "telegram", "address": "omi_chat_bot"},
+  "imessage": {"provider": "linq", "address": "+12062808403"}
 }
 ```
 
-Admission still requires a valid subscription whose plan is exactly `pro`
-(catalog name Architect). The app copy says "Omi Pro". Do not rename either
-side until David decides.
+Admission requires a valid paid subscription: legacy Unlimited, Plus, Unlimited v2,
+Operator or Architect (including the legacy `pro` alias). Basic/free and expired
+subscriptions are rejected. The app uses its existing `plan.isPaid` helper for eligibility;
+its existing localized "Omi Pro" marketing copy is unchanged by this logic-only rollout.
+
+The committed prod configuration scopes these settings and the four secret bindings to
+Cloud Run `backend` in `based-hardware`, `us-central1`, with uid
+`vi7SA9ckQCe4ccobWNxlbdcNdC23` only. Adapter wakeups and pending recovery execute in
+that process; no GKE listen/pusher or other worker needs these settings. Prebind
+`TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest`,
+`TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest`,
+`LINQ_API_KEY=LINQ_API_KEY:latest`, and `LINQ_WEBHOOK_SECRET=LINQ_WEBHOOK_SECRET:latest`
+on the live service before deployment preflight. The parent operator owns this step.
 
 ## Register webhooks
 

@@ -515,6 +515,18 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
+          TELEGRAM_BOT_TOKEN:
+            secret: TELEGRAM_BOT_TOKEN
+            version: latest
+          TELEGRAM_WEBHOOK_SECRET:
+            secret: TELEGRAM_WEBHOOK_SECRET
+            version: latest
+          LINQ_API_KEY:
+            secret: LINQ_API_KEY
+            version: latest
+          LINQ_WEBHOOK_SECRET:
+            secret: LINQ_WEBHOOK_SECRET
+            version: latest
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
@@ -531,6 +543,14 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          # David-only channel launch; recovery runs inside this backend process.
+          OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
+          OMI_MESSAGING_CHANNELS_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
+          OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
+          OMI_IMESSAGE_PROVIDER: {value: 'linq', category: rollout}
+          OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
+          OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}', category: rollout}
           DREAM_AGENT_MODE: {value: 'shadow', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           # Dogfood self-report + Run Now (GET/POST /v1/dream/runs) for the dream cohort only.
