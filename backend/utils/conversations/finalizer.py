@@ -34,6 +34,7 @@ from utils.conversations.process_conversation import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
     extract_memories,
     process_conversation,
+    save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -287,8 +288,9 @@ async def finalize_persisted_conversation(
             raise ConversationFinalizationError('fanout_lease_conflict')
 
         # Ownership is now proven.  Emit every derived side effect — calendar,
-        # usage/app, vector, action/goal, audio artifact/enqueue, webhook, and
-        # memory extraction — only behind the winning claim.  A processing
+        # usage/app, action/goal, audio artifact/enqueue, webhook, and
+        # memory extraction — only behind the winning claim. Summary indexing
+        # also runs here, independently of the intelligence bundle.  A processing
         # conversation hands the bundle back from process_conversation; an
         # already-completed replay re-extracts memories behind the proven claim
         # unless the durable terminal marker is set (free-tier minimum).
@@ -298,9 +300,18 @@ async def finalize_persisted_conversation(
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         stage = 'derived_effects'
+        # Completed-row replays have no coordinator bundle. Summary indexing is
+        # independent of JIT folder/apps receipts and terminal intelligence
+        # suppression, but must share the same winning fanout claim.
+        if (
+            not conversation_data.get('deleted', False)
+            and not getattr(conversation, 'discarded', False)
+            and getattr(conversation, 'structured', None)
+        ):
+            await run_blocking(postprocess_executor, save_structured_vector, uid, conversation)
         if skip_derived_effects:
             logger.info(
-                'persisted conversation finalization terminal with no derived effects uid=%s conversation=%s',
+                'persisted conversation finalization terminal with suppressed intelligence uid=%s conversation=%s',
                 uid,
                 conversation_id,
             )

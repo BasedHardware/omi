@@ -129,3 +129,12 @@ def test_metrics_export_every_idle_bounded_child():
                 REGISTRY.get_sample_value('omi_chat_search_tool_outcomes_total', {'path': path, 'outcome': outcome})
                 is not None
             )
+
+
+def test_recency_contract_in_inline_and_langsmith_fallback_prompts():
+    backend = Path(__file__).resolve().parents[2]
+    for path in ('utils/llm/chat.py', 'utils/observability/langsmith_prompts.py'):
+        prompt = (backend / path).read_text()
+        assert 'with a small limit and NO dates (newest-first)' in prompt
+        assert 'Never claim recency from **search_conversations_tool** alone.' in prompt
+        assert 'describe them as similarity matches, not a complete recent history.' in prompt

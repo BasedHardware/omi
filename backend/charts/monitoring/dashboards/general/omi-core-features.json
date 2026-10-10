@@ -3634,7 +3634,7 @@
       ]
     },
     {
-      "id": 69,
+      "id": 72,
       "type": "row",
       "title": "Conversation search freshness",
       "collapsed": true,
@@ -3650,7 +3650,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Successful summary vector writes divided by all write outcomes, including skips. No traffic produces no percentage.",
+          "description": "Successful summary vector writes divided by successes plus errors; skipped rows are excluded. No traffic produces no percentage.",
           "fieldConfig": {
             "defaults": {
               "max": 100,
@@ -3699,7 +3699,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "100 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) / sum(rate(omi_conversation_summary_vector_upserts_total[$__range]))",
+              "expr": "100 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) / sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))",
               "instant": true,
               "range": false
             }
@@ -3712,7 +3712,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Retrieval path outcomes per second. Degraded marks unavailable indexes/errors; empty marks a successful search with no matches.",
+          "description": "Retrieval path outcomes per second, aggregated across all processes and scrape jobs (including idle zero-export children). Degraded marks unavailable indexes/errors; empty marks a successful search with no matches.",
           "fieldConfig": {
             "defaults": {
               "custom": {
