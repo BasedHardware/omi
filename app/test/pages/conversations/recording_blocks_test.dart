@@ -52,6 +52,38 @@ void main() {
     expect([for (final b in blocks) b.wals.length], [1, 3]);
   });
 
+  test('phone and device copies of the same recording interleave but group separately', () {
+    // The same audio can exist on the phone and on the device, so newest-first
+    // order alternates between the two places.
+    final wals = _newestFirst([
+      for (var i = 0; i < 2; i++) ...[
+        _wal(i * 75, 75),
+        _wal(i * 75, 75, storage: WalStorage.sdcard),
+      ],
+    ]);
+
+    final blocks = groupRecordingBlocks(wals);
+
+    expect(blocks, hasLength(2));
+    expect([for (final b in blocks) b.wals.length], [2, 2]);
+    expect(blocks.map((b) => b.wals.map((w) => w.storage).toSet().length), everyElement(1));
+  });
+
+  test('two devices recording at the same time interleave but group separately', () {
+    final wals = _newestFirst([
+      for (var i = 0; i < 3; i++) ...[
+        _wal(i * 75, 75),
+        _wal(i * 75 + 5, 75, device: 'pendant-b'),
+      ],
+    ]);
+
+    final blocks = groupRecordingBlocks(wals);
+
+    expect(blocks, hasLength(2));
+    expect([for (final b in blocks) b.wals.first.device], ['pendant-b', 'pendant-a']);
+    expect([for (final b in blocks) b.wals.length], [3, 3]);
+  });
+
   test('a different device or the device copy of phone audio never merges', () {
     final wals = _newestFirst([
       _wal(0, 75),

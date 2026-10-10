@@ -145,7 +145,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildRecordingsHeader(filteredWals.length),
+                      _buildRecordingsHeader(),
                       const SizedBox(height: 10),
                       _buildFilterChips(),
                       const SizedBox(height: 12),
@@ -428,7 +428,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  Widget _buildRecordingsHeader(int total) {
+  Widget _buildRecordingsHeader() {
     return OmiSectionHeader(
       context.l10n.recordings,
       trailing: Text(context.l10n.newestFirst, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
