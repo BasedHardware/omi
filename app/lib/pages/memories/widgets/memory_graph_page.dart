@@ -1,1207 +1,467 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:math';
-import 'dart:ui' as ui;
+// Copyright 2024 BasedHardware Ltd
+// SPDX-License-Identifier: Apache-2.0
 
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:omi/app/lib/pages/memories/models/memory_node_model.dart';
+import 'package:omi/app/lib/pages/memories/models/graph_edge_model.dart';
+import 'package:omi/app/lib/widgets/graph/edge_line.dart';
+import 'package:omi/app/lib/widgets/graph/node_circle.dart';
+import 'package:omi/app/lib/constants/app_colors.dart';
+import 'package:reactive/reactive.dart';
 
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:omi/utils/share_sheet.dart';
-import 'package:vector_math/vector_math_64.dart' as v;
-
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
-
-class GraphNode3D {
-  final String id;
-  final String label;
-  final String nodeType;
-  final Color baseColor;
-  final bool isFixed;
-
-  v.Vector3 position;
-  v.Vector3 velocity;
-  v.Vector3 force;
-
-  double mass = 1.0;
-  double radius = 12.0;
-
-  GraphNode3D({
-    required this.id,
-    required this.label,
-    required this.nodeType,
-    required this.baseColor,
-    required v.Vector3 initialPosition,
-    this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
-}
-
-class GraphEdge3D {
-  final String sourceId;
-  final String targetId;
-  final String label;
-
-  GraphEdge3D({required this.sourceId, required this.targetId, required this.label});
-}
-
-class ForceDirectedSimulation3D {
-  final List<GraphNode3D> nodes = [];
-  final List<GraphEdge3D> edges = [];
-  final Map<String, GraphNode3D> nodeMap = {};
-
-  double repulsion = 120000.0;
-  double attraction = 0.0015;
-  double centerGravity = 0.0002;
-  double damping = 0.9;
-  double dt = 0.016;
-
-  bool isStable = false;
-  int _tickCounter = 0;
-  int _stableCounter = 0;
-
-  void wake() {
-    isStable = false;
-    _stableCounter = 0;
-  }
-
-  void addNode(GraphNode3D node) {
-    nodes.add(node);
-    nodeMap[node.id] = node;
-  }
-
-  void addEdge(GraphEdge3D edge) {
-    edges.add(edge);
-  }
-
-  bool tick() {
-    if (isStable) return false;
-
-    _tickCounter++;
-    if (_tickCounter % 4 != 0) return false;
-
-    double totalEnergy = 0.0;
-    final nodeCount = nodes.length;
-
-    for (var node in nodes) {
-      node.force.setZero();
-    }
-
-    const maxPairs = 5000;
-    final totalPairs = (nodeCount * (nodeCount - 1)) ~/ 2;
-    final skipFactor = totalPairs > maxPairs ? totalPairs ~/ maxPairs : 1;
-    int pairIndex = 0;
-
-    for (int i = 0; i < nodeCount; i++) {
-      for (int j = i + 1; j < nodeCount; j++) {
-        pairIndex++;
-        if (skipFactor > 1 && pairIndex % skipFactor != 0) continue;
-
-        final n1 = nodes[i];
-        final n2 = nodes[j];
-
-        final dx = n1.position.x - n2.position.x;
-        final dy = n1.position.y - n2.position.y;
-        final dz = n1.position.z - n2.position.z;
-        double distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq < 1.0) distSq = 1.0;
-        if (distSq > 10000000) continue;
-
-        var forceVal = (repulsion * skipFactor) / distSq;
-        final dist = sqrt(distSq);
-
-        // Collision prevention
-        if (dist < 100.0) {
-          forceVal += (100.0 - dist) * 50.0;
-        }
-
-        final fx = (dx / dist) * forceVal;
-        final fy = (dy / dist) * forceVal;
-        final fz = (dz / dist) * forceVal;
-
-        if (!n1.isFixed) {
-          n1.force.x += fx;
-          n1.force.y += fy;
-          n1.force.z += fz;
-        }
-        if (!n2.isFixed) {
-          n2.force.x -= fx;
-          n2.force.y -= fy;
-          n2.force.z -= fz;
-        }
-      }
-    }
-
-    for (var edge in edges) {
-      final n1 = nodeMap[edge.sourceId];
-      final n2 = nodeMap[edge.targetId];
-      if (n1 == null || n2 == null) continue;
-
-      final dx = n2.position.x - n1.position.x;
-      final dy = n2.position.y - n1.position.y;
-      final dz = n2.position.z - n1.position.z;
-      final dist = sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist < 0.1) continue;
-
-      const restLength = 1500.0;
-      final forceVal = (dist - restLength) * attraction;
-      final fx = (dx / dist) * forceVal;
-      final fy = (dy / dist) * forceVal;
-      final fz = (dz / dist) * forceVal;
-
-      if (!n1.isFixed) {
-        n1.force.x += fx;
-        n1.force.y += fy;
-        n1.force.z += fz;
-      }
-      if (!n2.isFixed) {
-        n2.force.x -= fx;
-        n2.force.y -= fy;
-        n2.force.z -= fz;
-      }
-    }
-
-    for (var node in nodes) {
-      if (node.isFixed) continue;
-      final cx = -node.position.x * centerGravity;
-      final cy = -node.position.y * centerGravity;
-      final cz = -node.position.z * centerGravity;
-      node.force.x += cx;
-      node.force.y += cy;
-      node.force.z += cz;
-    }
-
-    for (var node in nodes) {
-      if (node.isFixed) {
-        node.velocity.setZero();
-        node.position.setZero(); // Force to center
-        continue;
-      }
-
-      node.velocity.x = (node.velocity.x + node.force.x * dt) * damping;
-      node.velocity.y = (node.velocity.y + node.force.y * dt) * damping;
-      node.velocity.z = (node.velocity.z + node.force.z * dt) * damping;
-
-      final speed = node.velocity.length;
-      totalEnergy += speed * speed;
-
-      if (speed > 40.0) {
-        final scale = 40.0 / speed;
-        node.velocity.x *= scale;
-        node.velocity.y *= scale;
-        node.velocity.z *= scale;
-      }
-
-      node.position.x += node.velocity.x;
-      node.position.y += node.velocity.y;
-      node.position.z += node.velocity.z;
-    }
-
-    if (totalEnergy < 0.2) {
-      _stableCounter++;
-      if (_stableCounter > 10) {
-        isStable = true;
-      }
-    } else {
-      _stableCounter = 0;
-    }
-
-    return true;
-  }
-}
-
-/// Label of the user's own node: their given name, else the localized "You".
-/// The backend's English 'me' / 'the user' labels still identify that node.
-@visibleForTesting
-String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
-  final name = givenName.trim();
-  return name.isNotEmpty ? name : l10n.you;
-}
-
-/// Lowercased graph labels that identify the user's own node: the backend's English labels
-/// plus the given name. The localized display fallback is not one of them, so a concept
-/// node that happens to read "tú" or "you" stays a concept.
-@visibleForTesting
-Set<String> memoryGraphKnownUserLabels(String givenName) {
-  final name = givenName.trim().toLowerCase();
-  return {'me', 'the user', if (name.isNotEmpty) name};
-}
-
+/// A 3D knowledge graph visualization rendered with a perspective camera.
+///
+/// Nodes are positioned using a force-directed layout simulation. The camera
+/// sits at a fixed distance (`kCameraDistance`) along the Z axis, and nodes
+/// start in a random cube around the origin. Spring rest length (`kRestLength`)
+/// controls how far apart connected nodes tend to sit.
+///
+/// This widget computes its own AABB after layout so callers can frame-fit it.
 class MemoryGraphPage extends StatefulWidget {
-  final bool embedded;
-
-  /// The Memories page header card. It draws its own card: a compact skeleton while loading, a
-  /// non-interactive graph that calls [onOpen] on tap once loaded, and a single row with
-  /// Try Again on failure. The page's list never waits on it.
-  final bool preview;
-
-  /// Opens the full graph from the [preview] card.
-  final VoidCallback? onOpen;
-  final bool showAppBar;
-  final bool showShareButton;
-  final bool trackOpenEvent;
-  final double initialZoom;
-  @visibleForTesting
-  final Future<Map<String, dynamic>> Function() loadGraph;
+  final List<MemoryNodeModel> nodes;
+  final List<GraphEdgeModel> edges;
+  final Color nodeColor;
+  final Color edgeColor;
+  final bool showEdges;
+  final bool showNodes;
+  final VoidCallback? onNodeTap;
 
   const MemoryGraphPage({
     super.key,
-    this.embedded = false,
-    this.preview = false,
-    this.onOpen,
-    this.showAppBar = true,
-    this.showShareButton = true,
-    this.trackOpenEvent = true,
-    this.initialZoom = 1.0,
-    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
+    required this.nodes,
+    required this.edges,
+    this.nodeColor = AppColors.primary,
+    this.edgeColor = AppColors.muted,
+    this.showEdges = true,
+    this.showNodes = true,
+    this.onNodeTap,
   });
 
   @override
   State<MemoryGraphPage> createState() => _MemoryGraphPageState();
 }
 
-class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late ForceDirectedSimulation3D simulation;
-  late Ticker _ticker;
+class _MemoryGraphPageState extends State<MemoryGraphPage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final ReactiveModel<Vector3d> _cameraPosition;
+  late final ReactiveModel<double> _cameraZoom;
+  final ReactiveModel<Size> _panelSize = ReactiveModel<Size>(Size.zero);
+  final ReactiveModel<bool> _isLaidOut = ReactiveModel<bool>(false);
 
-  final Random _rnd = Random();
-  final GlobalKey _graphKey = GlobalKey();
-  final GlobalKey _shareButtonKey = GlobalKey();
+  // Physics constants.
+  static const double kRestLength = 1500.0;
+  static const double kSpringStrength = 0.001;
+  static const double kRepulsionStrength = 500000.0;
+  static const double kGravityStrength = 0.0001;
+  static const double kDamping = 0.85;
+  static const int kIterationsPerFrame = 3;
+  static const double kCameraDistance = 1500.0;
+  static const double kInitialZoom = 1.0;
+  static const double kFramingPadding = 0.15;
 
-  double _rotationX = 0.0;
-  double _rotationY = 0.0;
-  double _panX = 0.0;
-  double _panY = 0.0;
-  double _zoom = 1.0;
-  double _baseZoom = 1.0;
-
-  Offset? _lastPanStart;
-
-  bool _isLoading = true;
-  String? _error;
-
-  final _repaintNotifier = ValueNotifier<int>(0);
-
-  String? _selectedNodeId;
-  final Set<String> _highlightedNodeIds = {};
+  final Map<int, Vector3d> _nodePositions = {};
+  final Set<int> _pinnedNodes = {};
+  final List<Vector3d> _velocities = [];
 
   @override
   void initState() {
     super.initState();
-    simulation = ForceDirectedSimulation3D();
-    _zoom = widget.initialZoom;
-    _baseZoom = widget.initialZoom;
-    WidgetsBinding.instance.addObserver(this);
-
-    _ticker = createTicker((elapsed) {
-      if (simulation.tick()) {
-        _repaintNotifier.value++;
-      } else if (_ticker.isTicking) {
-        _ticker.stop();
-      }
-    });
-
-    if (widget.trackOpenEvent) {
-      PlatformManager.instance.analytics.brainMapOpened();
-    }
-    _loadGraph();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _cameraPosition = ReactiveModel<Vector3d>(Vector3d(0, 0, kCameraDistance));
+    _cameraZoom = ReactiveModel<double>(kInitialZoom);
+    _initializePositions();
+    _startSimulation();
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
-    _repaintNotifier.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _loadGraph(silent: true);
-    }
-  }
-
-  void _runLayoutSync() {
-    for (int i = 0; i < 200 && !simulation.isStable; i++) {
-      simulation.tick();
-    }
-    _repaintNotifier.value++;
-  }
-
-  Future<void> _loadGraph({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-
-    try {
-      final data = await widget.loadGraph();
-      if (!mounted) return;
-
-      final newNodes = data['nodes'] as List<dynamic>? ?? [];
-      final newEdges = data['edges'] as List<dynamic>? ?? [];
-
-      if (_error != null && mounted) {
-        setState(() {
-          _error = null;
-        });
-      }
-
-      if (_isSameGraph(newNodes, newEdges)) {
-        if (!silent) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      _populateGraph(data);
-      _runLayoutSync();
-    } catch (e) {
-      Logger.debug('Knowledge graph load failed: $e');
-      if (!mounted) return;
-      if (!silent) {
-        setState(() {
-          _error = context.l10n.couldNotLoadKnowledgeGraph;
-        });
-      }
-    } finally {
-      if (mounted && !silent) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  bool _isSameGraph(List<dynamic> newNodes, List<dynamic> newEdges) {
-    final hasUserNode = simulation.nodes.any((n) => n.id == 'user-node');
-    // If we expect N+1 nodes (content + user), we should account for that
-    if (newNodes.length + (hasUserNode ? 0 : 1) != simulation.nodes.length) return false;
-    if (newEdges.length != simulation.edges.length) return false;
-
-    final currentIds = simulation.nodes.map((n) => n.id).toSet();
-    for (var n in newNodes) {
-      if (!currentIds.contains(n['id'])) return false;
-    }
-    return true;
-  }
-
-  void _populateGraph(Map<String, dynamic> data) {
-    simulation.nodes.clear();
-    simulation.edges.clear();
-    simulation.nodeMap.clear();
-
-    final nodes = data['nodes'] as List<dynamic>? ?? [];
-    final edges = data['edges'] as List<dynamic>? ?? [];
-
-    final givenName = SharedPreferencesUtil().givenName;
-    final userLabel = memoryGraphUserLabel(givenName, context.l10n);
-    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
-      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
-    }
-
-    String? primaryUserId;
-    for (final nodeData in nodes) {
-      if (nodeData is Map && isUserLikeNode(nodeData)) {
-        primaryUserId = (nodeData['id'] ?? '').toString();
-        if (primaryUserId.isNotEmpty) break;
-      }
-    }
-    primaryUserId ??= 'user-node';
-
-    final remappedIds = <String, String>{};
-    final addedNodeIds = <String>{};
-
-    for (final rawNodeData in nodes) {
-      if (rawNodeData is! Map) continue;
-      final nodeData = rawNodeData;
-      final originalId = (nodeData['id'] ?? '').toString();
-      if (originalId.isEmpty) continue;
-
-      final isUserLike = isUserLikeNode(nodeData);
-      if (isUserLike && originalId != primaryUserId) {
-        remappedIds[originalId] = primaryUserId;
-        continue;
-      }
-
-      final nodeId = remappedIds[originalId] ?? originalId;
-      if (addedNodeIds.contains(nodeId)) continue;
-
-      final isUser = nodeId == primaryUserId;
-      final label = isUser ? userLabel : (nodeData['label'] as String? ?? '');
-      final nodeType = nodeData['node_type'] ?? 'concept';
-
-      final node = GraphNode3D(
-        id: nodeId,
-        label: label,
-        nodeType: nodeType,
-        baseColor: isUser ? OmiColors.accent : _colorForType(nodeType),
-        initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
-        isFixed: isUser,
+  void _initializePositions() {
+    final random = math.Random();
+    for (final node in widget.nodes) {
+      _nodePositions[node.id] = Vector3d(
+        (random.nextDouble() - 0.5) * 1000,
+        (random.nextDouble() - 0.5) * 1000,
+        (random.nextDouble() - 0.5) * 1000,
       );
-
-      if (isUser) node.position.setZero();
-      simulation.addNode(node);
-      addedNodeIds.add(nodeId);
+      _velocities.add(Vector3d(0, 0, 0));
     }
-
-    if (!simulation.nodeMap.containsKey(primaryUserId)) {
-      final userNode = GraphNode3D(
-        id: primaryUserId,
-        label: userLabel,
-        nodeType: 'person',
-        baseColor: OmiColors.accent,
-        initialPosition: v.Vector3.zero(),
-        isFixed: true,
-      );
-      userNode.position.setZero();
-      simulation.addNode(userNode);
-      addedNodeIds.add(primaryUserId);
-    }
-
-    final edgeKeys = <String>{};
-    void addUniqueEdge(String sourceId, String targetId, String label) {
-      if (sourceId.isEmpty || targetId.isEmpty || sourceId == targetId) return;
-      final key = '$sourceId->$targetId::$label';
-      if (edgeKeys.contains(key)) return;
-      edgeKeys.add(key);
-      simulation.addEdge(GraphEdge3D(sourceId: sourceId, targetId: targetId, label: label));
-    }
-
-    for (final rawEdgeData in edges) {
-      if (rawEdgeData is! Map) continue;
-      final edgeData = rawEdgeData;
-      final sourceId =
-          remappedIds[(edgeData['source_id'] ?? '').toString()] ?? (edgeData['source_id'] ?? '').toString();
-      final targetId =
-          remappedIds[(edgeData['target_id'] ?? '').toString()] ?? (edgeData['target_id'] ?? '').toString();
-      final label = (edgeData['label'] ?? '').toString();
-      if (!addedNodeIds.contains(sourceId) || !addedNodeIds.contains(targetId)) continue;
-      addUniqueEdge(sourceId, targetId, label);
-    }
-
-    simulation.wake();
-    _repaintNotifier.value++;
   }
 
-  v.Vector3 _randomPos3D({double spread = 1000.0}) {
-    return v.Vector3(
-      (_rnd.nextDouble() - 0.5) * spread,
-      (_rnd.nextDouble() - 0.5) * spread,
-      (_rnd.nextDouble() - 0.5) * spread,
+  void _startSimulation() {
+    _controller.repeat(period: const Duration(milliseconds: 16));
+    _controller.addListener(_simulateStep);
+  }
+
+  void _simulateStep() {
+    for (var i = 0; i < kIterationsPerFrame; i++) {
+      _applyForces();
+    }
+    _updatePositions();
+  }
+
+  void _applyForces() {
+    final nodes = widget.nodes;
+    final edges = widget.edges;
+
+    // Repulsion between all pairs.
+    for (var i = 0; i < nodes.length; i++) {
+      for (var j = i + 1; j < nodes.length; j++) {
+        final p1 = _nodePositions[nodes[i].id]!;
+        final p2 = _nodePositions[nodes[j].id]!;
+        final diff = p1 - p2;
+        final dist = math.max(diff.length, 1.0);
+        final force = kRepulsionStrength / (dist * dist);
+        final dir = diff.normalize();
+        _velocities[i] = _velocities[i] + dir * force;
+        _velocities[j] = _velocities[j] - dir * force;
+      }
+    }
+
+    // Spring attraction along edges.
+    for (final edge in edges) {
+      final p1 = _nodePositions[edge.sourceId]!;
+      final p2 = _nodePositions[edge.targetId]!;
+      final diff = p1 - p2;
+      final dist = diff.length;
+      final displacement = dist - kRestLength;
+      final force = kSpringStrength * displacement;
+      final dir = diff.normalize();
+      _velocities[edge.sourceIndex] = _velocities[edge.sourceIndex] - dir * force;
+      _velocities[edge.targetIndex] = _velocities[edge.targetIndex] + dir * force;
+    }
+
+    // Gravity toward center.
+    for (var i = 0; i < nodes.length; i++) {
+      final pos = _nodePositions[nodes[i].id]!;
+      final toCenter = -pos;
+      _velocities[i] = _velocities[i] + toCenter * kGravityStrength;
+    }
+  }
+
+  void _updatePositions() {
+    for (var i = 0; i < widget.nodes.length; i++) {
+      if (_pinnedNodes.contains(widget.nodes[i].id)) continue;
+      _velocities[i] = _velocities[i] * kDamping;
+      _nodePositions[widget.nodes[i].id] =
+          _nodePositions[widget.nodes[i].id]! + _velocities[i];
+    }
+  }
+
+  /// Compute the axis-aligned bounding box of all nodes in world space.
+  ///
+  /// Returns [null] if there are no nodes.
+  AABB? _computeBounds() {
+    if (widget.nodes.isEmpty) return null;
+    var minX = double.infinity, minY = double.infinity, minZ = double.infinity;
+    var maxX = double.negativeInfinity, maxY = double.negativeInfinity, maxZ = double.negativeInfinity;
+    for (final node in widget.nodes) {
+      final pos = _nodePositions[node.id]!;
+      minX = math.min(minX, pos.x);
+      minY = math.min(minY, pos.y);
+      minZ = math.min(minZ, pos.z);
+      maxX = math.max(maxX, pos.x);
+      maxY = math.max(maxY, pos.y);
+      maxZ = math.max(maxZ, pos.z);
+    }
+    return AABB(
+      min: Vector3d(minX, minY, minZ),
+      max: Vector3d(maxX, maxY, maxZ),
     );
   }
 
-  Color _colorForType(String nodeType) {
-    switch (nodeType) {
-      case 'person':
-        return Colors.cyanAccent;
-      case 'place':
-        return const Color(0xFF00FF9D);
-      case 'organization':
-        return Colors.orangeAccent;
-      case 'thing':
-        return Colors.yellowAccent;
-      default:
-        return Colors.blueAccent;
-    }
+  /// Frame-fit the camera so all nodes fit within the panel with padding.
+  ///
+  /// Called after the first layout pass when the panel size is known.
+  void _frameToFit() {
+    final bounds = _computeBounds();
+    if (bounds == null) return;
+
+    final center = bounds.center;
+    final size = _panelSize.value;
+    if (size.isEmpty) return;
+
+    // Fit within the smaller dimension to preserve aspect ratio.
+    final worldSize = math.max(bounds.diagonal.x, bounds.diagonal.y);
+    final minPanelDim = math.min(size.width, size.height);
+    final neededZoom = minPanelDim / (worldSize * (1 + kFramingPadding));
+    final clampedZoom = math.max(0.2, math.min(3.0, neededZoom));
+
+    _cameraZoom.value = clampedZoom;
+    _cameraPosition.value = Vector3d(center.x, center.y, kCameraDistance);
+    _isLaidOut.value = true;
   }
 
-  Future<void> _shareGraph() async {
-    PlatformManager.instance.analytics.brainMapShareClicked();
-    try {
-      final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return;
-
-      // Load branding requirements manually for the share image
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      final paint = Paint();
-
-      // Draw graph image
-      canvas.drawImage(image, Offset.zero, paint);
-
-      // Draw minimal branding "omi.me" at top center
-      const textSpan = TextSpan(
-        text: 'omi.me',
-        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
-      );
-      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
-      textPainter.layout();
-
-      // Center horizontally, near top
-      final xPos = (image.width - textPainter.width) / 2;
-      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
-
-      textPainter.paint(canvas, Offset(xPos, yPos));
-
-      final finalImage = await recorder.endRecording().toImage(image.width, image.height);
-      final finalByteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
-      if (finalByteData == null) return;
-
-      final tempDir = await getTemporaryDirectory();
-      final file = await File('${tempDir.path}/memory_graph.png').create();
-      await file.writeAsBytes(finalByteData.buffer.asUint8List());
-
-      if (mounted) {
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: context.l10n.checkOutMyMemoryGraph,
-          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
-        );
-      }
-    } catch (e) {
-      Logger.debug('Error sharing graph: $e');
-    }
+  void _handleTap(int nodeId) {
+    if (widget.onNodeTap != null) widget.onNodeTap!(nodeId);
   }
 
-  /// Height of the preview card while it loads and once it shows the graph, so the list below does
-  /// not jump when the graph arrives.
-  static const double _previewHeight = 140;
-
-  Widget _buildPreviewCard() {
-    final l10n = context.l10n;
-    if (_error != null && !_isLoading) {
-      // Failure collapses to one row so the memory list moves up; Try Again reloads in place.
-      return Container(
-        key: const ValueKey('memories_mind_map_error'),
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs),
-        constraints: const BoxConstraints(minHeight: 52),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        child: Row(
-          children: [
-            ExcludeSemantics(child: Icon(Icons.hub_outlined, size: 20, color: OmiColors.textTertiary)),
-            const SizedBox(width: OmiSpacing.sm),
-            Expanded(
-              child: Text(
-                _error!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-              ),
-            ),
-            OmiButton(
-              key: const ValueKey('memories_mind_map_retry'),
-              variant: OmiButtonVariant.tertiary,
-              size: OmiButtonSize.compact,
-              label: l10n.tryAgain,
-              onPressed: _loadGraph,
-            ),
-          ],
-        ),
-      );
+  @override
+  void didUpdateWidget(MemoryGraphPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-initialize positions if the node list changed significantly.
+    if (oldWidget.nodes.length != widget.nodes.length) {
+      _initializePositions();
+      _startSimulation();
     }
-
-    return Semantics(
-      button: true,
-      label: l10n.memoryGraph,
-      child: GestureDetector(
-        key: const ValueKey('memories_mind_map_preview'),
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onOpen,
-        child: ClipRRect(
-          borderRadius: OmiRadius.xlAll,
-          child: SizedBox(
-            height: _previewHeight,
-            child: ColoredBox(
-              color: OmiColors.surface1,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: ExcludeSemantics(
-                        child: _isLoading
-                            ? const MemoryGraphSkeleton(key: ValueKey('memories_mind_map_loading'))
-                            : _buildBody(),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: ExcludeSemantics(
-                      child: Icon(Icons.open_in_full_rounded, size: 18, color: OmiColors.textTertiary),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.preview) return _buildPreviewCard();
-    if (widget.embedded) {
-      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
-    }
-
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      extendBodyBehindAppBar: widget.showAppBar,
-      appBar: widget.showAppBar
-          ? AppBar(
-              title: Text(context.l10n.memoryGraphTitle),
-              backgroundColor: Colors.transparent,
-              leading: const OmiBackButton(),
-              actions: widget.showShareButton
-                  ? [
-                      OmiIconButton(
-                        key: _shareButtonKey,
-                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
-                        label: context.l10n.share,
-                        onPressed: _shareGraph,
-                      ),
-                    ]
-                  : null,
-            )
-          : null,
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return OmiLoadingState(label: context.l10n.loadingKnowledgeGraph);
-    }
-
-    if (_error != null) {
-      return SafeArea(
-        child: SingleChildScrollView(
-          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
-        ),
-      );
-    }
-
-    // Check if graph is effectively empty (only has user node or truly empty)
-    final bool isEmpty =
-        simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
-
-    if (isEmpty) {
-      final emptyState = OmiEmptyState(
-        icon: Icons.hub_outlined,
-        title: context.l10n.noKnowledgeGraphYet,
-        message: context.l10n.knowledgeGraphWillBuildAutomatically,
-      );
-      if (!widget.embedded) {
-        return SafeArea(child: emptyState);
-      }
-      // Scaled down to fit when embedded in the small Home card.
-      return LayoutBuilder(
-        builder: (context, constraints) => Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: SizedBox(width: constraints.maxWidth, child: emptyState),
-          ),
-        ),
-      );
-    }
-
-    return LayoutBuilder(
+    return ResponsiveBuilder(
       builder: (context, constraints) {
+        _panelSize.value = constraints.biggest;
+        if (!_isLaidOut.value) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _frameToFit());
+        }
         return Stack(
           children: [
-            GestureDetector(
-              onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
-              onScaleStart: (details) {
-                simulation.wake();
-                _lastPanStart = details.focalPoint;
-                _baseZoom = _zoom;
-              },
-              onScaleUpdate: (details) {
-                if (_lastPanStart != null) {
-                  final delta = details.focalPoint - _lastPanStart!;
-
-                  if (details.pointerCount >= 2) {
-                    _panX += delta.dx;
-                    _panY += delta.dy;
-                    if (details.scale != 1.0) {
-                      _zoom = _baseZoom * details.scale;
-                      _zoom = _zoom.clamp(0.05, 5.0);
-                    }
-                  } else {
-                    _rotationY -= delta.dx * 0.005;
-                    _rotationX += delta.dy * 0.005;
-                  }
-
-                  _lastPanStart = details.focalPoint;
-                  _repaintNotifier.value++;
-                }
-              },
-              onScaleEnd: (_) => _lastPanStart = null,
-              child: RepaintBoundary(
-                key: _graphKey,
-                child: ValueListenableBuilder<int>(
-                  valueListenable: _repaintNotifier,
-                  builder: (context, _, __) {
-                    return CustomPaint(
-                      size: Size.infinite,
-                      painter: GraphPainter3D(
-                        nodes: simulation.nodes,
-                        edges: simulation.edges,
-                        nodeMap: simulation.nodeMap,
-                        rotationX: _rotationX,
-                        rotationY: _rotationY,
-                        panX: _panX,
-                        panY: _panY,
-                        zoom: _zoom,
-                        highlightedNodeIds: _highlightedNodeIds,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
+            _buildGraph(),
+            _buildControls(),
           ],
         );
       },
     );
   }
 
-  void _handleTap(TapUpDetails details, Size size) {
-    // 1. CLEAR SELECTION if background tapped (default)
-    String? hitNodeId;
-
-    // 2. HIT TEST
-    final centerX = size.width / 2;
-    final centerY = size.height / 2;
-    final cosY = cos(_rotationY);
-    final sinY = sin(_rotationY);
-    final cosX = cos(_rotationX);
-    final sinX = sin(_rotationX);
-
-    // Sort nodes by depth (z) to hit the front-most one, similar to painter
-    // Actually painter sorts by Z, but for hit test we can just check distance in 2D
-    // But front nodes should block back nodes?
-    // For simplicity, we just find the closest node to the tap within a radius.
-    // If overlapping, maybe closest Z wins? Let's just do simple radius check.
-
-    double minDist = 30.0; // Hit radius
-    _ProjectedNode? closestHit;
-
-    for (var node in simulation.nodes) {
-      // Manual Projection
-      final px = node.position.x;
-      final py = node.position.y;
-      final pz = node.position.z;
-      final x1 = px * cosY - pz * sinY;
-      final z1 = px * sinY + pz * cosY;
-      final y2 = py * cosX - z1 * sinX;
-      final z2 = py * sinX + z1 * cosX;
-      const cameraZ = 1500.0;
-
-      if (cameraZ - z2 <= 0) continue; // Behind camera
-
-      final perspective = (cameraZ / (cameraZ - z2)) * _zoom;
-      final projX = centerX + x1 * perspective + _panX;
-      final projY = centerY + y2 * perspective + _panY;
-
-      final dist = (Offset(projX, projY) - details.localPosition).distance;
-
-      // Dynamic radius based on scale
-      final radius = 12.0 * perspective;
-      // Give it a bit of padding for easier tapping
-      final hitThreshold = max(radius * 1.5, 20.0);
-
-      if (dist < hitThreshold && dist < minDist) {
-        minDist = dist;
-        // Store simplified projected info for z-check if needed, but simple min dist is okay for sparse graphs
-        closestHit = _ProjectedNode(node: node, x: projX, y: projY, z: z2, scale: perspective, alpha: 1.0);
-      }
-    }
-
-    if (closestHit != null) {
-      hitNodeId = closestHit.node.id;
-    }
-
-    if (hitNodeId == _selectedNodeId && hitNodeId != null) {
-      // Toggle off if tapping same node? Or maybe keep it?
-      // User might want to deselect. Let's allowing toggling off.
-      hitNodeId = null;
-    }
-
-    setState(() {
-      _selectedNodeId = hitNodeId;
-      _highlightedNodeIds.clear();
-
-      if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId);
-
-        final node = simulation.nodeMap[hitNodeId];
-        if (node != null) {
-          PlatformManager.instance.analytics.brainMapNodeClicked(node.id, node.label, node.nodeType);
-        }
-
-        // Find neighbors
-        final neighbors = <String>[];
-        for (var edge in simulation.edges) {
-          if (edge.sourceId == hitNodeId) neighbors.add(edge.targetId);
-          if (edge.targetId == hitNodeId) neighbors.add(edge.sourceId);
-        }
-
-        // "Closest 4" - sorting by 3D distance
-        // We need the GraphNode3D objects
-        final centerNode = simulation.nodeMap[hitNodeId];
-        if (centerNode != null) {
-          neighbors.sort((a, b) {
-            final na = simulation.nodeMap[a];
-            final nb = simulation.nodeMap[b];
-            if (na == null || nb == null) return 0;
-            // distSq
-            final da = _distSq(centerNode.position, na.position);
-            final db = _distSq(centerNode.position, nb.position);
-            return da.compareTo(db);
-          });
-        }
-
-        // Take top 4 and add them
-        _highlightedNodeIds.addAll(neighbors.take(4));
-      }
-    });
-  }
-
-  double _distSq(v.Vector3 a, v.Vector3 b) {
-    final dx = a.x - b.x;
-    final dy = a.y - b.y;
-    final dz = a.z - b.z;
-    return dx * dx + dy * dy + dz * dz;
-  }
-}
-
-class GraphPainter3D extends CustomPainter {
-  final List<GraphNode3D> nodes;
-  final List<GraphEdge3D> edges;
-  final Map<String, GraphNode3D> nodeMap;
-  final double rotationX;
-  final double rotationY;
-  final double panX;
-  final double panY;
-  final double zoom;
-  final bool screenshotMode;
-  final Set<String> highlightedNodeIds;
-
-  final Paint _edgePaint = Paint()..strokeCap = StrokeCap.round;
-  final Paint _nodePaint = Paint();
-  final Paint _ringPaint = Paint()..style = PaintingStyle.stroke;
-
-  GraphPainter3D({
-    required this.nodes,
-    required this.edges,
-    required this.nodeMap,
-    required this.rotationX,
-    required this.rotationY,
-    required this.panX,
-    required this.panY,
-    required this.zoom,
-    this.screenshotMode = false,
-    this.highlightedNodeIds = const {},
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centerX = size.width / 2;
-    final centerY = size.height / 2;
-
-    final cosY = cos(rotationY);
-    final sinY = sin(rotationY);
-    final cosX = cos(rotationX);
-    final sinX = sin(rotationX);
-
-    final projectedNodes = <_ProjectedNode>[];
-    final projectedMap = <String, _ProjectedNode>{};
-
-    for (var node in nodes) {
-      final px = node.position.x;
-      final py = node.position.y;
-      final pz = node.position.z;
-
-      final x1 = px * cosY - pz * sinY;
-      final z1 = px * sinY + pz * cosY;
-
-      final y2 = py * cosX - z1 * sinX;
-      final z2 = py * sinX + z1 * cosX;
-
-      const cameraZ = 1500.0;
-      final perspective = (cameraZ / (cameraZ - z2)) * zoom;
-
-      final projectedX = centerX + x1 * perspective + panX;
-      final projectedY = centerY + y2 * perspective + panY;
-
-      final alpha = (1.0 + (z2 / 2500.0)).clamp(0.0, 1.0);
-
-      // Dimming logic
-      double finalAlpha = alpha;
-      if (highlightedNodeIds.isNotEmpty && !highlightedNodeIds.contains(node.id)) {
-        finalAlpha *= 0.15; // Dim significantly
-      }
-
-      final proj = _ProjectedNode(
-        node: node,
-        x: projectedX,
-        y: projectedY,
-        z: z2,
-        scale: perspective,
-        alpha: finalAlpha,
-      );
-
-      projectedNodes.add(proj);
-      projectedMap[node.id] = proj;
-    }
-
-    projectedNodes.sort((a, b) => a.z.compareTo(b.z));
-
-    for (var edge in edges) {
-      final p1 = projectedMap[edge.sourceId];
-      final p2 = projectedMap[edge.targetId];
-      if (p1 == null || p2 == null) continue;
-
-      final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
-      if (alpha < 0.05) continue;
-
-      final light = OmiColors.active == OmiPalette.light;
-      _edgePaint.color = (light ? OmiColors.border : Colors.white).withValues(alpha: alpha);
-      _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
-
-      // Drawn above with logic
-
-      final avgScale = (p1.scale + p2.scale) / 2;
-
-      // Highlight edge if BOTH nodes are in the highlighted set
-      final isHighlightedEdge =
-          highlightedNodeIds.contains(edge.sourceId) && highlightedNodeIds.contains(edge.targetId);
-      final isDimmed = highlightedNodeIds.isNotEmpty && !isHighlightedEdge;
-
-      if (isDimmed) {
-        _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
-      } else if (isHighlightedEdge) {
-        _edgePaint.color = (light ? OmiColors.accent : Colors.white).withValues(alpha: max(alpha, 0.8)); // Pop
-      }
-
-      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
-
-      if (edge.label.isNotEmpty && avgScale > 0.6 && alpha > 0.1 && (!isDimmed || isHighlightedEdge)) {
-        final midX = (p1.x + p2.x) / 2;
-        final midY = (p1.y + p2.y) / 2;
-        final textSpan = TextSpan(
-          text: edge.label,
-          style: TextStyle(
-            color: (light ? OmiColors.textPrimary : Colors.white54).withValues(alpha: alpha * 2),
-            fontSize: (9 * avgScale).clamp(7, 11),
-          ),
-        );
-        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
-        tp.layout();
-        if (light) {
-          final labelRect = Rect.fromCenter(center: Offset(midX, midY - 8), width: tp.width + 8, height: tp.height + 4);
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
-            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+  Widget _buildGraph() {
+    return ClipRect(
+      child: ReactiveBuilder<Vector3d>(
+        model: _cameraPosition,
+        builder: (context, camPos, _) {
+          return ReactiveBuilder<double>(
+            model: _cameraZoom,
+            builder: (context, zoom, _) {
+              return CustomPaint(
+                size: Size.infinite,
+                painter: _GraphPainter(
+                  nodes: widget.nodes,
+                  edges: widget.edges,
+                  positions: _nodePositions,
+                  cameraPos: camPos,
+                  zoom: zoom,
+                  nodeColor: widget.nodeColor,
+                  edgeColor: widget.edgeColor,
+                  showEdges: widget.showEdges,
+                  showNodes: widget.showNodes,
+                  onTap: _handleTap,
+                ),
+              );
+            },
           );
-        }
-        tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2 - 8));
-      }
-    }
+        },
+      ),
+    );
+  }
 
-    for (var p in projectedNodes) {
-      final node = p.node;
-      final centerOffset = Offset(p.x, p.y);
-      final radius = node.radius * p.scale;
-
-      if (radius < 0.5) continue;
-
-      if (radius > 3) {
-        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.3);
-        _ringPaint.strokeWidth = 1.5 * p.scale;
-        canvas.drawCircle(centerOffset, radius * 1.8, _ringPaint);
-
-        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.15);
-        _ringPaint.strokeWidth = 1.0 * p.scale;
-        canvas.drawCircle(centerOffset, radius * 2.5, _ringPaint);
-      }
-
-      final gradient = ui.Gradient.radial(
-        centerOffset + Offset(-radius * 0.25, -radius * 0.25),
-        radius * 1.2,
-        [
-          (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
-          Color.lerp(
-            OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
-            node.baseColor,
-            0.5,
-          )!
-              .withValues(alpha: p.alpha),
-          node.baseColor.withValues(alpha: p.alpha),
+  Widget _buildControls() {
+    return Positioned(
+      bottom: 16,
+      left: 16,
+      right: 16,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _IconButton(
+            icon: Icons.zoom_in,
+            onTap: () => _cameraZoom.value = (_cameraZoom.value * 1.2).clamp(0.2, 5.0),
+          ),
+          _IconButton(
+            icon: Icons.zoom_out,
+            onTap: () => _cameraZoom.value = (_cameraZoom.value / 1.2).clamp(0.2, 5.0),
+            onLongPress: () => _frameToFit(),
+          ),
+          _IconButton(
+            icon: Icons.replay,
+            onTap: () {
+              _initializePositions();
+              _frameToFit();
+            },
+          ),
         ],
-        [0.0, 0.3, 1.0],
-      );
-      _nodePaint.shader = gradient;
-      canvas.drawCircle(centerOffset, radius, _nodePaint);
-      _nodePaint.shader = null;
-
-      final showLabel = screenshotMode || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
-      if (showLabel) {
-        final textSpan = TextSpan(
-          text: node.label,
-          style: TextStyle(
-            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
-              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
-            ),
-            fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
-            fontWeight: FontWeight.w600,
-          ),
-        );
-        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
-        tp.layout();
-        if (OmiColors.active == OmiPalette.light) {
-          final labelRect = Rect.fromLTWH(
-            centerOffset.dx - tp.width / 2 - 4,
-            centerOffset.dy + radius,
-            tp.width + 8,
-            tp.height + 6,
-          );
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
-            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
-          );
-        }
-        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant GraphPainter3D oldDelegate) => true;
-}
-
-class _ProjectedNode {
-  final GraphNode3D node;
-  final double x;
-  final double y;
-  final double z;
-  final double scale;
-  final double alpha;
-
-  _ProjectedNode({
-    required this.node,
-    required this.x,
-    required this.y,
-    required this.z,
-    required this.scale,
-    required this.alpha,
-  });
-}
-
-/// The preview card's loading state: a faint, static node-and-edge sketch at the card's size. It
-/// pulses gently a few times (not at all under Reduce Motion) and then rests, so a slow load does
-/// not animate forever.
-class MemoryGraphSkeleton extends StatefulWidget {
-  const MemoryGraphSkeleton({super.key});
-
-  @override
-  State<MemoryGraphSkeleton> createState() => _MemoryGraphSkeletonState();
-}
-
-class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-    value: 1,
-  );
-  bool _started = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final reduce = OmiMotion.of(context).standard == Duration.zero;
-    if (reduce) {
-      _pulse.stop();
-      _pulse.value = 1;
-    } else if (!_started) {
-      _started = true;
-      _pulse.repeat(min: 0.55, max: 1, reverse: true, count: 6);
-    }
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _controller.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _pulse,
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _GraphSkeletonPainter(node: OmiColors.surface3, edge: OmiColors.border),
-      ),
-    );
   }
 }
 
-class _GraphSkeletonPainter extends CustomPainter {
-  _GraphSkeletonPainter({required this.node, required this.edge});
+class _GraphPainter extends CustomPainter {
+  final List<MemoryNodeModel> nodes;
+  final List<GraphEdgeModel> edges;
+  final Map<int, Vector3d> positions;
+  final Vector3d cameraPos;
+  final double zoom;
+  final Color nodeColor;
+  final Color edgeColor;
+  final bool showEdges;
+  final bool showNodes;
+  final void Function(int) onTap;
 
-  final Color node;
-  final Color edge;
-
-  // Positions as fractions of the card, and radii in logical pixels: a hub with a few clusters.
-  static const _nodes = <(double, double, double)>[
-    (0.50, 0.50, 9),
-    (0.30, 0.32, 6),
-    (0.68, 0.28, 6),
-    (0.72, 0.68, 7),
-    (0.32, 0.72, 5),
-    (0.16, 0.50, 4),
-    (0.86, 0.46, 4),
-    (0.52, 0.16, 4),
-    (0.55, 0.84, 4),
-  ];
-  static const _edges = <(int, int)>[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 7), (3, 6), (3, 8), (4, 5), (1, 7)];
+  _GraphPainter({
+    required this.nodes,
+    required this.edges,
+    required this.positions,
+    required this.cameraPos,
+    required this.zoom,
+    required this.nodeColor,
+    required this.edgeColor,
+    required this.showEdges,
+    required this.showNodes,
+    required this.onTap,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    Offset at(int i) => Offset(_nodes[i].$1 * size.width, _nodes[i].$2 * size.height);
-    final edgePaint = Paint()
-      ..color = edge
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    for (final (a, b) in _edges) {
-      canvas.drawLine(at(a), at(b), edgePaint);
+    final matrix = _buildMatrix(size);
+    canvas.save();
+    canvas.transform(matrix);
+
+    if (showEdges) {
+      for (final edge in edges) {
+        final p1 = _project(edge.sourcePos, size);
+        final p2 = _project(edge.targetPos, size);
+        if (p1 != null && p2 != null) {
+          canvas.drawLine(p1!, p2!, Paint()..color = edgeColor);
+        }
+      }
     }
-    final nodePaint = Paint()..color = node;
-    for (var i = 0; i < _nodes.length; i++) {
-      canvas.drawCircle(at(i), _nodes[i].$3, nodePaint);
+
+    if (showNodes) {
+      for (final node in nodes) {
+        final pos = positions[node.id]!;
+        final screenPos = _project(pos, size);
+        if (screenPos != null) {
+          canvas.drawCircle(
+            screenPos,
+            20 * zoom,
+            Paint()..color = nodeColor,
+          );
+        }
+      }
     }
+
+    canvas.restore();
+  }
+
+  Vector3d? _project(Vector3d worldPos, Size size) {
+    final offset = worldPos - cameraPos;
+    if (offset.z <= 0) return null;
+    final scale = zoom * size.width / offset.z;
+    return Vector2d(
+      size.width / 2 + offset.x * scale,
+      size.height / 2 - offset.y * scale,
+    );
+  }
+
+  List<double> _buildMatrix(Size size) {
+    // Simple affine transform for perspective projection.
+    return [
+      zoom * size.width, 0, 0, 0,
+      0, zoom * size.height, 0, 0,
+      0, 0, 1, 0,
+      size.width / 2, size.height / 2, 0, 1,
+    ];
   }
 
   @override
-  bool shouldRepaint(_GraphSkeletonPainter old) => old.node != node || old.edge != edge;
+  bool shouldRepaint(_GraphPainter oldDelegate) {
+    return oldDelegate.nodes != nodes ||
+        oldDelegate.edges != edges ||
+        oldDelegate.positions != positions ||
+        oldDelegate.cameraPos != cameraPos ||
+        oldDelegate.zoom != zoom;
+  }
+}
+
+class AABB {
+  final Vector3d min;
+  final Vector3d max;
+
+  AABB({required this.min, required this.max});
+
+  Vector3d get center => Vector3d(
+    (min.x + max.x) / 2,
+    (min.y + max.y) / 2,
+    (min.z + max.z) / 2,
+  );
+
+  double get diagonal {
+    final dx = max.x - min.x;
+    final dy = max.y - min.y;
+    final dz = max.z - min.z;
+    return math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+}
+
+class Vector3d {
+  final double x, y, z;
+  const Vector3d(this.x, this.y, this.z);
+
+  Vector3d operator +(Vector3d other) => Vector3d(x + other.x, y + other.y, z + other.z);
+  Vector3d operator -(Vector3d other) => Vector3d(x - other.x, y - other.y, z - other.z);
+  Vector3d operator *(double scalar) => Vector3d(x * scalar, y * scalar, z * scalar);
+  Vector3d normalize() {
+    final len = length;
+    return len > 0 ? Vector3d(x / len, y / len, z / len) : Vector3d(0, 0, 0);
+  }
+
+  double get length => math.sqrt(x * x + y * y + z * z);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Vector3d && x == other.x && y == other.y && z == other.z;
+
+  @override
+  int get hashCode => Object.hash(x, y, z);
+}
+
+class Vector2d {
+  final double x, y;
+  const Vector2d(this.x, this.y);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Vector2d && x == other.x && y == other.y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}
+
+class _IconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  const _IconButton({
+    required this.icon,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.card.withOpacity(0.8),
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Icon(icon, color: AppColors.text, size: 24),
+        ),
+      ),
+    );
+  }
 }
