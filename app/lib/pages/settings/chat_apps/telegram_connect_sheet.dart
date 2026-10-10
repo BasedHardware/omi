@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -87,15 +86,13 @@ class _TelegramConnectSheetState extends State<TelegramConnectSheet>
     ChatAppsAnalytics.connectStarted(ChatChannel.telegram);
     final proof = await _token();
     if (proof == null || !mounted) return;
-    final uri = chatAppProofUri(
-      channel: ChatChannel.telegram,
-      endpoint: endpoint,
+    final opened = await openChatAppProof(
+      ChatChannel.telegram,
+      endpoint,
       deepLink: proof.deepLink,
       address: proof.address,
       startToken: proof.proof,
-      platform: defaultTargetPlatform,
     );
-    final opened = uri != null && await chatAppLauncher(uri);
     if (!mounted) return;
     if (!opened) {
       OmiFeedback.error(

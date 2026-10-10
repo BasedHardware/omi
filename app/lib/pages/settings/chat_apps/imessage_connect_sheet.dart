@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -130,15 +129,13 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     final proof = _proof;
     if (endpoint == null || proof == null) return;
     if (!_sent) ChatAppsAnalytics.connectStarted(ChatChannel.imessage);
-    final uri = chatAppProofUri(
-      channel: ChatChannel.imessage,
-      endpoint: endpoint,
+    final opened = await openChatAppProof(
+      ChatChannel.imessage,
+      endpoint,
       deepLink: proof.deepLink,
       address: proof.address,
       body: _body(proof.proof),
-      platform: defaultTargetPlatform,
     );
-    final opened = uri != null && await chatAppLauncher(uri);
     if (!mounted) return;
     if (!opened) {
       OmiFeedback.error(
@@ -293,7 +290,6 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
     wire.GeneratedChannelLinkProof proof,
   ) {
     final l10n = context.l10n;
-    final endpoint = _endpoint;
     final remaining = proof.expiresAt.difference(DateTime.now());
     final expired = remaining <= Duration.zero;
     return Column(

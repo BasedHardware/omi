@@ -352,6 +352,28 @@ Future<bool> openChatApp(
   return chatAppLauncher(uri);
 }
 
+/// Opens the minted deep link when the server sent one, otherwise the flag address.
+Future<bool> openChatAppProof(
+  ChatChannel channel,
+  ChatChannelEndpoint? endpoint, {
+  String? deepLink,
+  String? address,
+  String? startToken,
+  String? body,
+}) {
+  final uri = chatAppProofUri(
+    channel: channel,
+    endpoint: endpoint,
+    deepLink: deepLink,
+    address: address,
+    startToken: startToken,
+    body: body,
+    platform: defaultTargetPlatform,
+  );
+  if (uri == null) return Future.value(false);
+  return chatAppLauncher(uri);
+}
+
 /// Test seam for [openChatApp].
 @visibleForTesting
 Future<bool> Function(Uri uri) chatAppLauncher = _launch;
@@ -366,7 +388,6 @@ Future<bool> _launch(Uri uri) async {
 
 /// Prefer the mint response. [deepLink] is a full `https` or `sms` URI. [address] replaces the
 /// flag payload's address. When neither is present, [endpoint] is the fallback.
-@visibleForTesting
 Uri? chatAppProofUri({
   required ChatChannel channel,
   required ChatChannelEndpoint? endpoint,
