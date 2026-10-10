@@ -170,6 +170,10 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
+    if isinstance(segments := data.get('transcript_segments'), list):
+        from utils.conversations.speaker_grouping_storage import reveal_segments
+
+        reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
@@ -277,6 +281,9 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
             segment.pop(match_scores.FIELD, None)
     if 'transcript_segments' in data and isinstance(data['transcript_segments'], list):
         data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
+        from utils.conversations.speaker_grouping_storage import protect_segments
+
+        protect_segments(data['transcript_segments'], uid)
         data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
@@ -334,6 +341,16 @@ def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
 
 
 def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
+    from utils.conversations.speaker_grouping_storage import reveal_segments
+
+    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    reveal_segments(segments, uid)
+    return segments
+
+
+def _decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
@@ -516,6 +533,10 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
                 logger.error(e)
                 pass
 
+    if isinstance(segments := data.get('transcript_segments'), list):
+        from utils.conversations.speaker_grouping_storage import reveal_segments
+
+        reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
     return data
@@ -2787,6 +2808,8 @@ def assign_conversation_speaker(
     rejection=None,
     owner_segment_ids=None,
     time_range=None,
+    segment_only=False,
+    owner_confirmation=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
@@ -2801,6 +2824,8 @@ def assign_conversation_speaker(
     def assign(transaction, bookkeeping):
         if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
+        if owner_confirmation is not None and source.get('deleted'):
+            raise LookupError('Owner question conversation changed')
         source_segments = None
         selected_segment_ids, selected_speaker_id, selected_segment_index = segment_ids, speaker_id, segment_index
         current_id, raw, seen = conversation_id, source, set()
@@ -2839,6 +2864,26 @@ def assign_conversation_speaker(
         current['manual_speaker_assignments'] = decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
+        owner_updates = {}
+        if owner_confirmation is not None:
+            # Read-only conversation consumers do not depend on prompt models.
+            # Load the authorization contract only for the explicit excerpt path.
+            from utils.speaker_tag_prompts.owner_confirmation import (
+                FIELD as OWNER_CONFIRMATION_FIELD,
+                StaleOwnerConfirmation,
+                validate_binding as validate_owner_confirmation,
+            )
+
+            binding = validate_owner_confirmation(
+                current,
+                owner_confirmation['prompt_id'],
+                owner_confirmation['evidence_id'],
+                selected_segment_ids,
+                require_played=True,
+            )
+            if not segment_only or selected_speaker_id != binding['speaker_id'] or owner_segment_ids:
+                raise StaleOwnerConfirmation('Owner excerpt cannot authorize whole-voice assignment or learning')
+            owner_updates[OWNER_CONFIRMATION_FIELD] = dict(binding, answered='yes' if is_user else 'no')
         before = copy.deepcopy(current['transcript_segments'])
         if source_segments is not None:
             before_ids = {s.get('id') for s in before}
@@ -2854,7 +2899,7 @@ def assign_conversation_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
             time_range=time_range if source_segments is None else None,
-            segment_only=time_range is not None,
+            segment_only=segment_only or time_range is not None,
         )
         removed, relabeled = persist_assignment_effects(
             transaction,
@@ -2876,7 +2921,8 @@ def assign_conversation_speaker(
             owner_segment_ids=owner_segment_ids,
         )
         extract_learning_receipt_markers(receipt, current)
-        written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+        written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt, **owner_updates}
+        current.update(owner_updates)
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         clear_client_processing(payload)
         _guard_match_score_size(payload, raw, getattr(ref, 'path', None))
@@ -2890,7 +2936,28 @@ def assign_conversation_speaker(
 
     result = run_assignment_transaction(client, assign)
     invalidate_people_stats_cache(uid)
-    current, _, _, before = result
+    current, resolved, _, before = result
+    if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
+        try:
+            from utils.conversations.speaker_grouping_shadow import record_correction
+
+            record_correction(current, resolved)
+        except Exception as error:
+            # A committed user correction cannot fail because optional telemetry
+            # is unavailable (including its lazy import).
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='speaker_grouping',
+                to_mode='incumbent',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+            logger.warning(
+                'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
+            )
     record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
     try:

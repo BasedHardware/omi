@@ -892,8 +892,8 @@ class SharedPreferencesUtil {
   String get transcriptionModel => getString('transcriptionModel3', defaultValue: 'soniox');
   set transcriptionModel(String value) => saveString('transcriptionModel3', value);
 
-  bool get firstSummaryRatingPending => getBool('firstSummaryRatingPending'); // set at onboarding end
-  set firstSummaryRatingPending(bool value) => saveBool('firstSummaryRatingPending', value);
+  String get ratingAskAnswer => getString('ratingAskAnswer'); // '' until "Are you enjoying Omi?" is answered
+  set ratingAskAnswer(String value) => saveString('ratingAskAnswer', value); // 'yes' | 'no'
 
   bool get onboardingCompleted => getBool('onboardingCompleted');
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
@@ -1275,6 +1275,11 @@ class SharedPreferencesUtil {
   set speakerLabelLastUsedMs(Map<String, int> value) {
     saveString('speaker_label_last_used_ms', jsonEncode(value));
   }
+
+  /// The one-time "label all speakers, then tap Done" tip has been shown on this install.
+  bool get speakerLabelingTipShown => getBool('speakerLabelingTipShown');
+
+  set speakerLabelingTipShown(bool value) => saveBool('speakerLabelingTipShown', value);
 
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');

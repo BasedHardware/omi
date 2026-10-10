@@ -237,6 +237,15 @@ env:
     value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
+  # Cached-evidence shadow only; authoritative grouping stays incumbent.
+  - name: SPEAKER_GROUPING_SHADOW
+    value: "cohort"
+  - name: SPEAKER_GROUPING_SHADOW_PERCENT
+    value: "10"
+  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: SPEAKER_GROUPING_MODE
+    value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
@@ -270,6 +279,8 @@ env:
     value: "100"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
     value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_RESCUE
+    value: "shadow"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT

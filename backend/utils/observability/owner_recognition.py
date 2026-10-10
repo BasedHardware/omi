@@ -47,6 +47,30 @@ _RESOLUTION_STATUS = frozenset({'resolved', 'capture', 'unavailable'})
 _TARGETS = frozenset({'owner', 'person'})
 _LIVE_DECISIONS = frozenset({'accepted', 'rejected', 'ambiguous', 'pending'})
 _CARRIED = frozenset({'manual', 'automatic', 'none'})
+_ROLLOVER_REASONS = frozenset(
+    {
+        'manual',
+        'manual_not_copied',
+        'non_owner',
+        'no_scope',
+        'donor_unavailable',
+        'donor_ineligible',
+        'donor_authority',
+        'scope_changed',
+        'manual_override',
+        'no_evidence',
+        'not_restored',
+        'stale_generation',
+        'profile_unavailable',
+        'profile_changed',
+        'current_evidence',
+        'voice_capacity',
+        'automatic',
+        'owner_contended',
+        'voiceprint_rejected',
+        'not_eligible',
+    }
+)
 # process_conversation stamps one of these on relevance_decision.trigger.
 # Sync intake stamps ``sync_intake`` or nothing, which is not in this set.
 _PROCESSED_TRIGGERS = frozenset(item.value for item in ProcessingTrigger)
@@ -111,6 +135,40 @@ OWNER_RECOGNITION_CONVERSATIONS = _owner_recognition_conversations()
 OWNER_RECOGNITION_OWNER_SHARE = _owner_recognition_owner_share()
 LIVE_SPEAKER_DECISIONS = _live_speaker_decisions()
 LIVE_SPEAKER_ROLLOVER = _live_speaker_rollover()
+
+
+def _reconnect_counter() -> Counter:
+    try:
+        return Counter('omi_owner_reconnect_total', 'Owner acoustic reconnect handoff outcomes', ['outcome', 'reason'])
+    except ValueError:
+        return REGISTRY._names_to_collectors['omi_owner_reconnect_total']  # type: ignore[attr-defined]
+
+
+OWNER_RECONNECT = _reconnect_counter()
+_RECONNECT_REASONS = frozenset(
+    {
+        'lookup',
+        'no_device',
+        'absent',
+        'corrupt',
+        'unavailable',
+        'expired_or_profile',
+        'donor_authority',
+        'acoustic',
+        'accepted',
+        'arbitration',
+    }
+)
+
+
+def record_owner_reconnect(outcome: str, reason: str) -> None:
+    try:
+        if outcome in {'attempted', 'accepted', 'rejected'} and reason in _RECONNECT_REASONS:
+            OWNER_RECONNECT.labels(outcome=outcome, reason=reason).inc()
+    except Exception:
+        logger.warning('owner_reconnect_record_failed')
+
+
 OWNER_IDENTITY_REPAIR = _owner_identity_repair()
 
 for _target in ('owner', 'person'):
@@ -449,6 +507,7 @@ def record_live_speaker_rollover(
     mappings: Mapping[int, Any],
     origins: Mapping[int, str],
     carried_speaker_ids: Optional[set[int]],
+    reasons: Optional[Mapping[int, str]] = None,
 ) -> None:
     """Count the prior mappings after manual and automatic carry have been decided.
 
@@ -475,5 +534,10 @@ def record_live_speaker_rollover(
             if carried not in _CARRIED:
                 carried = 'none'
             LIVE_SPEAKER_ROLLOVER.labels(carried=carried, target=target).inc()
+            # Closed reason values come from the rollover policy, not user data.
+            reason = 'manual' if carried == 'manual' else (reasons or {}).get(speaker_id, 'not_eligible')
+            if reason not in _ROLLOVER_REASONS:
+                reason = 'not_eligible'
+            logger.info('live_speaker_rollover carried=%s target=%s reason=%s', carried, target, reason)
     except Exception:
         logger.warning('live_speaker_rollover_record_failed')

@@ -1576,15 +1576,28 @@ class ListenReceiver(ReplayFilterMixin):
                     retry_after=error.retry_after,
                 )
                 return False
+            except LiveChainExhausted as error:
+                # Typed exhaustion is the chain's normal terminal answer, not
+                # an unexpected crash: the dial already emitted its
+                # `omi_fallback_event ... outcome=exhausted` WARNING and the
+                # death monitor converts the exhaustion latch below into the
+                # typed `stt_failed` terminal status. `logger.exception` here
+                # re-printed the chain's own frames once per session
+                # (2026-10-09: the `STT failover connect raised` traceback
+                # mirrored the `LiveChainExhausted` fallback events 1:1,
+                # ~100/30m); one classified line keeps the fault signal.
+                # Untyped dial failures keep the traceback.
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                logger.error('STT failover chain exhausted (%s)', error)
+                hop.note_failure(None)
+                settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+                self.recovery.exhaust()
+                return False
             except Exception as error:
                 if managed_chain_enabled(self.host):
                     self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
                 logger.exception('STT failover connect raised')
-                if isinstance(error, LiveChainExhausted):
-                    hop.note_failure(None)
-                    settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
-                    self.recovery.exhaust()
-                    return False
                 self._stt_failed_providers.add(provider_for_service(service) or service.value)
                 hop.note_failure(None, continuing=True)
                 continue

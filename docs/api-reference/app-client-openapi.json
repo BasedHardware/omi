@@ -6705,6 +6705,234 @@
         "title": "ChangeRef",
         "type": "object"
       },
+      "ChannelLink": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "display_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Handle"
+          },
+          "external_id": {
+            "title": "External Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "insights": {
+            "default": false,
+            "title": "Insights",
+            "type": "boolean"
+          },
+          "keep_private_memories_in_app": {
+            "default": true,
+            "title": "Keep Private Memories In App",
+            "type": "boolean"
+          },
+          "linked_at": {
+            "format": "date-time",
+            "title": "Linked At",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "visible_in_app": {
+            "default": false,
+            "title": "Visible In App",
+            "type": "boolean"
+          },
+          "voice_notes": {
+            "default": true,
+            "title": "Voice Notes",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "channel",
+          "provider",
+          "external_id",
+          "linked_at"
+        ],
+        "title": "ChannelLink",
+        "type": "object"
+      },
+      "ChannelLinkProof": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "token",
+              "code"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "proof": {
+            "title": "Proof",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proof",
+          "kind",
+          "expires_at"
+        ],
+        "title": "ChannelLinkProof",
+        "type": "object"
+      },
+      "ChannelLinkReceipt": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ChannelLinkReceipt",
+        "type": "object"
+      },
+      "ChannelLinkRequest": {
+        "properties": {
+          "channel": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Channel",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "token",
+              "code"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_-]+$",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "provider",
+          "kind"
+        ],
+        "title": "ChannelLinkRequest",
+        "type": "object"
+      },
+      "ChannelLinksResponse": {
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelLink"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "links"
+        ],
+        "title": "ChannelLinksResponse",
+        "type": "object"
+      },
+      "ChannelVisibilityRequest": {
+        "description": "Partial per-link settings. Omitted fields stay as stored.",
+        "properties": {
+          "insights": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insights"
+          },
+          "keep_private_memories_in_app": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Private Memories In App"
+          },
+          "visible_in_app": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible In App"
+          },
+          "voice_notes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Notes"
+          }
+        },
+        "title": "ChannelVisibilityRequest",
+        "type": "object"
+      },
       "ChartData": {
         "properties": {
           "chart_type": {
@@ -7081,6 +7309,30 @@
             "description": "App/plugin the session belongs to; null for main chat.",
             "title": "App Id"
           },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Messaging channel for a channel session.",
+            "title": "Channel"
+          },
+          "channel_link_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Link that owns a channel session.",
+            "title": "Channel Link Id"
+          },
           "created_at": {
             "description": "Session creation timestamp (UTC).",
             "format": "date-time",
@@ -7125,6 +7377,18 @@
             "description": "Whether the user starred the session.",
             "title": "Starred",
             "type": "boolean"
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Surface id. Absent means the app surface.",
+            "title": "Surface"
           },
           "title": {
             "description": "Display title of the session.",
@@ -13126,6 +13390,313 @@
           }
         },
         "title": "Display",
+        "type": "object"
+      },
+      "DreamReportEdit": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "shadow",
+              "applied",
+              "suppressed",
+              "suggest_only",
+              "edit_cap",
+              "invalid_evidence"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_label": {
+            "title": "Target Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_label",
+          "before",
+          "after",
+          "reason",
+          "evidence_count",
+          "outcome"
+        ],
+        "title": "DreamReportEdit",
+        "type": "object"
+      },
+      "DreamReportFeedback": {
+        "properties": {
+          "component": {
+            "title": "Component",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "failure_class": {
+            "title": "Failure Class",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "failure_class",
+          "severity",
+          "count"
+        ],
+        "title": "DreamReportFeedback",
+        "type": "object"
+      },
+      "DreamReportQuestion": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "DreamReportQuestion",
+        "type": "object"
+      },
+      "DreamReportTask": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "DreamReportTask",
+        "type": "object"
+      },
+      "DreamReportTerm": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "spelling": {
+            "title": "Spelling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "spelling",
+          "aliases"
+        ],
+        "title": "DreamReportTerm",
+        "type": "object"
+      },
+      "DreamRun": {
+        "properties": {
+          "cost_usd": {
+            "default": 0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dirty_dropped": {
+            "default": 0,
+            "title": "Dirty Dropped",
+            "type": "integer"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportEdit"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Type"
+          },
+          "feedback": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportFeedback"
+            },
+            "title": "Feedback",
+            "type": "array"
+          },
+          "privacy_rejected": {
+            "default": 0,
+            "title": "Privacy Rejected",
+            "type": "integer"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "records_queued_after": {
+            "default": 0,
+            "title": "Records Queued After",
+            "type": "integer"
+          },
+          "records_read": {
+            "default": 0,
+            "title": "Records Read",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "slow_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportTask"
+            },
+            "title": "Slow Tasks",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "failed",
+              "deadline",
+              "idle"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tokens": {
+            "default": 0,
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "vocabulary": {
+            "items": {
+              "$ref": "#/components/schemas/DreamReportTerm"
+            },
+            "title": "Vocabulary",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "created_at",
+          "trigger",
+          "status"
+        ],
+        "title": "DreamRun",
+        "type": "object"
+      },
+      "DreamRunRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "DreamRunRequest",
+        "type": "object"
+      },
+      "DreamRunsResponse": {
+        "properties": {
+          "manual_runs_limit": {
+            "title": "Manual Runs Limit",
+            "type": "integer"
+          },
+          "manual_runs_today": {
+            "title": "Manual Runs Today",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "shadow",
+              "on"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "passes_limit": {
+            "title": "Passes Limit",
+            "type": "integer"
+          },
+          "passes_today": {
+            "title": "Passes Today",
+            "type": "integer"
+          },
+          "queued_changes": {
+            "title": "Queued Changes",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/DreamRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "passes_today",
+          "passes_limit",
+          "manual_runs_today",
+          "manual_runs_limit",
+          "queued_changes",
+          "runs"
+        ],
+        "title": "DreamRunsResponse",
         "type": "object"
       },
       "EntitiesResponse": {
@@ -27886,6 +28457,17 @@
       },
       "SpeakerTagPrompt": {
         "properties": {
+          "audio_capture_run": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Capture Run"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/SpeakerTagCandidate"
@@ -27924,6 +28506,17 @@
             "title": "Conversation Title",
             "type": "string"
           },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
           "excerpt": {
             "default": "",
             "title": "Excerpt",
@@ -27939,6 +28532,17 @@
           "origin": {
             "$ref": "#/components/schemas/SpeakerTagPromptOrigin"
           },
+          "receipt_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Generation"
+          },
           "segment_ids": {
             "items": {
               "type": "string"
@@ -27949,6 +28553,17 @@
           "speaker_id": {
             "title": "Speaker Id",
             "type": "integer"
+          },
+          "speaker_id_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id Scope"
           },
           "suggested_person_id": {
             "anyOf": [
@@ -28017,6 +28632,18 @@
             "minLength": 1,
             "title": "Conversation Id",
             "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
           },
           "first_time": {
             "default": false,
@@ -28101,6 +28728,17 @@
       },
       "SpeakerTagPromptAnswerResponse": {
         "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -28114,6 +28752,13 @@
           },
           "quality_outcome": {
             "$ref": "#/components/schemas/SpeakerTagPromptQualityOutcome"
+          },
+          "segment_identities": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerTagPromptSegmentIdentity"
+            },
+            "title": "Segment Identities",
+            "type": "array"
           },
           "status": {
             "default": "ok",
@@ -28192,6 +28837,35 @@
         "title": "SpeakerTagPromptQualityOutcome",
         "type": "string"
       },
+      "SpeakerTagPromptSegmentIdentity": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_user": {
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          }
+        },
+        "required": [
+          "id",
+          "is_user"
+        ],
+        "title": "SpeakerTagPromptSegmentIdentity",
+        "type": "object"
+      },
       "SpeakerTagPromptsResponse": {
         "properties": {
           "first_time": {
@@ -28242,6 +28916,11 @@
             "maxItems": 10,
             "title": "Prompt Ids",
             "type": "array"
+          },
+          "set_shown": {
+            "default": true,
+            "title": "Set Shown",
+            "type": "boolean"
           }
         },
         "title": "SpeakerTagPromptsShownRequest",
@@ -49977,6 +50656,174 @@
         ]
       }
     },
+    "/v1/dream/runs": {
+      "get": {
+        "operationId": "get_runs_v1_dream_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamRunsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Runs"
+      },
+      "post": {
+        "operationId": "run_now_v1_dream_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DreamRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DreamRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Run Now"
+      }
+    },
     "/v1/entities": {
       "get": {
         "operationId": "get_entities_v1_entities_get",
@@ -58890,6 +59737,356 @@
         ]
       }
     },
+    "/v1/messaging/link-proofs": {
+      "post": {
+        "operationId": "mint_link_proof_v1_messaging_link_proofs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelLinkProof"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mint Link Proof",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
+    "/v1/messaging/links": {
+      "get": {
+        "operationId": "list_links_v1_messaging_links_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelLinksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Links",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
+    "/v1/messaging/links/{link_id}": {
+      "delete": {
+        "operationId": "unlink_v1_messaging_links__link_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelLinkReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Unlink",
+        "tags": [
+          "messaging"
+        ]
+      },
+      "patch": {
+        "operationId": "set_visibility_v1_messaging_links__link_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelVisibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelLinkReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Visibility",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
     "/v1/mobile/device-diagnostics": {
       "post": {
         "operationId": "upload_device_diagnostics_v1_mobile_device_diagnostics_post",
@@ -61857,6 +63054,16 @@
         "operationId": "get_speaker_tag_prompts_v1_speaker_tag_prompts_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "owner_excerpt",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Owner Excerpt",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -62050,6 +63257,40 @@
               "exclusiveMinimum": 0,
               "title": "End",
               "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "prompt_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "evidence_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Id"
             }
           },
           {

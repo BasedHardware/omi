@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "Направи и сподели своја прилагодена апликација",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "Пребарај апликации",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "Придружи се на заедницата!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ членови и се зголемува.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "Избриши профил",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "На Omi, сме посветени на заштита на вашата приватност. Оваа страница вам овозможува контрола како ваши податоци се складираат и користат.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "Научи повеќе…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "Ниво на заштита на податоци",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "Вашите податоци се безбедни по стандард со силна енкрипција. Преглед ваши поставки и идните опции за приватност подолу.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "Пристап на апликација",
     "@appAccess": {
@@ -849,25 +833,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "Конфигурирај STT провајдер",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "Време за истек на разговор",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "Постави кога разговорите автоматски завршуваат",
+    "conversationTimeoutConfig": "Колку време Omi чека во тишина пред да заврши разговор",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "Увези податоци",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "Увези податоци од други извори",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "Debug & Дијагностика",
     "@debugDiagnostics": {
@@ -933,10 +909,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "Зборови разбрани од ваши разговори.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "Обезбедување",
     "@providing": {
         "description": "Providing stat title"
@@ -948,10 +920,6 @@
     "remembering": "Помнење",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "Факти и детали запомнети за вас.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "Неограничен план",
     "@unlimitedPlan": {
@@ -1069,7 +1037,6 @@
     },
     "debugLogs": "Debug логови",
     "debugLogsAutoDelete": "Автоматски се бриши по 3 денови.",
-    "debugLogsDesc": "Помага при дијагностицирање проблеми",
     "noLogFilesFound": "Нема пронајдени датотеки логови.",
     "omiDebugLog": "Omi debug лог",
     "logShared": "Логот е споделен",
@@ -1082,7 +1049,6 @@
     "exportedConversations": "Извезени разговори од Omi",
     "exportShared": "Извезување споделено",
     "deleteKnowledgeGraphTitle": "Избриши граф на знаење?",
-    "deleteKnowledgeGraphMessage": "Ово ќе избрише сави извлечени податоци на граф на знаење (чворови и врски). Ваши оригинални спомени ќе останат безбедни. Графот ќе биде обновен со текот на времето или при следното барање.",
     "knowledgeGraphDeleted": "Граф на знаење е избришан",
     "deleteGraphFailed": "Неуспешно бришење на граф: {error}",
     "@deleteGraphFailed": {
@@ -1094,7 +1060,6 @@
         }
     },
     "deleteKnowledgeGraph": "Избриши граф на знаење",
-    "deleteKnowledgeGraphDesc": "Очисти сите чворови и врски",
     "mcp": "MCP",
     "mcpServer": "MCP сервер",
     "mcpServerDesc": "Поврзи AI асистенти со твои податоци",
@@ -1247,7 +1212,6 @@
     "trainFamilyProfiles": "Обучи профили за пријатели и семејство",
     "trainFamilyProfilesDesc": "Ваши записи ни помагаат да препознаеме и направиме профили за вашите пријатели и семејство.",
     "enhanceTranscriptAccuracy": "Подобри точност на транскрипт",
-    "enhanceTranscriptAccuracyDesc": "Како што нашиот модел се подобрува, можеме да обезбедиме подобри резултати на транскрипција за ваши записи.",
     "legalNotice": "Правна напомена: Законитоста на снимање и складирање на гласни податоци може да варира во зависност од вашата локација и начинот на кој ја користите оваа функција. Вашa е одговорност да обезбедите соответност со локалните закони и регулативи.",
     "alreadyAuthorized": "Веќе авторизирано",
     "authorize": "Авторизирај",
@@ -1315,7 +1279,7 @@
         }
     },
     "tellUsPrimaryLanguage": "Кажете ни го вашиот основен јазик",
-    "languageForTranscription": "Поставете го вашиот јазик за поостри транскрипции и персонализирано искуство.",
+    "languageForTranscription": "Omi го користи овој јазик за транскрипции, резимеа и спомени.",
     "singleLanguageModeInfo": "Режимот на еден јазик е активиран. Преводот е онемогучен за поголема точност.",
     "searchLanguageHint": "Пребарувајте јазик по име или код",
     "noLanguagesFound": "Нема пронајдени јазици",
@@ -1462,7 +1426,7 @@
             }
         }
     },
-    "integrationComingSoon": "Интеграција со {appName} ускоро! Тешко работиме да вам донесеме повеќе опции за управување со задачи.",
+    "integrationComingSoon": "{appName} сè уште не е поддржано.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1476,7 +1440,7 @@
     "importConfiguration": "Конфигурирај увоз",
     "exportConfiguration": "Извезување конфигурација",
     "bringYourOwn": "Донесете ваше",
-    "payYourSttProvider": "Слободно користете omi. Плаќате директно на вашиот STT добавувач.",
+    "payYourSttProvider": "Бесплатно во Omi. Директно му плаќате на вашиот добавувач за транскрипција.",
     "freeMinutesMonth": "300 слободни минути/месец вклучени. Неограничено со ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Домаќин е задолжителен",
@@ -1524,7 +1488,7 @@
     "enterLiveSttWebsocket": "Внесете го вашиот вживо STT WebSocket крајна точка",
     "apiKey": "API клуч",
     "enterApiKey": "Внесете го вашиот API клуч",
-    "storedLocallyNeverShared": "Зачувано локално, никогаш споделено",
+    "storedLocallyNeverShared": "Зачувано на овој телефон. Се испраќа само до вашиот добавувач за транскрипција.",
     "host": "Домаќин",
     "port": "Порт",
     "advanced": "Напредно",
@@ -1535,8 +1499,8 @@
     "resetRequestConfig": "Ресетирај конфигурација на стандардна",
     "logs": "Дневници",
     "logsCopied": "Дневници копирани",
-    "noLogsYet": "Нема дневници сеуште. Почнете да снимате за да видите прилагодена STT активност.",
-    "deviceUsesCodec": "{device} користи {reason}. Omi ќе биде користен.",
+    "noLogsYet": "Сè уште нема дневници. Снимете нешто за да ги видите барањата до вашиот добавувач за транскрипција.",
+    "deviceUsesCodec": "{device} снима во формат што овој добавувач не може да го чита ({reason}), па ќе се користи транскрипцијата на Omi.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1549,13 +1513,9 @@
         }
     },
     "omiTranscription": "Omi транскрипција",
-    "bestInClassTranscription": "Најдобра транскрипција без подесување",
     "instantSpeakerLabels": "Веќе означување на звучник",
     "languageTranslation": "Превод на 100+ јазици",
-    "optimizedForConversation": "Оптимизирано за разговор",
     "autoLanguageDetection": "Автоматско откривање на јазик",
-    "highAccuracy": "Висока точност",
-    "privacyFirst": "Приватност прво",
     "saveChanges": "Зачувај промени",
     "resetToDefault": "Ресетирај на стандардна",
     "viewTemplate": "Преглед шаблон",
@@ -1709,10 +1669,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "Продолжи, ја правиш добро работа",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "Прескочи го овој прашање",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1816,7 +1772,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "Фатете секој момент. Добијте AI-напаљени\nрезимеа. Никогаш нема да пишувате белешки повторно.",
+    "captureEveryMoment": "Omi ги снима вашите разговори и ги пишува\nрезимеа и задачите за вас.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1885,7 +1841,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "Поставете го вашиот јазик за поостри транскрипции и персонализирано искуство",
+    "languageBenefits": "Omi го користи овој јазик за транскрипции, резимеа и спомени.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1902,10 +1858,6 @@
     "selectYourLanguage": "Изберете го вашиот јазик",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "Вашите лично растење патување со AI што слуша на секое ваше слово.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "Задачи",
     "@actionItemsTitle": {
@@ -2557,11 +2509,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "Конфигурирај STT обезбедувач",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "Постави кога разговорите автоматски завршуваат",
+    "setWhenConversationsAutoEnd": "Колку време Omi чека во тишина пред да заврши разговор",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2610,9 +2558,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "Граф на знаење успешно избришан",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2628,10 +2573,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "Обриши сите јазли и врски",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2826,10 +2767,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Добредојде на Omi! Твојот AI придружник е подготвен да ти помогне со разговори, задачи и повеќе.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Почни да користиш Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2943,14 +2880,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "Разговорите се обработуваат автоматски",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Добивај увиди и резимеа веднаш",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "Покажи се",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2962,10 +2891,6 @@
     "dailyScore": "ДНЕВНА ОЦЕНКА",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "Оценка која ти помага да се\nфокусираш на извршување.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "Резултати од барање",
     "@searchResults": {
@@ -3480,10 +3405,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "Почни разговор и дозволи магијата да почне",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "Молиме провери твоја интернет врска",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3742,10 +3663,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "Преносив AI придружник",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "Се учитуваат мемории…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3817,10 +3734,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "Организирај и управувај со твои мемории",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "Вкупно",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3829,17 +3742,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "Постави сите мемории во приватна видливост",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "Направи сите мемории јавни",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "Постави сите мемории во јавна видливост",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Трајно отстрани сите мемории од Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3924,7 +3829,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "Молам, одберете го вашиот примарен јазик",
     "chooseYourLanguage": "Одберете го вашиот јазик",
-    "selectPreferredLanguageForBestExperience": "Одберете го вашиот претпочитан јазик за најдобро Omi искуство",
     "searchLanguages": "Пребарувај јазици",
     "selectALanguage": "Одберете јазик",
     "tryDifferentSearchTerm": "Пробајте со друг термин за пребарување",
@@ -3939,7 +3843,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "Овозможи функции за најдобро Omi искуство на твоето уредување.",
     "microphoneAccess": "Приступ на микрофон",
     "recordAudioConversations": "Запиши аудио разговори",
     "microphoneAccessDescription": "Omi треба приступ на микрофон за да запише твои разговори и да обезбеди транскрипции.",
@@ -4305,10 +4208,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "Кога да приме твое дневно резиме",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "Претплата",
     "@subscription": {
         "description": "Subscription section title"
@@ -4334,14 +4233,10 @@
     "checkingNext7Days": "Проверување на следните 7 дена",
     "shortcuts": "Кратенки",
     "shortcutChangeInstruction": "Кликни на кратенка за да је промениш. Притисни Escape за откажување.",
-    "configureSTTProvider": "Конфигурирај STT добавувач",
-    "setConversationEndDescription": "Постави кога разговорите автоматски завршува",
     "importDataDescription": "Увезување податоци од други извори",
     "exportConversationsDescription": "Експортирај разговори во JSON",
     "exportingConversations": "Експортирање разговори…",
-    "clearNodesDescription": "Избриши сите јазлови и врски",
     "deleteKnowledgeGraphQuestion": "Избриши граф на знаење?",
-    "deleteKnowledgeGraphWarning": "Ово ќе избрише сви изведени податоци на граф на знаење. Твоите оригинални спомени остануваат безбедни.",
     "connectOmiWithAI": "Поврзи Omi со AI асистенти",
     "noAPIKeys": "Нема API клучеви. Создај еден за да почнеш.",
     "autoCreateWhenDetected": "Автоматски создај кога се открие име",
@@ -4754,10 +4649,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "Создај и дели твоја апликација",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "Апликација",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4904,10 +4795,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "Криптирање крај-до-крај е голдениот стандард за приватност. Кога е овозможено, твои податоци се криптирани на твоето уредување пред да се испрати на нашите серверски места. Тоа значи нема никој, дури и Omi, може да пристапи твој содржај.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "Важни трговски замени:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4960,17 +4847,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "Твои податоци се криптирани со клуч единствен за тебе на нашите серверски места, хостирани на Google Cloud. Тоа значи твој суров содржај е недостапен за никој, вклучително Omi персонал или Google, директно од базата на податоци.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "Криптирање крај-до-крај",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "Овозможи за максимална безбедност каде само ти можеш пристапи твои податоци. Кликни за да научиш повеќе.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "Независно од нивото, твои податоци се секогаш криптирани на мирување и во транзит.",
     "@dataAlwaysEncrypted": {
@@ -5069,7 +4948,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• Твои податоци помагаат да го подобриме AI модели\n• Само неосетливи податоци се делат\n• Целосно транспарентен процес",
+    "trainingDataBullets": "• Вашите податоци помагаат да се подобрат AI моделите\n• Се споделуваат само нечувствителни податоци",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5178,10 +5057,6 @@
     "youAreOnUnlimitedPlan": "Сте на Неограничениот план.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "Вашиот Omi, ослободен. Одете неограничено за бесконечни можности.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "Вашиот план заврши на {date}.\nПретплатете се сега - ќе бидете наплатени веднаш за нов период на наплатување.",
     "@planEndedOn": {
@@ -5299,10 +5174,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Во Omi, го земаме вашата приватност многу сериозно. Сакаме да бидеме транспарентни за податоците што ги собираме и како ги користиме за да го подобриме нашиот производ за вас. Ево што треба да знаете:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "Што го следиме",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5318,14 +5189,6 @@
     "ourCommitment": "Нашето обврзување",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "Посветени сме да ги користиме соберените податоци само за да го направиме Omi подобар производ за вас. Вашата приватност и доверба се од највисокo значење за нас.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Благодариме што сте вреден корисник на Omi. Ако имате прашања или забрзи, слободно нас контактирајте на team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "Лозинка",
     "@password": {
@@ -5388,10 +5251,6 @@
     "exportStartedMayTakeFewSeconds": "Извозот почна. Ова може да потрае неколку секунди…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "Ова ќе го избрише целиот извлечен графички податок на знаење (чворови и врски). Вашите оригинални мемории ќе остану безбедни. Графикот ќе се преправи со текот на времето или по следната барање.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "Конфигурирајте го вашиот дневен преглед на задачи",
     "@configureDailySummaryDigest": {
@@ -5581,10 +5440,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "Откако лицето ќе се создаде, можете да одите на разговор транскрипт и да им доделите одговарачки сегменти, на тој начин Omi ќе биде способен да го препознае и нивниот говор!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "Отвори за да избришеш",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5663,7 +5518,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "Складирајте ги вашите снимки во реално време во приватно облачно складирање додека говорите. Аудиото се прифаќа и зачувува безбедно во реално време.",
+    "storeAudioCloudDescription": "Ги прикачува вашите снимки додека зборувате за да можете подоцна да ги пуштите.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6776,10 +6631,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "Создавај и дели ја твојата прилагодена апликација",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "Претражи 1500+ апликации",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6816,23 +6667,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "Само критични потсетници",
+    "frequencyDescMinimal": "Само итни работи, околу 1–3 дневно",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "Само важни ажурирања",
+    "frequencyDescLow": "Само важни работи, околу 3–5 дневно",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "Редовни корисни потисни подстреки",
+    "frequencyDescBalanced": "Корисни предлози, околу 5–8 дневно",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "Чести проверки",
+    "frequencyDescHigh": "Повеќе предлози, околу 6–9 дневно",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "Остани константно ангажиран",
+    "frequencyDescMaximum": "Секоја корисна врска, до 9 дневно",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8080,7 +7931,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "Приватно и безбедно на твојот уред",
+    "privateAndSecureOnDevice": "Зачувано на овој телефон",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8740,14 +8591,6 @@
     "onboardingTellUsAboutYourself": "Кажи ни за себеси",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "Одберете вашата преференција",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Дозволете потребен пристап",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "Сите сте подготвени",
     "@onboardingYoureAllSet": {
@@ -9684,10 +9527,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "Одбери на кој позадински систем да се поврзеш",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "Производство",
     "@production": {
         "description": "Label for production API environment"
@@ -9859,10 +9698,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "Твоите повици останувач приватни и безбедни",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "Надгради на Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9964,7 +9799,7 @@
     "fairUse3Day": "3-дневен намотување",
     "fairUseWeekly": "Неделна намотување",
     "fairUseAboutTitle": "За правично користење",
-    "fairUseAboutBody": "Omi е дизајнирана за лични разговори, состаноци и живи интеракции. Употребата се мери по вистински детектиран говор време, а не по време на поврзување. Доколку употребата значајно надминува нормални обрасци за не-лично содржување, прилагодување може да се примени.",
+    "fairUseAboutBody": "Omi е дизајниран за лични разговори, состаноци и живи интеракции. Употребата се мери според времето на зборување, а не според времето на поврзување. Ако вашата употреба е далеку над нормалната лична употреба, прво ќе добиете предупредување. Континуираната интензивна употреба може да ја забави или ограничи транскрипцијата.",
     "fairUseCaseRefCopied": "{caseRef} копирано",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10069,10 +9904,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "Кога твојот Omi не е поврзан на твојот телефон, тој складира звук локално на неговата вградена меморија. Никогаш не теглиш запис.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Кога Omi се повторно поврзе, записите се автоматски пренесуваат на твојот телефон како привремена облас за ископување пред ископување.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10109,7 +9940,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "Овие дозволи се основни за тоа како функционира Omi. Тие овозможуваат клучни функции како известувања, локациски искуства и снимање звук.",
+    "permissionsPageDescription": "Omi ги користи овие за да се поврзе со вашиот уред, да снима звук, да работи во заднина, да испраќа потсетници и да забележува каде се случиле разговорите.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10120,10 +9951,6 @@
     "permissionsSetupTitle": "Добиј најдобро искуство",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "Дозволи неколку дозволи за да Omi може да ја направи своја магија.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "Можеш да ги смениш овие било кога во Поставки > Дозволи",
     "@permissionsChangeAnytime": {
@@ -10456,7 +10283,6 @@
     "currentPlan": "Тековен",
     "neoSubtitle": "{count} прашања месечно",
     "operatorSubtitle": "{count} прашања месечно",
-    "architectSubtitle": "Напреден AI — илјадници разговори + агентна автоматизација",
     "chatUsageCost": "Разговор: ${used} / ${limit} искористено овој месец",
     "chatUsageCostNoLimit": "Разговор: ${used} искористено овој месец",
     "chatUsageMessages": "Разговор: {used} / {limit} пораки овој месец",
@@ -10483,7 +10309,7 @@
     "record": "Сними",
     "stop": "Стоп",
     "recordWithPhoneMic": "Снимај со микрофон на телефонот",
-    "recordWithPhoneMicSubtitle": "Снимајте звук околу вас",
+    "recordWithPhoneMicSubtitle": "Снимајте и транскрибирајте со микрофонот на овој телефон",
     "phoneCall": "Телефонски повик",
     "phoneCallSubtitle": "Снимајте повик со транскрипција во живо",
     "bulkExportInProgress": "Извезување…",
@@ -10554,7 +10380,6 @@
     "invalidPromotionCode": "Невалиден промо код.",
     "backgroundModeTitle": "Режим во заднина",
     "backgroundModeDescription": "Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.",
-    "backgroundModeNote": "Засега работи само со уреди Omi и постојано се подобрува.",
     "regenerateRecap": "Регенерирај резиме",
     "recapRegeneratedSnackbar": "Резимето е регенерирано",
     "recapRegenerateFailed": "Не успеа регенерирањето на резимето. Обидете се повторно подоцна.",
@@ -10610,7 +10435,7 @@
     "deviceOnboardingContinue": "Продолжи",
     "deviceOnboardingFinish": "Заврши",
     "deviceOnboardingIntroTitle": "Запознајте се со вашиот Omi",
-    "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
+    "deviceOnboardingIntroSubtitle": "Пробајте живо транскрибирање, поставување прашање и кратенката со двојно допрување.",
     "deviceOnboardingIntroDuration": "Околу 1 минута",
     "jumpToLatestMessage": "Оди до последната порака",
     "latest": "Најново",
@@ -10730,7 +10555,6 @@
     "pinAsBaseline": "Закачи како основа",
     "unpinAsBaseline": "Откачи од основа",
     "baselineMemory": "Основна меморија",
-    "alwaysInContext": "Секогаш во контекст",
     "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
     "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
@@ -10785,7 +10609,7 @@
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
     "home": "Почетна",
-    "failedToUpdateBaselineStatus": "Неуспешно ажурирање на основниот статус.",
+    "failedToUpdateBaselineStatus": "Не можеше да се ажурира овој спомен. Обидете се повторно.",
     "memoryAllowUse": "Дозволи употреба",
     "memoryDontUse": "Не користи",
     "unstarConversation": "Отстрани ѕвезда од разговорот",
@@ -10841,8 +10665,8 @@
     "memoryReviewRight": "Точно",
     "memoryReviewWrong": "Погрешно",
     "memoryReviewFix": "Поправи",
-    "memoryReviewConfirmed": "Потврдено. Ќе го земам предвид.",
-    "memoryReviewDropped": "Отфрлено. Ќе избегнувам вакви факти.",
+    "memoryReviewConfirmed": "Потврдено.",
+    "memoryReviewDropped": "Отстрането од вашите спомени.",
     "memoryReviewUpdated": "Ажурирано.",
     "memoryReviewSaveFailed": "Не може да се зачува, обидете се повторно",
     "indentTask": "Вовлечи",
@@ -10917,7 +10741,7 @@
     "homeScreen": "Почетен екран",
     "phoneCalls": "Телефонски повици",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "Филтрирање на гласот на серверот за помали трошоци за препознавање говор",
+    "vadGateDescription": "Ги прескокнува тивките аудиа пред транскрипцијата за да ги намали трошоците.",
     "flashCustomFirmware": "Инсталирај прилагоден фирмвер",
     "flashCustomFirmwareDescription": "Инсталирајте прилагодени верзии на фирмвер",
     "selectFirmwareZip": "Изберете ZIP-датотека со фирмвер",
@@ -10936,7 +10760,7 @@
     "permissionBlockedHint": "Исклучено во Поставки. Дозволете го таму за да го користите.",
     "useDifferentAccount": "Користи друга сметка",
     "onboardingStepOf": "Чекор {current} од {total}",
-    "onboardingCompleteMessage": "Оставете го Omi да работи во заднина 2 дена и ќе почне да ви дава корисни повратни информации.",
+    "onboardingCompleteMessage": "Оставете го Omi да работи неколку дена. Вашите разговори, спомени и задачи ќе почнат да се пополнуваат.",
     "cantFindDeviceHint": "Не го наоѓате уредот? Проверете дали е вклучен и блиску до телефонот, па пребарајте повторно.",
     "scanAgain": "Пребарај повторно",
     "howToPair": "Како да се спари",
@@ -11057,8 +10881,7 @@
     "notificationsAndDisplay": "Известувања и приказ",
     "helpAndAbout": "Помош и за апликацијата",
     "speakerTagPromptTitle": "Помогнете му на Omi да препознава гласови",
-    "speakerTagPromptSubtitle": "Брза проверка на гласовите од последните два дена",
-    "speakerTagPromptIsThisYou": "Дали ова сте вие?",
+    "speakerTagPromptIsThisYou": "Дали ова бевте вие?",
     "speakerTagPromptIsThisPerson": "Дали ова е {name}?",
     "speakerTagPromptWhoIsThis": "Кој е ова?",
     "speakerTagPromptThatsMe": "Тоа сум јас",
@@ -11233,24 +11056,24 @@
     "confidenceMeterLabel": "Сигурност: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{Означивте еднаш} other{Означивте {count} пати}}",
     "confidenceReasonPicked": "{count, plural, =1{Избрано во 1 предлог} other{Избрано во {count} предлози}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{Потврдивте 1 совпаѓање} other{Потврдивте {count} совпаѓања}}",
-    "confidenceReasonAutoOnly": "Само автоматски совпаднато, никогаш потврдено",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Потврдивте 1 автоматска ознака} other{Потврдивте {count} автоматски ознаки}}",
+    "confidenceReasonAutoOnly": "Автоматски означено, сè уште не е потврдено",
     "confidenceReasonNeverConfirmed": "Никогаш потврдено",
     "confidenceReasonCorrected": "Го поправивте неговото совпаѓање",
-    "confidenceReasonVoiceReady": "гласот е подготвен",
-    "confidenceReasonNeedsVoice": "треба глас",
+    "confidenceReasonVoiceReady": "гласот е зачуван",
+    "confidenceReasonNeedsVoice": "сè уште нема примерок од глас",
     "confidenceReasonNotHeard": "сè уште не е слушнат",
     "confidenceSheetTitle": "Сигурност",
     "confidenceSummaryConfirmed": "Omi го препознава гласот на {name}, а вие го потврдивте.",
     "confidenceSummaryLikely": "Omi обично го препознава гласот на {name}, но вие сте го потврдиле само неколку пати.",
-    "confidenceSummaryUnverified": "Ништо што сте направиле сè уште не го поддржува {name}.",
+    "confidenceSummaryUnverified": "Сè уште не сте ја означиле или потврдиле {name}, па Omi не е сигурен дека го познава нивниот глас.",
     "confidenceEvidenceHeader": "Докази",
     "evidenceManualLabels": "{count, plural, =1{Означено од вас во 1 разговор} other{Означено од вас во {count} разговори}}",
     "evidenceCardConfirms": "{count, plural, =1{Да на 1 предлог} other{Да на {count} предлози}}",
     "evidenceCardPicks": "{count, plural, =1{Избрано во 1 предлог} other{Избрано во {count} предлози}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{Потврдено 1 автоматско совпаѓање} other{Потврдени {count} автоматски совпаѓања}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 совпаѓање преместено кај некој друг} other{{count} совпаѓања преместени кај некој друг}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 автоматско совпаѓање што никој не го потврди} other{{count} автоматски совпаѓања што никој не ги потврди}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Потврдивте 1 автоматска ознака} other{Потврдивте {count} автоматски ознаки}}",
+    "evidenceAutoCorrected": "{count, plural, =1{Променивте 1 автоматска ознака на друга личност} other{Променивте {count} автоматски ознаки на друга личност}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 автоматска ознака сè уште не е потврдена} other{{count} автоматски ознаки сè уште не се потврдени}}",
     "evidenceVoiceReady": "Примерокот од гласот е подготвен",
     "evidenceNoVoice": "Сè уште нема примерок од глас",
     "evidenceNotHeard": "Сè уште не е слушнат во разговор",
@@ -11263,12 +11086,10 @@
     "effectNeeded": "Потребно за да биде потврдено",
     "confidenceToReachConfirmed": "За да стане потврдено",
     "confidenceNextVoice": "На Omi му треба и примерок од гласот на {name}. Означете го со вклучено „Запомни гласови“.",
-    "confidenceIsConfirmed": "{name} е потврден. Omi продолжува да учи од секоја ознака.",
-    "confidenceFootnote": "Само вашите одговори значително ја менуваат сигурноста. Автоматските совпаѓања сами едвај помагаат.",
+    "confidenceIsConfirmed": "{name} е Потврдено. Не треба да правите ништо друго.",
+    "confidenceFootnote": "Ознаките и потврдите од вас се најважни. Автоматските ознаки имаат мала тежина додека не ги потврдите.",
     "personWhyConfidence": "Зошто?",
     "pinPersonTitle": "Закачи {name}",
-    "pinPersonSubtitle": "Задржете го {name} и очекувајте го во вашите разговори",
-    "pinPersonHonestLine": "Omi прашува пред да поврзе слични гласови.",
     "pinAction": "Закачи",
     "unpinAction": "Откачи",
     "personPinnedToast": "{name} е закачен",
@@ -11306,9 +11127,8 @@
     "voiceMatchPossible": "Можно совпаѓање",
     "voiceMatchWeak": "Слабо совпаѓање",
     "voiceMatchMeterLabel": "Совпаѓање на глас: {level}",
-    "speakerTagPromptHintIdentify": "Секој одговор го учи Omi на глас и ја зголемува сигурноста за тоа лице.",
-    "speakerTagPromptHintConfirm": "Да ја зголемува сигурноста за {name}.",
-    "speakerTagPromptHintOwner": "Го одржува вашиот гласовен профил прецизен, за Omi никогаш да не ве именува како некој друг.",
+    "speakerTagPromptHintIdentify": "Вашиот одговор му помага на Omi да го препознае овој глас следниот пат.",
+    "speakerTagPromptHintOwner": "Вашиот одговор го означува само пуштениот извадок.",
     "speakerTagPromptSavedAs": "Зачувано како {name}",
     "speakerTagPromptSavedAsYou": "Зачувано како вие",
     "speakerTagPromptIgnoredNote": "Omi повеќе нема да праша за овој глас",
@@ -11384,7 +11204,7 @@
     "conversationProcessingFailedMessage": "Овој разговор не можеше да се обработи.",
     "waitForReprocessing": "Почекајте да заврши повторната обработка.",
     "unnamedSpeakerLabel": "Говорувач",
-    "unresolvedSpeakersNotice": "Говорниците не се одвоени низ снимките.",
+    "unresolvedSpeakersNotice": "Ознаките на говорниците можеби не се совпаѓаат низ снимките во овој разговор.",
     "unresolvedSpeakersTitle": "За ознаките на говорници",
     "unresolvedSpeakersMessage": "Omi не можеше да ги разликува другите гласови низ снимките. Допрете ознака на говорник за да именувате кој зборува.",
     "nameSpeakerTitle": "Именувај говорник",
@@ -11507,5 +11327,109 @@
     "dreamReportRunsLeft": "{count, plural, =1{Денес остава 1 рачно стартување} other{Денес остануваат {count} рачни стартувања}}",
     "dreamReportFound": "{fixes, plural, =1{1 поправка} other{{fixes} поправки}} · {asks, plural, =1{1 предлог} other{{asks} предлози}}",
     "dreamReportDropped": "{count, plural, =1{1 постара промена е прескокната} other{{count} постари промени се прескокнати}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 извештај е задржан поради приватност} other{{count} извештаи се задржани поради приватност}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 извештај е задржан поради приватност} other{{count} извештаи се задржани поради приватност}}",
+    "speakerTagPromptExcerptSaved": "Одговорот е зачуван за овој извадок.",
+    "pinPersonDescription": "Закачените луѓе остануваат на врвот на вашата листа Луѓе и не се отстрануваат со Чистење.",
+    "chatAppsProblemFailed": "Нешто тргна наопаку. Обидете се повторно.",
+    "chatAppsIsConnected": "{app} е поврзан",
+    "chatAppsRefreshFailed": "Не може да се освежи. Го прикажуваме последното што го видовме.",
+    "chatAppsReadOnlyBanner": "Само за читање. Одговорете му на Omi во {app}.",
+    "chatAppsWaitlistConfirmed": "Благодариме. WhatsApp ќе се појави тука кога ќе биде подготвен.",
+    "chatAppsUseTelegramForNow": "Користи Telegram засега",
+    "chatAppsCouldNotOpen": "Не може да се отвори {app}. Проверете дали е инсталирана и обидете се повторно.",
+    "chatAppsTryPromise": "Што му ветив на Сем вчера?",
+    "chatAppsDoesSave": "Зачувува спомени и управува со вашите задачи",
+    "chatAppsOnTheList": "На листата",
+    "chatAppsNoChatsTitle": "Сè уште нема разговори",
+    "chatAppsInChannel": "Во {app}",
+    "chatAppsConnectTelegramMessage": "Omi ќе го отвори Telegram со приватна врска што е само за вас.",
+    "chatAppsOpenMessages": "Отвори Пораки",
+    "chatAppsDisconnectTitle": "Да се исклучи {app}?",
+    "chatAppsPrivateMemoriesSubtitle": "Здравјето, парите и сè што сте означиле како приватно остануваат надвор од апликациите за разговор.",
+    "chatAppsConnectIMessageMessage": "Испратете му на Omi една порака од бројот што сакате да го користите. Кодот во неа го поврзува тој број со вашата сметка.",
+    "chatAppsWhatsAppMessage": "Работиме на довесување на Omi на WhatsApp. Ќе се појави тука кога ќе биде подготвено.",
+    "chatAppsNoChatsMessage": "Разговорите со Omi во {app} се појавуваат тука.",
+    "chatAppsViewChats": "Прикажи разговори",
+    "chatAppsDisconnectMessage": "Omi ќе престане да одговара во {app} и ќе ја избрише историјата на разговори што ја чува за него. Пораките што веќе се во {app} остануваат таму.",
+    "chatAppsReadOnlyFooter": "Овие разговори се само за читање тука. Одговарајте во {app}.",
+    "chatAppsAddToContacts": "Додај го Omi во Контакти",
+    "chatAppsProPerkContext": "Omi го помни контекстот во сите апликации",
+    "chatAppsWhatsAppMeantime": "Telegram и iMessage работат веќе денес, со истите спомени и задачи.",
+    "chatAppsComingLater": "Наскоро",
+    "chatAppsProblemRateLimited": "Премногу обиди. Почекајте една минута и обидете се повторно.",
+    "chatAppsMessage": "Пораката",
+    "chatAppsOpenApp": "Отвори {app}",
+    "chatAppsTelegramSubtitle": "Поставете со две допири",
+    "chatAppsLoadFailedTitle": "Не може да се вчитаат апликациите за разговор",
+    "chatAppsInsights": "Увиди од Omi",
+    "chatAppsShowInAppOff": "Исклучено: ги гледате само во {app}.",
+    "chatAppsProPerkText": "Пишувајте му на Omi од Telegram и iMessage",
+    "chatAppsVoiceNotesSubtitle": "Испратете гласовна белешка и Omi ќе одговори.",
+    "chatAppsPartOfPro": "Апликациите за разговор се дел од Pro",
+    "chatAppsMessagesApp": "Пораки",
+    "chatAppsTelegramOtherDevice": "Telegram на друг уред?",
+    "chatAppsHeroMessage": "Прашувајте за вашиот ден, зачувувајте спомени и управувајте со задачи од Telegram или iMessage. Вашите разговори остануваат во апликацијата што ја користите, а Omi помни за што сте зборувале насекаде.",
+    "chatAppsTryRemind": "Потсети ме да ѝ се јавам на мама во недела",
+    "chatAppsChannelsTitle": "Апликации за разговор",
+    "chatAppsDoesAnswer": "Одговара на прашања за вашите разговори и спомени",
+    "chatAppsChannelChats": "Разговори во {app}",
+    "chatAppsIncludedWithPro": "ВКЛУЧЕНО ВО OMI PRO",
+    "chatAppsLink": "Врската",
+    "chatAppsNeverMessagesOthers": "Никогаш не им пишува на други луѓе наместо вас",
+    "chatAppsNotConnectedTitle": "Не е поврзано",
+    "chatAppsTelegramPrivacyNote": "Вашите разговори со Omi ги чува и Telegram. Omi одговара само вам, никогаш на други луѓе, а можете да се исклучите во секое време.",
+    "chatAppsProblemOffline": "Не сте на интернет. Проверете ја врската и обидете се повторно.",
+    "chatAppsIMessageSubtitle": "Пишувајте му на Omi од вашиот телефонски број",
+    "chatAppsPrivateMemories": "Чувај ги приватните спомени во апликацијата",
+    "chatAppsConnectTelegramTitle": "Поврзи Telegram",
+    "chatAppsInsightsSubtitle": "Дозволете му на Omi да ви испрати резиме или увид тука.",
+    "chatAppsTelegramWaiting": "Чекаме да допрете Започни во Telegram…",
+    "chatAppsEntrySubtitle": "Разговарајте со Omi во апликациите што веќе ги користите секој ден.",
+    "chatAppsConnectedAs": "Поврзано како {handle}",
+    "chatAppsProPerkSave": "Зачувувајте спомени и управувајте со задачи директно од разговорот",
+    "chatAppsConnectIMessageTitle": "Испратете порака до Omi за да се поврзете",
+    "chatAppsWaitingMessage": "Испратете ја пораката во Пораки. Овој екран се ажурира штом Omi ќе ја добие.",
+    "chatAppsShowInApp": "Прикажи ги овие разговори во апликацијата Omi",
+    "chatAppsCodeExpiredMessage": "Добијте нов код и испратете го од Пораки.",
+    "chatAppsNoMessages": "Нема пораки",
+    "chatAppsHeroTitle": "Разговарајте со Omi таму каде што веќе разговарате",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage и повеќе",
+    "chatAppsCodeExpiresIn": "Кодот истекува за {time}",
+    "chatAppsNotConnectedMessage": "Оваа апликација за разговор е исклучена.",
+    "chatAppsRepliesOnlyNote": "Omi одговара само вам. Никогаш не пишува први.",
+    "chatAppsDisconnectFooter": "Исклучувањето ја брише историјата што Omi ја чува за {app}.",
+    "chatAppsReplyThereAnytime": "Пишувајте му на Omi во {app} во секое време.",
+    "chatAppsTryAsking": "Пробајте да прашате",
+    "chatAppsTelegramStepReturn": "Вратете се тука. Ќе потврдиме дека успеало.",
+    "chatAppsDoesFiles": "Испраќа и прима датотеки, фотографии и гласовни белешки",
+    "chatAppsTryWeek": "Сумирај ми ја неделата во три реда",
+    "chatAppsChannelFooter": "Вашите разговори во {app} остануваат во {app}. Omi сепак знае за што сте зборувале во апликацијата и во другите ваши апликации за разговор.",
+    "chatAppsWhatsAppTitle": "WhatsApp доаѓа наскоро",
+    "chatAppsCodeExpiredTitle": "Овој код истече",
+    "chatAppsProblemUnavailable": "Апликациите за разговор сè уште не се достапни за вашата сметка.",
+    "chatAppsWhatOmiDoes": "Што прави Omi во апликациите за разговор",
+    "chatAppsVoiceNotes": "Гласовни белешки",
+    "chatAppsNotAvailableYet": "Сè уште не е достапно",
+    "chatAppsOpenMessagesAgain": "Отвори Пораки повторно",
+    "chatAppsConnectedOn": "Поврзано на {date}",
+    "chatAppsWaitingTitle": "Чекаме на вашата порака",
+    "chatAppsEntryTitle": "Разговарајте со Omi",
+    "chatAppsTelegramStepOpen": "Допрете Отвори Telegram подолу",
+    "chatAppsShowInAppOn": "Вклучено: се појавуваат во апликацијата Omi како разговори само за читање.",
+    "chatAppsDisconnectChannel": "Исклучи {app}",
+    "chatAppsTelegramStepStart": "Допрете Започни во разговорот со Omi",
+    "chatAppsLocked": "Бара Omi Pro",
+    "chatAppsIMessageBody": "Здраво Omi, код за поврзување {code}",
+    "chatAppsChatIn": "Разговор во {app}",
+    "chatAppsContactsApp": "Контакти",
+    "chatAppsCodeNote": "Кодот важи еднаш и истекува за 10 минути.",
+    "chatAppsMoreComing": "Доаѓаат уште апликации.",
+    "chatAppsInTheMeantime": "Во меѓувреме",
+    "chatAppsGetNewCode": "Добиј нов код",
+    "chatAppsNotifyMe": "Извести ме",
+    "chatAppsPrefilled": "Однапред пополнето",
+    "chatAppsTextThisTo": "Не се отвори? Испратете го ова на {address}",
+    "chatAppsLinkExpired": "Таа врска истече. Допрете Отвори Telegram за нова.",
+    "chatAppsIMessageTo": "До: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO"
 }

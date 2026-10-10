@@ -5,7 +5,9 @@
   "canonical_prevention": "Maintain one explicit, mutually exclusive runtime-binding contract. Candidate preflight validates declared and preserved Secret Manager bindings, while deployment automatically merges reviewed literal values and removes only enumerated retired bindings.",
   "canonical_prevention_artifact": [
     ".github/scripts/check-desktop-backend-release-policy.py",
-    ".github/scripts/test_check_desktop_backend_release_policy.py"
+    ".github/scripts/test_check_desktop_backend_release_policy.py",
+    "backend/scripts/runtime_env_validation/manifest.py",
+    "backend/tests/unit/test_runtime_env_redis_port.py"
   ],
   "evidence_prs": [9997],
   "scope_hints": [

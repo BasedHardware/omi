@@ -239,7 +239,7 @@ struct TaskChatPanel: View {
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(Ink.secondary)
 
-      Text("Continue the same work as context changes, without starting over.")
+      Text("Keep chatting about this task. Omi remembers what you've already discussed here.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)

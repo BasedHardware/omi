@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.464",
+      "date": "2026-10-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.463",
+      "date": "2026-10-10",
+      "changes": [
+        "Settings, memory, task, and onboarding descriptions now say plainly what each feature does"
+      ]
+    },
+    {
+      "version": "0.12.462",
+      "date": "2026-10-10",
+      "changes": [
+        "Chat can look up how Omi works on this Mac, including Only Meetings and permissions, from a guide shipped with the app"
+      ]
+    },
+    {
+      "version": "0.12.461",
+      "date": "2026-10-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.460",
+      "date": "2026-10-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.459",
       "date": "2026-10-09",
       "changes": [

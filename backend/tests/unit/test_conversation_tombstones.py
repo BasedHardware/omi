@@ -95,6 +95,34 @@ def test_tombstone_contains_only_identity_and_point_lookup_is_owner_scoped(store
     assert not tombstones.is_deleted('other-user', 'c')
 
 
+def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_primary_audio(store):
+    calls = []
+
+    def purge(uid, cid):
+        calls.append(('prompt', tombstones.is_deleted(uid, cid)))
+
+    def hard_delete(uid, cid):
+        calls.append(('parent', tombstones.is_deleted(uid, cid)))
+        store.rows.pop(f'users/{uid}/conversations/{cid}')
+
+    audio = MagicMock()
+    namespace = {
+        'logger': MagicMock(),
+        'conversation_tombstones': tombstones,
+        'delete_owner_prompt_embedding_cache': purge,
+        'delete_conversation_screen_frames': MagicMock(),
+        'delete_conversation_and_frame_evidence': hard_delete,
+        'delete_conversation_audio_files': audio,
+        'delete_vector': MagicMock(),
+        'delete_transcript_chunk_vectors': MagicMock(),
+        'record_product_event': MagicMock(),
+    }
+    delete = function('routers/conversations.py', 'delete_conversation', namespace)
+    assert delete('c', MagicMock(), False, None, 'u') == {'status': 'Ok'}
+    assert calls == [('prompt', True), ('parent', True)]
+    audio.assert_not_called()
+
+
 @pytest.mark.parametrize('failure', ['retraction', 'cleanup', None])
 def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure):
     class Conflict(Exception):
@@ -126,6 +154,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'delete_conversation_and_frame_evidence': hard_delete,
         'action_items_db': MagicMock(get_action_items_by_conversation=MagicMock(return_value=[])),
         'delete_conversation_audio_files': MagicMock(),
+        'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),

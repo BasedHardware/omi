@@ -317,6 +317,7 @@ for _reason in (
     'no_pcm',
     'stale_generation',
     'already_mapped',
+    'authority_unavailable',
 ):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
@@ -353,8 +354,25 @@ for _outcome in (
 ):
     OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=_outcome)
 
+OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL = Counter(
+    'omi_conversation_summary_vector_upserts_total',
+    'Conversation summary vector writes by bounded outcome',
+    ['outcome'],
+)
+OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL = Counter(
+    'omi_chat_search_tool_outcomes_total',
+    'Chat conversation retrieval paths by bounded outcome',
+    ['path', 'outcome'],
+)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
+for _outcome in ('success', 'skipped_discarded', 'skipped_no_structured', 'skipped_stale', 'error'):
+    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome=_outcome)
+for _path in ('keyword', 'vector', 'transcript', 'firestore'):
+    for _outcome in ('ok', 'degraded', 'empty'):
+        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path=_path, outcome=_outcome)
+
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
@@ -1097,6 +1115,11 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
 # Wall seconds of live /v4/listen sessions by who could have watched them in real
 # time (routers/listen/realtime_demand.py). The input for routing background
 # capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS = Gauge(
+    'omi_listen_live_no_audio_sessions',
+    'Open backend-STT sockets awaiting first decoded frame for 300s, or receiving no raw byte frames for 300s afterward',
+)
+
 OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
     'omi_listen_realtime_demand_seconds_total',
     'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',

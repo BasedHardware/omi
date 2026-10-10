@@ -15,6 +15,17 @@ DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.js
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
 
 SCHEMA_GROUPS = {
+    'messaging': {
+        'output': DEFAULT_OUTPUT_DIR / 'messaging_wire.g.dart',
+        'schemas': (
+            'ChannelLinkRequest',
+            'ChannelLinkProof',
+            'ChannelLink',
+            'ChannelLinksResponse',
+            'ChannelVisibilityRequest',
+            'ChannelLinkReceipt',
+        ),
+    },
     'dream': {
         'spec': ROOT_DIR / 'backend' / 'docs' / 'api' / 'dream-openapi.json',
         'output': DEFAULT_OUTPUT_DIR / 'dream_wire.g.dart',
@@ -306,6 +317,7 @@ SCHEMA_GROUPS = {
             'SpeakerTagPromptsShownResponse',
             'SpeakerTagPromptAnswerRequest',
             'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptSegmentIdentity',
             'SpeakerTagPromptClip',
             'IgnoredVoice',
             'IgnoredVoicesResponse',

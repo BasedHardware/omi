@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "உங்கள் தனிப்பயன பயன்பாடு உருவாக்கி பகிர்ந்து கொள்ளுங்கள்",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "பயன்பாடுகளைத் தேடுங்கள்",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "சமூகத்தில் சேரவும்!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ உறுப்பினர்கள் மற்றும் எண்ணுதல்.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "கணக்கை நீக்கவும்",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "Omi இல், நாங்கள் உங்கள் தனியுரிமையைக் காப்பாற்ற உறுதிபட்டுள்ளோம். இந்தப் பக்கம் உங்கள் தரவை எவ்வாறு சேமிக்கப்பட்டு பயன்படுத்தப்படுகிறது என்பதை கட்டுப்படுத்த அनुमति கொடுக்கிறது.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "மேலும் அறியவும்…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "தரவு பாதுகாப்பு நிலை",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "உங்கள் தரவு வலுவான என்ற்িப்ட்ஸனுடன் இயல்பாக பாதுகாக்கப்படுகிறது. உங்கள் அமைப்புகளைப் பரிசோதிக்கவும் மற்றும் கீழே உள்ள எதிர்கால தனியுரிமை விருப்பங்களைப் பரிசோதிக்கவும்.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "பயன்பாடு அணுகல்",
     "@appAccess": {
@@ -849,25 +833,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "STT வழங்குநரைக் கட்டமைக்கவும்",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "உரையாடல் நேர வெளியேற்றம்",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "உரையாடல்கள் தன்னாக முடிவுக்கு போகும் போது அமைக்கவும்",
+    "conversationTimeoutConfig": "உரையாடலை முடிப்பதற்கு முன் Omi எவ்வளவு நேரம் மௌனத்தில் காத்திருக்கிறது",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "தரவு இறக்குமதி",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "மற்ற ஆதாரங்களிலிருந்து தரவை இறக்குமதி",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "பிழைத்திருத்தம் & நோயறிதல்",
     "@debugDiagnostics": {
@@ -933,10 +909,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "உங்கள் உரையாடல்களில் இருந்து புரிந்துகொள்ளப்பட்ட சொற்கள்.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "வழங்குதல்",
     "@providing": {
         "description": "Providing stat title"
@@ -948,10 +920,6 @@
     "remembering": "நினைவு",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "உங்களுக்கு நினைவுபடுத்தப்பட்ட உண்மைகள் மற்றும் விவரங்கள்.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "வரம்பற்ற திட்டம்",
     "@unlimitedPlan": {
@@ -1069,7 +1037,6 @@
     },
     "debugLogs": "பிழைத்திருத்தம் பதிவுகள்",
     "debugLogsAutoDelete": "3 நாட்களுக்குப் பிறகு தன்னாக நீக்கப்படுகிறது.",
-    "debugLogsDesc": "சிக்கல்களைக் கண்டறிய உதவுங்கள்",
     "noLogFilesFound": "எந்த பதிவு கோப்புகளும் கண்டுபிடிக்கப்படவில்லை.",
     "omiDebugLog": "Omi பிழைத்திருத்தம் பதிவு",
     "logShared": "பதிவு பகிர்ந்து",
@@ -1082,7 +1049,6 @@
     "exportedConversations": "Omi இலிருந்து ஏற்றுமதி செய்யப்பட்ட உரையாடல்கள்",
     "exportShared": "ஏற்றுமதி பகிர்ந்து",
     "deleteKnowledgeGraphTitle": "அறிவு வரைபடத்தை நீக்கவா?",
-    "deleteKnowledgeGraphMessage": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவையும் நீக்கும் (முனைப்புகள் மற்றும் இணைப்புகள்). உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும். வரைபடம் கால மற்றும் அல்லது அடுத்த கோரிக்கை மீது மீண்டும் உருவாக்கப்படும்.",
     "knowledgeGraphDeleted": "அறிவு வரைபடம் நீக்கப்பட்டது",
     "deleteGraphFailed": "வரைபடம் நீக்க முடியவில்லை: {error}",
     "@deleteGraphFailed": {
@@ -1094,7 +1060,6 @@
         }
     },
     "deleteKnowledgeGraph": "அறிவு வரைபடம் நீக்கவும்",
-    "deleteKnowledgeGraphDesc": "அனைத்து முனைप்புகள் மற்றும் இணைப்புகள் அழிக்கவும்",
     "mcp": "MCP",
     "mcpServer": "MCP சேவையகம்",
     "mcpServerDesc": "AI உதவிகளை உங்கள் தரவுடன் இணைக்கவும்",
@@ -1247,7 +1212,6 @@
     "trainFamilyProfiles": "நண்பர்கள் மற்றும் குடும்ப சுயவிவரங்களைப் பயிற்சி",
     "trainFamilyProfilesDesc": "உங்கள் நண்பர்கள் மற்றும் குடும்ப உறுப்பினர்களை அங்கீகரிக்கவும் சுயவிவரங்களை உருவாக்க உங்கள் பதிவுகள் நாங்கள் உதவுகிறது.",
     "enhanceTranscriptAccuracy": "வேண்டுகோள் நির்ভুलத்தை மேம்படுத்தவும்",
-    "enhanceTranscriptAccuracyDesc": "எங்கள் மாதிரி উন்নত, நாங்கள் உங்கள் பதிவுகளுக்கு சிறந்த வேண்டுகோள் முடிவுகள் வழங்க முடியும்.",
     "legalNotice": "சட்ட மாற்றம்: குரல் தரவு பதிவு மற்றும் சேமிப்பு சட்டம் உங்கள் இடத்தைப் பொறுத்து மாறுவது சட்ட முறை மாறுவது சாத்தியமுள்ளது. உங்கள் உள்ளூர் சட்டங்கள் மற்றும் விதிமுறைகளுடன் இணங்கக் உறுதி செய்வது உங்கள் பொறுப்பு.",
     "alreadyAuthorized": "ஏற்கனவே அங்கீகரிக்கப்பட்ட",
     "authorize": "அங்கீகாரம் கொடுக்கவும்",
@@ -1315,7 +1279,7 @@
         }
     },
     "tellUsPrimaryLanguage": "உங்கள் முதன்மை மொழி என்ன என்று சொல்லுங்கள்",
-    "languageForTranscription": "தட்டச்சுக்கு உங்கள் மொழியைத் தேர்ந்தெடுக்கவும் மேலும் ஒரு தனிப்பட்ட அভিজ்ஞதைக்கு.",
+    "languageForTranscription": "இந்த மொழியை எழுத்தாக்கம், சுருக்கங்கள் மற்றும் நினைவுகளுக்கு Omi பயன்படுத்துகிறது.",
     "singleLanguageModeInfo": "ஒற்றை மொழி பயன்முறை இயக்கப்பட்டுள்ளது. மொழிபெயர்ப்பு அதிக নির்ভুலமாக்க முடக்கப்பட்டுள்ளது.",
     "searchLanguageHint": "பெயர் அல்லது குறியீட்டின் மூலம் மொழியைத் தேடவும்",
     "noLanguagesFound": "மொழிகள் கிடைக்கவில்லை",
@@ -1462,7 +1426,7 @@
             }
         }
     },
-    "integrationComingSoon": "{appName} உடனான ஒருங்கிணைப்பு விரைவில் வரும்! நாங்கள் உங்களுக்கு மேலும் பணி மேலாண்மை விருப்பங்களைக் கொண்டு வர கடினமாக உழைக்கிறோம்.",
+    "integrationComingSoon": "{appName} இன்னும் ஆதரிக்கப்படவில்லை.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1476,7 +1440,7 @@
     "importConfiguration": "உள்ளமைப்பைக் கொண்டு வாருங்கள்",
     "exportConfiguration": "உள்ளமைப்பை ஏற்றுமதி செய்யவும்",
     "bringYourOwn": "உங்களையே கொண்டு வாருங்கள்",
-    "payYourSttProvider": "Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.",
+    "payYourSttProvider": "Omi-இல் இலவசம். எழுத்தாக்க வழங்குநருக்கு நேரடியாகப் பணம் செலுத்துவீர்கள்.",
     "freeMinutesMonth": "மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ஹோஸ்ட் தேவை",
@@ -1524,7 +1488,7 @@
     "enterLiveSttWebsocket": "உங்கள் நேரலை STT WebSocket முனைப்பை உள்ளிடவும்",
     "apiKey": "API விசை",
     "enterApiKey": "உங்கள் API விசையை உள்ளிடவும்",
-    "storedLocallyNeverShared": "உள்ளூராக சேமிக்கப்பட்ட, ஒருபோதும் பகிரப்படவில்லை",
+    "storedLocallyNeverShared": "இந்த ஃபோனில் சேமிக்கப்பட்டது. உங்கள் எழுத்தாக்க வழங்குநருக்கு மட்டுமே அனுப்பப்படும்.",
     "host": "ஹோஸ்ட்",
     "port": "போர்ட்",
     "advanced": "மேம்பட்ட",
@@ -1535,8 +1499,8 @@
     "resetRequestConfig": "கோரிக்கை உள்ளமைப்பைக் இயல்புநிலைக்கு மீட்டமை",
     "logs": "பதிவுகள்",
     "logsCopied": "பதிவுகள் நகல் செய்யப்பட்டுள்ளன",
-    "noLogsYet": "இன்னும் பதிவுகள் இல்லை. தனிப்பட்ட STT செயல்பாட்டைக் காண பதிவை உருவாக்கத் தொடங்கவும்.",
-    "deviceUsesCodec": "{device} {reason} ஐப் பயன்படுத்துகிறது. Omi பயன்படுத்தப்படும்.",
+    "noLogsYet": "பதிவுகள் இன்னும் இல்லை. எழுத்தாக்க வழங்குநருக்கான கோரிக்கைகளைக் காண ஏதேனும் பதிவு செய்யுங்கள்.",
+    "deviceUsesCodec": "{device} இந்த வழங்குநரால் படிக்க முடியாத வடிவத்தில் பதிவு செய்கிறது ({reason}), எனவே அதற்குப் பதிலாக Omi-யின் எழுத்தாக்கம் பயன்படுத்தப்படும்.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1549,13 +1513,9 @@
         }
     },
     "omiTranscription": "Omi தட்டச்சு",
-    "bestInClassTranscription": "பூஜ்ய அமைப்பின் சிறந்த தட்டச்சு",
     "instantSpeakerLabels": "உடனடி பேச்சாளர் பெயர்கள்",
     "languageTranslation": "100+ மொழி மொழிபெயர்ப்பு",
-    "optimizedForConversation": "உரையாடலுக்கு உகந்த",
     "autoLanguageDetection": "தானியங்கி மொழி கண்டறிதல்",
-    "highAccuracy": "உচ்ச நிர்ভুலத்தன்மை",
-    "privacyFirst": "தனிமை முதல்",
     "saveChanges": "மாற்றங்களைச் சேமிக்கவும்",
     "resetToDefault": "இயல்புநிலைக்கு மீட்டமை",
     "viewTemplate": "வார்ப்பை பாருங்கள்",
@@ -1709,10 +1669,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "தொடர்ந்து செல்லவும், நீங்கள் நன்றாக செய்கிறீர்கள்",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "இந்தக் கேள்வியை தவிர்க்கவும்",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1816,7 +1772,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "ஒவ்வொரு தருணத்தையும் ஆட்டவும். AI-உயர்ந்த\nசுருக்கங்களைப் பெற்றுக் கொள்ளவும். பதிப்புகளை உருவாக்க வேண்டாம்.",
+    "captureEveryMoment": "Omi உங்கள் உரையாடல்களைப் பதிவுசெய்து, உங்களுக்காக\nசுருக்கத்தையும் பணிகளையும் எழுதுகிறது.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1885,7 +1841,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "তীக்ஷ்ணமான தட்டச்சு மற்றும் தனிப்பாக்கப்பட்ட அভிज்ஞதைக்கு உங்கள் மொழியை அமைக்கவும்",
+    "languageBenefits": "இந்த மொழியை எழுத்தாக்கம், சுருக்கங்கள் மற்றும் நினைவுகளுக்கு Omi பயன்படுத்துகிறது.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1902,10 +1858,6 @@
     "selectYourLanguage": "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "உங்கள் ஒவ்வொரு வார்த்தைக்கும் கேட்கும் AI உடன் உங்கள் தனிப்பட்ட வளர்ச்சி பயணம்.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "பணிகள்",
     "@actionItemsTitle": {
@@ -2557,11 +2509,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "STT வழங்குநரைக் கட்டமைக்கவும்",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "உரையாடல்கள் தானாக முடிய சரிசெய்யவும்",
+    "setWhenConversationsAutoEnd": "உரையாடலை முடிப்பதற்கு முன் Omi எவ்வளவு நேரம் மௌனத்தில் காத்திருக்கிறது",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2610,9 +2558,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "அறிவு வரைபடம் வெற்றிகரமாக நீக்கப்பட்டது",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2628,10 +2573,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "அனைத்து முனைகள் மற்றும் இணைப்புகளைத் தெளிவு செய்",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2826,10 +2767,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Omi க்கு வரவேற்கிறோம்! உங்கள் AI தோழி உரையாடல், பணிகள் மற்றும் பலவற்றை உங்களுக்கு உதவ தயாரிக்கப்பட்டுள்ளார்.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Omi ஐ பயன்படுத்த தொடங்கவும்",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2943,14 +2880,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "உரையாடல்கள் தானாக செயலாக்கப்படுகின்றன",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "உடனடியாக நுண்ணறிவு மற்றும் சுருக்கங்களைப் பெறவும்",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "அனைத்தும் காட்டு",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2962,10 +2891,6 @@
     "dailyScore": "தினசரி மதிப்பெண்",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "செயல்படுத்தலில் நீங்கள் நன்கு\nமையாமவில்லை மதிப்பெண்.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "தேடல் முடிவுகள்",
     "@searchResults": {
@@ -3480,10 +3405,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "ஒரு உரையாடல் தொடங்கி மந்திரம் தொடங்கட்டும்",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "உங்கள் இணைய இணைப்பை சரிபார்க்கவும்",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3742,10 +3663,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "அணிந்துகொள்ள AI தோழி",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "நினைவுகள் ஏற்றுகிறது…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3817,10 +3734,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "உங்கள் நினைவுகளை ஒழுங்கு செய்க மற்றும் கட்டுப்பாட்டு",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "மொத்த",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3829,17 +3742,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "அனைத்து நினைவுகளை தனிப்பட்ட பார்வையாக அமைக்கவும்",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "அனைத்து நினைவுகளை பொது செய்க",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "அனைத்து நினைவுகளை பொது பார்வையாக அமைக்கவும்",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Omi இலிருந்து அனைத்து நினைவுகளை நிரந்தரமாக நீக்கவும்",
     "@permanentlyRemoveAllMemories": {
@@ -3924,7 +3829,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "உங்கள் முதன்மை மொழியைத் தேர்ந்தெடுக்கவும்",
     "chooseYourLanguage": "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்",
-    "selectPreferredLanguageForBestExperience": "சிறந்த Omi அভிজ্ঞதைக்கான உங்கள் விரும்பிய மொழியைத் தேர்ந்தெடுக்கவும்",
     "searchLanguages": "மொழிகளைத் தேடவும்",
     "selectALanguage": "ஒரு மொழியைத் தேர்ந்தெடுக்கவும்",
     "tryDifferentSearchTerm": "வேறு தேடல் சொல்லை முயற்சி செய்யவும்",
@@ -3939,7 +3843,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "உங்கள் சாதனத்தில் சிறந்த Omi அভிজ்ஞதைக்கான அம்சங்களை செயல்படுத்தவும்.",
     "microphoneAccess": "மைக்ரோஃபோன் அணுக்கம்",
     "recordAudioConversations": "ஆடியோ உரையாடல்களைப் பதிவு செய்யவும்",
     "microphoneAccessDescription": "உங்கள் உரையாடல்களைப் பதிவு செய்து எழுத்தாக்க வழங்க Omi மைக்ரோஃபோன் அணுக்கம் தேவை.",
@@ -4305,10 +4208,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "உங்கள் தினசரி சுருக்கத்தைப் பெற வேண்டிய நேரம்",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "சந்தா",
     "@subscription": {
         "description": "Subscription section title"
@@ -4334,14 +4233,10 @@
     "checkingNext7Days": "அடுத்த 7 நாட்களைச் சரிபார்க்கிறது",
     "shortcuts": "குறுக்குவழிகள்",
     "shortcutChangeInstruction": "மாற்ற குறுக்குவழியைக் கிளிக் செய்யவும். ரத்து செய்ய Escape ஐ அழுத்தவும்.",
-    "configureSTTProvider": "STT வழங்குநரை கட்டமைக்கவும்",
-    "setConversationEndDescription": "உரையாடல்கள் தானாக முடியும் நேரத்தை அமைக்கவும்",
     "importDataDescription": "மற்ற மூலங்களிலிருந்து தரவை இறக்குமதி செய்யவும்",
     "exportConversationsDescription": "உரையாடல்களை JSON இல் ஏற்றுமதி செய்யவும்",
     "exportingConversations": "உரையாடல்களை ஏற்றுமதி செய்கிறது…",
-    "clearNodesDescription": "அனைத்து முனைகள் மற்றும் இணைப்புகளைத் துடைக்கவும்",
     "deleteKnowledgeGraphQuestion": "அறிவு வரைபடத்தை நீக்கவா?",
-    "deleteKnowledgeGraphWarning": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவையும் நீக்கும். உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும்.",
     "connectOmiWithAI": "Omi ஐ AI உதவியாளர்களுடன் இணைக்கவும்",
     "noAPIKeys": "API விசைகள் இல்லை. தொடங்க ஒன்றை உருவாக்கவும்.",
     "autoCreateWhenDetected": "பெயர் கண்டறியப்பட்டபோது தானாக உருவாக்கவும்",
@@ -4754,10 +4649,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "உங்கள் பயன்பாட்டை உருவாக்கி பகிரவும்",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "பயன்பாடு",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4904,10 +4795,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "End-to-end encryption இரகசியதைக்கான தங்கம் தரமாகும். செயல்படுத்தப்பட்டபோது, உங்கள் தரவு நம் சர்வரிற்கு அனுப்பப்படுவதற்கு முன் உங்கள் சாதனத்தில் குறியாக்கம் செய்யப்படுகிறது. இதன் பொருள் யாரும், Omi கூட, உங்கள் உள்ளடக்கத்தை அணுக முடியாது.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "முக்கியமான வாணிக்க:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4960,17 +4847,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "உங்கள் தரவு Google Cloud இல் புலனாய்வு செய்யப்பட்ட சர்வரில் உங்களுக்கு தனிப்பட்ட விசையுடன் குறியாக்கம் செய்யப்படுகிறது. இதன் பொருள் உங்கள் மூல உள்ளடக்கம் Omi ஊழியர்கள் அல்லது Google உட்பட, தரவுதளத்திலிருந்து நேரடியாக அணுக முடியாது.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "End-to-End குறியாக்கம்",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "அதிகம் பாதுகாப்புக்கு செயல்படுத்தவும். தட்டவும் மேலும் அறிய.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "பகுதி குறித்தில் இல்லாமல், உங்கள் தரவு எப்போதுமே ஓய்வில் மற்றும் போக்குவரத்தில் குறியாக்கம் செய்யப்படுகிறது.",
     "@dataAlwaysEncrypted": {
@@ -5069,7 +4948,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• உங்கள் தரவு AI மாதிரிகளை மேம்படுத்த உதவுகிறது\n• இரகசியமற்ற தரவு மட்டுமே பகிரப்படுகிறது\n• முழுமையாக வெளிப்படையான செயல்முறை",
+    "trainingDataBullets": "• உங்கள் தரவு AI மாதிரிகளை மேம்படுத்த உதவுகிறது\n• உணர்திறன் இல்லாத தரவு மட்டுமே பகிரப்படுகிறது",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5178,10 +5057,6 @@
     "youAreOnUnlimitedPlan": "நீங்கள் வரம்பற்ற திட்டத்தில் இருக்கிறீர்கள்.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "உங்கள் Omi, வெளியிடப்பட்டது. வரம்பிலா வாய்ப்புகளுக்கு வரம்பற்றதாக செல்லவும்.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "உங்கள் திட்டம் {date} இல் முடிந்துவிட்டது।\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.",
     "@planEndedOn": {
@@ -5299,10 +5174,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "Omi இல், நாங்கள் உங்கள் தனியுரிமையை மிகவும் தீவிரமாக எடுத்துக்கொள்கிறோம். நாம் சேகரிக்கும் தரவு மற்றும் அதை உங்களுக்கான எங்கள் தயாரிப்பை மேம்படுத்த எவ்வாறு பயன்படுத்துகிறோம் என்பது பற்றி நாங்கள் வெளிப்படையாக இருக்க விரும்புகிறோம். நீங்கள் தெரிந்து கொள்ள வேண்டிய விஷயங்கள் இங்கே உள்ளன:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "நாங்கள் என்ன ட்র্যাக் செய்கிறோம்",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5318,14 +5189,6 @@
     "ourCommitment": "எங்கள் சேவையுறவு",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "நாங்கள் சேகரிக்கும் தரவை Omi ஐ உங்களுக்கு சிறந்த தயாரிப்பாக செய்ய பயன்படுத்த பிரতிசெரிக்கப் பட்டுள்ளோம். உங்கள் தனியுரிமை மற்றும் நம்பிக்கை எங்களுக்கு மிக முக்கியம்.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Omi இன் மதிப்புள்ள ব்যবহারকாரராக இருந்தமைக்கு நன்றி. உங்களுக்கு ஏதேனும் கேள்விகள் அல்லது கவலைகள் இருந்தால், team@basedhardware.com ஐக்கு தொடர்பு கொள்ளவும்.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "கடவுச்சொல்",
     "@password": {
@@ -5388,10 +5251,6 @@
     "exportStartedMayTakeFewSeconds": "ஏற்றுமதி தொடங்கியது. இது சில நொடிகள் ஆகலாம்…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "இது அனைத்து பெறப்பட்ட அறிவு வரைபட தரவு (முனைகள் மற்றும் இணைப்புகள்) நீக்கும். உங்கள் அசல் நினைவுகள் பாதுகாப்பாக இருக்கும். வரைபடம் সময়ের சாக்கில் அல்லது அடுத்த요request இல் மறுபடியும் உருவாக்கப்படும்.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "உங்கள் தினசரி பணிகள் சுருக்கத்தை கட்டமைக்கவும்",
     "@configureDailySummaryDigest": {
@@ -5581,10 +5440,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "ஒரு ব்যக்தி உருவாக்கப்பட்டவுடன், நீங்கள் ஒரு உரையாடல் பதிவுக்குச் சென்று அவர்களை அவர்களின் தொடர்புடைய பிரிவுகளுக்கு நியமித்து, Omi அவர்களின் பேச்சை உணர்ந்து கொள்ள முடியும்!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "நீக்க தட்டவும்",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5663,7 +5518,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "உங்கள் நிகழ்நேர பதிவுகளை நீங்கள் பேசும்போது தனிப்பட்ட கிளவுட் சேமிப்பில் சேமிக்கவும். ஆடியோ நிகழ்நேரத்தில் பெறப்பட்டு பாதுகாப்பாக சேமிக்கப்படுகிறது.",
+    "storeAudioCloudDescription": "நீங்கள் பேசும்போதே உங்கள் பதிவுகளைப் பதிவேற்றுகிறது, பின்னர் இயக்கிக் கேட்கலாம்.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6776,10 +6631,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "உங்கள் கூறப்பட்ட பயன்பாட்டை உருவாக்கி பகிர்ந்து கொள்ளுங்கள்",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "1500+ பயன்பாடுகளைத் தேடவும்",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6816,23 +6667,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "முக்கியமான நினைவூட்டல்களை மட்டுமே",
+    "frequencyDescMinimal": "அவசரமானவை மட்டும், நாளுக்கு சுமார் 1–3",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "முக்கியமான புதல்வருகள் மட்டுமே",
+    "frequencyDescLow": "முக்கியமானவை மட்டும், நாளுக்கு சுமார் 3–5",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "வழக்கமான உதவிகரமான தொடுதல்கள்",
+    "frequencyDescBalanced": "பயனுள்ள பரிந்துரைகள், நாளுக்கு சுமார் 5–8",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "அடிக்கடி செக்-இன்கள்",
+    "frequencyDescHigh": "கூடுதல் பரிந்துரைகள், நாளுக்கு சுமார் 6–9",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "தொடர்ந்து நியூக்தமாக நீடிக்கும்",
+    "frequencyDescMaximum": "ஒவ்வொரு பயனுள்ள இணைப்பும், நாளுக்கு 9 வரை",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8080,7 +7931,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "உங்கள் சாதனத்தில் தனிப்பட்டது மற்றும் உறுதியாக",
+    "privateAndSecureOnDevice": "இந்த ஃபோனில் சேமிக்கப்பட்டது",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8740,14 +8591,6 @@
     "onboardingTellUsAboutYourself": "உங்களைப் பற்றி சொல்லுங்கள்",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "உங்கள் விருப்பத்தைத் தேர்ந்தெடுக்கவும்",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "தேவையான அணுகலை வழங்கவும்",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "நீங்கள் அனைத்தும் தயாராகிவிட்டீர்கள்",
     "@onboardingYoureAllSet": {
@@ -9684,10 +9527,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "எந்த பின்தளத்துடன் இணைக்க வேண்டுமென்பதை தேர்வு செய்யவும்",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "உৎপादन",
     "@production": {
         "description": "Label for production API environment"
@@ -9859,10 +9698,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "உங்கள் அழைப்புகள் தனிப்பட்ட மற்றும் பாதுகாப்பாக இருக்கும்",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "Unlimited க்கு மேம்படுத்து",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9964,7 +9799,7 @@
     "fairUse3Day": "3-நாள் Rolling",
     "fairUseWeekly": "வாரம் Rolling",
     "fairUseAboutTitle": "நியாய பயன்பாட்டு பற்றி",
-    "fairUseAboutBody": "Omi தனிப்பட்ட உரையாடல்கள், கூட்டங்கள், மற்றும் நேரடி தொடர்பினை நோக்கமாகக் கொண்டுள்ளது. பயன்பாடு கண்டறியப்பட்ட உண்மையான ஆவாஸ் நேரத்தால் அளவிடப்படுகிறது, இணைப்பு நேரம் அல்ல. பயன்பாடு தனிப்பட்ட உள்ளடக்கம் அல்ல வழக்கமான வடிவங்கலை கணிசமாக கடக்க நிலைமாறினால், சரிசெய்தல் பயன்படுத்தப்படலாம்.",
+    "fairUseAboutBody": "Omi தனிப்பட்ட உரையாடல்கள், கூட்டங்கள் மற்றும் நேரடித் தொடர்புகளுக்காக வடிவமைக்கப்பட்டது. பயன்பாடு, இணைக்கப்பட்ட நேரத்தால் அல்ல, நீங்கள் பேசிய நேரத்தால் அளவிடப்படுகிறது. உங்கள் பயன்பாடு வழக்கமான தனிப்பட்ட பயன்பாட்டை விட அதிகமாக இருந்தால், முதலில் எச்சரிக்கை பெறுவீர்கள். தொடர்ந்து அதிக பயன்பாடு இருந்தால் எழுத்தாக்கம் மெதுவாகலாம் அல்லது கட்டுப்படுத்தப்படலாம்.",
     "fairUseCaseRefCopied": "{caseRef} நகლாக்கப்பட்டது",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10069,10 +9904,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "உங்கள் Omi உங்கள் தொலைபேசிக்குத் தொடர்புபடாமல் இருக்கும்போது, அது ஆடியோவை அதன் உள்ளமைக்கப்பட்ட நினைவகத்தில் உள்ளூரில் சேமிக்கிறது। நீங்கள் ஒருபோதும் ஒரு பதிவை இழக்கமாட்டீர்கள்.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Omi மீண்டு இணையப்படும்போது, பதிவுகள் தானாகவே உங்கள் தொலைபேசிக்கு அப்ளோட் செய்ய முன் தற்காலிக நிலையீடாக மாற்றப்படுகிறது.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10109,7 +9940,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "இந்த அனுமதிகள் Omi எவ்வாறு செயல்படுகிறது என்பதற்கு மூலமுள்ளவை. அவை அறிவிப்புகள், தொடர்பிலான அভিজ্ঞதங்கள், மற்றும் ஆடியோ பிடிப்பு போன்ற முக்கிய வசதিகளை இயக்குகிறது.",
+    "permissionsPageDescription": "உங்கள் சாதனத்துடன் இணைக்கவும், ஆடியோ பதிவு செய்யவும், பின்னணியில் தொடர்ந்து இயங்கவும், நினைவூட்டல்களை அனுப்பவும், உரையாடல்கள் எங்கு நடந்தன என்பதைக் குறிக்கவும் Omi இவற்றைப் பயன்படுத்துகிறது.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10120,10 +9951,6 @@
     "permissionsSetupTitle": "சிறந்த அভிজ்ঞதம் பெறவும்",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "Omi தன் மாயாவிற்கு பணிய சில அனுமதிகளை இயக்கவும்.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "நீங்கள் இந்த அனுமதிகளை எந்நேரம் அமைப்பாடுகளில் மாற்றலாம் > அனுமதிகள்",
     "@permissionsChangeAnytime": {
@@ -10456,7 +10283,6 @@
     "currentPlan": "தற்போதைய",
     "neoSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
     "operatorSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
-    "architectSubtitle": "பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்",
     "chatUsageCost": "அரட்டை: ${used} / ${limit} இந்த மாதம் பயன்படுத்தப்பட்டது",
     "chatUsageCostNoLimit": "அரட்டை: ${used} இந்த மாதம் பயன்படுத்தப்பட்டது",
     "chatUsageMessages": "அரட்டை: {used} / {limit} செய்திகள் இந்த மாதம்",
@@ -10483,7 +10309,7 @@
     "record": "பதிவு",
     "stop": "நிறுத்து",
     "recordWithPhoneMic": "போன் மைக்கில் பதிவு செய்யவும்",
-    "recordWithPhoneMicSubtitle": "உங்களைச் சுற்றியுள்ள ஒலியைப் பதிவு செய்யவும்",
+    "recordWithPhoneMicSubtitle": "இந்த ஃபோனின் மைக்ரோஃபோன் மூலம் பதிவுசெய்து எழுத்தாக்கவும்",
     "phoneCall": "தொலைபேசி அழைப்பு",
     "phoneCallSubtitle": "நேரடி படியெடுத்தலுடன் அழைப்பைப் பதிவு செய்யவும்",
     "bulkExportInProgress": "ஏற்றுமதி செய்கிறது…",
@@ -10554,7 +10380,6 @@
     "invalidPromotionCode": "தவறான விளம்பர குறியீடு.",
     "backgroundModeTitle": "பின்னணி பயன்முறை",
     "backgroundModeDescription": "ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.",
-    "backgroundModeNote": "தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.",
     "regenerateRecap": "சுருக்கத்தை மீண்டும் உருவாக்கு",
     "recapRegeneratedSnackbar": "சுருக்கம் மீண்டும் உருவாக்கப்பட்டது",
     "recapRegenerateFailed": "சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
@@ -10610,7 +10435,7 @@
     "deviceOnboardingContinue": "தொடரவும்",
     "deviceOnboardingFinish": "முடிக்கவும்",
     "deviceOnboardingIntroTitle": "உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்",
-    "deviceOnboardingIntroSubtitle": "உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.",
+    "deviceOnboardingIntroSubtitle": "நேரடி எழுத்தாக்கம், கேள்வி கேட்பது, இருமுறை தட்டும் குறுக்குவழி ஆகியவற்றை முயன்று பாருங்கள்.",
     "deviceOnboardingIntroDuration": "சுமார் 1 நிமிடம்",
     "jumpToLatestMessage": "சமீபத்திய செய்திக்குச் செல்",
     "latest": "சமீபத்தியது",
@@ -10730,7 +10555,6 @@
     "pinAsBaseline": "அடிப்படையாகப் பின் செய்",
     "unpinAsBaseline": "அடிப்படையிலிருந்து அகற்று",
     "baselineMemory": "அடிப்படை நினைவு",
-    "alwaysInContext": "எப்போதும் சூழலில்",
     "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
     "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
@@ -10785,7 +10609,7 @@
     "processingTakingLonger": "இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.",
     "speechProfileEnrollmentPrompt": "Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.",
     "home": "முகப்பு",
-    "failedToUpdateBaselineStatus": "அடிப்படை நிலையைப் புதுப்பிக்க முடியவில்லை.",
+    "failedToUpdateBaselineStatus": "இந்த நினைவை புதுப்பிக்க முடியவில்லை. மீண்டும் முயலவும்.",
     "memoryAllowUse": "பயன்படுத்த அனுமதி",
     "memoryDontUse": "பயன்படுத்தாதே",
     "unstarConversation": "உரையாடல் நட்சத்திரத்தை அகற்று",
@@ -10841,8 +10665,8 @@
     "memoryReviewRight": "சரி",
     "memoryReviewWrong": "தவறு",
     "memoryReviewFix": "திருத்து",
-    "memoryReviewConfirmed": "உறுதிசெய்யப்பட்டது. இதன்படி செயல்படுவேன்.",
-    "memoryReviewDropped": "நீக்கப்பட்டது. இது போன்ற தகவல்களைத் தவிர்ப்பேன்.",
+    "memoryReviewConfirmed": "உறுதிசெய்யப்பட்டது.",
+    "memoryReviewDropped": "உங்கள் நினைவுகளிலிருந்து நீக்கப்பட்டது.",
     "memoryReviewUpdated": "புதுப்பிக்கப்பட்டது.",
     "memoryReviewSaveFailed": "சேமிக்க முடியவில்லை, மீண்டும் முயலவும்",
     "indentTask": "உள்தள்ளு",
@@ -10917,7 +10741,7 @@
     "homeScreen": "முகப்புத் திரை",
     "phoneCalls": "தொலைபேசி அழைப்புகள்",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "பேச்சு-உரை செலவைக் குறைக்க சர்வரில் குரல் வடிகட்டல்",
+    "vadGateDescription": "செலவைக் குறைக்க எழுத்தாக்கத்திற்கு முன் அமைதியான ஒலியைத் தவிர்க்கிறது.",
     "flashCustomFirmware": "தனிப்பயன் ஃபர்ம்வேரை நிறுவு",
     "flashCustomFirmwareDescription": "தனிப்பயன் ஃபர்ம்வேர் பதிப்புகளை நிறுவு",
     "selectFirmwareZip": "ஃபர்ம்வேர் ZIP கோப்பைத் தேர்ந்தெடுக்கவும்",
@@ -10936,7 +10760,7 @@
     "permissionBlockedHint": "அமைப்புகளில் முடக்கப்பட்டுள்ளது. இதைப் பயன்படுத்த அங்கே அனுமதிக்கவும்.",
     "useDifferentAccount": "வேறு கணக்கைப் பயன்படுத்து",
     "onboardingStepOf": "படி {current} / {total}",
-    "onboardingCompleteMessage": "Omi-ஐ 2 நாட்கள் பின்னணியில் இயங்க விடுங்கள்; பிறகு பயனுள்ள கருத்துகளைத் தரத் தொடங்கும்.",
+    "onboardingCompleteMessage": "Omi-ஐ சில நாட்கள் இயங்க விடுங்கள். உங்கள் உரையாடல்கள், நினைவுகள், பணிகள் நிரம்பத் தொடங்கும்.",
     "cantFindDeviceHint": "உங்கள் சாதனம் கிடைக்கவில்லையா? அது இயக்கத்தில் உள்ளதா, ஃபோன் அருகில் உள்ளதா என உறுதிசெய்து மீண்டும் தேடுங்கள்.",
     "scanAgain": "மீண்டும் தேடு",
     "howToPair": "இணைப்பது எப்படி",
@@ -11057,8 +10881,7 @@
     "notificationsAndDisplay": "அறிவிப்புகள் மற்றும் காட்சி",
     "helpAndAbout": "உதவி மற்றும் பற்றி",
     "speakerTagPromptTitle": "குரல்களை அடையாளம் காண Omi-க்கு உதவுங்கள்",
-    "speakerTagPromptSubtitle": "கடந்த இரண்டு நாட்களின் குரல்களை விரைவாகச் சரிபார்க்கவும்",
-    "speakerTagPromptIsThisYou": "இது நீங்களா?",
+    "speakerTagPromptIsThisYou": "இது நீங்கள் தானா?",
     "speakerTagPromptIsThisPerson": "இது {name} ஆ?",
     "speakerTagPromptWhoIsThis": "இது யார்?",
     "speakerTagPromptThatsMe": "இது நான்தான்",
@@ -11233,24 +11056,24 @@
     "confidenceMeterLabel": "நம்பகத்தன்மை: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{நீங்கள் ஒருமுறை லேபிள் செய்தீர்கள்} other{நீங்கள் {count} முறை லேபிள் செய்தீர்கள்}}",
     "confidenceReasonPicked": "{count, plural, =1{1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது} other{{count} பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{1 பொருத்தத்தை உறுதிசெய்தீர்கள்} other{{count} பொருத்தங்களை உறுதிசெய்தீர்கள்}}",
-    "confidenceReasonAutoOnly": "தானாகப் பொருத்தப்பட்டது மட்டும், உறுதிசெய்யப்படவில்லை",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{1 தானியங்கி குறியீட்டை உறுதிசெய்தீர்கள்} other{{count} தானியங்கி குறியீடுகளை உறுதிசெய்தீர்கள்}}",
+    "confidenceReasonAutoOnly": "தானாகக் குறியிடப்பட்டது, இன்னும் உறுதிசெய்யப்படவில்லை",
     "confidenceReasonNeverConfirmed": "ஒருபோதும் உறுதிசெய்யப்படவில்லை",
     "confidenceReasonCorrected": "அதன் பொருத்தத்தை நீங்கள் திருத்தினீர்கள்",
-    "confidenceReasonVoiceReady": "குரல் தயார்",
-    "confidenceReasonNeedsVoice": "குரல் தேவை",
+    "confidenceReasonVoiceReady": "குரல் சேமிக்கப்பட்டது",
+    "confidenceReasonNeedsVoice": "இன்னும் குரல் மாதிரி இல்லை",
     "confidenceReasonNotHeard": "இன்னும் கேட்கப்படவில்லை",
     "confidenceSheetTitle": "நம்பகத்தன்மை",
     "confidenceSummaryConfirmed": "{name} அவர்களின் குரலை Omi அடையாளம் காண்கிறது, நீங்களும் அதை உறுதிசெய்துள்ளீர்கள்.",
     "confidenceSummaryLikely": "{name} அவர்களின் குரலை Omi பொதுவாக அடையாளம் காண்கிறது, ஆனால் நீங்கள் சில முறை மட்டுமே உறுதிசெய்துள்ளீர்கள்.",
-    "confidenceSummaryUnverified": "{name} தொடர்பாக நீங்கள் செய்த எதுவும் இன்னும் ஆதரவாக இல்லை.",
+    "confidenceSummaryUnverified": "{name} நபரை நீங்கள் இன்னும் குறியிடவோ உறுதிசெய்யவோ இல்லை; அவர்களின் குரலை Omi அறியுமா என்று உறுதியாகத் தெரியாது.",
     "confidenceEvidenceHeader": "ஆதாரம்",
     "evidenceManualLabels": "{count, plural, =1{1 உரையாடலில் நீங்கள் லேபிள் செய்தீர்கள்} other{{count} உரையாடல்களில் நீங்கள் லேபிள் செய்தீர்கள்}}",
     "evidenceCardConfirms": "{count, plural, =1{1 பரிந்துரையில் ஆம்} other{{count} பரிந்துரைகளில் ஆம்}}",
     "evidenceCardPicks": "{count, plural, =1{1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது} other{{count} பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{1 தானியங்கி பொருத்தம் உறுதிசெய்யப்பட்டது} other{{count} தானியங்கி பொருத்தங்கள் உறுதிசெய்யப்பட்டன}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 பொருத்தம் வேறொருவருக்கு மாற்றப்பட்டது} other{{count} பொருத்தங்கள் வேறொருவருக்கு மாற்றப்பட்டன}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{யாரும் உறுதிசெய்யாத 1 தானியங்கி பொருத்தம்} other{யாரும் உறுதிசெய்யாத {count} தானியங்கி பொருத்தங்கள்}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{1 தானியங்கி குறியீடு உறுதிசெய்யப்பட்டது} other{{count} தானியங்கி குறியீடுகள் உறுதிசெய்யப்பட்டன}}",
+    "evidenceAutoCorrected": "{count, plural, =1{1 தானியங்கி குறியீட்டை வேறொருவருக்கு மாற்றினீர்கள்} other{{count} தானியங்கி குறியீடுகளை வேறொருவருக்கு மாற்றினீர்கள்}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{இன்னும் உறுதிசெய்யப்படாத 1 தானியங்கி குறியீடு} other{இன்னும் உறுதிசெய்யப்படாத {count} தானியங்கி குறியீடுகள்}}",
     "evidenceVoiceReady": "குரல் மாதிரி தயார்",
     "evidenceNoVoice": "இன்னும் குரல் மாதிரி இல்லை",
     "evidenceNotHeard": "இன்னும் எந்த உரையாடலிலும் கேட்கப்படவில்லை",
@@ -11263,12 +11086,10 @@
     "effectNeeded": "உறுதிசெய்யப்பட்டது நிலைக்குத் தேவை",
     "confidenceToReachConfirmed": "உறுதிசெய்யப்பட்டது நிலையை அடைய",
     "confidenceNextVoice": "{name} அவர்களின் குரல் மாதிரியும் Omi-க்குத் தேவை. “குரல்களை நினைவில் வை” இயக்கத்தில் இருக்கும்போது அவரை லேபிள் செய்யுங்கள்.",
-    "confidenceIsConfirmed": "{name}: உறுதிசெய்யப்பட்டது. ஒவ்வொரு லேபிளிலிருந்தும் Omi தொடர்ந்து கற்றுக்கொள்கிறது.",
-    "confidenceFootnote": "உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட உதவாது.",
+    "confidenceIsConfirmed": "{name} உறுதிசெய்யப்பட்டவர். இனி நீங்கள் எதுவும் செய்ய வேண்டியதில்லை.",
+    "confidenceFootnote": "உங்கள் குறியீடுகளும் உறுதிப்படுத்தல்களுமே அதிக மதிப்பு பெறும். தானியங்கி குறியீடுகளை நீங்கள் உறுதிசெய்யும் வரை அவற்றுக்கு சிறிய மதிப்பே உண்டு.",
     "personWhyConfidence": "ஏன்?",
     "pinPersonTitle": "{name}-ஐ பின் செய்",
-    "pinPersonSubtitle": "{name}-ஐ வைத்திருங்கள், உங்கள் உரையாடல்களில் அவர்களை எதிர்பாருங்கள்",
-    "pinPersonHonestLine": "ஒத்த குரல்களைப் பொருத்தும் முன் Omi கேட்கும்.",
     "pinAction": "பின் செய்",
     "unpinAction": "பின்னை நீக்கு",
     "personPinnedToast": "{name} பின் செய்யப்பட்டார்",
@@ -11306,9 +11127,8 @@
     "voiceMatchPossible": "சாத்தியமான பொருத்தம்",
     "voiceMatchWeak": "பலவீனமான பொருத்தம்",
     "voiceMatchMeterLabel": "குரல் பொருத்தம்: {level}",
-    "speakerTagPromptHintIdentify": "ஒவ்வொரு பதிலும் Omi-க்கு ஒரு குரலைக் கற்றுத்தந்து, அந்த நபரின் நம்பகத்தன்மையை உயர்த்துகிறது.",
-    "speakerTagPromptHintConfirm": "ஆம் என்றால் {name} நம்பகத்தன்மை உயரும்.",
-    "speakerTagPromptHintOwner": "உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.",
+    "speakerTagPromptHintIdentify": "உங்கள் பதில் அடுத்த முறை இந்தக் குரலை Omi அடையாளம் காண உதவுகிறது.",
+    "speakerTagPromptHintOwner": "உங்கள் பதில் இயக்கப்பட்ட பகுதியை மட்டுமே குறிக்கும்.",
     "speakerTagPromptSavedAs": "{name} ஆகச் சேமிக்கப்பட்டது",
     "speakerTagPromptSavedAsYou": "நீங்களாகச் சேமிக்கப்பட்டது",
     "speakerTagPromptIgnoredNote": "இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது",
@@ -11384,7 +11204,7 @@
     "conversationProcessingFailedMessage": "இந்த உரையாடலைச் செயலாக்க முடியவில்லை.",
     "waitForReprocessing": "மீண்டும் செயலாக்கம் முடியும் வரை காத்திருக்கவும்.",
     "unnamedSpeakerLabel": "பேச்சாளர்",
-    "unresolvedSpeakersNotice": "பதிவுகளில் பேசுபவர்கள் பிரிக்கப்படவில்லை.",
+    "unresolvedSpeakersNotice": "இந்த உரையாடலின் பதிவுகளுக்கு இடையே பேச்சாளர் குறியீடுகள் பொருந்தாமல் போகலாம்.",
     "unresolvedSpeakersTitle": "பேச்சாளர் லேபிள்கள் பற்றி",
     "unresolvedSpeakersMessage": "பதிவுகளில் மற்ற குரல்களை Omi வேறுபடுத்த முடியவில்லை. யார் பேசுகிறார்கள் எனப் பெயரிட பேச்சாளர் லேபிளைத் தட்டவும்.",
     "nameSpeakerTitle": "பேச்சாளருக்கு பெயரிடவும்",
@@ -11507,5 +11327,109 @@
     "dreamReportRunsLeft": "{count, plural, =1{இன்று 1 கைமுறை இயக்கம் மீதம்} other{இன்று {count} கைமுறை இயக்கங்கள் மீதம்}}",
     "dreamReportFound": "{fixes, plural, =1{1 திருத்தம்} other{{fixes} திருத்தங்கள்}} · {asks, plural, =1{1 பரிந்துரை} other{{asks} பரிந்துரைகள்}}",
     "dreamReportDropped": "{count, plural, =1{1 பழைய மாற்றம் தவிர்க்கப்பட்டது} other{{count} பழைய மாற்றங்கள் தவிர்க்கப்பட்டன}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது} other{தனியுரிமைக்காக {count} அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன}}",
+    "speakerTagPromptExcerptSaved": "இந்தப் பகுதிக்கான பதில் சேமிக்கப்பட்டது.",
+    "pinPersonDescription": "பின் செய்யப்பட்டவர்கள் உங்கள் மக்கள் பட்டியலின் மேலே இருப்பார்கள்; சுத்தம் செய் அவர்களை நீக்காது.",
+    "chatAppsProblemFailed": "ஏதோ தவறு நடந்துவிட்டது. மீண்டும் முயலுங்கள்.",
+    "chatAppsIsConnected": "{app} இணைக்கப்பட்டது",
+    "chatAppsRefreshFailed": "புதுப்பிக்க முடியவில்லை. கடைசியாகப் பார்த்ததைக் காட்டுகிறது.",
+    "chatAppsReadOnlyBanner": "படிக்க-மட்டும். Omi-க்கு {app}-இல் பதிலளியுங்கள்.",
+    "chatAppsWaitlistConfirmed": "நன்றி. WhatsApp தயாரானதும் இங்கே தோன்றும்.",
+    "chatAppsUseTelegramForNow": "இப்போதைக்கு Telegram-ஐப் பயன்படுத்து",
+    "chatAppsCouldNotOpen": "{app}-ஐத் திறக்க முடியவில்லை. அது நிறுவப்பட்டுள்ளதா எனப் பார்த்து மீண்டும் முயலுங்கள்.",
+    "chatAppsTryPromise": "நேற்று சாமுக்கு நான் என்ன வாக்குறுதி கொடுத்தேன்?",
+    "chatAppsDoesSave": "நினைவுகளைச் சேமித்து உங்கள் பணிகளை நிர்வகிக்கும்",
+    "chatAppsOnTheList": "பட்டியலில் உள்ளது",
+    "chatAppsNoChatsTitle": "இன்னும் சாட்கள் இல்லை",
+    "chatAppsInChannel": "{app}-இல்",
+    "chatAppsConnectTelegramMessage": "உங்களுக்கு மட்டுமேயான தனிப்பட்ட இணைப்புடன் Omi Telegram-ஐத் திறக்கும்.",
+    "chatAppsOpenMessages": "செய்திகள்-ஐத் திற",
+    "chatAppsDisconnectTitle": "{app}-ஐத் துண்டிக்கவா?",
+    "chatAppsPrivateMemoriesSubtitle": "உடல்நலம், பணம், தனிப்பட்டவை எனக் குறித்த அனைத்தும் சாட் ஆப்ஸுக்கு வெளியே இருக்கும்.",
+    "chatAppsConnectIMessageMessage": "நீங்கள் பயன்படுத்த விரும்பும் எண்ணிலிருந்து Omi-க்கு ஒரு மெசேஜ் அனுப்புங்கள். அதிலுள்ள குறியீடு அந்த எண்ணை உங்கள் கணக்குடன் இணைக்கும்.",
+    "chatAppsWhatsAppMessage": "Omi-ஐ WhatsApp-க்குக் கொண்டுவரப் பணியாற்றி வருகிறோம். தயாரானதும் இங்கே தோன்றும்.",
+    "chatAppsNoChatsMessage": "{app}-இல் Omi-யுடன் நீங்கள் செய்யும் சாட்கள் இங்கே தோன்றும்.",
+    "chatAppsViewChats": "சாட்களைப் பார்",
+    "chatAppsDisconnectMessage": "{app}-இல் Omi பதிலளிப்பதை நிறுத்திவிட்டு, அதற்காகச் சேமித்துள்ள சாட் வரலாற்றை நீக்கும். {app}-இல் ஏற்கெனவே உள்ள மெசேஜ்கள் அங்கேயே இருக்கும்.",
+    "chatAppsReadOnlyFooter": "இந்த சாட்கள் இங்கே படிக்க-மட்டும். {app}-இல் பதிலளியுங்கள்.",
+    "chatAppsAddToContacts": "Omi-ஐ தொடர்புகளில் சேர்",
+    "chatAppsProPerkContext": "எல்லா ஆப்ஸிலும் சூழலை Omi நினைவில் வைத்திருக்கும்",
+    "chatAppsWhatsAppMeantime": "Telegram, iMessage இன்றே வேலை செய்கின்றன; அதே நினைவுகள், பணிகளுடன்.",
+    "chatAppsComingLater": "பின்னர் வரும்",
+    "chatAppsProblemRateLimited": "அதிகமான முயற்சிகள். ஒரு நிமிடம் காத்திருந்து மீண்டும் முயலுங்கள்.",
+    "chatAppsMessage": "செய்தி",
+    "chatAppsOpenApp": "{app}-ஐத் திற",
+    "chatAppsTelegramSubtitle": "இரண்டு தட்டலில் அமைக்கலாம்",
+    "chatAppsLoadFailedTitle": "சாட் ஆப்ஸை ஏற்ற முடியவில்லை",
+    "chatAppsInsights": "Omi-யின் நுண்ணறிவுகள்",
+    "chatAppsShowInAppOff": "அணைப்பு: {app}-இல் மட்டுமே பார்ப்பீர்கள்.",
+    "chatAppsProPerkText": "Telegram, iMessage-இலிருந்து Omi-க்கு மெசேஜ் அனுப்புங்கள்",
+    "chatAppsVoiceNotesSubtitle": "குரல் குறிப்பை அனுப்புங்கள், Omi பதிலளிக்கும்.",
+    "chatAppsPartOfPro": "சாட் ஆப்ஸ் Pro-வின் ஒரு பகுதி",
+    "chatAppsMessagesApp": "செய்திகள்",
+    "chatAppsTelegramOtherDevice": "வேறொரு சாதனத்தில் Telegram உள்ளதா?",
+    "chatAppsHeroMessage": "உங்கள் நாளைப் பற்றி கேளுங்கள், நினைவுகளைச் சேமியுங்கள், பணிகளை Telegram அல்லது iMessage-இலிருந்தே நிர்வகியுங்கள். உங்கள் சாட்கள் நீங்கள் பயன்படுத்தும் ஆப்ஸிலேயே இருக்கும்; நீங்கள் பேசியதை Omi எல்லா இடத்திலும் நினைவில் வைத்திருக்கும்.",
+    "chatAppsTryRemind": "ஞாயிற்றுக்கிழமை அம்மாவுக்கு போன் செய்ய நினைவூட்டு",
+    "chatAppsChannelsTitle": "சாட் ஆப்ஸ்",
+    "chatAppsDoesAnswer": "உங்கள் உரையாடல்கள், நினைவுகள் பற்றிய கேள்விகளுக்குப் பதிலளிக்கும்",
+    "chatAppsChannelChats": "{app} சாட்கள்",
+    "chatAppsIncludedWithPro": "OMI PRO-வில் உள்ளடங்கியது",
+    "chatAppsLink": "இணைப்பு",
+    "chatAppsNeverMessagesOthers": "உங்களுக்காக மற்றவர்களுக்கு ஒருபோதும் மெசேஜ் அனுப்பாது",
+    "chatAppsNotConnectedTitle": "இணைக்கப்படவில்லை",
+    "chatAppsTelegramPrivacyNote": "Omi-யுடனான உங்கள் சாட்களை Telegram-உம் சேமிக்கிறது. Omi உங்களுக்கு மட்டுமே பதிலளிக்கும், மற்றவர்களுக்கு ஒருபோதும் இல்லை; எப்போது வேண்டுமானாலும் இணைப்பைத் துண்டிக்கலாம்.",
+    "chatAppsProblemOffline": "நீங்கள் ஆஃப்லைனில் உள்ளீர்கள். இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.",
+    "chatAppsIMessageSubtitle": "உங்கள் தொலைபேசி எண்ணிலிருந்து Omi-க்கு மெசேஜ் அனுப்புங்கள்",
+    "chatAppsPrivateMemories": "தனிப்பட்ட நினைவுகளை ஆப்ஸிலேயே வைத்திரு",
+    "chatAppsConnectTelegramTitle": "Telegram-ஐ இணை",
+    "chatAppsInsightsSubtitle": "Omi சுருக்கத்தையோ நுண்ணறிவையோ இங்கே அனுப்பட்டும்.",
+    "chatAppsTelegramWaiting": "Telegram-இல் தொடங்கு என்பதை நீங்கள் தட்டுவதற்காகக் காத்திருக்கிறது…",
+    "chatAppsEntrySubtitle": "நீங்கள் தினமும் பயன்படுத்தும் ஆப்ஸிலேயே Omi-யுடன் பேசுங்கள்.",
+    "chatAppsConnectedAs": "{handle} ஆக இணைக்கப்பட்டது",
+    "chatAppsProPerkSave": "சாட்டிலிருந்தே நினைவுகளைச் சேமித்து பணிகளை நிர்வகியுங்கள்",
+    "chatAppsConnectIMessageTitle": "இணைக்க Omi-க்கு மெசேஜ் அனுப்புங்கள்",
+    "chatAppsWaitingMessage": "செய்திகள்-இல் மெசேஜை அனுப்புங்கள். Omi-க்குக் கிடைத்தவுடன் இந்தத் திரை புதுப்பிக்கப்படும்.",
+    "chatAppsShowInApp": "இந்த சாட்களை Omi ஆப்ஸில் காட்டு",
+    "chatAppsCodeExpiredMessage": "புதிய குறியீட்டைப் பெற்று செய்திகள்-இலிருந்து அனுப்புங்கள்.",
+    "chatAppsNoMessages": "மெசேஜ்கள் இல்லை",
+    "chatAppsHeroTitle": "நீங்கள் ஏற்கெனவே சாட் செய்யும் இடத்திலேயே Omi-யுடன் சாட் செய்யுங்கள்",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage மற்றும் பல",
+    "chatAppsCodeExpiresIn": "குறியீடு {time}-இல் காலாவதியாகும்",
+    "chatAppsNotConnectedMessage": "இந்த சாட் ஆப்ஸ் துண்டிக்கப்பட்டது.",
+    "chatAppsRepliesOnlyNote": "Omi உங்களுக்கு மட்டுமே பதிலளிக்கும். அது ஒருபோதும் முதலில் மெசேஜ் அனுப்பாது.",
+    "chatAppsDisconnectFooter": "துண்டித்தால், {app}-க்காக Omi சேமித்துள்ள வரலாறு நீக்கப்படும்.",
+    "chatAppsReplyThereAnytime": "எப்போது வேண்டுமானாலும் {app}-இல் Omi-க்கு மெசேஜ் அனுப்புங்கள்.",
+    "chatAppsTryAsking": "இவற்றைக் கேட்டுப் பாருங்கள்",
+    "chatAppsTelegramStepReturn": "இங்கே திரும்பி வாருங்கள். வெற்றிகரமாக முடிந்ததை உறுதிசெய்வோம்.",
+    "chatAppsDoesFiles": "கோப்புகள், புகைப்படங்கள், குரல் குறிப்புகளை அனுப்பும், பெறும்",
+    "chatAppsTryWeek": "என் வாரத்தை மூன்று வரிகளில் சுருக்கிச் சொல்",
+    "chatAppsChannelFooter": "உங்கள் {app} சாட்கள் {app}-இலேயே இருக்கும். ஆப்ஸிலும் உங்கள் மற்ற சாட் ஆப்ஸிலும் நீங்கள் பேசியதை Omi இன்னும் அறியும்.",
+    "chatAppsWhatsAppTitle": "WhatsApp விரைவில் வருகிறது",
+    "chatAppsCodeExpiredTitle": "இந்தக் குறியீடு காலாவதியாகிவிட்டது",
+    "chatAppsProblemUnavailable": "உங்கள் கணக்கிற்கு சாட் ஆப்ஸ் இன்னும் கிடைக்கவில்லை.",
+    "chatAppsWhatOmiDoes": "சாட் ஆப்ஸில் Omi என்ன செய்கிறது",
+    "chatAppsVoiceNotes": "குரல் குறிப்புகள்",
+    "chatAppsNotAvailableYet": "இன்னும் கிடைக்கவில்லை",
+    "chatAppsOpenMessagesAgain": "செய்திகள்-ஐ மீண்டும் திற",
+    "chatAppsConnectedOn": "{date} அன்று இணைக்கப்பட்டது",
+    "chatAppsWaitingTitle": "உங்கள் மெசேஜுக்காகக் காத்திருக்கிறது",
+    "chatAppsEntryTitle": "Omi-யுடன் சாட் செய்யுங்கள்",
+    "chatAppsTelegramStepOpen": "கீழே உள்ள Telegram-ஐத் திற என்பதைத் தட்டுங்கள்",
+    "chatAppsShowInAppOn": "இயக்கம்: Omi ஆப்ஸில் படிக்க-மட்டும் சாட்களாகத் தோன்றும்.",
+    "chatAppsDisconnectChannel": "{app}-ஐத் துண்டி",
+    "chatAppsTelegramStepStart": "Omi-யுடனான சாட்டில் தொடங்கு என்பதைத் தட்டுங்கள்",
+    "chatAppsLocked": "Omi Pro தேவை",
+    "chatAppsIMessageBody": "வணக்கம் Omi, இணைப்புக் குறியீடு {code}",
+    "chatAppsChatIn": "{app}-இல் சாட்",
+    "chatAppsContactsApp": "தொடர்புகள்",
+    "chatAppsCodeNote": "குறியீடு ஒருமுறை மட்டுமே செயல்படும்; 10 நிமிடங்களில் காலாவதியாகும்.",
+    "chatAppsMoreComing": "மேலும் ஆப்ஸ் வருகின்றன.",
+    "chatAppsInTheMeantime": "இதற்கிடையில்",
+    "chatAppsGetNewCode": "புதிய குறியீட்டைப் பெறு",
+    "chatAppsNotifyMe": "எனக்குத் தெரிவி",
+    "chatAppsPrefilled": "முன்பே நிரப்பப்பட்டது",
+    "chatAppsTextThisTo": "திறக்கவில்லையா? இதை {address} எண்ணுக்கு அனுப்புங்கள்",
+    "chatAppsLinkExpired": "அந்த இணைப்பு காலாவதியாகிவிட்டது. புதியதைப் பெற Telegram-ஐத் திற என்பதைத் தட்டுங்கள்.",
+    "chatAppsIMessageTo": "பெறுநர்: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO"
 }

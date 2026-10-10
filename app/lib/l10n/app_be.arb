@@ -410,10 +410,6 @@
     "@createYourOwnApp": {
         "description": "Button title for creating custom apps"
     },
-    "buildAndShareApp": "Стварыце і раздзеліцеся сваім дадатком",
-    "@buildAndShareApp": {
-        "description": "Create app button subtitle"
-    },
     "searchApps": "Поіск дадатаў",
     "@searchApps": {
         "description": "Placeholder text for search input"
@@ -449,10 +445,6 @@
     "joinCommunity": "Далучыцеся да грамады!",
     "@joinCommunity": {
         "description": "Discord community link"
-    },
-    "membersAndCounting": "8000+ членаў і больш.",
-    "@membersAndCounting": {
-        "description": "Discord member count"
     },
     "deleteAccountTitle": "Выдаліць рахунак",
     "@deleteAccountTitle": {
@@ -605,10 +597,6 @@
     "@yourPrivacyYourControl": {
         "description": "Data privacy page heading"
     },
-    "privacyIntro": "У Omi мы адданы абаронцы вашай прыватнасці. Гэта старонка дазваляе вам кантраляваць, як вашы дадзеныя захоўваюцца і выкарыстоўваюцца.",
-    "@privacyIntro": {
-        "description": "Data privacy page introduction"
-    },
     "learnMore": "Даведацца больш…",
     "@learnMore": {
         "description": "Learn more link"
@@ -616,10 +604,6 @@
     "dataProtectionLevel": "Ўзровень абароны дадзеных",
     "@dataProtectionLevel": {
         "description": "Data protection section title"
-    },
-    "dataProtectionDesc": "Вашы дадзеныя абаронены па змаўчанні сільным шыфраваннем. Прагледзьце ваш параметры і адносныя вариянты прыватнасці ніжэй.",
-    "@dataProtectionDesc": {
-        "description": "Data protection section description"
     },
     "appAccess": "Доступ дадатка",
     "@appAccess": {
@@ -849,25 +833,17 @@
     "@transcription": {
         "description": "Transcription feature name"
     },
-    "transcriptionConfig": "Наладзіць пастаўшчыка STT",
-    "@transcriptionConfig": {
-        "description": "Transcription configuration subtitle"
-    },
     "conversationTimeout": "Тайм-аут размовы",
     "@conversationTimeout": {
         "description": "Conversation timeout feature name"
     },
-    "conversationTimeoutConfig": "Устанавіць, калі размовы аўтаматычна завяршаюцца",
+    "conversationTimeoutConfig": "Колькі часу Omi чакае ў цішыні, перш чым завяршыць размову",
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
     "importData": "Імпартаваць дадзеныя",
     "@importData": {
         "description": "Import data feature name"
-    },
-    "importDataConfig": "Імпартаваць дадзеныя з іншых крыніц",
-    "@importDataConfig": {
-        "description": "Import data details subtitle"
     },
     "debugDiagnostics": "Адладка і дыягностыка",
     "@debugDiagnostics": {
@@ -933,10 +909,6 @@
     "@understanding": {
         "description": "Understanding stat title"
     },
-    "understandingSubtitle": "Слоў разумена з вашых размоў.",
-    "@understandingSubtitle": {
-        "description": "Understanding stat subtitle"
-    },
     "providing": "Абеспячэнне",
     "@providing": {
         "description": "Providing stat title"
@@ -948,10 +920,6 @@
     "remembering": "Запамінанне",
     "@remembering": {
         "description": "Remembering stat title"
-    },
-    "rememberingSubtitle": "Факты і дэталі запамінаны для вас.",
-    "@rememberingSubtitle": {
-        "description": "Remembering stat subtitle"
     },
     "unlimitedPlan": "Неабмежаваны план",
     "@unlimitedPlan": {
@@ -1069,7 +1037,6 @@
     },
     "debugLogs": "Лагі адладкі",
     "debugLogsAutoDelete": "Аўтаматычна выдаляюцца пасля 3 дзён.",
-    "debugLogsDesc": "Дапамагае дыягнаставаць праблемы",
     "noLogFilesFound": "Файлы логаў не знойдзены.",
     "omiDebugLog": "Лог адладкі Omi",
     "logShared": "Лог раздзелены",
@@ -1082,7 +1049,6 @@
     "exportedConversations": "Экспартаваныя размовы з Omi",
     "exportShared": "Экспорт раздзелены",
     "deleteKnowledgeGraphTitle": "Выдаліць граф ведаў?",
-    "deleteKnowledgeGraphMessage": "Гэта выдаліць усе вывераныя дадзеныя графа ведаў (вузлы і звязкі). Вашы арыгінальныя ўспаміны заставаюцца бяспечныя. Граф будзе перабудаваны з часам або пры наступным запыце.",
     "knowledgeGraphDeleted": "Граф ведаў выдалены",
     "deleteGraphFailed": "Не атрымалася выдаліць граф: {error}",
     "@deleteGraphFailed": {
@@ -1094,7 +1060,6 @@
         }
     },
     "deleteKnowledgeGraph": "Выдаліць граф ведаў",
-    "deleteKnowledgeGraphDesc": "Ачысціць усе вузлы і звязкі",
     "mcp": "MCP",
     "mcpServer": "MCP сервер",
     "mcpServerDesc": "Падключыце AI ассістэнтаў да вашых дадзеных",
@@ -1247,7 +1212,6 @@
     "trainFamilyProfiles": "Тренаваць профілі для сяброў і сямей",
     "trainFamilyProfilesDesc": "Вашы запісы дапамаглі нам распазнаваць і стварыць профілі для вашых сяброў і сямей.",
     "enhanceTranscriptAccuracy": "Палепшыць дакладнасць транскрыпцыі",
-    "enhanceTranscriptAccuracyDesc": "Па меры палепшэння нашай мадэлі, мы можам забяспечыць лепшыя вынікі транскрыпцыі для вашых запісаў.",
     "legalNotice": "Юридычнае ўведамленне: Легальнасць запісу і захаванне голасных дадзеных можа варыяваць ў залежнасці ад вашага месцазнаходжання і вашага выкарыстання гэтай функцыі. Вы адказаны за захаванне адпаведнасці месцавым законам і рэгуляцыям.",
     "alreadyAuthorized": "Ужо аўтарызавана",
     "authorize": "Аўтарызаваць",
@@ -1315,7 +1279,7 @@
         }
     },
     "tellUsPrimaryLanguage": "Скажыце нам вашу асноўную мову",
-    "languageForTranscription": "Устаноўце вашу мову для больш складаных расшифровак і персаналізаванага вопыту.",
+    "languageForTranscription": "Omi выкарыстоўвае гэту мову для расшыфроўкі, рэзюме і ўспамінаў.",
     "singleLanguageModeInfo": "Адзінмоўны рэжым уключаны. Пераклад адключаны для больш высокай дакладнасці.",
     "searchLanguageHint": "Пошук мовы па імі ці коду",
     "noLanguagesFound": "Мовы не знойдзены",
@@ -1462,7 +1426,7 @@
             }
         }
     },
-    "integrationComingSoon": "Інтэграцыя з {appName} скора дойдзе! Мы цяжка працуем над больш опцыямі кіравання задачамі.",
+    "integrationComingSoon": "{appName} пакуль не падтрымліваецца.",
     "@integrationComingSoon": {
         "placeholders": {
             "appName": {
@@ -1476,7 +1440,7 @@
     "importConfiguration": "Імпартаваць канфігурацыю",
     "exportConfiguration": "Экспартаваць канфігурацыю",
     "bringYourOwn": "Прынясіце ваше",
-    "payYourSttProvider": "Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.",
+    "payYourSttProvider": "У Omi гэта бясплатна. Вы плаціце свайму пастаўшчыку транскрыпцыі напрамую.",
     "freeMinutesMonth": "300 свабодных мінут/месяц уключана. Неабмежавана з ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост абавязаны",
@@ -1524,7 +1488,7 @@
     "enterLiveSttWebsocket": "Уведзіце ваш live STT WebSocket endpoint",
     "apiKey": "Ключ API",
     "enterApiKey": "Уведзіце ваш ключ API",
-    "storedLocallyNeverShared": "Захавана лакальна, ніколі не дзяліцца",
+    "storedLocallyNeverShared": "Захавана на гэтым тэлефоне. Адпраўляецца толькі вашаму пастаўшчыку транскрыпцыі.",
     "host": "Хост",
     "port": "Порт",
     "advanced": "Развінутыя",
@@ -1535,8 +1499,8 @@
     "resetRequestConfig": "Скінуць конфігурацыю запыту на змаўчанне",
     "logs": "Логі",
     "logsCopied": "Логі скапіяваны",
-    "noLogsYet": "Логаў яшчэ нету. Пачніце запіс, каб убачыць дзейнасць користуемага STT.",
-    "deviceUsesCodec": "{device} выкарыстоўвае {reason}. Omi будзе выкарыстовуваца.",
+    "noLogsYet": "Журналаў пакуль няма. Запішыце што-небудзь, каб убачыць запыты да вашага пастаўшчыка транскрыпцыі.",
+    "deviceUsesCodec": "{device} запісвае ў фармаце, які гэты пастаўшчык не можа прачытаць ({reason}), таму будзе выкарыстана транскрыпцыя Omi.",
     "@deviceUsesCodec": {
         "description": "Warning about device codec compatibility",
         "placeholders": {
@@ -1549,13 +1513,9 @@
         }
     },
     "omiTranscription": "Расшыфроўка Omi",
-    "bestInClassTranscription": "Лепшая ў сваім класе расшыфроўка без наладкі",
     "instantSpeakerLabels": "Імгненныя метакі дыктарай",
     "languageTranslation": "Пераклад более чем 100 моў",
-    "optimizedForConversation": "Аптымізавана для разговора",
     "autoLanguageDetection": "Аўтаматычнае вызначэнне мовы",
-    "highAccuracy": "Высокая дакладнасць",
-    "privacyFirst": "Прыватнасць наперш",
     "saveChanges": "Захаваць змены",
     "resetToDefault": "Скінуць на змаўчанне",
     "viewTemplate": "Прагледаць шаблон",
@@ -1709,10 +1669,6 @@
     "@allDone": {
         "description": "Success message after completing a task"
     },
-    "keepGoing": "Прадоўжайце, вы робіце адлічна",
-    "@keepGoing": {
-        "description": "Encouragement text during a multi-step process"
-    },
     "skipThisQuestion": "Прапусціць гэта пытанне",
     "@skipThisQuestion": {
         "description": "Button text to skip current question"
@@ -1816,7 +1772,7 @@
     "@omiYourAiCompanion": {
         "description": "App title or branding on onboarding screen"
     },
-    "captureEveryMoment": "Захапляйце кожны момант. Атрымайце рэзюме на базе AI.\nАбыходіцеся бес запісаў.",
+    "captureEveryMoment": "Omi запісвае вашыя размовы і\nсклада для вас рэзюме і спіс спраў.",
     "@captureEveryMoment": {
         "description": "App value proposition or description"
     },
@@ -1885,7 +1841,7 @@
     "@selectPrimaryLanguage": {
         "description": "Title for language selection dialog"
     },
-    "languageBenefits": "Ўстаноўце вашу мову для больш складаных расшифровак і персаналізаванага вопыту",
+    "languageBenefits": "Omi выкарыстоўвае гэту мову для расшыфроўкі, рэзюме і ўспамінаў.",
     "@languageBenefits": {
         "description": "Explanation of why language selection matters"
     },
@@ -1902,10 +1858,6 @@
     "selectYourLanguage": "Выберыце вашу мову",
     "@selectYourLanguage": {
         "description": "Placeholder for selected language name"
-    },
-    "personalGrowthJourney": "Ваш персаніфічны шлях росту з AI, які слухае кожнае вашае слова.",
-    "@personalGrowthJourney": {
-        "description": "Subtitle describing Omi on auth screen"
     },
     "actionItemsTitle": "Задачы",
     "@actionItemsTitle": {
@@ -2557,11 +2509,7 @@
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
     },
-    "configureSttProvider": "Наладзьце пастаўшчыка STT",
-    "@configureSttProvider": {
-        "description": "Description for transcription settings"
-    },
-    "setWhenConversationsAutoEnd": "Установіце, калі разнамовы аўтаматычна заканчваюцца",
+    "setWhenConversationsAutoEnd": "Колькі часу Omi чакае ў цішыні, перш чым завяршыць размову",
     "@setWhenConversationsAutoEnd": {
         "description": "Description for conversation timeout setting"
     },
@@ -2610,9 +2558,6 @@
     "@deleteKnowledgeGraphTitle": {
         "description": "Dialog title for delete knowledge graph confirmation"
     },
-    "@deleteKnowledgeGraphMessage": {
-        "description": "Dialog message explaining delete knowledge graph action"
-    },
     "knowledgeGraphDeletedSuccess": "Граф ведаў паспяхова выдалены",
     "@knowledgeGraphDeletedSuccess": {
         "description": "Success message after deleting knowledge graph"
@@ -2628,10 +2573,6 @@
     },
     "@deleteKnowledgeGraph": {
         "description": "Delete knowledge graph feature name"
-    },
-    "clearAllNodesAndConnections": "Очыстіць усе вузлы і злучэнні",
-    "@clearAllNodesAndConnections": {
-        "description": "Description for delete knowledge graph"
     },
     "@mcp": {
         "description": "MCP (Model Context Protocol) section header"
@@ -2826,10 +2767,6 @@
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
-    "welcomeToOmiDescription": "Вітаем у Omi! Ваш AI асістэнт готаў дапамагаць вам з разнамовамі, задачамі і многім іншым.",
-    "@welcomeToOmiDescription": {
-        "description": "Welcome message on completion screen"
-    },
     "startUsingOmi": "Пачаць выкарыстоўваць Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
@@ -2943,14 +2880,6 @@
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
     },
-    "conversationsProcessedAutomatically": "Разнамовы апрацоўваюцца аўтаматычна",
-    "@conversationsProcessedAutomatically": {
-        "description": "Tip about automatic conversation processing"
-    },
-    "getInsightsInstantly": "Атрымаць ўгледзінаў і рэзюмаў танічна",
-    "@getInsightsInstantly": {
-        "description": "Tip about instant insights feature"
-    },
     "showAll": "Паказаць ўсё",
     "@showAll": {
         "description": "Button text to show all items"
@@ -2962,10 +2891,6 @@
     "dailyScore": "ЕЖЕДНЕВНАЯ ОЦЕНКА",
     "@dailyScore": {
         "description": "Header for daily score widget"
-    },
-    "dailyScoreDescription": "Оценка, чтобы помочь вам лучше\nсосредоточиться на исполнении.",
-    "@dailyScoreDescription": {
-        "description": "Description text for daily score widget"
     },
     "searchResults": "Вынікі пошуку",
     "@searchResults": {
@@ -3480,10 +3405,6 @@
     "@connectionNeeded": {
         "description": "Empty state title when not connected"
     },
-    "startConversation": "Пачніце разнамову і дайце чарадзэйству пачаціся",
-    "@startConversation": {
-        "description": "Empty state subtitle when connected"
-    },
     "checkInternetConnection": "Будь ласка, праверыце сувязь з Інтэрнэтам",
     "@checkInternetConnection": {
         "description": "Empty state subtitle when not connected"
@@ -3742,10 +3663,6 @@
     "@getOmiDevice": {
         "description": "Widget title for device promotion"
     },
-    "wearableAiCompanion": "Надзеваны AI асістэнт",
-    "@wearableAiCompanion": {
-        "description": "Widget subtitle for device promotion"
-    },
     "loadingMemories": "Загрузка памятак…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
@@ -3817,10 +3734,6 @@
     "@makePrivate": {
         "description": "Menu option to change memory visibility to private"
     },
-    "organizeAndControlMemories": "Арганізуйце і кіруйце вашымі памяткамі",
-    "@organizeAndControlMemories": {
-        "description": "Subtitle for memory management dialog"
-    },
     "total": "Усяго",
     "@total": {
         "description": "Label for total memory count statistic"
@@ -3829,17 +3742,9 @@
     "@makeAllMemoriesPrivate": {
         "description": "Action to make all memories private"
     },
-    "setAllMemoriesToPrivate": "Установіць усе памяткі на прыватны доступ",
-    "@setAllMemoriesToPrivate": {
-        "description": "Description for making all memories private"
-    },
     "makeAllMemoriesPublic": "Ўчыніць усе памяткі публічнымі",
     "@makeAllMemoriesPublic": {
         "description": "Action to make all memories public"
-    },
-    "setAllMemoriesToPublic": "Установіць усе памяткі на публічны доступ",
-    "@setAllMemoriesToPublic": {
-        "description": "Description for making all memories public"
     },
     "permanentlyRemoveAllMemories": "Назаўсёды выдаліць усе памяткі з Omi",
     "@permanentlyRemoveAllMemories": {
@@ -3924,7 +3829,6 @@
     },
     "pleaseSelectYourPrimaryLanguage": "Пажалуйста, выберыце вашу асноўную мову",
     "chooseYourLanguage": "Выберыце вашу мову",
-    "selectPreferredLanguageForBestExperience": "Выберыце вашу аддаленую мову для лепшага вопыту Omi",
     "searchLanguages": "Шукаць мовы",
     "selectALanguage": "Выберыце мову",
     "tryDifferentSearchTerm": "Спрабуйце іншы тэрмін пошуку",
@@ -3939,7 +3843,6 @@
             }
         }
     },
-    "enableFeaturesForBestExperience": "Ўключыце функцыі для лепшага вопыту Omi на вашым прыладзе.",
     "microphoneAccess": "Доступ да мікрофона",
     "recordAudioConversations": "Запісваць аўдыёразмовы",
     "microphoneAccessDescription": "Omi патрабуе доступ да мікрофона для запісу вашых размаў і прадастаўлення транскрыпцый.",
@@ -4305,10 +4208,6 @@
     "@deliveryTime": {
         "description": "Label for delivery time setting"
     },
-    "deliveryTimeDescription": "Когда атрымаць вашу щодзённую зводку",
-    "@deliveryTimeDescription": {
-        "description": "Delivery time description"
-    },
     "subscription": "Подпіска",
     "@subscription": {
         "description": "Subscription section title"
@@ -4334,14 +4233,10 @@
     "checkingNext7Days": "Праверка наступных 7 дзён",
     "shortcuts": "Ярлыкі",
     "shortcutChangeInstruction": "Клацніце на ярлык, каб змяніць яго. Клацніце Escape для скасавання.",
-    "configureSTTProvider": "Наканфігуйце пастаўшчыка STT",
-    "setConversationEndDescription": "Ўстаноўце, калі размовы аўтаматычна заканчваюцца",
     "importDataDescription": "Імпартуйце даныя з іншых крыніц",
     "exportConversationsDescription": "Экспартуйце размовы ў JSON",
     "exportingConversations": "Экспарт размаў…",
-    "clearNodesDescription": "Очысціць ўсе вузлы і злучэнні",
     "deleteKnowledgeGraphQuestion": "Выдаліць граф ведаў?",
-    "deleteKnowledgeGraphWarning": "Гэта выдаліць ўсе вывядзеныя даныя графа ведаў. Вашы асноўныя спогады застаюцца бяспечны.",
     "connectOmiWithAI": "Злучыце Omi з помацнікамі ШІ",
     "noAPIKeys": "Адсутнічаюць API ключы. Создайте адзін для пачатку.",
     "autoCreateWhenDetected": "Аўтаматычна стварыць, калі выявлена імя",
@@ -4754,10 +4649,6 @@
     "@createAnApp": {
         "description": "Option to create an app"
     },
-    "createAndShareYourApp": "Стварыце і дзяліцеся вашым прыкладаннем",
-    "@createAndShareYourApp": {
-        "description": "Subtitle for create app option"
-    },
     "itemApp": "Прыкладанне",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
@@ -4904,10 +4795,6 @@
     "@maximumSecurityE2ee": {
         "description": "Title for End-to-End Encryption dialog"
     },
-    "e2eeDescription": "Шыфраванне ад канца да канца - гэта золаты стандарт для прыватнасці. Калі ўключана, вашы даныя шыфруюцца на вашым прыладзе да адпраўкі на нашы серверы. Гэта азначае, што ніхто, нават Omi, не можа атрымаць доступ да вашага змесціва.",
-    "@e2eeDescription": {
-        "description": "Description of E2EE encryption explaining its benefits"
-    },
     "importantTradeoffs": "Важныя кампраміс:",
     "@importantTradeoffs": {
         "description": "Header for trade-offs section in E2EE dialog"
@@ -4960,17 +4847,9 @@
     "@secureEncryption": {
         "description": "Title for secure encryption card"
     },
-    "secureEncryptionDescription": "Вашы даныя шыфруюцца з ключом, адзінкавым для вас на нашых серверах, размешчаны на Google Cloud. Гэта азначае, што ваше сыра змесціва недаступна ніхто, уключаючы персонал Omi або Google, непасрэдна з базы даных.",
-    "@secureEncryptionDescription": {
-        "description": "Description of secure encryption explaining how data is protected"
-    },
     "endToEndEncryption": "Шыфраванне ад канца да канца",
     "@endToEndEncryption": {
         "description": "Title for E2EE card"
-    },
-    "e2eeCardDescription": "Ўключыце для максімальнай бяспекі, дзе толькі вы можаце мець доступ да вашых даных. Клацніце для больш дэталяў.",
-    "@e2eeCardDescription": {
-        "description": "Description for E2EE card explaining its benefit"
     },
     "dataAlwaysEncrypted": "Незалежна ад узроўня, вашы даныя заўсёды шыфруюцца ў спокойнаму стане і ў транзіце.",
     "@dataAlwaysEncrypted": {
@@ -5069,7 +4948,7 @@
     "@getOmiUnlimitedFree": {
         "description": "Description for getting Omi Unlimited free by contributing data"
     },
-    "trainingDataBullets": "• Ваша даныя дапамагаюць палепшыць мадэлі ШІ\n• Толькі нечуллівыя даныя дзяляцца\n• Цалкам прозрыста процес",
+    "trainingDataBullets": "• Вашы даныя дапамагаюць паляпшаць мадэлі ШІ\n• Дзяляцца толькі неканфідэнцыйнымі данымі",
     "@trainingDataBullets": {
         "description": "Bullet points explaining training data program benefits"
     },
@@ -5178,10 +5057,6 @@
     "youAreOnUnlimitedPlan": "Вы прыйшлі да Неабмежаванага Плана.",
     "@youAreOnUnlimitedPlan": {
         "description": "Message showing user is on unlimited plan"
-    },
-    "yourOmiUnleashed": "Ваш Omi, далі. Прайсцяце неабмежавана для бясконцых магчымасцей.",
-    "@yourOmiUnleashed": {
-        "description": "Marketing text for unlimited plan"
     },
     "planEndedOn": "Ваш план скончыўся {date}.\nПадпішыцеся яшчэ раз - вы будзеце адразу дэбетаваны за новы перыяд выстаўлення сметы.",
     "@planEndedOn": {
@@ -5299,10 +5174,6 @@
     "@yourPrivacyMattersToUs": {
         "description": "Privacy page - yourPrivacyMattersToUs"
     },
-    "privacyIntroText": "У Omi мы вельмі цэнім вашу прыватнасць. Мы хочам быць прозрыстымі адносна дадзеных, якія мы збіраем, і як мы іх выкарыстоўваем для палепшэння нашага прадукту для вас. Вось што вам трэба ведаць:",
-    "@privacyIntroText": {
-        "description": "Privacy page - privacyIntroText"
-    },
     "whatWeTrack": "Што мы адсочваем",
     "@whatWeTrack": {
         "description": "Privacy page - whatWeTrack"
@@ -5318,14 +5189,6 @@
     "ourCommitment": "Наша Адзвяртанне",
     "@ourCommitment": {
         "description": "Privacy page - ourCommitment"
-    },
-    "commitmentText": "Мы зацвёрджаны выкарыстоўваць дадзеныя, якія мы збіраем, толькі для палепшэння Omi. Ваша прыватнасць і даверыгу нам вельмі важныя.",
-    "@commitmentText": {
-        "description": "Privacy page - commitmentText"
-    },
-    "thankYouText": "Дзякуем, што вы каристальнік Omi. Калі ў вас ёсць якія-либо пытанні або ўзнікаюць праблемы, не вагайцеся звяртацца да нас team@basedhardware.com.",
-    "@thankYouText": {
-        "description": "Privacy page - thankYouText"
     },
     "password": "Пароль",
     "@password": {
@@ -5388,10 +5251,6 @@
     "exportStartedMayTakeFewSeconds": "Экспорт пачаўся. Гэта можа заняць некалькі секунд…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
-    },
-    "knowledgeGraphDeleteDescription": "Гэта удаліт усе дадзеныя дэрыванага графа ведаў (вузлы і злучэнні). Ваша арыгінальная память застанецца ў безпеце. Граф будзе адбудаваны з часам або пры наступным запыце.",
-    "@knowledgeGraphDeleteDescription": {
-        "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
     "configureDailySummaryDigest": "Наладзьце штодзённы дайджэст задач",
     "@configureDailySummaryDigest": {
@@ -5581,10 +5440,6 @@
     "@howItWorksTitle": {
         "description": "Help dialog title"
     },
-    "howPeopleWorks": "Як толькі чалавек створаны, вы можаце перайсці да транскрыпцыі разговора і прызначыць яму іх адпаведныя сегменты, гэта дозваліт Omi распазнаваць іх мову!",
-    "@howPeopleWorks": {
-        "description": "Explanation of how people/speech recognition works"
-    },
     "tapToDelete": "Тапніце для удалення",
     "@tapToDelete": {
         "description": "Hint text for tap to delete action"
@@ -5663,7 +5518,7 @@
     "@cloudStorageDialogMessage": {
         "description": "cloudStorageDialogMessage label"
     },
-    "storeAudioCloudDescription": "Захавайце свае запісы ў рэжыме рэальнага часу ў прыватным облачным сховіщы па мене, як вы гавараеце. Аўдыё захоплівается і безбяспечна захавліваецца ў рэжыме рэальнага часу.",
+    "storeAudioCloudDescription": "Загружае вашы запісы падчас гаварэння, каб вы маглі прайграць іх пазней.",
     "@storeAudioCloudDescription": {
         "description": "storeAudioCloudDescription label"
     },
@@ -6776,10 +6631,6 @@
     "@removeFromAllFolders": {
         "description": "Description for no folder option"
     },
-    "buildAndShareYourCustomApp": "Постаў і дзелісь сваім адмысловым прыкладаннем",
-    "@buildAndShareYourCustomApp": {
-        "description": "Subtitle for create app button"
-    },
     "searchAppsPlaceholder": "Пошук 1500+ прыкладанняў",
     "@searchAppsPlaceholder": {
         "description": "Search bar placeholder text"
@@ -6816,23 +6667,23 @@
     "@frequencyDescOff": {
         "description": "Description for off notification frequency"
     },
-    "frequencyDescMinimal": "Толькі крітычныя напамінаўі",
+    "frequencyDescMinimal": "Толькі тэрміновае, каля 1–3 на дзень",
     "@frequencyDescMinimal": {
         "description": "Description for minimal notification frequency"
     },
-    "frequencyDescLow": "Толькі важныя абнаўленні",
+    "frequencyDescLow": "Толькі важнае, каля 3–5 на дзень",
     "@frequencyDescLow": {
         "description": "Description for low notification frequency"
     },
-    "frequencyDescBalanced": "Звычайныя карыснымі падштурхаўкі",
+    "frequencyDescBalanced": "Карысныя прапановы, каля 5–8 на дзень",
     "@frequencyDescBalanced": {
         "description": "Description for balanced notification frequency"
     },
-    "frequencyDescHigh": "Частыя праверкі",
+    "frequencyDescHigh": "Больш прапаноў, каля 6–9 на дзень",
     "@frequencyDescHigh": {
         "description": "Description for high notification frequency"
     },
-    "frequencyDescMaximum": "Застаёцеся пастаянна ўключаны",
+    "frequencyDescMaximum": "Кожная карысная сувязь, да 9 на дзень",
     "@frequencyDescMaximum": {
         "description": "Description for maximum notification frequency"
     },
@@ -8080,7 +7931,7 @@
     "@transferToPhone": {
         "description": "Button to start transfer to phone"
     },
-    "privateAndSecureOnDevice": "Прыватны і бяспечны на вашым прыборы",
+    "privateAndSecureOnDevice": "Захавана на гэтым тэлефоне",
     "@privateAndSecureOnDevice": {
         "description": "Privacy notice for local recordings"
     },
@@ -8740,14 +8591,6 @@
     "onboardingTellUsAboutYourself": "Расказыце нам пра сябе",
     "@onboardingTellUsAboutYourself": {
         "description": "Onboarding step description for name entry"
-    },
-    "onboardingChooseYourPreference": "Выберыце ваш перавагу",
-    "@onboardingChooseYourPreference": {
-        "description": "Onboarding step description for language selection"
-    },
-    "onboardingGrantRequiredAccess": "Прадаць патрэбны доступ",
-    "@onboardingGrantRequiredAccess": {
-        "description": "Onboarding step description for permissions"
     },
     "onboardingYoureAllSet": "Вы ўсё гатовы",
     "@onboardingYoureAllSet": {
@@ -9684,10 +9527,6 @@
     "@apiEnvironment": {
         "description": "Title for the API environment switcher in developer settings"
     },
-    "apiEnvironmentDescription": "Выберыце, да якога бэкэнда падключыцца",
-    "@apiEnvironmentDescription": {
-        "description": "Subtitle for the API environment switcher"
-    },
     "production": "Прадукцыйна",
     "@production": {
         "description": "Label for production API environment"
@@ -9859,10 +9698,6 @@
     "@phoneCallsUpsellFeature3": {
         "description": "Phone calls upsell feature 3"
     },
-    "phoneCallsUpsellFeature4": "Ваш вызовы астаюцца прыватнымі і бяспечнымі",
-    "@phoneCallsUpsellFeature4": {
-        "description": "Phone calls upsell feature 4"
-    },
     "phoneCallsUpgradeButton": "Абнавіць на Unlimited",
     "@phoneCallsUpgradeButton": {
         "description": "Button text to upgrade to unlimited plan from phone calls upsell"
@@ -9964,7 +9799,7 @@
     "fairUse3Day": "3-дневны прокат",
     "fairUseWeekly": "Еженедельны прокат",
     "fairUseAboutTitle": "Аб справядлівым ўжыванні",
-    "fairUseAboutBody": "Omi прызначаны для асобных размоў, сустрэч і жывых узаёмадзеянняў. Ужыванне вымяраецца рэальным часом мовы, а не часам злучэння. Калі ўжыванне значна перавышае нармальныя мадэлі для ненасобнага контэнта, могуць быць зробленыя карэкцыі.",
+    "fairUseAboutBody": "Omi створаны для асабістых размоў, сустрэч і жывых узаемадзеянняў. Выкарыстанне вымяраецца часам мовы, а не часам злучэння. Калі ваша выкарыстанне значна перавышае звычайнае асабістае, вы спачатку атрымаеце папярэджанне. Працяглае інтэнсіўнае выкарыстанне можа запаволіць або абмежаваць расшыфроўку.",
     "fairUseCaseRefCopied": "{caseRef} скапіравана",
     "@fairUseCaseRefCopied": {
         "description": "Snackbar message when case reference is copied to clipboard",
@@ -10069,10 +9904,6 @@
     "@cancelSyncQuestion": {
         "description": "Title for cancel sync confirmation dialog"
     },
-    "omisStorageDesc": "Калі вашы Omi не злучаны з вашым тэлефонам, ён захоўвае аўдыё адзінаў у абрана пам'яці прыстасавання. Вы ніколі не страчаеце запіс.",
-    "@omisStorageDesc": {
-        "description": "Description of device storage in sync info sheet"
-    },
     "phoneStorageDesc": "Калі Omi яшчэ раз злучаюцца, запісы аўтаматычна переносяцца на вашы тэлефон як часовае адзінаў да загрузкі.",
     "@phoneStorageDesc": {
         "description": "Description of phone storage in sync info sheet"
@@ -10109,7 +9940,7 @@
     "@permissionEnable": {
         "description": "Action text to enable a permission"
     },
-    "permissionsPageDescription": "Гэтыя дазволы важны для таго, как працуе Omi. Яны дазваляюць ключавыя функцыі, такія як апавяшчэнні, месцазнаходжанні і захоп аўдыё.",
+    "permissionsPageDescription": "Omi выкарыстоўвае гэтыя дазволы, каб падключацца да прылады, запісваць гук, працаваць у фоне, адпраўляць напаміны і адзначаць, дзе адбываліся размовы.",
     "@permissionsPageDescription": {
         "description": "Description text shown at the bottom of the permissions page"
     },
@@ -10120,10 +9951,6 @@
     "permissionsSetupTitle": "Атрымайце найлепшыя адносіны",
     "@permissionsSetupTitle": {
         "description": "Title for the permissions interstitial screen"
-    },
-    "permissionsSetupDescription": "Уключыце некалькі дазволаў, каб Omi мог адкрыць свайна магію.",
-    "@permissionsSetupDescription": {
-        "description": "Subtitle for the permissions interstitial screen"
     },
     "permissionsChangeAnytime": "Вы можаце змяніць гэтыя дазволы ў любы час у Параметрах > Дазволы",
     "@permissionsChangeAnytime": {
@@ -10456,7 +10283,6 @@
     "currentPlan": "Бягучы",
     "neoSubtitle": "{count} пытанняў у месяц",
     "operatorSubtitle": "{count} пытанняў у месяц",
-    "architectSubtitle": "AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя",
     "chatUsageCost": "Чат: ${used} / ${limit} выкарыстана ў гэтым месяцы",
     "chatUsageCostNoLimit": "Чат: ${used} выкарыстана ў гэтым месяцы",
     "chatUsageMessages": "Чат: {used} / {limit} паведамленняў у гэтым месяцы",
@@ -10483,7 +10309,7 @@
     "record": "Запісаць",
     "stop": "Спыніць",
     "recordWithPhoneMic": "Запіс мікрафонам тэлефона",
-    "recordWithPhoneMicSubtitle": "Запісвайце гук вакол сябе",
+    "recordWithPhoneMicSubtitle": "Запісвайце і расшыфроўвайце з мікрафона гэтага тэлефона",
     "phoneCall": "Тэлефонны званок",
     "phoneCallSubtitle": "Запіс званка з жывой транскрыпцыяй",
     "bulkExportInProgress": "Экспарт…",
@@ -10554,7 +10380,6 @@
     "invalidPromotionCode": "Няправільны промакод.",
     "backgroundModeTitle": "Фонавы рэжым",
     "backgroundModeDescription": "Працягвайце запіс Omi, нават калі праграма цалкам закрыта.",
-    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.",
     "regenerateRecap": "Згенераваць рэзюмэ паўторна",
     "recapRegeneratedSnackbar": "Рэзюмэ перагенеравана",
     "recapRegenerateFailed": "Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.",
@@ -10610,7 +10435,7 @@
     "deviceOnboardingContinue": "Працягнуць",
     "deviceOnboardingFinish": "Гатова",
     "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
-    "deviceOnboardingIntroSubtitle": "Хуткі практычны агляд усяго, што ўмее ваш Omi.",
+    "deviceOnboardingIntroSubtitle": "Паспрабуйце жывую расшыфроўку, пытанне і хуткі доступ двайным дотыкам.",
     "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
     "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
     "latest": "Апошні",
@@ -10730,7 +10555,6 @@
     "pinAsBaseline": "Замацаваць як базавае",
     "unpinAsBaseline": "Адмацаваць ад базавага",
     "baselineMemory": "Базавая памяць",
-    "alwaysInContext": "Заўсёды ў кантэксце",
     "accountCutoverUpdateRequiredTitle": "Требуется обновление",
     "accountCutoverUpdateRequiredMessage": "Установите последнее приложение Omi, чтобы продолжить после миграции аккаунта.",
     "accountCutoverMigrationInProgressTitle": "Идёт миграция",
@@ -10785,7 +10609,7 @@
     "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
     "home": "Галоўная",
-    "failedToUpdateBaselineStatus": "Не атрымалася абнавіць статус базовай памяці.",
+    "failedToUpdateBaselineStatus": "Не атрымалася абнавіць гэты ўспамін. Паспрабуйце яшчэ раз.",
     "memoryAllowUse": "Дазволіць выкарыстанне",
     "memoryDontUse": "Не выкарыстоўваць",
     "unstarConversation": "Зняць зорку з размовы",
@@ -10841,8 +10665,8 @@
     "memoryReviewRight": "Дакладна",
     "memoryReviewWrong": "Няправільна",
     "memoryReviewFix": "Выправіць",
-    "memoryReviewConfirmed": "Пацверджана. Я буду гэта ўлічваць.",
-    "memoryReviewDropped": "Адкінута. Я буду пазбягаць падобных фактаў.",
+    "memoryReviewConfirmed": "Пацверджана.",
+    "memoryReviewDropped": "Выдалена з вашых успамінаў.",
     "memoryReviewUpdated": "Абноўлена.",
     "memoryReviewSaveFailed": "Не ўдалося захаваць, паспрабуйце яшчэ раз",
     "indentTask": "Павялічыць водступ",
@@ -10917,7 +10741,7 @@
     "homeScreen": "Галоўны экран",
     "phoneCalls": "Тэлефонныя выклікі",
     "vadGate": "VAD Gate",
-    "vadGateDescription": "Фільтрацыя голасу на серверы, каб знізіць выдаткі на распазнаванне маўлення",
+    "vadGateDescription": "Прапускае ціхі гук перад расшыфроўкай, каб знізіць кошт.",
     "flashCustomFirmware": "Усталяваць уласную прашыўку",
     "flashCustomFirmwareDescription": "Усталёўвайце ўласныя зборкі прашыўкі",
     "selectFirmwareZip": "Выберыце ZIP-файл прашыўкі",
@@ -10936,7 +10760,7 @@
     "permissionBlockedHint": "Выключана ў Наладах. Дазвольце гэта там, каб карыстацца.",
     "useDifferentAccount": "Выкарыстаць іншы ўліковы запіс",
     "onboardingStepOf": "Крок {current} з {total}",
-    "onboardingCompleteMessage": "Пакіньце Omi працаваць у фоне 2 дні, і ён пачне даваць вам карысныя парады.",
+    "onboardingCompleteMessage": "Пакіньце Omi працаваць некалькі дзён. Вашы размовы, успаміны і справы пачнуць запаўняцца.",
     "cantFindDeviceHint": "Не можаце знайсці прыладу? Пераканайцеся, што яна ўключана і побач з тэлефонам, і пашукайце зноў.",
     "scanAgain": "Шукаць зноў",
     "howToPair": "Як спалучыць",
@@ -11057,8 +10881,7 @@
     "notificationsAndDisplay": "Паведамленні і адлюстраванне",
     "helpAndAbout": "Дапамога і пра праграму",
     "speakerTagPromptTitle": "Дапамажыце Omi распазнаваць галасы",
-    "speakerTagPromptSubtitle": "Хуткая праверка галасоў за апошнія два дні",
-    "speakerTagPromptIsThisYou": "Гэта вы?",
+    "speakerTagPromptIsThisYou": "Гэта былі вы?",
     "speakerTagPromptIsThisPerson": "Гэта {name}?",
     "speakerTagPromptWhoIsThis": "Хто гэта?",
     "speakerTagPromptThatsMe": "Гэта я",
@@ -11233,24 +11056,24 @@
     "confidenceMeterLabel": "Упэўненасць: {level}",
     "confidenceReasonLabeled": "{count, plural, =1{Вы назвалі адзін раз} other{Вы назвалі разоў: {count}}}",
     "confidenceReasonPicked": "{count, plural, =1{Абрана ў 1 падказцы} other{Абрана ў падказках: {count}}}",
-    "confidenceReasonAutoConfirmed": "{count, plural, =1{Вы пацвердзілі 1 супадзенне} other{Вы пацвердзілі супадзенняў: {count}}}",
-    "confidenceReasonAutoOnly": "Толькі аўтаматычнае супадзенне, без пацвярджэння",
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{Вы пацвердзілі 1 аўтаматычную пазнаку} other{Вы пацвердзілі аўтаматычных пазнак: {count}}}",
+    "confidenceReasonAutoOnly": "Пазначана аўтаматычна, яшчэ не пацверджана",
     "confidenceReasonNeverConfirmed": "Без пацвярджэння",
     "confidenceReasonCorrected": "Вы выправілі супадзенне",
-    "confidenceReasonVoiceReady": "голас гатовы",
-    "confidenceReasonNeedsVoice": "патрэбны голас",
+    "confidenceReasonVoiceReady": "голас захаваны",
+    "confidenceReasonNeedsVoice": "голасавага ўзору пакуль няма",
     "confidenceReasonNotHeard": "пакуль не чуваць",
     "confidenceSheetTitle": "Упэўненасць",
     "confidenceSummaryConfirmed": "Omi распазнае голас {name}, і вы гэта пацвердзілі.",
     "confidenceSummaryLikely": "Omi звычайна распазнае голас {name}, але вы пацвердзілі гэта толькі некалькі разоў.",
-    "confidenceSummaryUnverified": "Пакуль нішто з вашых дзеянняў не пацвярджае {name}.",
+    "confidenceSummaryUnverified": "Вы яшчэ не пазначылі і не пацвердзілі {name}, таму Omi не ўпэўнены, што ведае яго голас.",
     "confidenceEvidenceHeader": "Доказы",
     "evidenceManualLabels": "{count, plural, =1{Вы назвалі ў 1 размове} other{Вы назвалі ў размовах: {count}}}",
     "evidenceCardConfirms": "{count, plural, =1{«Так» у 1 падказцы} other{«Так» у падказках: {count}}}",
     "evidenceCardPicks": "{count, plural, =1{Абрана ў 1 падказцы} other{Абрана ў падказках: {count}}}",
-    "evidenceAutoConfirmed": "{count, plural, =1{Пацверджана 1 аўтаматычнае супадзенне} other{Пацверджана аўтаматычных супадзенняў: {count}}}",
-    "evidenceAutoCorrected": "{count, plural, =1{1 супадзенне перанесена да іншага чалавека} other{Супадзенняў перанесена да іншых: {count}}}",
-    "evidenceAutoUnconfirmed": "{count, plural, =1{1 аўтаматычнае супадзенне без пацвярджэння} other{Аўтаматычных супадзенняў без пацвярджэння: {count}}}",
+    "evidenceAutoConfirmed": "{count, plural, =1{Вы пацвердзілі 1 аўтаматычную пазнаку} other{Вы пацвердзілі аўтаматычных пазнак: {count}}}",
+    "evidenceAutoCorrected": "{count, plural, =1{Вы перанеслі 1 аўтаматычную пазнаку да іншага чалавека} other{Вы перанеслі аўтаматычных пазнак да іншых людзей: {count}}}",
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 аўтаматычная пазнака яшчэ не пацверджана} other{Аўтаматычных пазнак яшчэ не пацверджана: {count}}}",
     "evidenceVoiceReady": "Узор голасу гатовы",
     "evidenceNoVoice": "Узору голасу пакуль няма",
     "evidenceNotHeard": "Яшчэ не было ў размовах",
@@ -11263,12 +11086,10 @@
     "effectNeeded": "Патрэбна для «Пацверджана»",
     "confidenceToReachConfirmed": "Як дасягнуць «Пацверджана»",
     "confidenceNextVoice": "Omi патрэбны яшчэ ўзор голасу {name}. Назавіце чалавека пры ўключаным «Запамінаць галасы».",
-    "confidenceIsConfirmed": "Статус {name}: «Пацверджана». Omi працягвае вучыцца з кожнай пазнакі.",
-    "confidenceFootnote": "Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не дапамагаюць.",
+    "confidenceIsConfirmed": "{name}: Пацверджана. Нічога больш рабіць не трэба.",
+    "confidenceFootnote": "Вашыя пазнакі і пацвярджэнні маюць найбольшую вагу. Аўтаматычныя пазнакі маюць мала значэння, пакуль вы іх не пацвердзіце.",
     "personWhyConfidence": "Чаму?",
     "pinPersonTitle": "Замацаваць {name}",
-    "pinPersonSubtitle": "Захаваць {name} і чакаць у вашых размовах",
-    "pinPersonHonestLine": "Omi пытаецца, перш чым супаставіць падобныя галасы.",
     "pinAction": "Замацаваць",
     "unpinAction": "Зняць замацаванне",
     "personPinnedToast": "Замацавана: {name}",
@@ -11306,9 +11127,8 @@
     "voiceMatchPossible": "Магчымае супадзенне",
     "voiceMatchWeak": "Слабое супадзенне",
     "voiceMatchMeterLabel": "Супадзенне голасу: {level}",
-    "speakerTagPromptHintIdentify": "Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.",
-    "speakerTagPromptHintConfirm": "«Так» павышае ўпэўненасць у {name}.",
-    "speakerTagPromptHintOwner": "Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.",
+    "speakerTagPromptHintIdentify": "Ваш адказ дапаможа Omi распазнаваць гэты голас наступным разам.",
+    "speakerTagPromptHintOwner": "Ваш адказ пазначае толькі праслуханы ўрывак.",
     "speakerTagPromptSavedAs": "Захавана як {name}",
     "speakerTagPromptSavedAsYou": "Захавана як вы",
     "speakerTagPromptIgnoredNote": "Omi больш не будзе пытацца пра гэты голас",
@@ -11384,7 +11204,7 @@
     "conversationProcessingFailedMessage": "Не ўдалося апрацаваць гэту размову.",
     "waitForReprocessing": "Пачакайце, пакуль скончыцца паўторная апрацоўка.",
     "unnamedSpeakerLabel": "Дыктар",
-    "unresolvedSpeakersNotice": "Спікары не падзелены паміж запісамі.",
+    "unresolvedSpeakersNotice": "Пазнакі спікераў могуць не супадаць у розных запісах гэтай размовы.",
     "unresolvedSpeakersTitle": "Пра пазнакі спікераў",
     "unresolvedSpeakersMessage": "Omi не змогла адрозніць іншыя галасы паміж запісамі. Націсніце пазнаку спікера, каб назваць таго, хто гаворыць.",
     "nameSpeakerTitle": "Назваць дыктара",
@@ -11507,5 +11327,109 @@
     "dreamReportRunsLeft": "{count, plural, =1{Сёння застаўся 1 ручны запуск} other{Сёння засталося {count} ручныя запускі}}",
     "dreamReportFound": "{fixes, plural, =1{1 выпраўленне} other{{fixes} выпраўленні}} · {asks, plural, =1{1 прапанова} other{{asks} прапановы}}",
     "dreamReportDropped": "{count, plural, =1{1 больш старая змена прапушчана} other{{count} больш старыя змены прапушчаны}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}"
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 справаздача затрымана з меркаванняў прыватнасці} other{{count} справаздачы затрыманы з меркаванняў прыватнасці}}",
+    "speakerTagPromptExcerptSaved": "Адказ захаваны для гэтага ўрыўка.",
+    "pinPersonDescription": "Замацаваныя людзі заўсёды знаходзяцца ўверсе вашага спісу «Людзі» і не выдаляюцца пры Ачыстцы.",
+    "chatAppsProblemFailed": "Нешта пайшло не так. Паспрабуй яшчэ раз.",
+    "chatAppsIsConnected": "{app} падключаны",
+    "chatAppsRefreshFailed": "Не атрымалася абнавіць. Паказваем апошнія даныя.",
+    "chatAppsReadOnlyBanner": "Толькі для чытання. Адказвай Omi у {app}.",
+    "chatAppsWaitlistConfirmed": "Дзякуй. WhatsApp пакажацца тут, калі будзе гатовы.",
+    "chatAppsUseTelegramForNow": "Выкарыстоўваць Telegram пакуль",
+    "chatAppsCouldNotOpen": "Не атрымалася адкрыць {app}. Пераканайся, што праграма ўсталявана, і паспрабуй яшчэ раз.",
+    "chatAppsTryPromise": "Што я ўчора абяцаў Сяргею?",
+    "chatAppsDoesSave": "Захоўвае памяці і кіруе тваімі задачамі",
+    "chatAppsOnTheList": "У спісе",
+    "chatAppsNoChatsTitle": "Чатаў пакуль няма",
+    "chatAppsInChannel": "У {app}",
+    "chatAppsConnectTelegramMessage": "Omi адкрые Telegram з прыватнай спасылкай, якая толькі для цябе.",
+    "chatAppsOpenMessages": "Адкрыць Паведамленні",
+    "chatAppsDisconnectTitle": "Адключыць {app}?",
+    "chatAppsPrivateMemoriesSubtitle": "Здароўе, грошы і ўсё, што ты пазначыў прыватным, не трапляе ў чат-праграмы.",
+    "chatAppsConnectIMessageMessage": "Адпраў Omi адно паведамленне з нумара, які хочаш выкарыстоўваць. Код у ім прывяжа гэты нумар да твайго акаўнта.",
+    "chatAppsWhatsAppMessage": "Мы працуем над тым, каб Omi з'явіўся ў WhatsApp. Ён пакажацца тут, калі будзе гатовы.",
+    "chatAppsNoChatsMessage": "Чаты з Omi у {app} з'явяцца тут.",
+    "chatAppsViewChats": "Паказаць чаты",
+    "chatAppsDisconnectMessage": "Omi перастане адказваць у {app} і выдаліць гісторыю чата, якую захоўвае для яго. Паведамленні, якія ўжо ёсць у {app}, там і застануцца.",
+    "chatAppsReadOnlyFooter": "Тут гэтыя чаты толькі для чытання. Адказвай у {app}.",
+    "chatAppsAddToContacts": "Дадаць Omi ў Кантакты",
+    "chatAppsProPerkContext": "Omi памятае кантэкст ва ўсіх праграмах",
+    "chatAppsWhatsAppMeantime": "Telegram і iMessage працуюць ужо сёння, з тымі ж памяцямі і задачамі.",
+    "chatAppsComingLater": "Пазней",
+    "chatAppsProblemRateLimited": "Занадта шмат спроб. Пачакай хвіліну і паспрабуй яшчэ раз.",
+    "chatAppsMessage": "Паведамленне",
+    "chatAppsOpenApp": "Адкрыць {app}",
+    "chatAppsTelegramSubtitle": "Наладжваецца за два націсканні",
+    "chatAppsLoadFailedTitle": "Не атрымалася загрузіць чат-праграмы",
+    "chatAppsInsights": "Ідэі ад Omi",
+    "chatAppsShowInAppOff": "Выключана: ты бачыш іх толькі ў {app}.",
+    "chatAppsProPerkText": "Пішы Omi з Telegram і iMessage",
+    "chatAppsVoiceNotesSubtitle": "Адпраў галасавое паведамленне, і Omi адкажа на яго.",
+    "chatAppsPartOfPro": "Чат-праграмы ўваходзяць у Pro",
+    "chatAppsMessagesApp": "Паведамленні",
+    "chatAppsTelegramOtherDevice": "Telegram на іншай прыладзе?",
+    "chatAppsHeroMessage": "Пытайся пра свой дзень, захоўвай памяці і кіруй задачамі з Telegram або iMessage. Твае чаты застаюцца ў праграме, якой ты карыстаешся, а Omi памятае, пра што вы размаўлялі, усюды.",
+    "chatAppsTryRemind": "Нагадай патэлефанаваць маме ў нядзелю",
+    "chatAppsChannelsTitle": "Чат-праграмы",
+    "chatAppsDoesAnswer": "Адказвае на пытанні пра твае размовы і памяці",
+    "chatAppsChannelChats": "Чаты {app}",
+    "chatAppsIncludedWithPro": "УКЛЮЧАНА Ў OMI PRO",
+    "chatAppsLink": "Спасылка",
+    "chatAppsNeverMessagesOthers": "Ніколі не піша іншым людзям ад твайго імя",
+    "chatAppsNotConnectedTitle": "Не падключана",
+    "chatAppsTelegramPrivacyNote": "Твае чаты з Omi таксама захоўвае Telegram. Omi адказвае толькі табе, ніколі іншым людзям, і ты можаш адключыць яго ў любы момант.",
+    "chatAppsProblemOffline": "Няма злучэння. Праверь інтэрнэт і паспрабуй яшчэ раз.",
+    "chatAppsIMessageSubtitle": "Пішы Omi са свайго нумара тэлефона",
+    "chatAppsPrivateMemories": "Трымаць прыватныя памяці ў праграме",
+    "chatAppsConnectTelegramTitle": "Падключыць Telegram",
+    "chatAppsInsightsSubtitle": "Дазволь Omi дасылаць табе тут рэзюмэ або ідэю.",
+    "chatAppsTelegramWaiting": "Чакаем, пакуль ты націснеш «Пачаць» у Telegram…",
+    "chatAppsEntrySubtitle": "Размаўляй з Omi у праграмах, якімі карыстаешся штодня.",
+    "chatAppsConnectedAs": "Падключана: {handle}",
+    "chatAppsProPerkSave": "Захоўвай памяці і кіруй задачамі проста з чата",
+    "chatAppsConnectIMessageTitle": "Напішы Omi, каб падключыць",
+    "chatAppsWaitingMessage": "Адпраў паведамленне ў Паведамленнях. Гэты экран абновіцца, як толькі Omi яго атрымае.",
+    "chatAppsShowInApp": "Паказваць гэтыя чаты ў праграме Omi",
+    "chatAppsCodeExpiredMessage": "Атрымай новы код і адпраў яго з Паведамленняў.",
+    "chatAppsNoMessages": "Няма паведамленняў",
+    "chatAppsHeroTitle": "Чат з Omi там, дзе ты ўжо перапісваешся",
+    "chatAppsEntryRowSubtitle": "Telegram, iMessage і не толькі",
+    "chatAppsCodeExpiresIn": "Код дзейнічае яшчэ {time}",
+    "chatAppsNotConnectedMessage": "Гэта чат-праграма была адключана.",
+    "chatAppsRepliesOnlyNote": "Omi адказвае толькі табе. Ён ніколі не піша першым.",
+    "chatAppsDisconnectFooter": "Пры адключэнні выдаляецца гісторыя, якую Omi захоўвае для {app}.",
+    "chatAppsReplyThereAnytime": "Пішы Omi у {app} у любы час.",
+    "chatAppsTryAsking": "Паспрабуй спытаць",
+    "chatAppsTelegramStepReturn": "Вярніся сюды. Мы пацвердзім, што ўсё атрымалася.",
+    "chatAppsDoesFiles": "Адпраўляе і атрымлівае файлы, фота і галасавыя паведамленні",
+    "chatAppsTryWeek": "Падсумуй мой тыдзень у трох радках",
+    "chatAppsChannelFooter": "Твае чаты ў {app} застаюцца ў {app}. Omi ўсё роўна ведае, пра што вы размаўлялі ў праграме і ў іншых чат-праграмах.",
+    "chatAppsWhatsAppTitle": "WhatsApp хутка будзе",
+    "chatAppsCodeExpiredTitle": "Тэрмін дзеяння кода скончыўся",
+    "chatAppsProblemUnavailable": "Чат-праграмы пакуль недаступныя для твайго акаўнта.",
+    "chatAppsWhatOmiDoes": "Што Omi робіць у чат-праграмах",
+    "chatAppsVoiceNotes": "Галасавыя паведамленні",
+    "chatAppsNotAvailableYet": "Пакуль недаступна",
+    "chatAppsOpenMessagesAgain": "Адкрыць Паведамленні яшчэ раз",
+    "chatAppsConnectedOn": "Падключана {date}",
+    "chatAppsWaitingTitle": "Чакаем тваё паведамленне",
+    "chatAppsEntryTitle": "Чат з Omi",
+    "chatAppsTelegramStepOpen": "Націсні «Адкрыць Telegram» ніжэй",
+    "chatAppsShowInAppOn": "Уключана: яны паказваюцца ў праграме Omi як чаты толькі для чытання.",
+    "chatAppsDisconnectChannel": "Адключыць {app}",
+    "chatAppsTelegramStepStart": "Націсні «Пачаць» у чаце з Omi",
+    "chatAppsLocked": "Патрабуецца Omi Pro",
+    "chatAppsIMessageBody": "Прывітанне, Omi, код прывязкі {code}",
+    "chatAppsChatIn": "Чат у {app}",
+    "chatAppsContactsApp": "Кантакты",
+    "chatAppsCodeNote": "Код дзейнічае адзін раз і заканчваецца праз 10 хвілін.",
+    "chatAppsMoreComing": "Праграм будзе больш.",
+    "chatAppsInTheMeantime": "Тым часам",
+    "chatAppsGetNewCode": "Атрымаць новы код",
+    "chatAppsNotifyMe": "Паведаміце мне",
+    "chatAppsPrefilled": "Запоўнена",
+    "chatAppsTextThisTo": "Не адкрылася? Адпраў гэта на {address}",
+    "chatAppsLinkExpired": "Тэрмін дзеяння спасылкі скончыўся. Націсні «Адкрыць Telegram», каб атрымаць новую.",
+    "chatAppsIMessageTo": "Каму: Omi · {address}",
+    "chatAppsOmiPro": "OMI PRO"
 }
