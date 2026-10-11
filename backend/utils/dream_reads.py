@@ -103,6 +103,7 @@ def read_changes(uid, lease, caps, vocabulary=None):
                 break
             records[ref] = row
             records.targets.add(ref)
+            records.target_sources[ref] = 'dirty'
         consumed.append(item)
     records = add_seed(uid, records, lease, caps, vocabulary, read_record=read_record)
     records = add_context(
