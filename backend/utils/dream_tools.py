@@ -327,13 +327,42 @@ def apply_grounded_edit(uid, edit, records):
 
 def suggest_spelling(uid, edit, records):
     validate_edit(edit, records)
+    source: dict[str, Any] = {
+        'records': {ref: records[ref] for ref in {edit.target, *edit.evidence}},
+        'edit_key': edit_key(edit, records),
+        'spelling_edit': edit.model_dump(mode='python'),
+    }
+    source['fences'] = proposal_fences(uid, source)
+    revalidate_proposal(uid, source)
+    validate_canonical_proposal(uid, edit)
     review_store.enqueue_review_proposal(
         uid,
         spelling_question(edit),
         edit_key=edit_key(edit, records),
-        evidence_version=review_store.fingerprint({ref: records[ref] for ref in {edit.target, *edit.evidence}}),
+        source=source,
+        evidence_version=review_store.fingerprint(source),
     )
     return 'suggested'
+
+
+def answer_spelling(uid, source, value):
+    """Apply the user's chosen spelling through the existing fenced Review seam."""
+    from models.dream_agent import Edit
+
+    edit = Edit.model_validate(source['spelling_edit'])
+    if not value.strip() or len(value) > 50:
+        raise review_store.ReviewConflict('Dream spelling answer is invalid')
+    if value == edit.before:
+        return False
+    records = revalidate_proposal(uid, source)
+    selected = edit.model_copy(update={'after': value})
+    try:
+        status = apply_edit(uid, selected, records, expected_records=source.get('fences'))
+    except ValueError as exc:
+        raise review_store.ReviewConflict('Dream spelling proposal no longer valid') from exc
+    if status == 'suppressed':
+        raise review_store.ReviewConflict('Dream spelling proposal was suppressed')
+    return status == 'applied'
 
 
 def proposal_record(uid, ref, snapshot):
