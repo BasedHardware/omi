@@ -2671,24 +2671,9 @@ _add(
 )
 
 
-def _receipt_message_pointer(client, combo, trial):
-    if combo['receipt_id'] == 'bound':
-        client.documents[f'users/{UID}/chat_receipts/bound'] = {'message_id': 'msg-1'}
-
-
 _add(
     DriverEntry(
-        'utils.messaging.undo.UndoStore.update_message_block',
-        base={'self': UndoStore(_messaging_store), 'uid': UID, 'undone_at': T0},
-        domains={'receipt_id': ['bound', 'missing']},
-        setup=_receipt_message_pointer,
-    )
-)
-
-_add(
-    CoveredByEntry(
-        'database.firestore_transaction_retry.run_with_transaction_contention_retry',
-        covered_by=('utils.messaging.undo.UndoStore.update_message_block',),
-        reason='The receipt query executes inside its transactional callback dispatched by the shared contention retry wrapper.',
+        'database.chat_receipts.message_receipt_snapshot',
+        base={'user_ref': ref_document(f'users/{UID}'), 'message_id': 'msg-1', 'transaction': ref_transaction()},
     )
 )

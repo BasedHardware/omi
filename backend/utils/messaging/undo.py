@@ -60,17 +60,13 @@ class UndoStore:
             pointer = pointer_ref.get(transaction=tx).to_dict() or {}
             if not pointer.get('message_id'):
                 return
-            matches = list(
-                self.store.user(uid)
-                .collection('messages')
-                .where('id', '==', pointer['message_id'])
-                .limit(1)
-                .stream(transaction=tx)
-            )
-            if not matches:
+            from database.chat_receipts import message_receipt_snapshot
+
+            message = message_receipt_snapshot(self.store.user(uid), pointer['message_id'], tx)
+            if message is None:
                 return
-            message_ref = matches[0].reference
-            row = matches[0].to_dict() or {}
+            message_ref = message.reference
+            row = message.to_dict() or {}
             if not row:
                 return
             blocks = row.get('content_blocks') or []

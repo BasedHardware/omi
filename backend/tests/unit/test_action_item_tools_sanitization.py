@@ -235,11 +235,11 @@ class TestUpdateActionItemSanitization:
 
 
 def test_snapshot_exception_is_sanitized_before_any_update(action_tools_module, monkeypatch):
+    from database import chat_edits
+
     update = MagicMock()
     monkeypatch.setattr(action_tools_module.action_items_db, 'update_action_item', update)
-    monkeypatch.setattr(
-        action_tools_module.chat_edits, 'snapshot', MagicMock(side_effect=RuntimeError('secret_snapshot_token'))
-    )
+    monkeypatch.setattr(chat_edits, 'snapshot', MagicMock(side_effect=RuntimeError('secret_snapshot_token')))
     result = action_tools_module.update_action_item_tool('item_999', completed=True, config=_valid_config())
     assert result == 'Error updating action item. Please try again.'
     assert 'secret_snapshot_token' not in result
