@@ -106,6 +106,9 @@ sealed class ChatContentBlock {
         final summary = _string(raw, 'summary');
         if (memoryId == null || summary == null) return null;
         return MemoryLinkContentBlock(id: id, memoryId: memoryId, summary: summary);
+      case 'editReceipt':
+      case 'edit_receipt':
+        return _decodeEditReceipt(raw, id);
       case 'citation':
         final ordinal = _int(raw, 'ordinal');
         final kind = _string(raw, 'kind');
@@ -189,6 +192,24 @@ sealed class ChatContentBlock {
       subjectId: subjectId,
       options: List.unmodifiable(options),
       selectedOptionId: _string(raw, 'selectedOptionId', 'selected_option_id'),
+    );
+  }
+
+  static ChatContentBlock? _decodeEditReceipt(Map<String, dynamic> raw, String id) {
+    final receiptId = _string(raw, 'receiptId', 'receipt_id');
+    final summary = _string(raw, 'summary');
+    if (receiptId == null || summary == null) return null;
+    final rawTargetKind = _string(raw, 'targetKind', 'target_kind');
+    return EditReceiptContentBlock(
+      id: id,
+      receiptId: receiptId,
+      targetKind: EditReceiptTargetKind.fromWire(rawTargetKind),
+      rawTargetKind: rawTargetKind,
+      action: EditReceiptAction.fromWire(_string(raw, 'action')),
+      targetId: _string(raw, 'targetId', 'target_id'),
+      summary: summary,
+      undoable: raw['undoable'] == true,
+      undoneAt: _string(raw, 'undoneAt', 'undone_at'),
     );
   }
 
@@ -445,6 +466,84 @@ class AgentCompletionContentBlock extends ChatContentBlock {
 
   @override
   String get type => 'agentCompletion';
+}
+
+/// What an `editReceipt` changed. A kind this client does not know decodes to
+/// [unknown]: the receipt still shows its summary and can still be undone, but
+/// it has no destination to open.
+enum EditReceiptTargetKind {
+  conversation,
+  memory,
+  task,
+  person,
+  unknown;
+
+  static EditReceiptTargetKind fromWire(String? value) => switch (value) {
+        'conversation' => conversation,
+        'memory' => memory,
+        'task' => task,
+        'person' => person,
+        _ => unknown,
+      };
+}
+
+enum EditReceiptAction {
+  created,
+  updated,
+  deleted,
+  completed,
+  uncompleted,
+  renamed,
+  unknown;
+
+  static EditReceiptAction fromWire(String? value) => switch (value) {
+        'created' => created,
+        'updated' => updated,
+        'deleted' => deleted,
+        'completed' => completed,
+        'uncompleted' => uncompleted,
+        'renamed' => renamed,
+        _ => unknown,
+      };
+}
+
+/// A receipt for a change a chat agent made to the user's data (a renamed
+/// task, a deleted memory, …), with an optional server-side undo
+/// (`POST /v1/chat/receipts/{receiptId}/undo`).
+class EditReceiptContentBlock extends ChatContentBlock {
+  const EditReceiptContentBlock({
+    required super.id,
+    required this.receiptId,
+    required this.targetKind,
+    required this.action,
+    required this.summary,
+    this.rawTargetKind,
+    this.targetId,
+    this.undoable = false,
+    this.undoneAt,
+  });
+
+  final String receiptId;
+  final EditReceiptTargetKind targetKind;
+
+  /// The wire kind as sent, kept for diagnostics when [targetKind] is unknown.
+  final String? rawTargetKind;
+  final EditReceiptAction action;
+  final String? targetId;
+  final String summary;
+  final bool undoable;
+
+  /// ISO-8601 time the change was undone, or null while it stands.
+  final String? undoneAt;
+
+  bool get isUndone => undoneAt != null;
+
+  /// Undo is offered only while the server says it is possible and it has not
+  /// happened yet.
+  bool get canUndo => undoable && !isUndone;
+
+  @override
+  String get type => 'editReceipt';
 }
 
 /// A block type this client does not know. Kept so the message keeps rendering

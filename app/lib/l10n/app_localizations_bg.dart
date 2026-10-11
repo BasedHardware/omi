@@ -9820,6 +9820,15 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chatBlockMemory => 'Спомен';
 
   @override
+  String get chatBlockPerson => 'Човек';
+
+  @override
+  String get chatBlockUndone => 'Отменено';
+
+  @override
+  String get chatBlockUndoFailed => 'Тази промяна не можа да бъде отменена';
+
+  @override
   String get chatBlockQuestion => 'Въпрос';
 
   @override

@@ -9813,6 +9813,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get chatBlockMemory => 'Wspomnienie';
 
   @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Cofnięto';
+
+  @override
+  String get chatBlockUndoFailed => 'Nie udało się cofnąć tej zmiany';
+
+  @override
   String get chatBlockQuestion => 'Pytanie';
 
   @override
