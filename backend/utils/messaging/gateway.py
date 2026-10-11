@@ -129,12 +129,12 @@ class Gateway:
             )
             await run_blocking(db_executor, self.store.retry, path)
             return False
+
+        async def guard():
+            await run_blocking(db_executor, self._assert_link, message, link)
+
+        sink = ChannelReplySink(self.adapter, message, guard=guard)
         try:
-
-            async def guard():
-                await run_blocking(db_executor, self._assert_link, message, link)
-
-            sink = ChannelReplySink(self.adapter, message, guard=guard)
             if message.command == 'help':
                 await sink.finish(
                     'Chat with your Omi agent about your memories, tasks and files. '
