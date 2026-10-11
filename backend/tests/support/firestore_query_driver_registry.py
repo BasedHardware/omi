@@ -2609,7 +2609,7 @@ _add(
 )
 
 
-# Messaging queries use only collection scans or document-id order; no composite indexes.
+# Messaging FIFO admission owns a declared status/created_at index; remaining queries are scans.
 def _messaging_cleanup(client):
     return unittest.mock.patch.object(client, 'recursive_delete', lambda ref: None, create=True)
 

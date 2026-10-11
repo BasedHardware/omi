@@ -735,3 +735,21 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
 
     asyncio.run(run())
     assert not store.leases
+
+
+def test_telegram_request_clock_uses_message_date_not_late_webhook_time():
+    adapter, _, _ = setup_turn()
+    at = datetime(2026, 10, 11, 9, 19, 3, tzinfo=timezone.utc)
+    item = {
+        'message_id': 1,
+        'date': int(at.timestamp()),
+        'chat': {'id': 42, 'type': 'private'},
+        'from': {'id': 42, 'is_bot': False},
+        'text': 'Synthetic reminder',
+    }
+    parsed = adapter.parse(json.dumps({'update_id': 1, 'message': item}).encode())[0]
+    assert parsed.received_at == at
+    before = datetime.now(timezone.utc)
+    callback = {'id': 'ask', 'from': item['from'], 'message': item, 'data': 'ask:Synthetic follow-up'}
+    parsed = adapter.parse(json.dumps({'update_id': 2, 'callback_query': callback}).encode())[0]
+    assert parsed.received_at >= before

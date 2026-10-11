@@ -72,6 +72,10 @@ class TelegramAdapter(BaseAdapter):
             proof = text.split(' ', 1)[1].strip()
             if not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', proof):
                 raise ValueError('Invalid link token')
+        stamp = None if callback else item.get('date')
+        if stamp is not None and (not isinstance(stamp, int) or isinstance(stamp, bool)):
+            raise ValueError('Invalid Telegram message time')
+        received_at = datetime.fromtimestamp(stamp, timezone.utc) if stamp is not None else datetime.now(timezone.utc)
         attachments = []
         for field, default_mime, default_name in (
             ('voice', 'audio/ogg', 'voice.ogg'),
@@ -99,7 +103,7 @@ class TelegramAdapter(BaseAdapter):
                 str(chat['id']),
                 str(item['message_id']) if not callback else 'callback:' + str(callback['id']),
                 text,
-                datetime.now(timezone.utc),
+                received_at,
                 reply_to=str(item['message_id']),
                 link_proof=proof,
                 unlink=command == '/unlink',

@@ -222,7 +222,9 @@ Undo cleanup edits its original receipt; stale/duplicate callbacks do not emit n
 unscoped replies. Linq text undo pins the selected receipt before background work.
 Confirmed receipts and undo requests enter the ordered channel history.
 
-The channel runtime carries the original provider message time. Its shaped evidence
+The channel runtime carries the original message time. Telegram normal messages
+use the verified update's `message.date`; callbacks lack a tap timestamp and use
+first webhook admission time. Its shaped evidence
 includes a server-verified request clock in the user's timezone. Relative reminders
 use `create_action_item_tool(due_in_minutes=N)`, which computes `due_at` from that
 original time. A reminder is an action item, not a separate scheduled-message object.
