@@ -13,7 +13,6 @@ once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
 """
 
-from zoneinfo import ZoneInfo
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
@@ -26,6 +25,7 @@ from .firestore_transaction_retry import run_with_transaction_contention_retry
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union, cast
 from utils.other.daily_summary_budget import DeferredTokens
+from utils.other.timezone import is_schedulable_time_zone
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,8 @@ def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None
     Tokenless clients need the same defaults as token registration to match the
     indexed recipient query. Present values, including False and 0, are preserved.
     """
-    _update_summary_schedule(uid, {'time_zone': time_zone}, firestore_client=firestore_client)
+    if is_schedulable_time_zone(time_zone):
+        _update_summary_schedule(uid, {'time_zone': time_zone}, firestore_client=firestore_client)
 
 
 def resolve_user_timezone(uid: str) -> str:
@@ -120,20 +121,16 @@ def resolve_user_timezone(uid: str) -> str:
     tz = get_user_time_zone(uid)
     if tz is None:
         return "UTC"
-    try:
-        ZoneInfo(tz)
+    if is_schedulable_time_zone(tz):
         return tz
-    except Exception:
-        return "UTC"
+    return "UTC"
 
 
 def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
     """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
     if not request_tz:
         return resolve_user_timezone(uid)
-    try:
-        ZoneInfo(request_tz)
-    except Exception:
+    if not is_schedulable_time_zone(request_tz):
         logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
         return resolve_user_timezone(uid)
     stored = get_user_time_zone(uid)
