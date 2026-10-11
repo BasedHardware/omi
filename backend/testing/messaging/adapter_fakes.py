@@ -2,6 +2,7 @@
 
 import copy
 import httpx
+from urllib.parse import urlparse
 
 
 class FixtureTransport:
@@ -18,7 +19,7 @@ class FixtureTransport:
                 raise response
             status, body, headers = response
             return httpx.Response(status, json=body, headers=headers)
-        if 'api.linqapp.com' in url and url.endswith('/messages') and method == 'POST':
+        if urlparse(url).hostname == 'api.linqapp.com' and url.endswith('/messages') and method == 'POST':
             # Replay the v3 boundary, not an unconditional success: the message
             # container is required by Linq's public SendMessage contract.
             body = kwargs.get('json', {})
