@@ -26,7 +26,8 @@ class Clock:
 
 
 @pytest.fixture
-def policy():
+def policy(monkeypatch):
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '64')
     clock = Clock()
     return MemoryReadResilience(
         clock=clock, sleep=clock.sleep, jitter=lambda low, high: 0.05, allowance=RetryAllowance(clock=clock)
@@ -161,52 +162,12 @@ def test_memory_pinecone_transient_status_only():
     assert not transient_store_error(PineconeError())
 
 
-def test_memory_24_concurrent_failures_are_bounded_to_24_plus_8_retries(monkeypatch):
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
-
-    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '8')
-    clock = Clock()
-    policy = MemoryReadResilience(
-        clock=clock, sleep=lambda _: None, jitter=lambda *_: 0, allowance=RetryAllowance(clock=clock)
-    )
-    first_attempts = threading.Barrier(24)
-    release_retries = threading.Event()
-    eight_retries_started = threading.Event()
-    local = threading.local()
-    lock = threading.Lock()
-    calls = 0
-    retries = 0
-
-    def read():
-        nonlocal calls, retries
-        with lock:
-            calls += 1
-        if not getattr(local, 'attempted', False):
-            local.attempted = True
-            first_attempts.wait(timeout=10)
-        else:
-            with lock:
-                retries += 1
-                if retries == 8:
-                    eight_retries_started.set()
-            assert release_retries.wait(timeout=10)
-        unavailable()
-
-    def request():
-        with pytest.raises(HTTPException):
-            policy.call('read', read)
-
-    with ThreadPoolExecutor(max_workers=24) as pool:
-        pending = [pool.submit(request) for _ in range(24)]
-        try:
-            assert eight_retries_started.wait(timeout=10)
-        finally:
-            release_retries.set()
-        for future in pending:
-            future.result(timeout=10)
-    assert calls == 24 + 8
-    assert retries == 8
+def test_memory_first_attempt_requires_process_admission(monkeypatch, policy):
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '0')
+    calls = []
+    with pytest.raises(HTTPException):
+        policy.call('read', lambda: calls.append(True))
+    assert calls == []
 
 
 def test_memory_circuit_opening_during_backoff_admits_zero_post_open_retries(policy):
@@ -279,11 +240,11 @@ def test_memory_process_retry_allowance_is_shared_configurable_and_refills(monke
     for policy in policies:
         with pytest.raises(HTTPException):
             policy.call('read', read)
-    assert len(calls) == 3 + 2
+    assert len(calls) == 2
     clock.sleep(1)
     with pytest.raises(HTTPException):
         policies[0].call('read', read)
-    assert len(calls) == 7  # one primary plus the one replenished retry
+    assert len(calls) == 3  # only one replenished whole-operation token
 
 
 def test_memory_retry_allowance_caps_inflight_even_after_tokens_refill(monkeypatch):

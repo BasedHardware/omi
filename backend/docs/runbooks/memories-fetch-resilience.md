@@ -49,12 +49,12 @@ Firestore/Pinecone exceptions, including typed causes under a 503. There are
 at most two whole-operation attempts **total per request**, including both cursor
 and offset fallback, with 25–75ms jitter. Attempt state and the one-second retry
 **admission** deadline travel through the original shared list budget; an exhausted
-cursor attempt allowance prevents another offset-store call. Process-wide retry
+cursor attempt allowance prevents another offset-store call. Process-wide whole-operation
 admission uses a nonblocking token bucket: `OMI_MEMORY_READ_RETRY_BURST` defaults
-to eight tokens (bounded to 0–64; zero disables retries), replenished at one token
-per second, with the same capacity limiting in-flight retries. The bucket
+to eight tokens (bounded to 0–64; zero denies all reads), replenished at one token
+per second, with the same capacity limiting in-flight attempts. The bucket
 is shared by all three operation circuits. A request without a token fails without
-retrying; the circuit and request headroom are rechecked after backoff.
+touching the store; the circuit and request headroom are rechecked after backoff.
 No retry starts without 50ms headroom or after document/time exhaustion.
 This does not preempt an in-flight SDK call: list RPCs still use the existing
 request deadline/document allowance, and SDK internal retry policies remain in
@@ -65,7 +65,7 @@ transient requests open it for five seconds; one half-open probe can recover.
 Only a successful backing-read seam with no failed provider read closes a probe.
 Validation/pre-store exceptions and successful returns without backing-read
 evidence keep it open and restart cooldown; no IO lock is held during provider
-execution. Calls admitted before an opening may finish, but no new retry is
+execution. Calls admitted before an opening may finish, but no new attempt is
 admitted after that opening.
 Peer calls fail fast with 503 and `Retry-After: 5`. Permanent errors retain their
 status and never open the circuit. The circuit has three fixed keys, no user

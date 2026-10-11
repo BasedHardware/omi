@@ -14,7 +14,7 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import HTTPException
 from google.api_core import exceptions as google_errors
@@ -64,8 +64,33 @@ class MemoryReadCircuitOpen(HTTPException):
         super().__init__(503, 'Memory backing store temporarily unavailable', headers={'Retry-After': '5'})
 
 
+MemoryBackingStoreStream = Literal['canonical', 'historical', 'cursor', 'admission']
+
+
+class MemoryBackingStoreUnavailable(HTTPException):
+    """Recoverable backing-store failure for mixed-list reads.
+
+    Subclasses ``HTTPException`` so existing callers keep the same 503 body.
+    ``GET /v3/memories`` first-page fallback catches this type instead of
+    matching ``detail`` strings — a renamed or newly added unavailable
+    message must not escape to clients as a hard 503.
+    """
+
+    def __init__(self, detail: str, *, stream: MemoryBackingStoreStream) -> None:
+        super().__init__(status_code=503, detail=detail)
+        self.stream = stream
+
+
+class MemoryReadAdmissionDenied(MemoryBackingStoreUnavailable):
+    """No store call was admitted; offset fallback must use the same gate."""
+
+    def __init__(self) -> None:
+        super().__init__('Memory read admission exhausted', stream='admission')
+        self.headers = {'Retry-After': '1'}
+
+
 class RetryAllowance:
-    """Process-wide burst and in-flight cap; one token/sec refill, no waiting."""
+    """Process-wide whole-operation burst and in-flight cap; one token/sec refill, no waiting."""
 
     def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
@@ -109,7 +134,7 @@ class MemoryReadAttempts:
     def __init__(self, deadline: float) -> None:
         self.deadline = deadline
         self.used = 0
-        self.error: Exception = HTTPException(503, 'Memory read attempts exhausted')
+        self.error: Exception = MemoryReadAdmissionDenied()
         self._lock = threading.Lock()
 
     def claim(self) -> bool:
@@ -144,7 +169,7 @@ def memory_store_read(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 
 
 class MemoryReadResilience:
-    """Thread-safe operation circuit plus request and process retry admission.
+    """Thread-safe operation circuit plus request and process whole-operation admission.
 
     Three exhausted transient requests open for five seconds. One caller probes
     after cooldown; only a successful backing read can close the circuit.
@@ -190,19 +215,36 @@ class MemoryReadResilience:
         attempts = 0
         transient = False
         completed = False
-        retry_permit: RetryAllowance | None = None
         evidence = _StoreEvidence()
         token = _store_evidence.set(evidence)
         try:
-            if not state.claim():
-                self._log(operation, 'attempts_exhausted', 0, started, state.error)
-                raise state.error
             while True:
+                # Every entry path (first attempt, retry, offset fallback) uses
+                # the same process allowance before executing the operation.
+                allowance = self.allowance or _retry_allowance
+                with self._lock:
+                    admitted = (
+                        generation == self._generation
+                        and (probing or self._open_until == 0)
+                        and self._headroom(state, budget) > 0.05
+                        and state.used < 2
+                        and allowance.take()
+                    )
+                    if admitted:
+                        admitted = state.claim()
+                        if not admitted:
+                            allowance.release()
+                if not admitted:
+                    self._log(operation, 'admission_denied', attempts, started, state.error)
+                    raise state.error
                 attempts += 1
                 evidence.succeeded = False
                 evidence.failed = False
                 try:
-                    result = fn()
+                    try:
+                        result = fn()
+                    finally:
+                        allowance.release()
                 except Exception as exc:
                     state.error = exc
                     transient = transient_store_error(exc)
@@ -211,23 +253,7 @@ class MemoryReadResilience:
                     # and a still-closed circuit. Check again after backoff.
                     if transient and state.used < 2 and not probing and self._headroom(state, budget) > delay + 0.05:
                         self.sleep(delay)
-                        allowance = self.allowance or _retry_allowance
-                        with self._lock:
-                            admitted = (
-                                generation == self._generation
-                                and self._open_until == 0
-                                and self._headroom(state, budget) > 0.05
-                                and state.used < 2
-                                and allowance.take()
-                            )
-                            if admitted:
-                                retry_permit = allowance
-                                admitted = state.claim()
-                                if not admitted:
-                                    allowance.release()
-                                    retry_permit = None
-                        if admitted:
-                            continue
+                        continue
                     if transient or (isinstance(exc, HTTPException) and exc.status_code == 503):
                         self._log(operation, 'exhausted' if transient else 'permanent', attempts, started, exc)
                     raise
@@ -238,8 +264,6 @@ class MemoryReadResilience:
                         self._log(operation, 'recovered', attempts, started, None)
                     return result
         finally:
-            if retry_permit is not None:
-                retry_permit.release()
             _store_evidence.reset(token)
             with self._lock:
                 # Pre-opening completions cannot close a newer circuit.

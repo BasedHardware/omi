@@ -101,7 +101,12 @@ from utils.memory.knowledge_ledger import (
     save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
-from utils.memory.read_resilience import memory_store_read, resilient_memory_read
+from utils.memory.read_resilience import (
+    MemoryBackingStoreStream,
+    MemoryBackingStoreUnavailable,
+    memory_store_read,
+    resilient_memory_read,
+)
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -133,22 +138,6 @@ from utils.metrics import (
 )
 
 logger = logging.getLogger(__name__)
-
-MemoryBackingStoreStream = Literal['canonical', 'historical', 'cursor']
-
-
-class MemoryBackingStoreUnavailable(HTTPException):
-    """Recoverable backing-store failure for mixed-list reads.
-
-    Subclasses ``HTTPException`` so existing callers keep the same 503 body.
-    ``GET /v3/memories`` first-page fallback catches this type instead of
-    matching ``detail`` strings — a renamed or newly added unavailable
-    message must not escape to clients as a hard 503.
-    """
-
-    def __init__(self, detail: str, *, stream: MemoryBackingStoreStream) -> None:
-        super().__init__(status_code=503, detail=detail)
-        self.stream = stream
 
 
 MemoryPayload = Dict[str, Any]

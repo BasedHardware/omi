@@ -136,6 +136,9 @@ def _load_memory_service(monkeypatch):
     monkeypatch.setattr(service_mod.memories_db, "get_memory_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", lambda *args, **kwargs: None)
     monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *args, **kwargs: [])
+    from utils.memory import read_resilience
+
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
     return service_mod
 
 

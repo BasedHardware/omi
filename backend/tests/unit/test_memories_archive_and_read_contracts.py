@@ -647,3 +647,116 @@ def test_memory_router_cursor_offset_fallback_uses_at_most_two_whole_operation_a
     assert result.status_code == 503
     assert calls == ['read_page', 'read_page']  # previously two page + two offset calls
     assert budget.remaining_seconds > 1.8  # time budget alone WOULD admit offset retries
+
+
+def _exercise_router_admission(monkeypatch, *, concurrent_requests):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from fastapi import FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+    from google.api_core.exceptions import ServiceUnavailable
+    from utils.memory import read_resilience
+    from utils.other.list_budget import ListReadBudget
+
+    mem_mod = _load_memories_router()
+    clock = lambda: 10.0  # no refill during the concurrent burst
+    bucket = read_resilience.RetryAllowance(clock=clock)
+    monkeypatch.setattr(read_resilience, '_retry_allowance', bucket)
+    policy_class = read_resilience.MemoryReadResilience
+    monkeypatch.setattr(
+        read_resilience,
+        'MemoryReadResilience',
+        lambda: policy_class(clock=clock, sleep=lambda _: None, jitter=lambda *_: 0),
+    )
+    calls = []
+    entries = []
+    lock = threading.Lock()
+    start = threading.Barrier(concurrent_requests)
+    pages_started = threading.Event()
+    release_pages = threading.Event()
+
+    class Unavailable(HTTPException):
+        stream = 'canonical'
+
+    def fail(operation):
+        with lock:
+            calls.append(operation)
+            if calls.count('read_page') == 8:
+                pages_started.set()
+        if concurrent_requests > 1:
+            assert release_pages.wait(timeout=10)
+        raise Unavailable(503, 'Canonical memory unavailable') from ServiceUnavailable('temporary')
+
+    class Service:
+        def __init__(self, **kwargs):
+            pass
+
+        def read_page(self, uid, **kwargs):
+            with lock:
+                entries.append('read_page')
+            return self._page(uid, **kwargs)
+
+        def read(self, uid, **kwargs):
+            with lock:
+                entries.append('read')
+            return self._offset(uid, **kwargs)
+
+        @read_resilience.resilient_memory_read
+        def _page(self, uid, **kwargs):
+            return fail('read_page')
+
+        @read_resilience.resilient_memory_read
+        def _offset(self, uid, **kwargs):
+            return fail('read')
+
+    app = FastAPI()
+    app.include_router(mem_mod.router)
+    route = next(r for r in app.routes if getattr(r, 'path', None) == '/v3/memories' and 'GET' in r.methods)
+    for dependency in route.dependant.dependencies:
+        app.dependency_overrides[dependency.call] = lambda: 'private-uid'
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', Service),
+        patch.object(
+            mem_mod, 'MemoryBackingStoreUnavailable', (Unavailable, read_resilience.MemoryReadAdmissionDenied)
+        ),
+        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(
+            mem_mod,
+            'list_read_budget_for_request',
+            side_effect=lambda *args, **_: ListReadBudget(deadline_monotonic=12, clock=clock),
+        ),
+        TestClient(app) as client,
+        ThreadPoolExecutor(max_workers=concurrent_requests) as pool,
+    ):
+
+        def request():
+            start.wait(timeout=10)
+            return client.get('/v3/memories').status_code
+
+        pending = [pool.submit(request) for _ in range(concurrent_requests)]
+        try:
+            if concurrent_requests > 1:
+                assert pages_started.wait(timeout=10)
+        finally:
+            release_pages.set()
+        assert [future.result(timeout=10) for future in pending] == [503] * concurrent_requests
+    return calls, entries
+
+
+def test_memory_router_cursor_offset_burst_zero_executes_zero_store_operations(monkeypatch):
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '0')
+    calls, entries = _exercise_router_admission(monkeypatch, concurrent_requests=1)
+    assert entries == ['read_page', 'read']  # both actual router paths entered and denied
+    assert len(calls) == 0
+
+
+def test_memory_router_24_concurrent_cursor_offset_requests_never_exceed_32_store_operations(monkeypatch):
+    monkeypatch.delenv('OMI_MEMORY_READ_RETRY_BURST', raising=False)  # production default: eight
+    calls, entries = _exercise_router_admission(monkeypatch, concurrent_requests=24)
+    assert entries.count('read_page') == 24
+    assert entries.count('read') > 0  # exercise actual offset fallback
+    assert len(calls) <= 24 + 8  # hard reviewer bound, includes every store operation
+    assert len(calls) == 8  # first attempts consume tokens too, so this is tighter
