@@ -3,18 +3,32 @@ import XCTest
 @testable import Omi_Computer
 
 /// A notification accepted for a private room must not be heard by a call that starts
-/// while its speech is still being generated.
+/// while its speech is still being generated or handed to a fallback voice.
 @MainActor
 final class NotificationSpeechAudienceRaceTests: XCTestCase {
+  private typealias Outcome = FloatingBarVoicePlaybackService.OneShotAudienceOutcome
+
   private final class Room: @unchecked Sendable {
     var othersCanHear = false
   }
 
   private struct SynthesisFailed: Error {}
 
+  private var service: FloatingBarVoicePlaybackService { .shared }
+
   override func tearDown() async throws {
-    FloatingBarVoicePlaybackService.shared.oneShotSynthesizer = nil
-    FloatingBarVoicePlaybackService.shared.stop()
+    service.oneShotSynthesizer = nil
+    service.oneShotAudienceObserver = nil
+    service.stop()
+  }
+
+  /// The decided outcome of the next audience-gated one-shot, awaited rather than timed.
+  private func nextOutcome(_ start: () -> Void) async -> Outcome? {
+    let (outcomes, sink) = AsyncStream<Outcome>.makeStream()
+    service.oneShotAudienceObserver = { sink.yield($0) }
+    start()
+    for await outcome in outcomes { return outcome }
+    return nil
   }
 
   func testTheAudienceHandedToThePlayerIsReadLive() {
@@ -30,46 +44,83 @@ final class NotificationSpeechAudienceRaceTests: XCTestCase {
     XCTAssertEqual(audience?(), false, "a call starting after presentation must revoke the audience")
   }
 
-  func testSpeechSynthesizedAfterACallStartsNeverPlays() async {
+  func testSpeechSynthesizedAfterACallStartsIsWithheld() async {
     let room = Room()
-    let service = FloatingBarVoicePlaybackService.shared
-    let (synthesized, done) = AsyncStream<Void>.makeStream()
     service.oneShotSynthesizer = { _, _, _ in
       await MainActor.run { room.othersCanHear = true }
-      done.finish()
       return Self.silentWAV()
     }
 
-    service.speakOneShot("Private reminder", audienceAllows: { !room.othersCanHear })
-    await landed(synthesized)
+    let outcome = await nextOutcome {
+      service.speakOneShot("Private reminder", audienceAllows: { !room.othersCanHear })
+    }
 
-    XCTAssertTrue(room.othersCanHear)
-    XCTAssertFalse(service.isSpeaking, "synthesized audio must not start once others can hear")
+    XCTAssertEqual(outcome, .withheld)
+    XCTAssertFalse(service.isSpeaking, "nothing started, and no synthesis is left pending")
   }
 
-  func testSystemVoiceFallbackAfterACallStartsNeverSpeaks() async {
+  func testAFailedSynthesisAfterACallStartsNeverFallsBackToSpeech() async {
     let room = Room()
-    let service = FloatingBarVoicePlaybackService.shared
-    let (synthesized, done) = AsyncStream<Void>.makeStream()
     service.oneShotSynthesizer = { _, _, _ in
       await MainActor.run { room.othersCanHear = true }
-      done.finish()
       throw SynthesisFailed()
     }
 
-    service.speakOneShot("Private reminder", audienceAllows: { !room.othersCanHear })
-    await landed(synthesized)
+    let outcome = await nextOutcome {
+      service.speakOneShot("Private reminder", audienceAllows: { !room.othersCanHear })
+    }
 
-    XCTAssertTrue(room.othersCanHear)
-    XCTAssertFalse(service.isSpeaking, "the system-voice fallback must not speak once others can hear")
+    XCTAssertEqual(outcome, .withheld)
+    XCTAssertFalse(service.isSpeaking)
   }
 
-  /// Wait for the fake synthesis to finish, then yield so its main-actor completion
-  /// runs. The audio below lasts 5 s, so anything that started is still speaking when
-  /// the assertion runs.
-  private func landed(_ synthesized: AsyncStream<Void>) async {
-    for await _ in synthesized {}
-    for _ in 0..<20 { await Task.yield() }
+  func testAPlayerFailureAfterTheCallStartsNeverFallsBackToSpeech() async {
+    // The audience is private when synthesis returns and changes before the player's
+    // system-voice fallback: the second read is the one that must hold.
+    var reads = 0
+    service.oneShotSynthesizer = { _, _, _ in Data("not audio".utf8) }
+
+    let outcome = await nextOutcome {
+      service.speakOneShot(
+        "Private reminder",
+        audienceAllows: {
+          reads += 1
+          return reads == 1
+        })
+    }
+
+    XCTAssertEqual(outcome, .withheld)
+    XCTAssertEqual(reads, 2, "checked after synthesis and again before the fallback")
+    XCTAssertFalse(service.isSpeaking)
+  }
+
+  func testAStoppedSynthesisThatFinishesLateNeverPlays() async {
+    let (release, open) = AsyncStream<Void>.makeStream()
+    service.oneShotSynthesizer = { _, _, _ in
+      for await _ in release {}
+      return Self.silentWAV()
+    }
+
+    let outcome = await nextOutcome {
+      service.speakOneShot("Private reminder", audienceAllows: { true })
+      service.stop()  // another output takes over before the audio arrives
+      open.finish()
+    }
+
+    XCTAssertEqual(outcome, .droppedStale)
+    XCTAssertFalse(service.isSpeaking)
+  }
+
+  func testAPrivateRoomStillHearsTheNotification() async {
+    service.oneShotSynthesizer = { _, _, _ in Self.silentWAV() }
+
+    let outcome = await nextOutcome {
+      service.speakOneShot("Private reminder", audienceAllows: { true })
+    }
+
+    // A machine with no audio output can refuse the player and fall back to the system
+    // voice; either way the notification was admitted, never withheld.
+    XCTAssertTrue([.played, .fellBackToSystemVoice].contains(outcome), String(describing: outcome))
   }
 
   private nonisolated static func silentWAV(sampleCount: Int = 40_000) -> Data {
