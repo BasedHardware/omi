@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/read_retry.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory.dart';
@@ -270,12 +271,14 @@ String buildLedgerHistoryUrl({
       .toString();
 }
 
-void _reportMemoriesFetchFailure(GetMemoriesResult result) {
-  Logger.error(
+Future<void> _reportMemoriesFetchFailure(GetMemoriesResult result) async {
+  // Logger.error also sends a separate Crashlytics event through Talker.
+  // Use one explicit, contained non-fatal report with the existing properties.
+  Logger.debug(
     'Failed to fetch memories: status=${result.statusCode} reason=${result.failureReason}',
   );
   if (result.failureReason == MemoriesFetchFailureReason.noResponse) return;
-  PlatformManager.instance.crashReporter.reportCrash(
+  await PlatformManager.instance.crashReporter.reportNonFatal(
     Exception(
       'Failed to fetch memories: ${result.statusCode} ${result.failureReason}',
     ),
@@ -304,6 +307,9 @@ Future<GetMemoriesResult> getMemoriesResult({
   bool thisDeviceOnly = false,
   MemoryReadView? view,
   bool forceView = false,
+  Future<http.Response?> Function(String url, Map<String, String> headers)? send,
+  ReadRetry? retry,
+  Future<void> Function(GetMemoriesResult)? reportFailure,
 }) async {
   // Probe once per owner/environment before sending temporal query params.
   // The response header becomes the source of truth for later beta requests.
@@ -318,11 +324,12 @@ Future<GetMemoriesResult> getMemoriesResult({
     thisDeviceOnly: thisDeviceOnly,
     view: requestedView,
   );
-  var response = await makeApiCall(
-    url: url,
-    headers: memoryBeliefBetaHeaders,
-    method: 'GET',
-    body: '',
+  final report = reportFailure ?? _reportMemoriesFetchFailure;
+  final response = await (retry ?? ReadRetry()).run(
+    () => send != null
+        ? send(url, memoryBeliefBetaHeaders)
+        : makeApiCall(url: url, headers: memoryBeliefBetaHeaders, method: 'GET', body: '', retries: 0),
+    onRetry: (response) => report(memoriesResultFromHttp(statusCode: response.statusCode)),
   );
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
@@ -334,6 +341,9 @@ Future<GetMemoriesResult> getMemoriesResult({
       cursor: cursor,
       view: view,
       forceView: forceView,
+      send: send,
+      retry: retry,
+      reportFailure: reportFailure,
     );
     return GetMemoriesResult(
       fallback.memories,
@@ -347,7 +357,7 @@ Future<GetMemoriesResult> getMemoriesResult({
   }
   if (response != null && response.statusCode != 200) {
     Logger.debug(
-      'getMemories error ${response.statusCode} body=${response.body}',
+      'getMemories error ${response.statusCode}',
     );
   }
   final result = memoriesResultFromHttp(
@@ -359,10 +369,7 @@ Future<GetMemoriesResult> getMemoriesResult({
   );
   _rememberMemoryBeliefCapability(result.beliefEnabled);
   if (!result.ok) {
-    if (result.failureReason == MemoriesFetchFailureReason.decodeError) {
-      Logger.error('Failed to decode memories 200 response');
-    }
-    _reportMemoriesFetchFailure(result);
+    await report(result);
   }
   return result;
 }
