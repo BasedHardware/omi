@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from collections.abc import Mapping
 from copy import deepcopy
+from functools import lru_cache
 from openai import AsyncOpenAI, OpenAI
 from typing import Any, TypeVar, cast
 
 import httpx
+import tiktoken
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from langchain_openai import ChatOpenAI
@@ -18,6 +21,8 @@ from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
 from utils.llm.usage_tracker import get_current_context
+
+logger = logging.getLogger(__name__)
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -622,6 +627,13 @@ FILE_CHAT_DOCUMENTS_AUTO_LANE_ID = feature_auto_lane_id(FILE_CHAT_DOCUMENTS_FEAT
 OPENAI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:openai-embeddings'
 GEMINI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:gemini-embeddings'
 EMBEDDINGS_TIMEOUT_SECONDS = 30.0
+# text-embedding-3-large rejects a single input over 8192 tokens and a request
+# over 300_000 tokens with HTTP 400. The gateway forwards that 400. LangChain's
+# direct embeddings client already splits under these limits; this hop must too.
+# 8191 matches LangChain's embedding_ctx_length (one under the hard maximum).
+_OPENAI_EMBEDDING_MAX_INPUT_TOKENS = 8191
+_OPENAI_EMBEDDING_MAX_BATCH_TOKENS = 300_000
+_OPENAI_EMBEDDING_MAX_BATCH_ITEMS = 2048
 _FILE_CHAT_GATEWAY_TIMEOUT_SECONDS = 120.0
 
 _file_chat_gateway_async_client: AsyncOpenAI | None = None
@@ -688,6 +700,71 @@ def file_chat_feature_header(lane_id: str, *, uid: str | None = None) -> dict[st
     return headers
 
 
+@lru_cache(maxsize=1)
+def _openai_embedding_encoding() -> Any:
+    # text-embedding-3-large uses cl100k. encoding_for_model is the hermetic
+    # test seam (tests/conftest.py stubs tiktoken); get_encoding is not.
+    return tiktoken.encoding_for_model('text-embedding-3-large')
+
+
+def _fit_openai_embedding_text(text: str) -> tuple[str, int]:
+    """Return a provider-accepted string and its token count.
+
+    Empty strings and NUL bytes are rejected by the embeddings gateway / OpenAI
+    with HTTP 400, which aborts the whole batch. A single space keeps positional
+    alignment with the caller's inputs. Over-long text is prefix-truncated to
+    the model context instead of failing the request.
+    """
+    cleaned = text.replace('\x00', '')
+    if not cleaned:
+        return ' ', 1
+    encoding = _openai_embedding_encoding()
+    token_count = len(encoding.encode_ordinary(cleaned))
+    if token_count <= _OPENAI_EMBEDDING_MAX_INPUT_TOKENS:
+        return cleaned, token_count
+    lo, hi = 1, len(cleaned)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if len(encoding.encode_ordinary(cleaned[:mid])) <= _OPENAI_EMBEDDING_MAX_INPUT_TOKENS:
+            lo = mid
+        else:
+            hi = mid - 1
+    truncated = cleaned[:lo]
+    if not truncated:
+        return ' ', 1
+    return truncated, len(encoding.encode_ordinary(truncated))
+
+
+def _openai_embedding_batches(texts: list[str]) -> list[list[str]]:
+    """Split embedding inputs into requests the gateway and OpenAI will accept."""
+    batches: list[list[str]] = []
+    current: list[str] = []
+    current_tokens = 0
+    changed = 0
+    for text in texts:
+        fitted, token_count = _fit_openai_embedding_text(text if isinstance(text, str) else '')
+        if fitted != text:
+            changed += 1
+        if current and (
+            len(current) >= _OPENAI_EMBEDDING_MAX_BATCH_ITEMS
+            or current_tokens + token_count > _OPENAI_EMBEDDING_MAX_BATCH_TOKENS
+        ):
+            batches.append(current)
+            current = []
+            current_tokens = 0
+        current.append(fitted)
+        current_tokens += token_count
+    if current:
+        batches.append(current)
+    if changed:
+        logger.warning(
+            'normalized openai embedding inputs before gateway post changed=%d batches=%d',
+            changed,
+            len(batches),
+        )
+    return batches
+
+
 def _embedding_vectors(body: object) -> list[list[float]]:
     if not isinstance(body, Mapping):
         raise ValueError('gateway embeddings response must be an object')
@@ -703,6 +780,12 @@ def _embedding_vectors(body: object) -> list[list[float]]:
     return vectors
 
 
+def _post_openai_embedding_batch(response: httpx.Response) -> list[list[float]]:
+    response.raise_for_status()
+    body: object = response.json()
+    return _embedding_vectors(body)
+
+
 def invoke_openai_embeddings_gateway(
     texts: list[str],
     *,
@@ -710,18 +793,22 @@ def invoke_openai_embeddings_gateway(
     byok_api_key: str | None = None,
 ) -> list[list[float]]:
     """Sync OpenAI text-embedding-3-large hop through the gateway embeddings lane."""
+    batches = _openai_embedding_batches(texts)
+    if not batches:
+        return []
     headers = _gateway_headers(feature='openai_embeddings')
     if byok_api_key:
         headers[byok_gateway_header_name('openai')] = byok_api_key
+    vectors: list[list[float]] = []
     with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
-        response = client.post(
-            f'{get_llm_gateway_base_url()}/v1/embeddings',
-            headers=headers,
-            json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': texts},
-        )
-        response.raise_for_status()
-        body: object = response.json()
-    return _embedding_vectors(body)
+        for batch in batches:
+            response = client.post(
+                f'{get_llm_gateway_base_url()}/v1/embeddings',
+                headers=headers,
+                json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': batch},
+            )
+            vectors.extend(_post_openai_embedding_batch(response))
+    return vectors
 
 
 async def ainvoke_openai_embeddings_gateway(
@@ -731,22 +818,24 @@ async def ainvoke_openai_embeddings_gateway(
     byok_api_key: str | None = None,
 ) -> list[list[float]]:
     """Async counterpart of :func:`invoke_openai_embeddings_gateway`."""
-    from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
-
+    batches = _openai_embedding_batches(texts)
+    if not batches:
+        return []
     headers = _gateway_headers(feature='openai_embeddings')
     if byok_api_key:
         headers[byok_gateway_header_name('openai')] = byok_api_key
+    vectors: list[list[float]] = []
     async with get_llm_gateway_semaphore():
         client = get_llm_gateway_client()
-        response = await client.post(
-            f'{get_llm_gateway_base_url()}/v1/embeddings',
-            headers=headers,
-            json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': texts},
-            timeout=_gateway_timeout(timeout_seconds),
-        )
-        response.raise_for_status()
-        body: object = response.json()
-    return _embedding_vectors(body)
+        for batch in batches:
+            response = await client.post(
+                f'{get_llm_gateway_base_url()}/v1/embeddings',
+                headers=headers,
+                json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': batch},
+                timeout=_gateway_timeout(timeout_seconds),
+            )
+            vectors.extend(_post_openai_embedding_batch(response))
+    return vectors
 
 
 def invoke_gemini_embedding_gateway(
