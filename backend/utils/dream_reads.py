@@ -7,6 +7,7 @@ from database import review_store
 from database import conversations, action_items, users, candidates, dream_store
 from utils.dream_prompt import fits_triage
 from utils.dream_cleanup import add_seed_safely
+from utils.dream_guards import timestamp
 from utils.dream_context import EvidenceRecords, add_context, context_candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -92,6 +93,9 @@ def read_changes(uid, lease, caps, vocabulary=None):
         if len(records.targets) >= 4:
             break
         item = snapshot.to_dict()
+        deferred_until = timestamp(item.get('deferred_until'))
+        if deferred_until and lease['started_at'] < deferred_until:
+            continue
         # An update after admission belongs to a later pass, even if observed now.
         if item['last_changed_at'] > lease['started_at']:
             continue

@@ -468,6 +468,9 @@ Accept revalidates all evidence and the current task generation, then the existi
 writer fences storage in its transaction; stale accepts return 409. New
 suggestions share Dream question attention accounting, capped at three per pass
 and UTC day, and also respect the per-pass edit cap and remaining answer headroom.
+Attention-capped spelling targets stay queued with `deferred_until` set to the
+next UTC midnight. Later passes skip them before hydration and model reasoning;
+product updates preserve the deferral, and the next UTC day permits retry.
 Retries of unchanged proposals use no new slot. Shadow mode continues to record
 proposals without enqueueing or applying anything; each edit and vocabulary term
 in its report is labeled `auto` or `suggest`.
@@ -484,7 +487,7 @@ change cohorts/schedules, or deploy anything.
 
 Registered, previously processed owners with empty dirty queues may run again after one hour under the same daily caps. Successful model passes record target review timestamps atomically with completion; failed passes do not. Empty passes refund inference admission but persist page progress. Synthetic canaries skip backfill.
 
-Uniform epsilon sampling uses collection counts and a random document rank, without rerolling filtered records. Offsets can bill linear skipped reads and large histories can hit the 3-second RPC deadline; this cost is outside the model USD reservation. Disable the random share when that cost is unsuitable. The sample is unbiased for a stable stored population before visibility/age/cooldown rejection, not an unbiased sample of automatically editable records.
+Epsilon sampling picks a collection proportional to count and a random-key successor with wraparound, bounded to two limit(1) queries. Pivots match the writers: `mem_` plus 32 hex digits for canonical memories, 20 mixed-case alphanumeric characters for Firestore action-item auto-IDs, and UUIDv4 for conversations and people. This avoids billed skipped reads and namespace collapse. Unequal ID gaps and legacy ID formats can still introduce bias; random-source outcomes do not measure unbiased precision. Attention-capped seeds share the next-UTC-midnight deferral metadata and skip hydration in either sampling path.
 
 
 ### Reserved background admission and fair drain

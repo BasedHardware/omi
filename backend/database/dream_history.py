@@ -41,7 +41,7 @@ def review_id(ref):
     return sha256(ref.encode()).hexdigest()
 
 
-def last_reviewed(uid, refs, *, firestore_client=None):
+def review_states(uid, refs, *, firestore_client=None):
     database = firestore_client if firestore_client is not None else get_firestore_client()
     source = database.collection('dream_users').document(uid).collection('reviews')
     keys = {review_id(ref): ref for ref in refs}
@@ -50,6 +50,6 @@ def last_reviewed(uid, refs, *, firestore_client=None):
     if not keys:
         return {}
     return {
-        keys[snapshot.id]: (snapshot.to_dict() or {}).get('last_reviewed_at')
+        keys[snapshot.id]: snapshot.to_dict() or {}
         for snapshot in database.get_all([source.document(key) for key in keys], timeout=3)
     }

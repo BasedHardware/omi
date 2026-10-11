@@ -398,6 +398,7 @@ async def _run_admitted_pass(
         report,
         success=success,
         consumed=[item for item in consumed if item['collection'] + '/' + item['id'] not in deferred],
+        deferred=deferred,
         release=release,
         refund=refund,
         reviewed=reviewed - deferred,
